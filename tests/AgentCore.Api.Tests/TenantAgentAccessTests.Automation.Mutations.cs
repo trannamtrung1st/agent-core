@@ -92,7 +92,14 @@ public sealed partial class TenantAgentAccessTests
     private static async Task<(Guid Tenant, Guid Instance, Guid Grant)> MutationAgent(RuntimeStateFactory factory, HttpClient owner, bool write = true, bool events = false, bool eventSourceRead = true)
     {
         foreach (var host in factory.Services.GetServices<IHostedService>().Where(s => s is AgentCore.Api.AgentRunHostedService or AgentCore.Api.TriggerSchedulerHostedService)) await host.StopAsync(CancellationToken.None);
-        var (tenant, instance) = await OwnedMemoryAgent(owner, enabled: false, automation: true, events: events, automationMutations: true);
+        (Guid tenant, Guid instance) owned;
+        try { owned = await OwnedMemoryAgent(owner, enabled: false, automation: true, events: events, automationMutations: true); }
+        catch (Xunit.Sdk.XunitException error) when (error.Message.StartsWith("CSRF ", StringComparison.Ordinal))
+        {
+            Assert.Fail(error.Message + "; HTTP diagnostics=" + factory.HttpFailures.Describe());
+            throw;
+        }
+        var (tenant, instance) = owned;
         await MemoryExecutor(owner, tenant, instance, read: false, manage: false, operations: true);
         var api = $"/api/v2/tenants/{tenant}"; var principal = (await Json(await owner.GetAsync(api + $"/agents/{instance}"))).GetProperty("principalId").GetGuid();
         var permissions = write ? new[] { "automations.read", "automations.create", "automations.update", "automations.delete" } : new[] { "automations.read" };

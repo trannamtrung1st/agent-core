@@ -67,9 +67,11 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         // Freeze before checking post-I/O authority; callers receive only a defensive copy of these verified bytes.
         var captured = new TenantResourceSource(before.Observation, bytes);
         var after = await RequireMetadataAsync(frame, tool, path, ct, approved, live, search: search, knowledgeIdentity: knowledgeIdentity, publication: publication).ConfigureAwait(false);
+        // Persisting the same claim's ordinary response does not replace its pinned resource.
+        // RequireMetadata repeats the current Session owner/lifecycle and source authority checks.
         if (before.Run.Revision != after.Run.Revision || before.Security.Tenant.Revision != after.Security.Tenant.Revision
             || before.Agent.Instance.Revision != after.Agent.Instance.Revision || before.Session.Owner != after.Session.Owner
-            || before.Session.Snapshot.Revision != after.Session.Snapshot.Revision || before.Observation != after.Observation)
+            || before.Observation != after.Observation)
             throw new SecurityConflictException("resource_source_changed");
         var final = await operations.ResolveAsync(new(after.Observation.TenantId, frame.RunId), ct).ConfigureAwait(false);
         if (live) TenantRuntimeRules.Require(frame, after.Session.Owner, final.Run, time.GetUtcNow());

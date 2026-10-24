@@ -7,12 +7,14 @@ using System.Text.Json.Nodes;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Observability;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Api.Tests;
 
@@ -105,8 +107,9 @@ public sealed partial class TenantCredentialAccessTests
         var reviewed = mode is "review" or "grant" or "reject";
         var model = new AutonomousFileModel(reviewed, conversation) { ExpectedRefusal = mode is "reject" or "missing-read" or "revoked-write" };
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow); var diagnostics = new AccountReadDiagnostics();
+        var safeDiagnostics = new DiagnosticLineLoggerProvider(LogLevel.Warning);
         var root = restart ? Path.Combine(Path.GetTempPath(), "independent-consent-reopen-" + Guid.NewGuid().ToString("N")) : null;
-        void Configure(IServiceCollection services) { services.RemoveAll<TimeProvider>(); services.AddSingleton<TimeProvider>(clock); services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(diagnostics); }
+        void Configure(IServiceCollection services) { services.RemoveAll<TimeProvider>(); services.AddSingleton<TimeProvider>(clock); services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(diagnostics); services.AddLogging(logging => logging.AddProvider(safeDiagnostics)); }
         await using var first = new OAuthFactory(root, sqlite: sqlite, preserve: restart, execute: true, model: model, servicesOverride: Configure);
         var factory = first; OAuthFactory? recreated = null; HttpClient? reopenedOwner = null;
         using var firstOwner = ConnectedClient(factory); var owner = firstOwner; await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
@@ -221,6 +224,10 @@ public sealed partial class TenantCredentialAccessTests
         if (model.ExpectedRefusal) Assert.Empty(artifacts.Items);
         else
         {
+            Assert.True(artifacts.Items.Count == 1,
+                $"Expected one owned Artifact. Status={final.Status} Outcome={final.Result?.OutcomeKind} FailureCode={final.Failure?.Code} DiagnosticId={final.Failure?.DiagnosticId} "
+                + $"ArtifactCount={artifacts.Items.Count} ModelRequests={model.Requests.Count} Decisions={decided.Count}; "
+                + AutonomousFileStageDiagnostics(model) + "; diagnostics=" + AutonomousFileSafeErrors(safeDiagnostics));
             var artifact = Assert.Single(artifacts.Items); Assert.Equal(final.AgentRunId, artifact.AgentRunId);
             var bytes = await owner.GetByteArrayAsync(api + $"/sessions/{initial.SessionId}/artifacts/{artifact.ArtifactId}/content");
             var path = "/home/independent." + (kind == "text" ? "txt" : kind);
@@ -245,5 +252,46 @@ public sealed partial class TenantCredentialAccessTests
             reopenedOwner?.Dispose(); if (recreated is not null) await recreated.DisposeAsync();
             if (restart) { await first.DisposeAsync(); if (Directory.Exists(root)) Directory.Delete(root, true); }
         }
+    }
+
+    private static string AutonomousFileStageDiagnostics(AutonomousFileModel model)
+    {
+        var results = model.Requests.ToArray().SelectMany(request => request.Messages).Where(message => message.Role == ModelRole.Tool).ToArray();
+        var stages = new List<string>();
+        for (var stage = 0; stage < 3; stage++)
+        {
+            var message = results.LastOrDefault(result => result.ToolCallId == "independent-stage-" + stage);
+            if (message is null) { stages.Add($"Stage{stage}=missing"); continue; }
+            try
+            {
+                using var document = JsonDocument.Parse(message.Text);
+                var root = document.RootElement; var fields = new List<string>();
+                if (root.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var key in new[] { "error", "reasonCode", "decision", "status", "approvalStatus", "outcome", "observationUnavailableReason" })
+                    {
+                        if (!root.TryGetProperty(key, out var value)) continue;
+                        var code = value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+                        fields.Add(key + "=" + (code is { Length: > 0 and <= 96 } && code.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-') ? code : value.ValueKind.ToString()));
+                    }
+                    foreach (var key in new[] { "applied", "readAuthorized" })
+                        if (root.TryGetProperty(key, out var value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False) fields.Add(key + "=" + value.GetBoolean());
+                    foreach (var key in new[] { "requestId", "operationId", "diagnosticId" })
+                        if (root.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String && value.TryGetGuid(out var id)) fields.Add(key + "=" + id.ToString("D"));
+                }
+                stages.Add($"Stage{stage}[shape={root.ValueKind};{string.Join(',', fields)}]");
+            }
+            catch (JsonException) { stages.Add($"Stage{stage}=invalid_json"); }
+        }
+        return string.Join(" | ", stages);
+    }
+
+    private static string AutonomousFileSafeErrors(DiagnosticLineLoggerProvider diagnostics)
+    {
+        lock (diagnostics.Lines)
+            return string.Join(" | ", diagnostics.Errors.Where(error => error.GetType().Assembly == typeof(DiagnosticLog).Assembly
+                && error.GetType().DeclaringType?.FullName == "AgentCore.Application.Observability.DiagnosticExceptionSnapshot"
+                && error.GetType().Name is "SafeException" or "SafeAggregateException").TakeLast(4)
+                .Select(error => error.ToString()).Select(text => text[..Math.Min(1024, text.Length)]));
     }
 }

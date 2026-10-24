@@ -1,0 +1,66 @@
+name: Cold CSRF diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: csrf-diagnostic-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  csrf:
+    name: Cold anonymous CSRF case (diagnostic)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      CI: "true"
+      Browser__Headless: "true"
+      AGENTCORE_LIVE_PROVIDER_TESTS: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tests/realtime-js/package-lock.json
+      - run: npm ci --prefix tests/realtime-js
+      - run: dotnet build tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --nologo
+      - run: sudo python3 scripts/prepare-ci-apt.py
+      - run: pwsh tests/AgentCore.Api.Tests/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
+      - name: Execute exact cold-start case
+        run: >-
+          dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj
+          --no-build --no-restore --nologo
+          --filter 'FullyQualifiedName~Tenant_model_existing_Automation_deletion_requires_exact_current_consent_and_preserves_history&DisplayName~sqlite: False&DisplayName~mode: %22changed%22'
+          --logger 'trx;LogFileName=csrf.trx'
+          --results-directory local/test-results/csrf-diagnostic
+      - name: Account for the exact selected case
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("local/test-results/csrf-diagnostic/csrf.trx").getroot()
+          ns = {"t": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          counters = root.find("t:ResultSummary/t:Counters", ns)
+          cases = root.findall("t:Results/t:UnitTestResult", ns)
+          assert counters is not None and int(counters.get("total", "0")) == 1
+          assert len(cases) == 1
+          name = cases[0].get("testName", "")
+          assert "Tenant_model_existing_Automation_deletion_requires_exact_current_consent_and_preserves_history" in name
+          assert 'sqlite: False, mode: "changed"' in name
+          print("Exactly one intended cold-start case was executed.")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cold-csrf-diagnostic
+          path: local/test-results/csrf-diagnostic/
+          if-no-files-found: error

@@ -122,10 +122,12 @@ public sealed partial class TenantAgentAccessTests
     {
         protected override bool EnableTenantRunExecution => model is not null;
         public RuntimeBrowserProbe Browser { get; } = new(); public string Root { get; } = root ?? Path.Combine(Path.GetTempPath(), "tenant-runtime-state-" + Guid.NewGuid().ToString("N"));
+        public HttpSetupFailureLogs HttpFailures { get; } = new();
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             base.ConfigureWebHost(builder);
             builder.ConfigureTestServices(services => {
+                services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(HttpFailures);
                 if (sqlite) { Directory.CreateDirectory(Root); var connection = $"Data Source={Path.Combine(Root, "state.db")};Foreign Keys=True;Default Timeout=10";
                     services.AddDbContextFactory<AgentCoreDbContext>(options => options.UseSqlite(connection)); TestSqliteIdentity.Configure(services, connection, Path.Combine(Root, "keys")); }
                 if (model is not null)

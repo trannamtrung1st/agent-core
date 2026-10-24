@@ -86,6 +86,70 @@ public sealed partial class TenantOperationAuthorizationTests
     }
 
     [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Tenant_workspace_read_remains_valid_when_the_same_claim_persists_ordinary_response_progress(bool sqlite)
+    {
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, true); await GrantWorkspaceRuntimeReads(f, s);
+        var runtime = (ITenantRuntimeStore)f.Iam;
+        var before = (await runtime.LoadTenantRuntimeAsync(frame))!;
+        var runBefore = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
+        var securityRevision = (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;
+        var probe = new WorkspaceRuntimeReadProbe(WorkspaceReader(f), async () =>
+        {
+            var snapshot = (await runtime.LoadTenantRuntimeAsync(frame))!;
+            var response = new ConversationEntry(f.Ids.NewId(), snapshot.LastEntrySequence + 1, null, ConversationRole.Assistant,
+                "Owned response progress", s.Run.ResponseId, EntryStatus.Streaming, SessionMode.Text, 0, 0, f.Clock.GetUtcNow());
+            await runtime.SaveTenantRuntimeAsync(frame, snapshot with { Revision = snapshot.Revision + 1,
+                Entries = [..snapshot.Entries, response], LastEntrySequence = response.Sequence }, snapshot.Revision);
+        });
+        var call = new ModelToolCall("progress-workspace", ToolCatalog.WorkspaceRead, """{"path":"/working/private.txt"}""");
+        string? output = null; SecurityConflictException? conflict = null;
+        try { output = await WorkspaceRuntimeReads(f, probe).InspectAsync(frame, call, 16000); }
+        catch (SecurityConflictException error) { conflict = error; }
+        Assert.Equal(1, probe.Fired);
+        var after = (await runtime.LoadTenantRuntimeAsync(frame))!;
+        Assert.Equal(before.Revision + 1, after.Revision);
+        Assert.Contains(after.Entries, entry => entry.ResponseId == s.Run.ResponseId && entry.Text == "Owned response progress" && entry.Status == EntryStatus.Streaming);
+        var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
+        Assert.Equal(AgentRunStatus.Running, run.Status); Assert.Equal(runBefore.Revision, run.Revision); Assert.Equal(frame.Generation, run.Claim!.Generation);
+        Assert.Equal(securityRevision, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
+        Assert.Equal("Private model bytes: thử nghiệm", Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(
+            new(s.Tenant, s.Agent.Instance.InstanceId, frame.SessionId), "/working/private.txt", 4096)).Bytes));
+        Assert.True(conflict is null, $"An unchanged owned read failed after only conversation progress: {conflict?.ReasonCode}");
+        Assert.NotNull(output); using var read = JsonDocument.Parse(output);
+        Assert.Equal("Private model bytes: thử nghiệm", read.RootElement.GetProperty("content").GetString());
+        Assert.True(read.RootElement.GetProperty("tenantWorkspaceRead").GetBoolean());
+    }
+
+    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Tenant_workspace_read_withholds_captured_bytes_after_cancellation_or_generation_replacement(bool sqlite, bool replace)
+    {
+        var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
+        await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, true); await GrantWorkspaceRuntimeReads(f, s);
+        var runtime = (ITenantRuntimeStore)f.Iam;
+        var probe = new WorkspaceRuntimeReadProbe(WorkspaceReader(f), async () =>
+        {
+            var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
+            if (!replace)
+                await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
+                    new AgentRunCommand.RequestCancellation(run.Revision, f.Clock.GetUtcNow(), null), f.Ids.NewId());
+            else
+            {
+                clock.Advance(TimeSpan.FromMinutes(6));
+                run = await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
+                    new AgentRunCommand.Recover(run.Revision, f.Clock.GetUtcNow()), f.Ids.NewId());
+                run = await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
+                    new AgentRunCommand.Claim(run.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId());
+                Assert.NotEqual(frame.Generation, run.Claim!.Generation);
+            }
+        });
+        var call = new ModelToolCall("retired-workspace", ToolCatalog.WorkspaceRead, """{"path":"/working/private.txt"}""");
+        var refused = await Assert.ThrowsAsync<AccessDeniedException>(() => WorkspaceRuntimeReads(f, probe).InspectAsync(frame, call, 16000).AsTask());
+        Assert.Equal("tenant_runtime_unavailable", refused.ReasonCode); Assert.Equal(1, probe.Fired);
+    }
+
+    [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_model_empty_lists_do_not_initialize_and_bounded_pages_preserve_next_unseen_path(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);

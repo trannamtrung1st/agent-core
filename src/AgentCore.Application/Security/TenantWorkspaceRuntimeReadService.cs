@@ -68,9 +68,11 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
     {
         ct.ThrowIfCancellationRequested();
         var after = await Require(frame, tool, args, ct, approved: approved, live: live).ConfigureAwait(false);
+        // The same live claim can persist its response while a file read is in flight.
+        // Conversation revision is not a file or authority witness; Require repeats owner/lifecycle checks.
         if (before.Run.Revision != after.Run.Revision || before.State.Tenant.Revision != after.State.Tenant.Revision
             || before.Agent.Instance.Revision != after.Agent.Instance.Revision || before.Session.Owner != after.Session.Owner
-            || before.Session.Snapshot.Revision != after.Session.Snapshot.Revision || before.Workspace != after.Workspace || before.Resource != after.Resource || before.Collection?.Hash != after.Collection?.Hash || before.Knowledge != after.Knowledge || before.Attachments?.Hash != after.Attachments?.Hash)
+            || before.Workspace != after.Workspace || before.Resource != after.Resource || before.Collection?.Hash != after.Collection?.Hash || before.Knowledge != after.Knowledge || before.Attachments?.Hash != after.Attachments?.Hash)
             throw new SecurityConflictException("workspace_source_changed");
         if ((await security.ReadTenantAsync(after.Workspace.TenantId, ct).ConfigureAwait(false))?.Tenant.Revision != after.State.Tenant.Revision)
             throw new SecurityConflictException("workspace_source_changed");

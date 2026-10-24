@@ -49,6 +49,37 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Empty((await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(s.Tenant, null, null, new(0, 20))).Items);
     }
 
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Tenant_resource_capture_remains_valid_when_the_same_claim_persists_ordinary_response_progress(bool sqlite)
+    {
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var v = await ResourceSourceCase(f); var s = v.Setup;
+        var frame = await ClaimArtifactRun(f, s); await GrantWorkspaceRuntimeReads(f, s, ["sessions.read", "agents.read", "resources.read"]);
+        var runtime = (ITenantRuntimeStore)f.Iam; var before = (await runtime.LoadTenantRuntimeAsync(frame))!;
+        var runBefore = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
+        var securityRevision = (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;
+        var probe = new ResourceContentProbe((ITenantResourceSourceContentStore)f.RunContent, async () =>
+        {
+            var snapshot = (await runtime.LoadTenantRuntimeAsync(frame))!;
+            var response = new ConversationEntry(f.Ids.NewId(), snapshot.LastEntrySequence + 1, null, ConversationRole.Assistant,
+                "Owned resource response progress", s.Run.ResponseId, EntryStatus.Streaming, SessionMode.Text, 0, 0, f.Clock.GetUtcNow());
+            await runtime.SaveTenantRuntimeAsync(frame, snapshot with { Revision = snapshot.Revision + 1,
+                Entries = [..snapshot.Entries, response], LastEntrySequence = response.Sequence }, snapshot.Revision);
+        });
+        TenantResourceSource? captured = null; SecurityConflictException? conflict = null;
+        try { captured = await ResourceSources(f, probe).CaptureAsync(frame, ToolCatalog.WorkspaceRead, v.Path); }
+        catch (SecurityConflictException error) { conflict = error; }
+        Assert.Equal(1, probe.Reads);
+        var after = (await runtime.LoadTenantRuntimeAsync(frame))!; Assert.Equal(before.Revision + 1, after.Revision);
+        Assert.Contains(after.Entries, entry => entry.ResponseId == s.Run.ResponseId && entry.Text == "Owned resource response progress" && entry.Status == EntryStatus.Streaming);
+        var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
+        Assert.Equal(AgentRunStatus.Running, run.Status); Assert.Equal(runBefore.Revision, run.Revision); Assert.Equal(frame.Generation, run.Claim!.Generation);
+        Assert.Equal(securityRevision, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
+        var pinned = run.Admission.Configuration!.Resources.Single(resource => resource.Key == v.Key);
+        Assert.Equal(v.Bytes, await ((ITenantResourceSourceContentStore)f.RunContent).ReadVerifiedResourceSourceAsync(pinned.ContentSha256, pinned.ByteLength));
+        Assert.True(conflict is null, $"An unchanged pinned resource failed after only conversation progress: {conflict?.ReasonCode}");
+        Assert.NotNull(captured); Assert.Equal(v.Bytes, captured.CopyContent()); Assert.Equal(pinned, captured.Observation.Resource);
+    }
+
     [Theory] [InlineData(false, "sessions.read")] [InlineData(true, "sessions.read")]
     [InlineData(false, "agents.read")] [InlineData(true, "agents.read")]
     [InlineData(false, "resources.read")] [InlineData(true, "resources.read")]
