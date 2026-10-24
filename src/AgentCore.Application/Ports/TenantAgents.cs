@@ -19,6 +19,7 @@ public sealed record TenantAgentConfigurationChange(Guid InstanceId, long Expect
     PreparedManagementBinding? Binding = null);
 
 public sealed record TenantIsolationMetadata(long ExperienceRevision, bool ExperienceEnabled, long MaintenanceRevision, bool AllowMaintenance);
+public sealed record IsolationOwnerRevisions(long Instance, long Experience, long Maintenance);
 public sealed record TenantIsolationMutation(IsolationOwnerRevisions Expected, bool ExperienceEnabled, bool AllowMaintenance);
 
 // Specialized transaction boundary: the existing Instance, its identity, security revision and audit
