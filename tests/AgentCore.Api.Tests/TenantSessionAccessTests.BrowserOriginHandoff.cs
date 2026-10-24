@@ -77,6 +77,12 @@ public sealed partial class TenantSessionAccessTests
                     "approved-redirect" => [Navigate("https://cars.test/page"), Navigate("https://cars.test/again"), Navigate("https://www.cars.test/again")],
                     "approved-close" => [Navigate("https://a.test/page"), new("close-" + index, ToolCatalog.RequestAuthorization,
                         """{"operation":"run_browser_command","command":{"tool":"browser.close","arguments":{}}}"""), Navigate("https://a.test/again"), Navigate("https://b.test/page"), read],
+                    "approved-after-action" => [Navigate("https://a.test/page"), Navigate("https://b.test/page"),
+                        new("act-" + index, ToolCatalog.RequestAuthorization, """{"operation":"run_browser_command","command":{"tool":"browser.click","arguments":{"target":{"by":"role","value":"button","name":"Save"}}}}"""),
+                        Navigate("https://a.test/again")],
+                    "approved-after-redirect-action" => [Navigate("https://cars.test/page"), Navigate("https://b.test/page"),
+                        new("act-" + index, ToolCatalog.RequestAuthorization, """{"operation":"run_browser_command","command":{"tool":"browser.click","arguments":{"target":{"by":"role","value":"button","name":"Save"}}}}"""),
+                        Navigate("https://cars.test/again"), Navigate("https://www.cars.test/again")],
                     _ => [Navigate("https://a.test/page"), read] };
                 if (index < actions.Length)
                 {
@@ -121,6 +127,8 @@ public sealed partial class TenantSessionAccessTests
     [InlineData(false, "approved-other")] [InlineData(true, "approved-other")]
     [InlineData(false, "approved-redirect")] [InlineData(true, "approved-redirect")]
     [InlineData(false, "approved-close")] [InlineData(true, "approved-close")]
+    [InlineData(false, "approved-after-action")] [InlineData(true, "approved-after-action")]
+    [InlineData(false, "approved-after-redirect-action")] [InlineData(true, "approved-after-redirect-action")]
     public async Task Tenant_Browser_owned_read_handoff_bounds_blocked_or_repeated_evidence_and_next_user_turn_rechecks(bool sqlite, string mode)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-browser-handoff-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
@@ -163,7 +171,8 @@ public sealed partial class TenantSessionAccessTests
             }
             var run = await AwaitBrowserRestartRun(runs, tenant, initial, false);
             Assert.Equal(mode == "after-stop" ? AgentRunStatus.Failed : AgentRunStatus.Completed, run.Status);
-            Assert.Equal(mode switch { "repeated" => 3, "approved-other" or "approved-close" => 4, _ => 1 }, browser.Calls);
+            Assert.Equal(mode switch { "repeated" or "approved-after-action" or "approved-after-redirect-action" => 3, "approved-other" or "approved-close" => 4, _ => 1 }, browser.Calls);
+            if (mode is "approved-after-action" or "approved-after-redirect-action") Assert.Equal("https://b.test/page", browser.CurrentUrl);
             if (mode == "approved-other") Assert.Contains(model.Requests.Last().Tools ?? [], t => t.Name == ToolCatalog.BrowserSnapshot);
             if (mode is "challenge" or "repeated" or "after-stop")
             {
@@ -179,7 +188,7 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Equal(AgentRunStatus.Completed, (await AwaitBrowserRestartRun(runs, tenant, next.GetProperty("runId").GetGuid(), false)).Status);
                 Assert.Equal(2, browser.Calls);
             }
-            Assert.Equal(mode switch { "approved-other" or "approved-close" => 3, _ => approved ? 1 : 0 }, (await factory.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(tenant, null, null, new())).Items.Count);
+            Assert.Equal(mode switch { "approved-other" or "approved-close" or "approved-after-action" or "approved-after-redirect-action" => 3, _ => approved ? 1 : 0 }, (await factory.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(tenant, null, null, new())).Items.Count);
             var history = (await Json(await owner.GetAsync(api + $"/sessions/{session}/messages"))).GetProperty("items").EnumerateArray().ToArray();
             Assert.DoesNotContain(history, h => h.GetProperty("text").GetString()!.Contains("Do not request more browser actions", StringComparison.Ordinal));
             Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);

@@ -25,7 +25,11 @@ internal static class RunExecutionFacts
         IReadOnlyList<string> loaded, IEnumerable<ModelMessage> receipts, string? failureCode = null, FailureReference? failure = null)
     {
         var outcomes = new Dictionary<(string Tool, string Outcome), int>();
-        foreach (var receipt in receipts.Where(r => r.Role == ModelRole.Tool && r.Name is not null))
+        // Settled exact consent carries native results in its bounded wrapper. Reuse
+        // only validated registered command/status facts; never copy page content or arguments.
+        var native = BrowserControlEvidence.Read(receipts.Where(r => r.Role != ModelRole.Tool || r.Name == ToolCatalog.RequestAuthorization))
+            .Select(observed => new ModelMessage(ModelRole.Tool, observed.Json, Name: observed.Call.Name));
+        foreach (var receipt in receipts.Concat(native).Where(r => r.Role == ModelRole.Tool && r.Name is not null))
         {
             if (!ToolRegistry.TryGet(receipt.Name!, out _)) continue;
             try

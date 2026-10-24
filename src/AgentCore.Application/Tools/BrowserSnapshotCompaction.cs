@@ -176,6 +176,7 @@ internal static class BrowserSnapshotCompaction
         var title = string.Empty;
         var visible = string.Empty;
         bool? settled = null;
+        BrowserInterventionKind? intervention = null;
         bool? effectAttempted = null, effectConfirmedBySdk = null, applicationOutcomeVerified = null;
         try
         {
@@ -189,6 +190,10 @@ internal static class BrowserSnapshotCompaction
             effectAttempted = ReadBoolean(root, "effectAttempted");
             effectConfirmedBySdk = ReadBoolean(root, "effectConfirmedBySdk");
             applicationOutcomeVerified = ReadBoolean(root, "applicationOutcomeVerified");
+            if (root.TryGetProperty("intervention", out var control) && control.ValueKind == JsonValueKind.Number
+                && control.TryGetInt32(out var kind) && Enum.IsDefined((BrowserInterventionKind)kind)
+                && kind != (int)BrowserInterventionKind.None)
+                intervention = (BrowserInterventionKind)kind;
             if (root.TryGetProperty("settled", out var settledProperty)
                 && settledProperty.ValueKind is JsonValueKind.True or JsonValueKind.False)
             {
@@ -220,6 +225,12 @@ internal static class BrowserSnapshotCompaction
                 title,
                 contentExcerpt = excerpt
             });
+        if (intervention is { } retained)
+        {
+            var receipt = JsonNode.Parse(result)!.AsObject();
+            receipt["intervention"] = (int)retained;
+            result = receipt.ToJsonString();
+        }
         return PreserveReadScope(text, result);
     }
 

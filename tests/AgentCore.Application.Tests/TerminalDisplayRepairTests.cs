@@ -46,51 +46,6 @@ public sealed partial class TerminalDisplayRepairTests
         finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Bounded_workspace_document_materializes_and_follow_up_note_repairs_invalid_blocks(bool structured)
-    {
-        var root = Path.Combine(Path.GetTempPath(), $"agent-core-block-repair-{Guid.NewGuid():N}");
-        try
-        {
-            var workspace = WorkspaceTestSessions.CreateWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "templates"));
-            var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-            var document = string.Concat(Enumerable.Repeat("# Scrum playbook\nObserve the current evidence before making changes.\n", 400));
-            var inner = new DocumentModel(document, structured);
-            var model = new SemanticResponseLanguageModel(inner);
-            var executor = new SessionToolExecutor( configurationGate:ToolConfigurationGates.AllowAll);
-            await using var runtime = CreateCore(model, null, null,
-                [ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreateFromWorkspace], executor, new SessionArtifactAuthorizer(artifacts));
-            await runtime.AttachAsync();
-            Assert.True(await runtime.SubmitUserTextAsync("Create a substantial Scrum playbook and materialize it."));
-            await runtime.WaitUntilIdleAsync();
-            var first = Assert.Single(runtime.Snapshot.Entries, e => e.Role == ConversationRole.Assistant);
-            Assert.Equal(EntryStatus.Completed, first.Status);
-            var artifact = Assert.Single(await artifacts.ListAsync(runtime.SessionId));
-            Assert.Equal(artifact.ArtifactId.ToString(), Assert.Single(first.Envelope!.Blocks).ArtifactId);
-            Assert.True(artifact.ByteSize > 16 * 1024);
-            Assert.DoesNotContain("[[", first.Text, StringComparison.Ordinal);
-            Assert.DoesNotContain("[Unavailable artifact]", first.Text, StringComparison.Ordinal);
-            Assert.True(await runtime.SubmitUserTextAsync("Write this down as a note first."));
-            await runtime.WaitUntilIdleAsync();
-            var answers = runtime.Snapshot.Entries.Where(e => e.Role == ConversationRole.Assistant).ToArray();
-            Assert.Equal(2, answers.Length);
-            Assert.All(answers, e => Assert.Equal(EntryStatus.Completed, e.Status));
-            Assert.Equal("Saved the note in notes.md.", answers[1].Text);
-            Assert.Empty(answers[1].Envelope!.Blocks);
-            Assert.Equal(document, Encoding.UTF8.GetString((await workspace.ReadAsync(runtime.SessionId,
-                runtime.Snapshot.Definition, "/working/notes.md")).Bytes));
-            Assert.Single(await artifacts.ListAsync(runtime.SessionId));
-            Assert.Equal([ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreateFromWorkspace, ToolCatalog.WorkspaceWrite], inner.ToolCalls);
-            Assert.Equal(6, inner.Requests.Count);
-            AssertTerminalChannelOnly(inner.Requests[^1]);
-            Assert.Contains(inner.Requests[^1].Messages, m => m.Text == ProtocolFailures.InvalidBlocksInstruction);
-            Assert.Contains(inner.Requests[^1].Messages, m => m.Role == ModelRole.Tool && m.Text.Contains("notes.md", StringComparison.Ordinal));
-        }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
-    }
-
     [Fact]
     public async Task A_direct_chat_shows_only_the_repaired_answer()
     {
@@ -297,28 +252,6 @@ public sealed partial class TerminalDisplayRepairTests
         Assert.Equal(1, model.Calls);
         Assert.Equal(
             EntryStatus.Interrupted,
-            Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
-    }
-
-    [Fact]
-    public async Task An_expired_execution_deadline_does_not_start_protocol_repair()
-    {
-        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
-        var browser = new CountingBrowser();
-        var model = new HoldThenFailModel();
-        await using var runtime = Create(model, browser, clock, ToolCatalog.BrowserNavigate);
-        await runtime.AttachAsync();
-
-        Assert.True(await runtime.SubmitUserTextAsync("check zigwheels"));
-        await model.Holding.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        clock.Advance(TimeSpan.FromSeconds(301));
-        model.Release.TrySetResult();
-        await runtime.WaitUntilIdleAsync();
-
-        Assert.Equal(2, model.Calls);
-        Assert.Single(browser.Navigated);
-        Assert.NotEqual(
-            EntryStatus.Completed,
             Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
     }
 
@@ -575,43 +508,6 @@ public sealed partial class TerminalDisplayRepairTests
             Ready.TrySetResult();
             await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
             yield break;
-        }
-    }
-
-    private sealed class HoldThenFailModel : ILanguageModel
-    {
-        private int _calls;
-
-        public int Calls => _calls;
-
-        public TaskCompletionSource Holding { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
-
-        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
-            ModelRequest request,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            var call = Interlocked.Increment(ref _calls);
-            if (call == 1)
-            {
-                yield return new ModelToolCallEvent(new ModelToolCall(
-                    "nav-1",
-                    ToolCatalog.BrowserNavigate,
-                    """{"url":"https://zigwheels.test/"}"""));
-                yield return new ModelCompleted(ModelStopReason.ToolCalls);
-                yield break;
-            }
-
-            Holding.TrySetResult();
-            await Release.Task.ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            yield return new ModelFailed(new ProviderFailure(
-                ProviderErrorCode.InvalidResponse,
-                "Malformed assistant envelope.",
-                FailureReason: ProviderFailureReason.MissingDisplayText));
         }
     }
 

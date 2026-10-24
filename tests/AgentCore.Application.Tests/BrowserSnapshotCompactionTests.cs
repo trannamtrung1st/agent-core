@@ -6,6 +6,68 @@ namespace AgentCore.Application.Tests;
 
 public sealed class BrowserSnapshotCompactionTests
 {
+    [Theory]
+    [InlineData(1)] [InlineData(2)] [InlineData(3)]
+    public void Reviewed_intervention_survives_later_and_repeated_compaction_without_retaining_private_observation_fields(int kind)
+    {
+        var (messages, call) = ChallengeHistory(JsonSerializer.SerializeToElement(kind));
+        BrowserSnapshotCompaction.Compact(messages);
+        AssertControl();
+        messages.Add(Page("https://final.test/page", "new observation", null));
+        BrowserSnapshotCompaction.Compact(messages);
+        AssertControl();
+        var repeated = messages[1].Text;
+        BrowserSnapshotCompaction.Compact(messages);
+        Assert.Equal(repeated, messages[1].Text);
+
+        void AssertControl()
+        {
+            using var json = JsonDocument.Parse(messages[1].Text); var receipt = json.RootElement;
+            Assert.Equal("request", receipt.GetProperty("requestId").GetString()); Assert.Equal("operation", receipt.GetProperty("operationId").GetString());
+            Assert.True(receipt.GetProperty("commandCompleted").GetBoolean()); Assert.False(receipt.GetProperty("replayAllowed").GetBoolean());
+            var observation = receipt.GetProperty("browser").GetProperty("observation");
+            Assert.Equal(kind, observation.GetProperty("intervention").GetInt32()); Assert.True(observation.GetProperty("compacted").GetBoolean());
+            Assert.False(observation.TryGetProperty("content", out _)); Assert.False(observation.TryGetProperty("targets", out _));
+            Assert.False(observation.TryGetProperty("privateBytes", out _)); Assert.False(observation.TryGetProperty("privateCookie", out _));
+            Assert.DoesNotContain("PRIVATE_BODY_MIDDLE", observation.GetRawText()); Assert.DoesNotContain("PRIVATE_TARGET", observation.GetRawText());
+            Assert.DoesNotContain("PRIVATE_BYTES", observation.GetRawText()); Assert.DoesNotContain("PRIVATE_COOKIE", observation.GetRawText());
+            Assert.InRange(observation.GetProperty("contentExcerpt").GetString()!.Length, 1, BrowserSnapshotCompaction.PageEvidenceChars);
+            var control = Assert.Single(BrowserControlEvidence.Read(messages));
+            Assert.Equal(ToolCatalog.BrowserNavigate, control.Call.Name); Assert.Contains("https://requested.test/page", control.Call.ArgumentsJson);
+            Assert.Equal(call.Id, control.Call.Id);
+            using var decoded = JsonDocument.Parse(control.Json);
+            Assert.Equal("user_intervention_required", decoded.RootElement.GetProperty("error").GetString());
+            Assert.Equal("https://final.test/page", decoded.RootElement.GetProperty("url").GetString());
+        }
+    }
+
+    [Theory]
+    [InlineData("null")] [InlineData("0")] [InlineData("999")] [InlineData("-1")]
+    [InlineData("true")] [InlineData("\"HumanVerificationRequired\"")] [InlineData("{\"private\":\"PRIVATE_CONTROL\"}")]
+    public void Compaction_does_not_promote_untyped_or_unknown_intervention_values(string value)
+    {
+        using var input = JsonDocument.Parse(value); var (messages, _) = ChallengeHistory(input.RootElement);
+        BrowserSnapshotCompaction.Compact(messages); BrowserSnapshotCompaction.Compact(messages);
+        using var json = JsonDocument.Parse(messages[1].Text);
+        var observation = json.RootElement.GetProperty("browser").GetProperty("observation");
+        Assert.False(observation.TryGetProperty("intervention", out _)); Assert.False(observation.TryGetProperty("targets", out _));
+        Assert.DoesNotContain("PRIVATE_", observation.GetRawText());
+        using var control = JsonDocument.Parse(Assert.Single(BrowserControlEvidence.Read(messages)).Json);
+        Assert.False(control.RootElement.TryGetProperty("error", out _));
+    }
+
+    private static (List<ModelMessage> Messages, ModelToolCall Call) ChallengeHistory(JsonElement intervention)
+    {
+        var call = new ModelToolCall("challenged", ToolCatalog.RequestAuthorization,
+            """{"operation":"run_browser_command","command":{"tool":"browser.navigate","arguments":{"url":"https://requested.test/page"}}}""");
+        var receipt = JsonSerializer.Serialize(new { approvalStatus = "approved", outcome = "completed", commandCompleted = true, replayAllowed = false,
+            requestId = "request", operationId = "operation", browser = new { status = "", untrustedBrowserContent = true, effectAttempted = true,
+                effectConfirmedBySdk = true, applicationOutcomeVerified = false, observation = new { url = "https://final.test/page", title = "Challenge", intervention,
+                    content = new string('a', 2000) + "PRIVATE_BODY_MIDDLE" + new string('z', 2000),
+                    targets = new[] { new { name = "PRIVATE_TARGET" } }, privateBytes = "PRIVATE_BYTES", privateCookie = "PRIVATE_COOKIE" } } });
+        return ([new(ModelRole.Assistant, "", ToolCalls: [call]), new(ModelRole.Tool, receipt, ToolCallId: call.Id, Name: call.Name), Observation(1, "latest")], call);
+    }
+
     [Fact]
     public void Reviewed_native_observations_share_compaction_without_changing_consent_or_effect_facts()
     {
