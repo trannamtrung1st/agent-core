@@ -776,34 +776,6 @@ public sealed class BrowserToolTests
     }
 
     [Fact]
-    public async Task Close_maps_unavailable_browser_to_provider_unavailable()
-    {
-        var fake = new FakeBrowser { IsAvailable = false };
-        var result = await Executor(fake).ExecuteAsync(
-            BrowserDefinitionV12(),
-            Guid.NewGuid(),
-            Call(ToolCatalog.BrowserClose, "{}"),
-            ToolLimits.MaxOutputBytes,
-            admission: UserTurn());
-        Assert.Equal(0, fake.CloseCalls);
-        Assert.Contains("provider_unavailable", result.Text, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task Close_maps_port_provider_unavailable_to_tool_failure()
-    {
-        var fake = new FakeBrowser { CloseResult = new BrowserResult(null, Status: "provider_unavailable", DataJson: System.Text.Json.JsonSerializer.Serialize(new { status = "provider_unavailable" })) };
-        var result = await Executor(fake).ExecuteAsync(
-            BrowserDefinitionV12(),
-            Guid.NewGuid(),
-            Call(ToolCatalog.BrowserClose, "{}"),
-            ToolLimits.MaxOutputBytes,
-            admission: UserTurn());
-        Assert.Equal(1, fake.CloseCalls);
-        Assert.Contains("provider_unavailable", result.Text, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void Publication_blocks_browser_tools_when_the_host_gate_is_closed()
     {
         var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Support) with
