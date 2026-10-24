@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
 
 test("fake Browser STT listens without PCM STT and keeps the composer", async ({ page }) => {
   await openTenantConversation(page);
-  await page.getByLabel("Message").fill("Hello");
+  await page.getByRole("textbox", { name: "Message", exact: true }).fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
 
@@ -21,7 +21,7 @@ test("fake Browser STT listens without PCM STT and keeps the composer", async ({
   }).toBe(true);
   expect(await page.evaluate(() => window.__agentCore?.getUserMediaUsed?.() ?? true)).toBe(false);
   expect(await page.evaluate(() => window.__agentCore?.audioFramesSent?.() ?? -1)).toBe(0);
-  await expect(page.getByLabel("Message")).toBeEnabled();
+  await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
 
   const utteranceId = "11111111-1111-1111-1111-111111111111";
@@ -42,9 +42,9 @@ test("fake Browser STT listens without PCM STT and keeps the composer", async ({
   }).toEqual(expect.arrayContaining(["hello there"]));
   await expect(page.getByRole("button", { name: "Queue" })).toHaveCount(0);
 
-  await page.getByLabel("Message").fill("Please hold the line");
+  await page.getByRole("textbox", { name: "Message", exact: true }).fill("Please hold the line");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
   expect(await page.evaluate(() => window.__agentCore?.audioFramesSent?.() ?? -1)).toBe(0);
-  await expect(page.getByLabel("Message")).toBeEnabled();
+  await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeEnabled();
 });

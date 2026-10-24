@@ -16,17 +16,17 @@ test('platform policy keeps effective startup facts, recovers lost reply and ret
   try {
     await page.setViewportSize({width:1440,height:1000}); await signIn(page); await page.getByRole('link',{name:'Browser privacy',exact:true}).click();
     await expect(page).toHaveURL(/\/system\/browser-privacy$/); await expect(page.getByRole('region',{name:'Platform Browser privacy'})).toBeVisible();
-    const current=await call<Policy>(api,policyApi); const firstMode=current.saved.mode==='Disabled'?'Protected':'Disabled';
+    const current=await call<Policy>(api,policyApi); expect(current.durable).toBe(true); const firstMode=current.saved.mode==='Disabled'?'Protected':'Disabled';
     await choose(page,'Saved screenshot privacy mode',firstMode==='Disabled'?'Disabled — no screenshots':'Protected — mask sensitive pixels');
     await page.getByRole('button',{name:/Save screenshot privacy$/}).click();
-    await expect(page.getByText(`${firstMode} · revision ${current.saved.revision+1} · ephemeral, not active`,{exact:true})).toBeVisible();
+    await expect(page.getByText(`${firstMode} · revision ${current.saved.revision+1} · restart required`,{exact:true})).toBeVisible();
     await expect(page.getByText(`${current.effective.mode} · revision ${current.effective.revision}`,{exact:true})).toBeVisible();
     const secondMode=firstMode==='Disabled'?'Protected':'Disabled'; let lost=0;
     await page.route('**'+policyApi,async route=>{if(route.request().method()!=='PUT'){await route.continue();return;}const actual=await route.fetch();expect(actual.ok()).toBeTruthy();lost++;await route.fulfill({response:actual,body:'lost policy reply'});});
     await page.setViewportSize({width:390,height:844});await choose(page,'Saved screenshot privacy mode',secondMode==='Disabled'?'Disabled — no screenshots':'Protected — mask sensitive pixels');await page.getByRole('button',{name:/Save screenshot privacy$/}).click();
     await expect(page.getByText('Read current policy before saving again',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:/Save screenshot privacy$/})).toBeDisabled();expect(lost).toBe(1);expect(mutations).toHaveLength(2);
     await page.screenshot({path:test.info().outputPath('mobile-lost-policy-reply.png'),fullPage:true});await page.getByRole('button',{name:'Reload saved policy',exact:true}).click();
-    await expect(page.getByText(`${secondMode} · revision ${current.saved.revision+2} · ephemeral, not active`,{exact:true})).toBeVisible();expect(mutations).toHaveLength(2);await expect(page.getByRole('button',{name:/Save screenshot privacy$/})).toBeDisabled();
+    await expect(page.getByText(`${secondMode} · revision ${current.saved.revision+2} · restart required`,{exact:true})).toBeVisible();expect(mutations).toHaveLength(2);await expect(page.getByRole('button',{name:/Save screenshot privacy$/})).toBeDisabled();
     await page.unroute('**'+policyApi);await page.setViewportSize({width:320,height:740});await choose(page,'Saved screenshot privacy mode','Unmasked — explicit confidentiality exception');await choose(page,'Trusted exact origins for Unmasked capture','https://example.test');
     await page.getByRole('button',{name:/Save screenshot privacy$/}).click();let confirm=page.getByRole('dialog',{name:'Authorize unmasked screenshots for all organizations?',exact:true});await expect(confirm).toContainText('https://example.test');
     await page.screenshot({path:test.info().outputPath('narrow-global-exposure-confirmation.png')});
@@ -35,7 +35,7 @@ test('platform policy keeps effective startup facts, recovers lost reply and ret
     await expect(page.getByRole('combobox',{name:/Saved screenshot privacy mode/}).locator('..')).toContainText('Unmasked');expect(mutations).toHaveLength(3);
     await page.getByRole('button',{name:'Reload saved policy',exact:true}).click();await expect(page.getByRole('button',{name:/Save screenshot privacy$/})).toBeEnabled();expect(mutations).toHaveLength(3);
     await page.getByRole('button',{name:/Save screenshot privacy$/}).click();confirm=page.getByRole('dialog',{name:'Authorize unmasked screenshots for all organizations?',exact:true});await confirm.getByRole('button',{name:'Acknowledge & save',exact:true}).click();
-    await expect(page.getByText(`Unmasked · revision ${current.saved.revision+4} · ephemeral, not active`,{exact:true})).toBeVisible();const saved=await call<Policy>(api,policyApi);expect(saved.effective).toEqual(current.effective);
+    await expect(page.getByText(`Unmasked · revision ${current.saved.revision+4} · restart required`,{exact:true})).toBeVisible();const saved=await call<Policy>(api,policyApi);expect(saved.effective).toEqual(current.effective);
     expect(mutations).toHaveLength(4);expect(errors).toEqual([]);expect(legacy).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }finally{await api.dispose();}
 });

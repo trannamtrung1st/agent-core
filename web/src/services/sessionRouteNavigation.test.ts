@@ -50,6 +50,7 @@ import { applyRouteFromLocation, openCatalogSession, openSessionById } from "./r
 import { getSession, listSessionMessages, reopenSession } from "./api";
 
 describe("session route navigation", () => {
+  const tenantId = "11111111-2222-3333-4444-555555555555";
   const endedId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 
   beforeEach(() => {
@@ -90,7 +91,7 @@ describe("session route navigation", () => {
       hasOlder: false,
       nextBefore: null
     });
-    window.history.replaceState(null, "", `/c/${endedId}`);
+    window.history.replaceState(null, "", `/t/${tenantId}/c/${endedId}`);
     useSessionStore.setState({
       ...emptySession(),
       agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
@@ -154,7 +155,7 @@ describe("session route navigation", () => {
     );
 
     expect(result).toBe("ended");
-    expect(window.location.pathname).toBe(`/c/${endedId}`);
+    expect(window.location.pathname).toBe(`/t/${tenantId}/c/${endedId}`);
     expect(useSessionStore.getState().status).toBe("ended");
     expect(useSessionStore.getState().connection).toBe("idle");
     expect(useSessionStore.getState().entries[0]?.text).toBe("Hello");
@@ -165,7 +166,7 @@ describe("session route navigation", () => {
   it("keeps an ended deep link after applyRouteFromLocation", async () => {
     await applyRouteFromLocation();
 
-    expect(window.location.pathname).toBe(`/c/${endedId}`);
+    expect(window.location.pathname).toBe(`/t/${tenantId}/c/${endedId}`);
     expect(useSessionStore.getState().status).toBe("ended");
     expect(useSessionStore.getState().entries[0]?.text).toBe("Hello");
     expect(reopenSession).not.toHaveBeenCalled();
@@ -333,7 +334,7 @@ describe("session route navigation", () => {
 
     await applyRouteFromLocation();
 
-    expect(window.location.pathname).toBe(`/c/${endedId}`);
+    expect(window.location.pathname).toBe(`/t/${tenantId}/c/${endedId}`);
     expect(useSessionStore.getState().status).toBe("ended");
     expect(useSessionStore.getState().connection).toBe("failed");
     expect(useSessionStore.getState().error).toBe("Unable to open the conversation.");
@@ -341,7 +342,7 @@ describe("session route navigation", () => {
   });
 
   it("keeps the admin path when openSessionById fails with syncUrl false", async () => {
-    const adminPath = "/admin/definitions/examiner";
+    const adminPath = `/t/${tenantId}/admin/definitions/examiner`;
     const liveId = "ffffffff-ffff-ffff-ffff-ffffffffffff";
     window.history.replaceState(null, "", adminPath);
     vi.mocked(getSession).mockResolvedValue({

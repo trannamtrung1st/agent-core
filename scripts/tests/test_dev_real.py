@@ -139,18 +139,23 @@ PYTHON''')
         import json
         (self.root / '.env').write_text("""OPENROUTER_API_KEY='literal-$value-$(touch should-not-exist)'
 Providers__LanguageModels__primary-llm__DefaultModel=operator-selected-model
+Providers__ModelCatalog__DefaultKey=operator-default-model
 VITE_AGENTCORE_REALTIME_PROTOCOL=json
 AGENTCORE_DEV_STATE_DIR=local/env-state
 """)
         self.env['OPENROUTER_API_KEY'] = 'older-inherited-value'
-        self.command('dotnet', '''python3 - "$@" <<'PYTHON'
-import json, os, pathlib, sys
+        # A native executable receives these names unchanged; Linux /bin/sh
+        # discards hyphenated keys before starting a child process.
+        dotnet = self.bin / 'dotnet'
+        dotnet.write_text(f'#!{sys.executable}\n' + '''import json, os, pathlib, sys, time
 pathlib.Path('backend-env.json').write_text(json.dumps({
  'key': os.environ.get('OPENROUTER_API_KEY'),
  'model': os.environ.get('Providers__LanguageModels__primary-llm__DefaultModel'),
+ 'catalog': os.environ.get('Providers__ModelCatalog__DefaultKey'),
  'args': sys.argv[1:]}))
-PYTHON
-exec sleep 300''')
+time.sleep(300)
+''')
+        dotnet.chmod(0o755)
         self.command('pnpm', '''python3 - <<'PYTHON'
 import json, os, pathlib
 pathlib.Path('frontend-env.json').write_text(json.dumps({
@@ -168,6 +173,7 @@ exec sleep 300''')
         frontend = json.loads((self.root / 'web/frontend-env.json').read_text())
         self.assertEqual(backend['key'], 'literal-$value-$(touch should-not-exist)')
         self.assertEqual(backend['model'], 'operator-selected-model')
+        self.assertEqual(backend['catalog'], 'operator-default-model')
         self.assertIn('--no-launch-profile', backend['args'])
         self.assertNotIn('--launch-profile', backend['args'])
         self.assertEqual(frontend, {'hasKey': False, 'hasProvider': False, 'protocol': 'json'})

@@ -101,6 +101,6 @@ test('exact scoped configuration manager needs no IAM inspector, retains stale d
     await page.getByRole('navigation', { name: 'Admin navigation', exact: true }).getByRole('link', { name: 'Connections', exact: true }).click();
     await expect(page.getByText('retained-shared', { exact: true })).toBeVisible();
     await f.revoke(parentGrant.assignmentId); await page.getByRole('button', { name: 'Reload connections', exact: true }).click();
-    await expect(page.getByText(/You do not have permission/)).toBeVisible(); await expect(page.getByText('retained-shared', { exact: true })).toHaveCount(0); await expect(page.getByRole('heading', { name: 'Alex', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Browser state', exact: true }).getByText(/You do not have permission/)).toBeVisible(); await expect(page.getByText('retained-shared', { exact: true })).toHaveCount(0); await expect(page.getByRole('heading', { name: 'Alex', exact: true })).toHaveCount(0);
   } finally { await f.api.dispose(); }
 });

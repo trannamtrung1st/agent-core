@@ -66,7 +66,9 @@ test('unaffiliated account joins two organizations; invalid, revoked and expired
     await page.goto('/account/organizations');
     await expect(page.getByRole('button', { name: `Open ${a.name}`, exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: `Open ${b.name}`, exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Sign out', exact: true }).click(); await signIn(page, login, password);
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
+    await signIn(page, login, password);
     const memberships = await call<{ total: number; items: { principalId: string }[] }>(page.request, '/api/v2/account/tenants');
     expect(memberships.total).toBe(2); expect(memberships.items[0].principalId).not.toBe(memberships.items[1].principalId);
     for (const state of ['invalid', 'revoked', 'expired'] as const) {
