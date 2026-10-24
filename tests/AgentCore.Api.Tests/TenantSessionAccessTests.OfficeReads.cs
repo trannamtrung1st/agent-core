@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AgentCore.Api.Security;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Security;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
@@ -12,6 +13,7 @@ using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Api.Tests;
 
@@ -45,7 +47,8 @@ public sealed partial class TenantSessionAccessTests
             var tool = working ? ToolCatalog.OfficeSpreadsheetInspect : ToolCatalog.OfficeDocumentInspect;
             var json = sparse ? JsonSerializer.Serialize(new { path }) : mode == "range-first" ? JsonSerializer.Serialize(new { path, range = "A1:B2" }) : working ? JsonSerializer.Serialize(new { path, sheet = "試験", range = "A1:B2" }) : JsonSerializer.Serialize(new { path, offset = 1, limit = 2 });
             var model = new TenantOfficeModel(tool, json, reviewed) { ContinueSparse = sparse, InvalidCursor = mode == "cursor-invalid" };
-            void Configure(IServiceCollection services) { if (proof) ((IdentityHttpOptions)services.Single(d => d.ServiceType == typeof(IdentityHttpOptions)).ImplementationInstance!).AllowedOrigins = ["http://127.0.0.1:5179"]; }
+            var diagnostics = new DiagnosticLineLoggerProvider(LogLevel.Warning);
+            void Configure(IServiceCollection services) { services.AddLogging(logging => logging.AddProvider(diagnostics)); if (proof) ((IdentityHttpOptions)services.Single(d => d.ServiceType == typeof(IdentityHttpOptions)).ImplementationInstance!).AllowedOrigins = ["http://127.0.0.1:5179"]; }
             await using WebApplicationFactory<Program> initial = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
             WebApplicationFactory<Program> factory = initial; if (proof) factory.UseKestrel(0);
             using var firstOwner = factory.CreateClient(); HttpClient owner = firstOwner;
@@ -115,7 +118,8 @@ public sealed partial class TenantSessionAccessTests
                     expectedRevision = detail.GetProperty("securityRevision").GetInt64(), expectedRequestRevision = request.Revision })).StatusCode);
                 Assert.Null(await factory.Services.GetRequiredService<ITenantApprovalStore>().FindOperationGrantAsync(tenant, request.RequestId));
             }
-            var done = await AwaitBrowserRestartRun(runs, tenant, runId, false); Assert.True(done.Status == AgentRunStatus.Completed, $"{done.Status}: {done.Failure?.Code}: {done.Failure?.Summary}");
+            var done = await AwaitBrowserRestartRun(runs, tenant, runId, false); Assert.True(done.Status == AgentRunStatus.Completed,
+                $"{done.Status}: {done.Failure?.Code}: {done.Failure?.Summary}; modelRequests={model.Requests.Count}; diagnosticId={done.Failure?.DiagnosticId}; diagnostics={SafePreparationDiagnostics(diagnostics)}");
             Assert.Equal(bytes, await owner.GetByteArrayAsync(workspace + "/content?path=" + Uri.EscapeDataString(path)));
             Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
             var result = model.Requests.Last().Messages.Last(m => m.Role == ModelRole.Tool && m.Name == (reviewed ? ToolCatalog.RequestAuthorization : tool));
@@ -177,6 +181,24 @@ public sealed partial class TenantSessionAccessTests
         }
         finally { recreatedOwner?.Dispose(); if (recreated is not null) await recreated.DisposeAsync(); SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }
+    private static string SafePreparationDiagnostics(DiagnosticLineLoggerProvider diagnostics)
+    {
+        lock (diagnostics.Lines)
+        {
+            static string Bound(string text) => text[..Math.Min(1024, text.Length)];
+            static string Cause(Exception error) => error.GetType().Assembly == typeof(DiagnosticLog).Assembly
+                && error.GetType().DeclaringType?.FullName == "AgentCore.Application.Observability.DiagnosticExceptionSnapshot"
+                && error.GetType().Name is "SafeException" or "SafeAggregateException"
+                ? error.ToString() : $"{error.GetType().FullName} HResult={error.HResult}";
+            // DiagnosticExceptionSnapshot captures content-free type/code/stack evidence.
+            // Do not render ordinary exception messages or unrelated warning text.
+            var handled = diagnostics.Lines.Where(line =>
+                line.StartsWith("The agent could not prepare a response.", StringComparison.Ordinal)
+                || line.StartsWith("Tenant Run projection unavailable.", StringComparison.Ordinal));
+            return string.Join(" | ", handled.Concat(diagnostics.Errors.Select(Cause)).TakeLast(16).Select(Bound));
+        }
+    }
+
     private sealed class TenantOfficeModel(string tool, string arguments, bool reviewed) : ILanguageModel
     {
         private readonly ScriptedLanguageModel inner = new(); public ModelCapabilities Capabilities => inner.Capabilities;

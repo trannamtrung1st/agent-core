@@ -2,13 +2,15 @@ using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Application.Security;
 
 public sealed partial class TenantRunExecutionAuthority(TenantOperationAuthorizer operations, IIamStore store, TimeProvider time,
     TenantRunConfigurationResolver configurations, TenantBrowserEffectService? browserEffects = null, TenantBrowserReadService? browserReads = null,
     TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantAttachmentRuntimeContextService? attachmentContext = null,
-    TenantWaitSourceAuthority? waitSources = null, TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantEventReadAuthority? eventReads = null, TenantRunSourceAuthority? sourceAuthority = null, AgentCore.Application.Ports.IModelCatalog? configurationModels = null, AgentCore.Application.Tools.IToolConfigurationGate? configurationTools = null, TenantPublicWebReadService? publicWebReads = null, TenantHttpEffectService? httpEffects = null) : IAgentRunAuthority, ITenantRunContext
+    TenantWaitSourceAuthority? waitSources = null, TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantEventReadAuthority? eventReads = null, TenantRunSourceAuthority? sourceAuthority = null, AgentCore.Application.Ports.IModelCatalog? configurationModels = null, AgentCore.Application.Tools.IToolConfigurationGate? configurationTools = null, TenantPublicWebReadService? publicWebReads = null, TenantHttpEffectService? httpEffects = null,
+    ILogger<TenantRunExecutionAuthority>? logger = null) : IAgentRunAuthority, ITenantRunContext
 {
     public ValueTask RecordAccountOutputFailureAsync(TenantRunReference reference, string reason, CancellationToken ct) =>
         operations.RecordFailureAsync(reference, reason == "account_metadata_unavailable" ? "credentials.read" : "credentials.use", reason, ExecutionAuthorizationPurpose.EffectEligibility, ct);
@@ -20,6 +22,7 @@ public sealed partial class TenantRunExecutionAuthority(TenantOperationAuthorize
         operations.RecordFailureAsync(reference, reason == "memory_learning_changed" ? "memory.manage" : "memory.read", reason, ExecutionAuthorizationPurpose.EffectEligibility, ct);
     private async ValueTask<AgentDefinition?> CurrentDefinitionCoreAsync(AgentRun run, bool checkProfile, CancellationToken cancellationToken)
     {
+        var phase = "resolve_before";
         try
         {
             // Discard a raced policy snapshot and make one fresh read. This never
@@ -27,14 +30,18 @@ public sealed partial class TenantRunExecutionAuthority(TenantOperationAuthorize
             for (var attempt = 0; attempt < 2; attempt++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                phase = "resolve_before";
                 var before = await ResolveCurrentAsync(run, cancellationToken).ConfigureAwait(false);
+                phase = "current_policy";
                 var current = await configurations.CurrentPolicyAsync(before.State.Tenant.TenantId, run.AgentInstanceId, cancellationToken).ConfigureAwait(false);
+                phase = "resolve_after";
                 var after = await ResolveCurrentAsync(run, cancellationToken).ConfigureAwait(false);
                 if (current.Agent.PrincipalId != run.Owner.ExecutorPrincipalId
                     || current.Agent.Instance.Lifecycle != AgentInstanceLifecycle.Active || current.Agent.Instance.DefinitionId != run.DefinitionId)
                     return null;
                 if (before.State.Tenant.Revision == after.State.Tenant.Revision)
                 {
+                    phase = "admission";
                     if (after.Run.Admission.OutputContract is AgentRunOutputContract.BackgroundOutcome or AgentRunOutputContract.CompletionReport
                         || TenantAutomationConversationRules.IsConversationRoot(await TenantExecutionLineage.RootAsync(after.Run, (ITenantRunStore)store, cancellationToken).ConfigureAwait(false)))
                     {
@@ -56,26 +63,39 @@ public sealed partial class TenantRunExecutionAuthority(TenantOperationAuthorize
                     }
                     if (after.Run.Admission.OutputContract == AgentRunOutputContract.CompletionReport)
                     {
+                        phase = "report_source";
                         if (reportReads is null) throw new AccessDeniedException("completion_source_read_required");
                         await reportReads.RequireAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     }
+                    phase = "event_source";
                     if (eventReads is not null) await eventReads.RequireAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     else if (TenantEventReadRules.IsEventRoot(await TenantExecutionLineage.RootAsync(after.Run, (ITenantRunStore)store, cancellationToken).ConfigureAwait(false)) || AgentCore.Application.Tools.TenantTaskExecutionContract.IsIndependent(after.Run))
                         throw new AccessDeniedException("event_source_unavailable");
+                    phase = "browser_effect";
                     if (browserEffects is not null) await browserEffects.RequireStoredObservationAsync(after.Run, cancellationToken).ConfigureAwait(false);
+                    phase = "browser_read";
                     if (browserReads is not null) await browserReads.RequireStoredObservationsAsync(after.Run, cancellationToken).ConfigureAwait(false);
+                    phase = "account_read";
                     if (accountReads is not null) await accountReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
+                    phase = "account_effect";
                     if (accountEffects is not null) await accountEffects.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     else if (TenantAccountActionReferences.Read(after.Run).Count > 0) throw new AccessDeniedException("account_source_changed");
+                    phase = "http_effect";
                     if(httpEffects is not null)await httpEffects.RequireStoredAsync(after.Run,cancellationToken).ConfigureAwait(false);
                     else if(TenantHttpReferences.Read(after.Run).Count>0)throw new AccessDeniedException("http_source_changed");
+                    phase = "credential_read";
                     if (credentialReads is not null) await credentialReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
+                    phase = "artifact_read";
                     if (artifactReads is not null) await artifactReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
+                    phase = "public_web_read";
                     if (publicWebReads is not null) await publicWebReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     else if (TenantPublicWebReadService.HasStored(after.Run)) throw new AccessDeniedException("public_web_unavailable");
+                    phase = "workspace_read";
                     if (workspaceReads is not null) await workspaceReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
+                    phase = "wait_source";
                     if (waitSources is not null) await waitSources.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     else if (TenantWaitSourceAuthority.HasStoredSources(after.Run)) throw new AccessDeniedException("wait_source_unavailable");
+                    phase = "attachment_context";
                     if (attachmentContext is not null) await attachmentContext.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     else if (AgentCore.Application.Execution.AgentRunToolCallCheckpoint.ReadExecutionState(after.Run.Checkpoint).TenantAttachmentSources is { Count: > 0 }
                         || AgentCore.Application.Execution.AgentRunToolCallCheckpoint.TryRead(after.Run.Checkpoint, out var attachmentMessages)
@@ -83,6 +103,7 @@ public sealed partial class TenantRunExecutionAuthority(TenantOperationAuthorize
                         throw new AccessDeniedException("attachment_context_unavailable");
                     if (TenantRunSourceAuthority.HasSources(after.Run, checkProfile))
                     {
+                        phase = "run_source";
                         if (sourceAuthority is null) throw new AccessDeniedException("source_context_unavailable");
                         await sourceAuthority.RequireAsync(after.Run, cancellationToken, checkProfile).ConfigureAwait(false);
                     }
@@ -91,8 +112,17 @@ public sealed partial class TenantRunExecutionAuthority(TenantOperationAuthorize
             }
             return null;
         }
-        catch (AccessDeniedException) { return null; }
-        catch (SecurityConflictException) { return null; }
+        catch (AccessDeniedException error) { Unavailable("denied", error.ReasonCode); return null; }
+        catch (SecurityConflictException error) { Unavailable("conflict", error.ReasonCode); return null; }
+
+        void Unavailable(string failure, string reason)
+        {
+            // Machine codes only: never pass exception objects, messages or source data to the sink.
+            var safeReason = reason is { Length: > 0 and <= 64 } && reason.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '-')
+                ? reason : "unavailable";
+            logger?.LogWarning("Tenant Run projection unavailable. Phase={Phase} Failure={Failure} ReasonCode={ReasonCode} RunId={RunId} CheckProfile={CheckProfile}",
+                phase, failure, safeReason, run.AgentRunId, checkProfile);
+        }
     }
 
     private async ValueTask<(AgentRun Run, TenantSecurityState State)> ResolveCurrentAsync(AgentRun run, CancellationToken ct)

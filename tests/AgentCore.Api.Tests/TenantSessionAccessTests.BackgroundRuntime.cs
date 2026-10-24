@@ -66,9 +66,17 @@ public sealed partial class TenantSessionAccessTests
         private sealed class Capture(TenantBackgroundModel model) : ILogger
         {
             public IDisposable? BeginScope<TState>(TState state) where TState:notnull => null;
-            public bool IsEnabled(LogLevel level) => level >= LogLevel.Error;
+            public bool IsEnabled(LogLevel level) => level >= LogLevel.Warning;
             public void Log<TState>(LogLevel level, EventId eventId, TState state, Exception? exception, Func<TState,Exception?,string> formatter)
-            { if(exception is not null) model.Failures.Enqueue(exception.ToString()); }
+            {
+                if (level >= LogLevel.Error && exception is not null) model.Failures.Enqueue(exception.ToString());
+                else if (level == LogLevel.Warning && model.Failures.Count < 64)
+                {
+                    var line = formatter(state, null);
+                    if (line.StartsWith("Tenant Run projection unavailable.", StringComparison.Ordinal))
+                        model.Failures.Enqueue(line[..Math.Min(line.Length, 512)]);
+                }
+            }
         }
     }
     private sealed class TenantBackgroundMemoryFactory(string root, TenantBackgroundModel model, bool holdCompletion = false) : AgentCoreApiFactory

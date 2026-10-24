@@ -12,6 +12,7 @@ using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Api.Tests;
 
@@ -116,7 +117,9 @@ public sealed partial class TenantSessionAccessTests
         try
         {
             var model = new TenantProgressModel(mode);
-            await using WebApplicationFactory<Program> factory = sqlite ? new NativeTenantSqliteFactory(root, model) : new NativeTenantMemoryFactory(root, model);
+            var diagnostics = new DiagnosticLineLoggerProvider(LogLevel.Warning);
+            void Configure(IServiceCollection services) => services.AddLogging(logging => logging.AddProvider(diagnostics));
+            await using WebApplicationFactory<Program> factory = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
             using var owner = factory.CreateClient(); await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
             var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
@@ -150,7 +153,26 @@ public sealed partial class TenantSessionAccessTests
             Guid? replacement = null;
             if (mode is "cancel-after-notice" or "steer-after-notice")
             {
-                await model.NoticesEntered.Task.WaitAsync(TimeSpan.FromSeconds(25));
+                try { await model.NoticesEntered.Task.WaitAsync(TimeSpan.FromSeconds(25)); }
+                catch (TimeoutException)
+                {
+                    var requests = model.Requests.Count;
+                    AgentRun? observed = null;
+                    var read = "completed";
+                    using var diagnosticDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                    try
+                    {
+                        observed = await runs.FindTenantRunAsync(tenant, id, diagnosticDeadline.Token).AsTask()
+                            .WaitAsync(diagnosticDeadline.Token);
+                    }
+                    catch (OperationCanceledException) { read = "timeout"; }
+                    catch { read = "unavailable"; }
+                    throw new TimeoutException($"Notice continuation did not enter within 25 seconds. RunRead={read} "
+                        + $"Status={observed?.Status.ToString() ?? "missing"} Revision={observed?.Revision} "
+                        + $"FailureCode={observed?.Failure?.Code ?? "none"} DiagnosticId={observed?.Failure?.DiagnosticId} "
+                        + $"ModelRequests={requests} CommittedSteps={observed?.Checkpoint?.StepCount}; "
+                        + $"diagnostics={SafePreparationDiagnostics(diagnostics)}");
+                }
                 try
                 {
                     var current = (await runs.FindTenantRunAsync(tenant, id))!;
