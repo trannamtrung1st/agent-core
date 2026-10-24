@@ -8,7 +8,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore : ISystemAdministrationStore
 {
-    private async ValueTask<Account> RequireSystemHumanAsync(AgentCoreDbContext db, HumanSessionReference human, string permission, CancellationToken ct)
+    private async ValueTask<Account> RequireAccountHumanAsync(AgentCoreDbContext db, HumanSessionReference human, CancellationToken ct)
     {
         var now = (clock ?? TimeProvider.System).GetUtcNow();
         var account = await (from session in db.Set<AuthenticationSession>() join a in db.Set<Account>() on session.AccountId equals a.AccountId
@@ -18,6 +18,11 @@ public sealed partial class SqliteIamStore : ISystemAdministrationStore
                 && p.PrincipalId == human.PrincipalId && p.Kind == PrincipalKind.User && p.Status == IdentityStatus.Active && p.TenantId == null && p.UserId == null && p.SystemIdentityId == null
             select a).AsNoTracking().SingleOrDefaultAsync(ct);
         if (account is null) throw new AccessDeniedException("initiator_unavailable");
+        return account;
+    }
+    private async ValueTask<Account> RequireSystemHumanAsync(AgentCoreDbContext db, HumanSessionReference human, string permission, CancellationToken ct)
+    {
+        var account = await RequireAccountHumanAsync(db, human, ct).ConfigureAwait(false);
         if (!(await SystemAdministrationRules.Decision(await ReadSystemAsync(db, ct), account, human.PrincipalId, permission, new IamAuthorizer(this), ct)).Allowed)
             throw new AccessDeniedException("permission_denied");
         return account;

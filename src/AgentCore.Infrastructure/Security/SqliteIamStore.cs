@@ -47,10 +47,11 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); return true; }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return false; }
     }
-    public async ValueTask<bool> TryUpdateAccountAsync(Account account, string expectedSecurityStamp, AuthorizationAudit audit, CancellationToken ct = default)
+    public async ValueTask<bool> TryUpdateAccountAsync(Account account, string expectedSecurityStamp, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        await RequireAccountChangeHumanAsync(db, account, audit, initiator, ct).ConfigureAwait(false);
         var old = await db.Set<Account>().SingleOrDefaultAsync(a => a.AccountId == account.AccountId, ct).ConfigureAwait(false);
         if (old is null || old.SecurityStamp != expectedSecurityStamp) return false;
         if (account.LoginKey != old.LoginKey || audit.TenantId is not null || string.IsNullOrEmpty(account.SecurityStamp)) throw new ArgumentException("Invalid Account update.");
@@ -64,6 +65,7 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
             }
         }
         db.Entry(old).CurrentValues.SetValues(account); db.Add(audit);
+        await RequireAccountChangeHumanAsync(db, account, audit, initiator, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false); await transaction.CommitAsync(ct).ConfigureAwait(false); return true;
     }
     public async ValueTask<SystemSecurityState> ReadSystemAsync(CancellationToken ct = default)
@@ -108,7 +110,7 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await transaction.CommitAsync(ct).ConfigureAwait(false); return true; }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return false; }
     }
-    public async ValueTask<bool> TrySaveTenantAsync(TenantSecurityState tenant, long expectedRevision, AuthorizationAudit audit, CancellationToken ct = default)
+    public async ValueTask<bool> TrySaveTenantAsync(TenantSecurityState tenant, long expectedRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         tenant = IamStateRules.Freeze(tenant); ValidateAudit(tenant, audit);
         if (tenant.Tenant.Revision != checked(expectedRevision + 1)) return false;
@@ -122,9 +124,11 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
             await ValidateTenantActorAsync(db, actor.State, actor.Principal, ct).ConfigureAwait(false);
         await EnsureActiveAccountOwnerAsync(db, tenant, null, ct).ConfigureAwait(false);
         await EnsureResourceOwnershipAsync(db, tenant, ct).ConfigureAwait(false);
+        await RequireSecurityWriteHumanAsync(db, tenant, audit, initiator, ct).ConfigureAwait(false);
         db.Entry(current).CurrentValues.SetValues(tenant.Tenant);
         await ApplyTenantChildrenAsync(db, tenant, ct).ConfigureAwait(false);
         db.Add(audit);
+        await RequireSecurityWriteHumanAsync(db, tenant, audit, initiator, ct).ConfigureAwait(false);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await transaction.CommitAsync(ct).ConfigureAwait(false); return true; }
         catch (DbUpdateConcurrencyException) { return false; }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return false; }

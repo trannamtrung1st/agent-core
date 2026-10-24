@@ -15,13 +15,13 @@ public interface IIamStore
     ValueTask<bool> TryCreateAccountAsync(Account account, Principal accountPrincipal, CancellationToken ct = default);
     // Account changes and last-active-Owner checks serialize with tenant security writes.
     ValueTask<bool> TryUpdateAccountAsync(Account account, string expectedSecurityStamp,
-        AuthorizationAudit audit, CancellationToken ct = default);
+        AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
     ValueTask<SystemSecurityState> ReadSystemAsync(CancellationToken ct = default);
     ValueTask<TenantSecurityState?> ReadTenantAsync(Guid tenantId, CancellationToken ct = default);
     ValueTask<IReadOnlyList<TenantMembership>> ListMembershipsAsync(Guid accountId, CancellationToken ct = default);
     ValueTask<bool> TryCreateTenantAsync(TenantSecurityState tenant, AuthorizationAudit audit, CancellationToken ct = default);
     ValueTask<bool> TrySaveTenantAsync(TenantSecurityState tenant, long expectedRevision,
-        AuthorizationAudit audit, CancellationToken ct = default);
+        AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
     ValueTask SaveSessionAsync(AuthenticationSession session, CancellationToken ct = default);
     ValueTask<AuthenticationSession?> ReadSessionAsync(Guid sessionId, CancellationToken ct = default);
     ValueTask RevokeSessionAsync(Guid sessionId, DateTimeOffset now, CancellationToken ct = default);

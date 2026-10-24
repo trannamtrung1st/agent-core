@@ -204,7 +204,6 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantSessionForegroundService>();
         services.TryAddSingleton<TenantActivityService>();
         services.AddHostedService<CredentialOAuthExpiryWorker>();
-        services.TryAddSingleton<AccountAdministrationService>();
         return services;
     }
     private static InMemoryIamStore CreateInMemoryStore(IServiceProvider provider)

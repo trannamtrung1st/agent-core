@@ -59,10 +59,11 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
             return ValueTask.FromResult(true);
         }
     }
-    public ValueTask<bool> TryUpdateAccountAsync(Account account, string expectedSecurityStamp, AuthorizationAudit audit, CancellationToken ct = default)
+    public ValueTask<bool> TryUpdateAccountAsync(Account account, string expectedSecurityStamp, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate)
         {
+            RequireAccountChangeHuman(account, audit, initiator);
             if (!_accounts.TryGetValue(account.AccountId, out var old) || old.SecurityStamp != expectedSecurityStamp) return ValueTask.FromResult(false);
             if (account.LoginKey != old.LoginKey || audit.TenantId is not null || string.IsNullOrEmpty(account.SecurityStamp)) throw new ArgumentException("Invalid Account update.");
             if (account.Status != IdentityStatus.Active)
@@ -94,7 +95,7 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
             EnsureReferences(tenant, audit, ct: ct); _tenants.Add(tenant.Tenant.TenantId, tenant); MarkOwnedAgents(tenant); _audit.Add(audit); return ValueTask.FromResult(true);
         }
     }
-    public ValueTask<bool> TrySaveTenantAsync(TenantSecurityState tenant, long expectedRevision, AuthorizationAudit audit, CancellationToken ct = default)
+    public ValueTask<bool> TrySaveTenantAsync(TenantSecurityState tenant, long expectedRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         ct.ThrowIfCancellationRequested(); tenant = IamStateRules.Freeze(tenant); lock (_gate) lock (instances.CredentialGate)
         {
@@ -102,6 +103,7 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
                 || old.Tenant.Revision != expectedRevision || _tenants.Values.Any(t => t.Tenant.TenantId != tenant.Tenant.TenantId && t.Tenant.Slug == tenant.Tenant.Slug)) return ValueTask.FromResult(false);
             IamStateRules.ValidateAgentContinuity(old.SystemIdentities, tenant);
             foreach (var actor in IamStateRules.SecurityWriteActors(old, tenant, audit)) ValidateAgentActor(actor.State, actor.Principal);
+            RequireSecurityWriteHuman(tenant, audit, initiator);
             EnsureReferences(tenant, audit, ct: ct); _tenants[tenant.Tenant.TenantId] = tenant; MarkOwnedAgents(tenant); _audit.Add(audit); return ValueTask.FromResult(true);
         }
     }

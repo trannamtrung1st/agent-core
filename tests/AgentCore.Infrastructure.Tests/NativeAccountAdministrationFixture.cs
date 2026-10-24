@@ -3,7 +3,8 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
-public sealed class AccountAdministrationService(IIamStore store, IamAuthorizer authorizer, IIdentityTokens tokens,
+// Native fixture helper only; canonical host administration uses SystemAdministrationService.
+internal sealed class AccountAdministrationService(IIamStore store, IamAuthorizer authorizer, IIdentityTokens tokens,
     IIdGenerator ids, TimeProvider time)
 {
     public async ValueTask SetStatusAsync(Guid systemActorId, Guid accountId, IdentityStatus status, CancellationToken ct = default)

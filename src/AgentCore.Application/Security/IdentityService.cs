@@ -47,8 +47,13 @@ public sealed class IdentityService(IIamStore store, IAccountPasswordHasher pass
         return new(account, session);
     }
 
-    public async ValueTask ChangePasswordAsync(Guid accountId, string currentPassword, string newPassword, CancellationToken ct = default)
+    public async ValueTask ChangePasswordAsync(Guid accountId, string currentPassword, string newPassword, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
+        if (initiator is not null)
+        {
+            if (initiator.AccountId != accountId) throw new AccessDeniedException("initiator_unavailable");
+            _ = await RequireAccountHumanAsync(initiator, ct).ConfigureAwait(false);
+        }
         ArgumentNullException.ThrowIfNull(currentPassword);
         ArgumentNullException.ThrowIfNull(newPassword);
         if (newPassword.Length is < 12 or > 256) throw new ArgumentException("Use a password between 12 and 256 characters.", nameof(newPassword));
@@ -58,7 +63,7 @@ public sealed class IdentityService(IIamStore store, IAccountPasswordHasher pass
             ?? throw new AccessDeniedException("account_unavailable");
         var updated = account with { PasswordHash = passwords.Hash(account, newPassword), SecurityStamp = tokens.Create() };
         var audit = new AuthorizationAudit(ids.NewId(), null, principal.PrincipalId, "account.password.change", accountId.ToString("D"), "allowed", "reauthenticated", time.GetUtcNow());
-        if (!await store.TryUpdateAccountAsync(updated, account.SecurityStamp, audit, ct).ConfigureAwait(false)) throw new SecurityConflictException("stale_account");
+        if (!await store.TryUpdateAccountAsync(updated, account.SecurityStamp, audit, ct, initiator).ConfigureAwait(false)) throw new SecurityConflictException("stale_account");
     }
 
     public async ValueTask<Account?> ValidateSessionAsync(Guid sessionId, CancellationToken ct = default)
@@ -67,6 +72,16 @@ public sealed class IdentityService(IIamStore store, IAccountPasswordHasher pass
         if (session is null || session.RevokedAt is not null || session.ExpiresAt <= time.GetUtcNow()) return null;
         var account = await store.ReadAccountAsync(session.AccountId, ct).ConfigureAwait(false);
         return account?.Status == IdentityStatus.Active && account.SecurityStamp == session.SecurityStamp ? account : null;
+    }
+
+    public async ValueTask<Account> RequireAccountHumanAsync(HumanSessionReference human, CancellationToken ct = default)
+    {
+        var account = await ValidateSessionAsync(human.AuthenticationSessionId, ct).ConfigureAwait(false);
+        var system = await store.ReadSystemAsync(ct).ConfigureAwait(false);
+        if (account?.AccountId != human.AccountId || !system.Principals.Any(p => p.PrincipalId == human.PrincipalId && p.AccountId == human.AccountId
+            && p.TenantId is null && p.UserId is null && p.SystemIdentityId is null && p.Kind == PrincipalKind.User && p.Status == IdentityStatus.Active))
+            throw new AccessDeniedException("initiator_unavailable");
+        return account;
     }
 
     public ValueTask SignOutAsync(Guid sessionId, CancellationToken ct = default) => store.RevokeSessionAsync(sessionId, time.GetUtcNow(), ct);

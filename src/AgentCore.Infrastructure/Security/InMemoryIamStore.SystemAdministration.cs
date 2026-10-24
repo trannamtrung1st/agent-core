@@ -6,7 +6,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore : ISystemAdministrationStore
 {
-    private Account RequireSystemHuman(HumanSessionReference human, string permission, CancellationToken ct)
+    private Account RequireAccountHuman(HumanSessionReference human)
     {
         var now = (clock ?? TimeProvider.System).GetUtcNow();
         if (!_accounts.TryGetValue(human.AccountId, out var account) || account.Status != IdentityStatus.Active
@@ -15,6 +15,11 @@ public sealed partial class InMemoryIamStore : ISystemAdministrationStore
             || !_system.Principals.Any(p => p.PrincipalId == human.PrincipalId && p.AccountId == human.AccountId && p.TenantId is null
                 && p.Kind == PrincipalKind.User && p.Status == IdentityStatus.Active && p.UserId is null && p.SystemIdentityId is null))
             throw new AccessDeniedException("initiator_unavailable");
+        return account;
+    }
+    private Account RequireSystemHuman(HumanSessionReference human, string permission, CancellationToken ct)
+    {
+        var account = RequireAccountHuman(human);
         if (!SystemAdministrationRules.Decision(_system, account, human.PrincipalId, permission, new IamAuthorizer(this), ct).GetAwaiter().GetResult().Allowed)
             throw new AccessDeniedException("permission_denied");
         return account;

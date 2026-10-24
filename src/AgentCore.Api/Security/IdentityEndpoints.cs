@@ -53,10 +53,10 @@ public static class IdentityEndpoints
         })).RequireRateLimiting("account-login");
 
         var accounts = app.MapGroup("/api/v2/account").RequireAuthorization();
-        accounts.MapGet("/me", (HttpContext http, IIamStore store, IamAuthorizer authorizer, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        accounts.MapGet("/me", (HttpContext http, IIamStore store, IdentityService identity, IamAuthorizer authorizer, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
-            var account = await store.ReadAccountAsync(IdentityHttp.AccountId(http.User)!.Value, ct).ConfigureAwait(false);
-            if (account is null) return Results.Unauthorized();
+            var human = await IdentityHttp.SystemHumanAsync(http, store, ct).ConfigureAwait(false);
+            var account = await identity.RequireAccountHumanAsync(human, ct).ConfigureAwait(false);
             var system = await store.ReadSystemAsync(ct).ConfigureAwait(false);
             var principal = system.Principals.SingleOrDefault(p => p.AccountId == account.AccountId && p.Kind == PrincipalKind.User && p.Status == IdentityStatus.Active);
             var permissions = new List<string>();
@@ -64,27 +64,31 @@ public static class IdentityEndpoints
                 foreach (var permission in PermissionCatalog.All.Where(p => p.SystemOnly))
                     if ((await authorizer.CheckAsync(principal.PrincipalId, permission.Key, AccessScope.System, ct).ConfigureAwait(false)).Allowed)
                         permissions.Add(permission.Key);
+            _ = await identity.RequireAccountHumanAsync(human, ct).ConfigureAwait(false);
             return Results.Json(new { account = SafeAccount(account), systemPrincipalId = principal?.PrincipalId, systemPermissions = permissions });
         }));
-        accounts.MapPost("/password", (PasswordChangeRequest request, HttpContext http, IdentityService identity, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        accounts.MapPost("/password", (PasswordChangeRequest request, HttpContext http, IdentityService identity, IIamStore store, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
-            await identity.ChangePasswordAsync(IdentityHttp.AccountId(http.User)!.Value, request.CurrentPassword, request.NewPassword, ct).ConfigureAwait(false);
+            await identity.ChangePasswordAsync(IdentityHttp.AccountId(http.User)!.Value, request.CurrentPassword, request.NewPassword, ct, await IdentityHttp.SystemHumanAsync(http, store, ct).ConfigureAwait(false)).ConfigureAwait(false);
             await http.SignOutAsync(IdentityHttp.Scheme).ConfigureAwait(false);
             return Results.NoContent();
         }));
-        accounts.MapGet("/tenants", (HttpContext http, IIamStore store, int? page, int? pageSize, string? q, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        accounts.MapGet("/tenants", (HttpContext http, IIamStore store, IdentityService identity, int? page, int? pageSize, string? q, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
+            var human = await IdentityHttp.SystemHumanAsync(http, store, ct).ConfigureAwait(false);
+            _ = await identity.RequireAccountHumanAsync(human, ct).ConfigureAwait(false);
             var all = await store.ListMembershipsAsync(IdentityHttp.AccountId(http.User)!.Value, ct).ConfigureAwait(false);
             var query = q?.Trim();
             var memberships = string.IsNullOrEmpty(query) ? all : all.Where(m => m.Tenant.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || m.Tenant.Slug.Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray();
             var size = Math.Clamp(pageSize ?? 30, 1, 100); var index = Math.Clamp(page ?? 0, 0, 100_000);
+            _ = await identity.RequireAccountHumanAsync(human, ct).ConfigureAwait(false);
             return Results.Json(new { items = memberships.Skip(index * size).Take(size).Select(m => new { m.Tenant.TenantId, m.Tenant.Name, m.Tenant.Slug, m.User.UserId, m.User.PrincipalId }), total = memberships.Count, page = index, pageSize = size });
         }));
-        accounts.MapPost("/tenant-invitations/{invitationId:guid}/accept", (Guid invitationId, InvitationProof proof, HttpContext http, TenantAccessService access, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        accounts.MapPost("/tenant-invitations/{invitationId:guid}/accept", (Guid invitationId, InvitationProof proof, HttpContext http, TenantAccessService access, IIamStore store, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             if (proof.InvitationId != invitationId) throw new AccessDeniedException("invitation_unavailable");
-            var user = await access.AcceptInvitationAsync(IdentityHttp.AccountId(http.User)!.Value, proof.TenantId, invitationId, proof.Token, ct).ConfigureAwait(false);
+            var user = await access.AcceptInvitationAsync(IdentityHttp.AccountId(http.User)!.Value, proof.TenantId, invitationId, proof.Token, ct, await IdentityHttp.SystemHumanAsync(http, store, ct).ConfigureAwait(false)).ConfigureAwait(false);
             return Results.Json(new { user.TenantId, user.UserId, user.PrincipalId });
         }));
 
