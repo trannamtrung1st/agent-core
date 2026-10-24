@@ -7,11 +7,11 @@ namespace AgentCore.Application.Security;
 public sealed partial class TenantDefinitionService
 {
     public async ValueTask DeleteDraftAsync(Guid actor, Guid tenant, Guid draftId, long expectedRevision,
-        long expectedDraftRevision, CancellationToken ct = default)
+        long expectedDraftRevision, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         var draft = await OwnedDraft(tenant, draftId, ct).ConfigureAwait(false);
         var id = Guid.Parse(draft.DefinitionId);
-        var state = await ForChange(actor, tenant, "delete", Scope(tenant, id), expectedRevision, ct).ConfigureAwait(false);
+        var state = await ForChange(actor, tenant, "delete", Scope(tenant, id), expectedRevision, ct, initiator).ConfigureAwait(false);
         if (draft.Revision != expectedDraftRevision) throw new SecurityConflictException("stale_revision");
         var retire = (await definitions.ListDefinitionDraftsAsync(tenant, id, ct).ConfigureAwait(false)).Count == 1
             && (await definitions.ListDefinitionPublicationsAsync(tenant, id, ct).ConfigureAwait(false)).Count == 0;
@@ -19,18 +19,18 @@ public sealed partial class TenantDefinitionService
         if (retire) next = TenantDefinitionDeletionRules.WithoutResourceGrants(next, id);
         var now = time.GetUtcNow();
         if (await definitions.TryDeleteDefinitionDraftAsync(next, expectedRevision, draftId, expectedDraftRevision, retire, now,
-            Audit(tenant, actor, "delete-draft", draftId, now), ct).ConfigureAwait(false) is null)
+            Audit(tenant, actor, "delete-draft", draftId, now), ct, initiator).ConfigureAwait(false) is null)
             throw new SecurityConflictException("stale_revision");
     }
 
     public async ValueTask DeleteAsync(Guid actor, Guid tenant, Guid id, AdminDefinitionDeleteWitness witness,
-        long expectedRevision, CancellationToken ct = default)
+        long expectedRevision, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         TenantDefinitionDeletionRules.Validate(witness);
-        var state = await ForChange(actor, tenant, "delete", Scope(tenant, id), expectedRevision, ct).ConfigureAwait(false);
+        var state = await ForChange(actor, tenant, "delete", Scope(tenant, id), expectedRevision, ct, initiator).ConfigureAwait(false);
         var now = time.GetUtcNow();
         if (await definitions.TryDeleteDefinitionAsync(TenantDefinitionDeletionRules.WithoutResourceGrants(Advance(state), id),
-            expectedRevision, id, witness, now, Audit(tenant, actor, "delete", id, now), ct).ConfigureAwait(false) is null)
+            expectedRevision, id, witness, now, Audit(tenant, actor, "delete", id, now), ct, initiator).ConfigureAwait(false) is null)
             throw new SecurityConflictException("stale_revision");
     }
 }

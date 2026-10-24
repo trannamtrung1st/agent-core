@@ -11,7 +11,7 @@ namespace AgentCore.Infrastructure.Security;
 public sealed partial class SqliteIamStore
 {
     public ValueTask<TenantDefinitionDeleted?> TryDeleteDefinitionDraftAsync(TenantSecurityState next, long expectedSecurityRevision,
-        Guid draftId, long expectedDraftRevision, bool retireDefinition, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) =>
+        Guid draftId, long expectedDraftRevision, bool retireDefinition, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
         {
             var draft = await Draft(db, next.Tenant.TenantId, draftId).SingleOrDefaultAsync(ct).ConfigureAwait(false);
@@ -30,10 +30,10 @@ public sealed partial class SqliteIamStore
             await PurgeDraftChildren(db, [draft.DraftId], ct).ConfigureAwait(false);
             db.AgentDefinitionDrafts.Remove(draft);
             return new TenantDefinitionDeleted(retireDefinition);
-        }, ct);
+        }, ct, initiator);
 
     public ValueTask<TenantDefinitionDeleted?> TryDeleteDefinitionAsync(TenantSecurityState next, long expectedSecurityRevision,
-        Guid definitionId, AdminDefinitionDeleteWitness witness, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
+        Guid definitionId, AdminDefinitionDeleteWitness witness, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         TenantDefinitionDeletionRules.Validate(witness);
         return WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
@@ -51,7 +51,7 @@ public sealed partial class SqliteIamStore
             db.AgentDefinitionDrafts.RemoveRange(drafts); db.AgentDefinitionPublications.RemoveRange(publications);
             await RetireDefinition(db, next.Tenant.TenantId, definitionId, at, ct).ConfigureAwait(false);
             return new TenantDefinitionDeleted(true);
-        }, ct);
+        }, ct, initiator);
     }
     private static async Task RequireDefinitionUnreferenced(AgentCoreDbContext db, string id, CancellationToken ct)
     {

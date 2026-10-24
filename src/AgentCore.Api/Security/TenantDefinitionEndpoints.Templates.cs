@@ -10,12 +10,12 @@ public static partial class TenantDefinitionEndpoints
         group.MapGet("/definition-templates", (HttpContext http, TenantDefinitionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);
-            return Results.Json(await service.TemplateCatalogAsync(a.PrincipalId, a.TenantId, ct).ConfigureAwait(false));
+            return Results.Json(await service.TemplateCatalogAsync(a.PrincipalId, a.TenantId, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false));
         }));
         group.MapPost("/agent-definitions/from-template", (TemplateForkRequest body, HttpContext http, TenantDefinitionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);
-            return Results.Json(await service.ForkTemplateAsync(a.PrincipalId, a.TenantId, body.TemplateId, body.Version, body.Name, body.ExpectedRevision, ct).ConfigureAwait(false), statusCode: 201);
+            return Results.Json(await service.ForkTemplateAsync(a.PrincipalId, a.TenantId, body.TemplateId, body.Version, body.Name, body.ExpectedRevision, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false), statusCode: 201);
         }));
     }
 }

@@ -13,9 +13,9 @@ public sealed record TenantPublicationResourceState(IReadOnlyList<AgentDefinitio
 
 public sealed partial class TenantDefinitionService
 {
-    private async ValueTask<TenantSecurityState> ResourceState(Guid actor, Guid tenant, Guid definition, CancellationToken ct)
+    private async ValueTask<TenantSecurityState> ResourceState(Guid actor, Guid tenant, Guid definition, CancellationToken ct, HumanSessionReference? initiator = null)
     {
-        var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
+        var state = await HumanState(actor, tenant, initiator, ct).ConfigureAwait(false);
         await RequireResourcePermission(state, actor, "agent-definitions.read", Scope(tenant, definition), ct).ConfigureAwait(false);
         return state;
     }
@@ -46,9 +46,9 @@ public sealed partial class TenantDefinitionService
         if (visible.Items.Length != snapshot.Resources.Count) throw new AccessDeniedException("permission_denied");
     }
     private async ValueTask<AgentDefinitionDraftResourceBatchBound> VisibleResourceMutation(Guid actor, Guid tenant, Guid definition, Guid draft,
-        AgentDefinitionDraftResourceBatchBound result, CancellationToken ct)
+        AgentDefinitionDraftResourceBatchBound result, CancellationToken ct, HumanSessionReference? initiator = null)
     {
-        var state = await ResourceState(actor, tenant, definition, ct).ConfigureAwait(false);
+        var state = await ResourceState(actor, tenant, definition, ct, initiator).ConfigureAwait(false);
         var visible = await ReadableDraftResources(state, actor, definition, draft, result.Resources, ct).ConfigureAwait(false);
         return result with { Resources = visible.Items };
     }

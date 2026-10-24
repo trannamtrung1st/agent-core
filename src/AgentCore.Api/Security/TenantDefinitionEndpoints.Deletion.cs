@@ -13,14 +13,14 @@ public static partial class TenantDefinitionEndpoints
             HttpContext http, TenantDefinitionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);
-            await service.DeleteDraftAsync(a.PrincipalId, a.TenantId, draftId, expectedRevision, expectedDraftRevision, ct).ConfigureAwait(false);
+            await service.DeleteDraftAsync(a.PrincipalId, a.TenantId, draftId, expectedRevision, expectedDraftRevision, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false);
             return Results.NoContent();
         }));
         group.MapDelete("/agent-definitions/{definitionId:guid}", (Guid definitionId, [FromBody] DeleteRequest body,
             HttpContext http, TenantDefinitionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);
-            await service.DeleteAsync(a.PrincipalId, a.TenantId, definitionId, body.Witness, body.ExpectedRevision, ct).ConfigureAwait(false);
+            await service.DeleteAsync(a.PrincipalId, a.TenantId, definitionId, body.Witness, body.ExpectedRevision, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false);
             return Results.NoContent();
         }));
     }

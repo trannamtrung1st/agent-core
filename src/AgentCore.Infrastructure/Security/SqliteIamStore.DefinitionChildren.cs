@@ -25,7 +25,7 @@ public sealed partial class SqliteIamStore
         return rows.Select(DefinitionResourcePersistence.MapPublicationResource).ToArray();
     }
     public ValueTask<AgentDefinitionDraftResourceBatchBound?> TryBindDefinitionResourcesAsync(TenantSecurityState next, long expectedSecurityRevision,
-        Guid draftId, long expectedDraftRevision, IReadOnlyList<AgentDefinitionDraftResource> resources, AuthorizationAudit audit, CancellationToken ct = default) =>
+        Guid draftId, long expectedDraftRevision, IReadOnlyList<AgentDefinitionDraftResource> resources, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
         {
             var draft = await Draft(db, next.Tenant.TenantId, draftId).SingleOrDefaultAsync(ct).ConfigureAwait(false);
@@ -48,10 +48,10 @@ public sealed partial class SqliteIamStore
                 else { var added = DefinitionResourcePersistence.MapDraftResource(resource); db.Add(added); byId.Add(added.ResourceId, added); }
             draft.Revision++; draft.UpdatedAtUtc = audit.At.ToUnixTimeMilliseconds();
             return new AgentDefinitionDraftResourceBatchBound(draft.Revision, byId.Values.Select(DefinitionResourcePersistence.MapDraftResource).OrderBy(r => r.LogicalPath, StringComparer.Ordinal).ToArray());
-        }, ct);
+        }, ct, initiator);
 
     public ValueTask<AgentDefinitionDraftResourceBatchBound?> TryRemoveDefinitionResourceAsync(TenantSecurityState next, long expectedSecurityRevision,
-        Guid draftId, long expectedDraftRevision, Guid resourceId, AuthorizationAudit audit, CancellationToken ct = default) =>
+        Guid draftId, long expectedDraftRevision, Guid resourceId, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
         {
             var draft = await Draft(db, next.Tenant.TenantId, draftId).SingleOrDefaultAsync(ct).ConfigureAwait(false);
@@ -62,10 +62,10 @@ public sealed partial class SqliteIamStore
             var resource = rows.SingleOrDefault(r => r.ResourceId == id) ?? throw new AccessDeniedException("resource_unavailable");
             db.Remove(resource); draft.Revision++; draft.UpdatedAtUtc = audit.At.ToUnixTimeMilliseconds();
             return new AgentDefinitionDraftResourceBatchBound(draft.Revision, rows.Where(r => r.ResourceId != id).Select(DefinitionResourcePersistence.MapDraftResource).OrderBy(r => r.LogicalPath, StringComparer.Ordinal).ToArray());
-        }, ct);
+        }, ct, initiator);
 
     public ValueTask<TenantDefinitionScenarioSaved?> TrySaveDefinitionScenarioAsync(TenantSecurityState next, long expectedSecurityRevision,
-        long expectedDraftRevision, DefinitionEvaluationScenarioUpsert scenario, AuthorizationAudit audit, CancellationToken ct = default) =>
+        long expectedDraftRevision, DefinitionEvaluationScenarioUpsert scenario, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
         {
             TenantDefinitionChildRules.ValidateScenario(scenario);
@@ -81,9 +81,9 @@ public sealed partial class SqliteIamStore
             else db.Entry(before).CurrentValues.SetValues(DefinitionDraftEvaluationPersistence.MapScenario(saved));
             draft.Revision++; draft.UpdatedAtUtc = audit.At.ToUnixTimeMilliseconds();
             return new TenantDefinitionScenarioSaved(saved, draft.Revision);
-        }, ct);
+        }, ct, initiator);
     public ValueTask<TenantDefinitionDraftRevision?> TryRemoveDefinitionScenarioAsync(TenantSecurityState next, long expectedSecurityRevision,
-        Guid draftId, long expectedDraftRevision, string scenarioId, AuthorizationAudit audit, CancellationToken ct = default) =>
+        Guid draftId, long expectedDraftRevision, string scenarioId, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
         {
             var draft = await Draft(db, next.Tenant.TenantId, draftId).SingleOrDefaultAsync(ct).ConfigureAwait(false);
@@ -93,9 +93,9 @@ public sealed partial class SqliteIamStore
                 ?? throw new AccessDeniedException("resource_unavailable");
             db.Remove(row); draft.Revision++; draft.UpdatedAtUtc = audit.At.ToUnixTimeMilliseconds();
             return new TenantDefinitionDraftRevision(draft.Revision);
-        }, ct);
+        }, ct, initiator);
     public ValueTask<DefinitionEvaluationResult?> TrySaveDefinitionEvaluationAsync(TenantSecurityState next, long expectedSecurityRevision,
-        DefinitionEvaluationResult result, AuthorizationAudit audit, CancellationToken ct = default) =>
+        DefinitionEvaluationResult result, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
         {
             var snapshot = await DefinitionSnapshot(db, next.Tenant.TenantId, result.DraftId, ct).ConfigureAwait(false);
@@ -104,7 +104,7 @@ public sealed partial class SqliteIamStore
                 || TenantDefinitionChildRules.Fingerprint(snapshot) != result.ConfigurationFingerprint) return null;
             var committed = result with { CommitRevision = next.Tenant.Revision };
             db.Add(DefinitionDraftEvaluationPersistence.MapResult(committed, audit.AuditId)); return committed;
-        }, ct);
+        }, ct, initiator);
     private static async Task<TenantDefinitionDraftSnapshot?> DefinitionSnapshot(AgentCoreDbContext db, Guid tenant, Guid draftId, CancellationToken ct)
     {
         var draft = await Draft(db, tenant, draftId).AsNoTracking().SingleOrDefaultAsync(ct).ConfigureAwait(false); if (draft is null) return null;

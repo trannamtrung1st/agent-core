@@ -8,7 +8,7 @@ namespace AgentCore.Infrastructure.Security;
 public sealed partial class InMemoryIamStore
 {
     public ValueTask<TenantDefinitionDeleted?> TryDeleteDefinitionDraftAsync(TenantSecurityState next, long expectedSecurityRevision,
-        Guid draftId, long expectedDraftRevision, bool retireDefinition, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) =>
+        Guid draftId, long expectedDraftRevision, bool retireDefinition, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         ValueTask.FromResult(WriteDefinition(next, expectedSecurityRevision, audit, () =>
         {
             var draft = definitions.TenantDraft(next.Tenant.TenantId, draftId);
@@ -21,10 +21,10 @@ public sealed partial class InMemoryIamStore
             if (retireDefinition) TenantDefinitionDeletionRules.RequireNoResourceGrants(next, id);
             return WithDefinitionReferences(id, retireDefinition,
                 () => definitions.DeleteTenantDraft(next.Tenant.TenantId, draftId, expectedDraftRevision, retireDefinition, at));
-        }, ct));
+        }, ct, initiator));
 
     public ValueTask<TenantDefinitionDeleted?> TryDeleteDefinitionAsync(TenantSecurityState next, long expectedSecurityRevision,
-        Guid definitionId, AdminDefinitionDeleteWitness witness, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
+        Guid definitionId, AdminDefinitionDeleteWitness witness, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         TenantDefinitionDeletionRules.Validate(witness);
         return ValueTask.FromResult(WriteDefinition(next, expectedSecurityRevision, audit, () =>
@@ -34,7 +34,7 @@ public sealed partial class InMemoryIamStore
             TenantDefinitionDeletionRules.RequireNoResourceGrants(next, definitionId);
             return WithDefinitionReferences(definitionId, true,
                 () => definitions.DeleteTenantDefinition(next.Tenant.TenantId, definitionId, at));
-        }, ct));
+        }, ct, initiator));
     }
     private TenantDefinitionDeleted? WithDefinitionReferences(Guid id, bool retiring, Func<TenantDefinitionDeleted?> change)
     {

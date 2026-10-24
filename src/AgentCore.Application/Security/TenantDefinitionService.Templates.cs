@@ -9,29 +9,31 @@ public sealed record TenantDefinitionTemplateCatalog(IReadOnlyList<AgentDefiniti
 
 public sealed partial class TenantDefinitionService
 {
-    public async ValueTask<TenantDefinitionTemplateCatalog> TemplateCatalogAsync(Guid actor, Guid tenant, CancellationToken ct = default)
-    {
-        var items = await ListTemplatesAsync(actor, tenant, ct).ConfigureAwait(false);
-        var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
-        await RequireResourcePermission(state, actor, "agent-definitions.create", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
-        var destination = await ResourceAllowed(state, actor, "resources.read", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false)
-            && await ResourceAllowed(state, actor, "resources.manage", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
-        var allowed = new Dictionary<string, bool>(StringComparer.Ordinal);
-        foreach (var item in items)
-            allowed[item.Id + ":" + item.Version.ToString(System.Globalization.CultureInfo.InvariantCulture)] = destination
-                || (await templates.ReadAsync(item.Id, item.Version, ct).ConfigureAwait(false))?.Resources.Count == 0;
-        return new(items, allowed);
-    }
-    public async ValueTask<IReadOnlyList<AgentDefinition>> ListTemplatesAsync(Guid actor, Guid tenant, CancellationToken ct = default)
-    {
-        await authorizer.RequireAsync(actor, "agent-definitions.create", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
-        return (await templates.ListAsync(ct).ConfigureAwait(false)).OrderBy(d => d.Id, StringComparer.Ordinal).ThenByDescending(d => d.Version).ToArray();
-    }
+    public ValueTask<TenantDefinitionTemplateCatalog> TemplateCatalogAsync(Guid actor, Guid tenant, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
+        WithHumanRead<TenantDefinitionTemplateCatalog>(actor, tenant, initiator, async () =>
+        {
+            var items = await ListTemplatesAsync(actor, tenant, ct).ConfigureAwait(false);
+            var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
+            await RequireResourcePermission(state, actor, "agent-definitions.create", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
+            var destination = await ResourceAllowed(state, actor, "resources.read", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false)
+                && await ResourceAllowed(state, actor, "resources.manage", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
+            var allowed = new Dictionary<string, bool>(StringComparer.Ordinal);
+            foreach (var item in items)
+                allowed[item.Id + ":" + item.Version.ToString(System.Globalization.CultureInfo.InvariantCulture)] = destination
+                    || (await templates.ReadAsync(item.Id, item.Version, ct).ConfigureAwait(false))?.Resources.Count == 0;
+            return new(items, allowed);
+        }, ct);
+    public ValueTask<IReadOnlyList<AgentDefinition>> ListTemplatesAsync(Guid actor, Guid tenant, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
+        WithHumanRead<IReadOnlyList<AgentDefinition>>(actor, tenant, initiator, async () =>
+        {
+            await authorizer.RequireAsync(actor, "agent-definitions.create", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
+            return (await templates.ListAsync(ct).ConfigureAwait(false)).OrderBy(d => d.Id, StringComparer.Ordinal).ThenByDescending(d => d.Version).ToArray();
+        }, ct);
 
     public async ValueTask<AgentDefinitionDraft> ForkTemplateAsync(Guid actor, Guid tenant, string templateId, int version,
-        string? name, long expectedRevision, CancellationToken ct = default)
+        string? name, long expectedRevision, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
-        var state = await ForChange(actor, tenant, "create", AccessScope.ForTenant(tenant), expectedRevision, ct).ConfigureAwait(false);
+        var state = await ForChange(actor, tenant, "create", AccessScope.ForTenant(tenant), expectedRevision, ct, initiator).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(templateId) || version < 1) throw new ArgumentException("Choose an exact shipped template version.");
         var source = await templates.ReadAsync(templateId, version, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("definition_unavailable");
         if (source.Definition.Id != templateId || source.Definition.Version != version) throw new AccessDeniedException("definition_unavailable");
@@ -50,7 +52,7 @@ public sealed partial class TenantDefinitionService
         TenantDefinitionPublicationRules.RequireReady(draft, new(resources, [], []));
         for (var i = 0; i < resources.Length; i++) await content.StoreVerifiedAsync(resources[i].ContentSha256, payloads[i].Content, ct).ConfigureAwait(false);
         if (!await definitions.TryCreateDefinitionAsync(Advance(state), expectedRevision, new(tenant, id, now), draft, resources,
-            Audit(tenant, actor, "fork-template", id, now), ct).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
+            Audit(tenant, actor, "fork-template", id, now), ct, initiator).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
         return draft;
     }
 }

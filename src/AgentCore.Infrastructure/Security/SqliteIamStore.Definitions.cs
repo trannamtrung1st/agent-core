@@ -133,7 +133,7 @@ public sealed partial class SqliteIamStore
         return rows.Select(AgentDefinitionAdminMapping.MapPublication).Select(Summary).ToArray();
     }
     public async ValueTask<bool> TryCreateDefinitionAsync(TenantSecurityState next, long expectedSecurityRevision, TenantDefinition definition,
-        AgentDefinitionDraft draft, IReadOnlyList<AgentDefinitionDraftResource> initialResources, AuthorizationAudit audit, CancellationToken ct = default) =>
+        AgentDefinitionDraft draft, IReadOnlyList<AgentDefinitionDraftResource> initialResources, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         await WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
         {
             if (definition.TenantId != next.Tenant.TenantId)
@@ -152,10 +152,10 @@ public sealed partial class SqliteIamStore
             }
             var root = TenantDefinitionRecord.Row(definition); db.Add(root); db.AgentDefinitionDrafts.Add(AgentDefinitionAdminMapping.MapDraft(draft));
             return root;
-        }, ct).ConfigureAwait(false) is not null;
+        }, ct, initiator).ConfigureAwait(false) is not null;
 
     public async ValueTask<bool> TrySaveDefinitionDraftAsync(TenantSecurityState next, long expectedSecurityRevision,
-        AgentDefinitionDraft draft, long? expectedDraftRevision, AuthorizationAudit audit, CancellationToken ct = default) =>
+        AgentDefinitionDraft draft, long? expectedDraftRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         await WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
         {
             AgentDefinitionValidator.ValidateCandidate(draft.Candidate);
@@ -178,10 +178,10 @@ public sealed partial class SqliteIamStore
                 db.Entry(row).CurrentValues.SetValues(AgentDefinitionAdminMapping.MapDraft(draft));
             }
             return draft;
-        }, ct).ConfigureAwait(false) is not null;
+        }, ct, initiator).ConfigureAwait(false) is not null;
 
     public ValueTask<AgentDefinitionPublication?> TryPublishDefinitionDraftAsync(TenantSecurityState next, long expectedSecurityRevision,
-        Guid draftId, long expectedDraftRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) =>
+        Guid draftId, long expectedDraftRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
         {
             var row = await Draft(db, next.Tenant.TenantId, draftId).SingleOrDefaultAsync(ct).ConfigureAwait(false);
@@ -207,20 +207,20 @@ public sealed partial class SqliteIamStore
             await db.AgentDefinitionDraftEvaluationResults.IgnoreQueryFilters().Where(r => r.DraftId == key).ExecuteDeleteAsync(ct).ConfigureAwait(false);
             db.AgentDefinitionDrafts.Remove(row);
             return publication;
-        }, ct);
+        }, ct, initiator);
 
     public ValueTask<AgentDefinitionPublication?> TryDeprecateDefinitionPublicationAsync(TenantSecurityState next, long expectedSecurityRevision,
-        Guid definitionId, int version, long expectedMetadataRevision, AuthorizationAudit audit, CancellationToken ct = default) =>
+        Guid definitionId, int version, long expectedMetadataRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
         {
             var row = await Publication(db, next.Tenant.TenantId, definitionId, version).SingleOrDefaultAsync(ct).ConfigureAwait(false);
             if (row is null || row.MetadataRevision != expectedMetadataRevision) return null;
             row.Status = (int)DefinitionPublicationStatus.Deprecated; row.MetadataRevision++;
             return AgentDefinitionAdminMapping.MapPublication(row);
-        }, ct);
+        }, ct, initiator);
 
     private async ValueTask<T?> WriteDefinitionAsync<T>(TenantSecurityState next, long expected, AuthorizationAudit audit,
-        Func<AgentCoreDbContext, Task<T?>> change, CancellationToken ct) where T : class
+        Func<AgentCoreDbContext, Task<T?>> change, CancellationToken ct, HumanSessionReference? initiator) where T : class
     {
         next = IamStateRules.Freeze(next);
         if (audit.TenantId != next.Tenant.TenantId || next.Tenant.Revision != checked(expected + 1)) throw new ArgumentException("Invalid definition transaction.");
@@ -235,8 +235,10 @@ public sealed partial class SqliteIamStore
         await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
         try
         {
+            await RequireAgentHumanAsync(db, next.Tenant.TenantId, audit.ActorPrincipalId, initiator, ct).ConfigureAwait(false);
             var result = await change(db).ConfigureAwait(false); if (result is null) return null;
             db.Entry(current).CurrentValues.SetValues(next.Tenant); await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
+            await RequireAgentHumanAsync(db, next.Tenant.TenantId, audit.ActorPrincipalId, initiator, ct).ConfigureAwait(false);
             await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return result;
         }
         catch (DbUpdateConcurrencyException) { return null; }

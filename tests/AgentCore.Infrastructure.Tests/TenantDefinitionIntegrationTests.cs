@@ -166,7 +166,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         private IBuiltInDefinitionTemplateSource? _shippedTemplates;
         public TenantDefinitionService Service => WithEvaluator(Evaluator);
         public TenantDefinitionService WithEvaluator(IDefinitionDraftSyntheticBehaviorEvaluator evaluator) => WithTemplates(_shippedTemplates ??= ShippedTemplates(), evaluator);
-        public TenantDefinitionService WithTemplates(IBuiltInDefinitionTemplateSource templates, IDefinitionDraftSyntheticBehaviorEvaluator? evaluator = null, IDefinitionResourceContentStore? resourceContent = null) => new(Iam, Definitions, Authorizer, SyntheticProviderAliases.Default, ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll, Ids, TimeProvider.System, resourceContent ?? Content, new(evaluator ?? Evaluator, ToolConfigurationGates.AllowAll), templates);
+        public TenantDefinitionService WithTemplates(IBuiltInDefinitionTemplateSource templates, IDefinitionDraftSyntheticBehaviorEvaluator? evaluator = null, IDefinitionResourceContentStore? resourceContent = null) => new(Iam, Definitions, Authorizer, SyntheticProviderAliases.Default, ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll, Ids, TimeProvider.System, resourceContent ?? Content, new(evaluator ?? Evaluator, ToolConfigurationGates.AllowAll), templates, Identity);
         public static IBuiltInDefinitionTemplateSource ShippedTemplates()
         {
             var directory = new DirectoryInfo(AppContext.BaseDirectory);
