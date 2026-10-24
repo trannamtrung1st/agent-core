@@ -17,6 +17,11 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Application.Tests;
 
+// Owned Stop/steer, reconnect and provider-loss parity is in
+// TenantSessionAccessTests.BrowserLifecycleParity; actual background pin/dispatch
+// in BrowserBackgroundBudget. TenantBrowserApprovalTests.FreshCheckpoint retains
+// immutable operation fences after current reads/refusals and checkpoint recreation.
+// Unknown durable native work remains blocked; no legacy read resets that authority.
 public sealed class BrowserLifecycleTests
 {
     private static readonly string[] FixtureOrigin = ["http://127.0.0.1:5091"];
@@ -32,99 +37,6 @@ public sealed class BrowserLifecycleTests
         Assert.Equal([runtime.SessionId], lease.Sessions);
         await runtime.DisposeAsync();
         Assert.Equal([runtime.SessionId, runtime.SessionId], lease.Sessions);
-    }
-
-    [Fact]
-    public async Task Cancel_and_steer_drop_a_late_navigation_and_do_not_navigate_again()
-    {
-        var browser = new HoldingBrowser { Hold = true, LateTitle = "LATE-PAGE" };
-        var output = new CapturingSessionOutput();
-        await using var runtime = Runtime(browser, new CountingLease(), new OneNavigateModel(), output);
-        await runtime.AttachAsync();
-        Assert.True(await runtime.SubmitUserTextAsync("open the record"));
-        await browser.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(ResponseCancelResult.Cancelled, await runtime.CancelResponseAsync(runtime.ActiveResponseId!.Value));
-        browser.Release.TrySetResult();
-        await runtime.WaitUntilIdleAsync();
-        Assert.Equal(1, browser.NavigateCalls);
-        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Text.Contains("LATE-PAGE", StringComparison.Ordinal));
-        Assert.True(await runtime.SubmitUserTextAsync("next"));
-        await runtime.WaitUntilIdleAsync();
-        Assert.Equal(1, browser.NavigateCalls);
-        var completed = runtime.Snapshot.Entries.Single(entry =>
-            entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed);
-        Assert.Equal("Still here.", completed.Text);
-
-        browser = new HoldingBrowser { Hold = true, LateTitle = "LATE-PAGE" };
-        output = new CapturingSessionOutput();
-        await using var steered = Runtime(browser, new CountingLease(), new OneNavigateModel(), output);
-        await steered.AttachAsync();
-        Assert.True(await steered.SubmitUserTextAsync("open the record"));
-        await browser.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.True(await steered.SubmitUserTextAsync("next"));
-        await output.WaitForAsync(item => item.Payload is PlaybackStopOutput);
-        browser.Release.TrySetResult();
-        await steered.WaitUntilIdleAsync();
-        Assert.Equal(1, browser.NavigateCalls);
-        Assert.DoesNotContain(steered.Snapshot.Entries, entry => entry.Text.Contains("LATE-PAGE", StringComparison.Ordinal));
-        Assert.Equal(
-            "Still here.",
-            steered.Snapshot.Entries.Single(entry =>
-                entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed).Text);
-    }
-
-    [Fact]
-    public async Task Reconnect_keeps_one_answer_and_does_not_navigate_again()
-    {
-        var browser = new HoldingBrowser();
-        var lease = new CountingLease();
-        var store = new InMemoryMemoryStore();
-        var output = new CapturingSessionOutput();
-        var sessionId = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940c201");
-        await using (var runtime = Runtime(browser, lease, new OneNavigateModel(), output, store, sessionId))
-        {
-            await runtime.AttachAsync();
-            Assert.True(await runtime.SubmitUserTextAsync("open the record"));
-            await runtime.WaitUntilIdleAsync();
-            Assert.Equal(1, browser.NavigateCalls);
-            await runtime.DetachAsync();
-            await runtime.WaitUntilIdleAsync();
-        }
-
-        Assert.Equal([sessionId], lease.Sessions);
-        var paused = (await store.LoadAsync(sessionId))!;
-        var restoredOutput = new CapturingSessionOutput();
-        await using var restored = Runtime(browser, new CountingLease(), new OneNavigateModel(), restoredOutput, store, sessionId, paused);
-        await restored.AttachAsync();
-        await restored.WaitUntilMailboxDrainedAsync();
-        Assert.Equal(1, browser.NavigateCalls);
-        var answer = Assert.Single(restored.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(EntryStatus.Completed, answer.Status);
-        Assert.Equal("Checked the record.", answer.Text);
-        Assert.IsType<ReadyOutput>(restoredOutput.Items.Single(item => item.Payload is ReadyOutput).Payload);
-    }
-
-    [Fact]
-    public async Task Provider_loss_keeps_history_and_does_not_navigate_again()
-    {
-        var browser = new HoldingBrowser { ErrorCode = "provider_unavailable" };
-        var store = new InMemoryMemoryStore();
-        var sessionId = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940c301");
-        await using var runtime = Runtime(browser, new CountingLease(), new OneNavigateModel(), store: store, sessionId: sessionId);
-        await runtime.AttachAsync();
-        Assert.True(await runtime.SubmitUserTextAsync("open the record"));
-        await runtime.WaitUntilIdleAsync();
-        Assert.Equal(1, browser.NavigateCalls);
-        var answer = runtime.Snapshot.Entries.Single(entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(EntryStatus.Completed, answer.Status);
-        Assert.Equal("The browser is unavailable.", answer.Text);
-        Assert.True(await runtime.SubmitUserTextAsync("next"));
-        await runtime.WaitUntilIdleAsync();
-        Assert.Equal(1, browser.NavigateCalls);
-        var loaded = (await store.LoadAsync(sessionId))!;
-        Assert.Equal(runtime.Snapshot.Entries.Count, loaded.Entries.Count);
-        Assert.Contains(loaded.Entries, entry => entry.Text == "The browser is unavailable.");
-        Assert.Contains(loaded.Entries, entry => entry.Text == "Still here.");
     }
 
     [Fact]
@@ -153,83 +65,6 @@ public sealed class BrowserLifecycleTests
         Assert.Equal(AgentRunStatus.Failed, recovered.Status);
         Assert.Equal("side-effect-indeterminate", recovered.Failure!.Code);
         Assert.Empty(await store.ListRunnableAsync(now.AddMinutes(6), 10));
-    }
-
-    [Fact]
-    public async Task Recovered_browser_change_stays_blocked_after_a_fresh_snapshot_and_checkpoint()
-    {
-        var now = DateTimeOffset.Parse("2026-10-08T00:00:00Z");
-        var clock = new FakeTimeProvider(now);
-        var owner = new AgentRunOwner(Guid.NewGuid(), Guid.NewGuid());
-        var memory = new InMemoryMemoryStore();
-        var runs = new InMemoryAgentRunStore(memory, new SystemDiagnosticIdSource());
-        var snapshot = AgentRunTestFixtures.Snapshot(owner, BrowserDefinition(), now);
-        var run = (await runs.AdmitAsync(snapshot, 0, AgentRunTestFixtures.Run(snapshot, now))).Run;
-        var generation = Guid.NewGuid();
-        run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, now, generation, now.AddMinutes(5)));
-        var original = new ModelToolCall("original", ToolCatalog.BrowserClick, "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_aaaaaaaaaaaaaaaaaaaaaa\"}}");
-        var hash = ToolActionHash.Compute(original.Name, JsonDocument.Parse(original.ArgumentsJson).RootElement);
-        run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, now, generation,
-            new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [original])], executionState: new(TranscriptId: run.Admission.ResponseId)), 1, 0, 180000), null));
-        foreach (var disposition in new[] { AgentRunSideEffectDisposition.Prepared, AgentRunSideEffectDisposition.InFlight })
-            run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.MarkSideEffect(run.Revision, now, generation, disposition, original.Id, hash));
-        clock.Advance(TimeSpan.FromMinutes(6));
-        run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Recover(run.Revision, clock.GetUtcNow()));
-        var browser = new HoldingBrowser { SuccessfulSnapshot = true };
-        var model = new RecoveryModel(original);
-        await using var runtime = SessionRuntimeFixture.Create((await memory.LoadAsync(snapshot.SessionId))!, model,
-            new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)), memory,
-            new CapturingSessionOutput(), new SystemIdGenerator(clock), clock, NullLogger<SessionRuntime>.Instance,
-            agentRuns: runs, tools: new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll));
-        await runtime.AttachAsync();
-        Assert.True(await runtime.DispatchAgentRunAsync(run.AgentRunId, false));
-        await model.AfterSnapshot.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var checkpointed = (await runs.GetAsync(owner, run.AgentRunId))!;
-        Assert.Equal(AgentRunSideEffectDisposition.None, checkpointed.SideEffect.Disposition);
-        Assert.True(AgentRunToolCallCheckpoint.TryReadState(checkpointed.Checkpoint, out _, out var needsSnapshot, out var blocked));
-        Assert.False(needsSnapshot);
-        Assert.Equal(hash, blocked);
-        model.Continue.TrySetResult();
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(1, browser.SnapshotCalls);
-        Assert.Equal(1, browser.InteractCalls);
-        Assert.Equal("el_bbbbbbbbbbbbbbbbbbbbbb", browser.LastInteractionRef);
-        Assert.Contains(model.Results, text => text.Contains("not_replayed", StringComparison.Ordinal));
-        Assert.Equal(AgentRunStatus.Completed, (await runs.GetAsync(owner, run.AgentRunId))!.Status);
-    }
-
-    [Fact]
-    public async Task Background_browser_lease_retains_its_32_step_budget_through_AgentRun_dispatch()
-    {
-        var now = DateTimeOffset.Parse("2026-10-08T00:00:00Z");
-        var clock = new FakeTimeProvider(now);
-        var owner = new AgentRunOwner(Guid.NewGuid(), Guid.NewGuid());
-        var memory = new InMemoryMemoryStore();
-        var runs = new InMemoryAgentRunStore(memory, new SystemDiagnosticIdSource());
-        var snapshot = AgentRunTestFixtures.Snapshot(owner, BrowserDefinition(), now);
-        var runId = Guid.NewGuid();
-        snapshot = snapshot with { Origin = new(SessionOriginKind.ManualBackground, initialBackgroundAgentRunId: runId),
-            Surfaces = SessionSurface.BackgroundWork };
-        var input = snapshot.Entries.Single();
-        var activation = Activation.Start(Guid.NewGuid(), snapshot.SessionId, ActivationKind.ManualBackground, [input.EntryId],
-            input.SourceEventId, null, null, null, "manual:browser-budget", now);
-        var run = AgentRun.Create(runId, owner, new(activation, snapshot.Definition.Id, snapshot.Definition.Version,
-            snapshot.PinnedPersona!, Guid.NewGuid(), AgentRunOutputContract.BackgroundOutcome, configuration: new(snapshot.Definition, 0, snapshot.PinnedPersonaRevision ?? 0, [])), new("scripted-alpha", "primary-llm", "scripted-alpha", null), 3, now);
-        run = (await runs.AdmitAsync(snapshot, 0, run)).Run;
-        run = await runs.ApplyAsync(owner, runId, new AgentRunCommand.Claim(run.Revision, now, Guid.NewGuid(), now.AddMinutes(5)));
-        var browser = new HoldingBrowser { SuccessfulSnapshot = true };
-        await using var runtime = SessionRuntimeFixture.Create((await memory.LoadAsync(snapshot.SessionId))!, new BoundBudgetModel(),
-            new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)), memory,
-            new CapturingSessionOutput(), new SystemIdGenerator(clock), clock, NullLogger<SessionRuntime>.Instance,
-            agentRuns: runs, tools: new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll));
-        Assert.True(await runtime.DispatchAgentRunAsync(runId, true));
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(1, browser.UnattendedLeases);
-        Assert.Equal(26, browser.SnapshotCalls);
-        run = (await runs.GetAsync(owner, runId))!;
-        Assert.Equal(AgentRunStatus.Completed, run.Status);
-        Assert.Equal(27, run.Checkpoint!.StepCount);
-        Assert.Equal(240000, run.Checkpoint.RemainingOverallBudgetMs);
     }
 
     private sealed class BoundBudgetModel : ILanguageModel

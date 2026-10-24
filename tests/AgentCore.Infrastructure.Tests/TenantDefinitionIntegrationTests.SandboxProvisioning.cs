@@ -191,7 +191,9 @@ public sealed partial class TenantDefinitionIntegrationTests
             else
             {
                 Assert.Null(saved.Execution.CommandStartedAt); Assert.Null(saved.Execution.DeadlineAt);
-                Assert.Equal(recovering || outcome is "createUnknown" or "foreignCreated" or "occupiedTemplate" or "privateRotated" ? SandboxLeaseState.NeedsReconciliation : SandboxLeaseState.Terminated, saved.Lease.State);
+                var expectedState = recovering || outcome is "createUnknown" or "foreignCreated" or "occupiedTemplate" or "privateRotated" ? SandboxLeaseState.NeedsReconciliation : SandboxLeaseState.Terminated;
+                Assert.True(saved.Lease.State == expectedState,
+                    $"Scenario={outcome}, expected={expectedState}, actual={saved.Lease.State}, deletes={deletes}, cleanupPasses={saved.Lease.CleanupPasses}, failureCategory={saved.Lease.FailureCategory}, failurePhase={saved.Lease.FailurePhase}, execution={saved.Execution.State}, remoteTerminationConfirmed={saved.Execution.RemoteTerminationConfirmed}");
                 Assert.Equal(recovering || outcome is "createUnknown" or "foreignCreated" or "occupiedTemplate" or "privateRotated" ? 0 : 1, deletes);
             }
             var retained = JsonSerializer.Serialize(new { result, saved, effect, Audit = await f.Iam.ReadAuditAsync(s.Tenant, 200) });

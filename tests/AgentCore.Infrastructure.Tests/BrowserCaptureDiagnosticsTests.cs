@@ -116,7 +116,8 @@ public sealed class BrowserCaptureDiagnosticsTests
             var url = browser.HostPolicy.NavigationOrigins.Single() + "/";
             Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(url)))).ErrorCode);
             var initial = await browser.ExecuteAsync(new(id, new BrowserScreenshot()));
-            using (var json = JsonDocument.Parse(initial.DataJson!)) Assert.True(json.RootElement.GetProperty("coordinateEvidence").GetBoolean());
+            using (var json = JsonDocument.Parse(initial.DataJson!))
+                Assert.True(json.RootElement.GetProperty("coordinateEvidence").GetBoolean(), initial.DataJson);
             if (mode == "fonts") await browser.ContextFor(id)!.Pages[0].RouteAsync("**/pending-font", async route => { await release.Task; await route.AbortAsync(); });
             browser.CaptureConsistencyProbe = page => mode switch
             {

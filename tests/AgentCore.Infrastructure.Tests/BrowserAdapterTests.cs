@@ -819,7 +819,7 @@ public sealed class NativePlaywrightBrowserAdapterTests(BrowserHostFixture fixtu
             Assert.False(waiting.IsCompleted);
             await lease.DisposeAsync();
             var opened = await waiting.WaitAsync(TimeSpan.FromSeconds(20));
-            Assert.Null(opened.ErrorCode);
+            Assert.True(opened.ErrorCode is null, $"Interactive navigation: code={opened.ErrorCode}, status={opened.Status}, attempted={opened.EffectAttempted}, SDK-confirmed={opened.EffectConfirmedBySdk}");
             Assert.Contains(otherOrigin, opened.Observation!.Url, StringComparison.Ordinal);
             Assert.Equal(BrowserPolicyMode.OpenWeb, session.HostPolicy.PolicyMode);
             Assert.Single(Directory.GetDirectories(root));

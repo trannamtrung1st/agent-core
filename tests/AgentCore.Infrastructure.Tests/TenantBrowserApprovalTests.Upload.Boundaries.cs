@@ -27,6 +27,8 @@ public sealed partial class TenantBrowserApprovalTests
 
     [Theory] [InlineData("fixture-artifact-1")] [InlineData("00000000-0000-0000-0000-000000000000")]
     [InlineData("ABCDEF00-0000-0000-0000-000000000001")]
+    [InlineData("/tmp/ac-keyboard.png")] [InlineData("https://files.example/ac-keyboard.png")]
+    [InlineData("definition:product-image")]
     public void Tenant_Browser_upload_rejects_noncanonical_or_fixture_sources(string id)
     {
         Assert.Throws<ArgumentException>(() => TenantBrowserUploadRules.Ids(new(new("label", "File"), [id])));
