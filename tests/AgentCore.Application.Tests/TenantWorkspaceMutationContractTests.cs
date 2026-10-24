@@ -11,6 +11,7 @@ public sealed class TenantWorkspaceMutationContractTests
     [InlineData("{\"path\":\"/working/a\",\"content\":\"x\",\"tenantId\":\"other\"}")]
     [InlineData("{\"path\":\"/working/a\",\"path\":\"/home/a\",\"content\":\"x\"}")]
     [InlineData("{\"path\":\"relative.txt\",\"content\":\"x\"}")]
+    [InlineData("{\"path\":\"/test.txt\",\"content\":\"x\"}")]
     [InlineData("{\"path\":\"/working\",\"content\":\"x\"}")]
     [InlineData("{\"path\":\"/working/../escape\",\"content\":\"x\"}")]
     public void Write_rejects_ambiguous_paths_and_caller_authority(string json) =>

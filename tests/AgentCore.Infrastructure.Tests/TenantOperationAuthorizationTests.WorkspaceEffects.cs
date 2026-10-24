@@ -37,6 +37,12 @@ public sealed partial class TenantOperationAuthorizationTests
         }
         await Execute("workspace-write", ToolCatalog.WorkspaceWrite, new { path = root + "/source.txt", content = "private literal: thử nghiệm" });
         await Execute("workspace-patch", ToolCatalog.WorkspacePatch, new { path = root + "/source.txt", edits = new[] { new { oldText = "private literal", newText = "edited literal" } } });
+        var staleHash = new ModelToolCall("workspace-rejected-stale-hash", ToolCatalog.WorkspacePatch, JsonSerializer.Serialize(new {
+            path = root + "/source.txt", expectedSha256 = new string('0', 64), edits = new[] { new { oldText = "edited literal", newText = "changed again" } } }));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ExecuteAsync(frame, staleHash).AsTask());
+        Assert.Null(await ((ITenantWorkspaceOperationStore)f.Iam).FindDirectOperationReceiptAsync(s.Tenant, frame.RunId, staleHash.Id));
+        Assert.Equal("edited literal: thử nghiệm", Encoding.UTF8.GetString((await files.InspectTenantAsync(
+            new(s.Tenant, s.Agent.Instance.InstanceId, working ? frame.SessionId : null), root + "/source.txt", 1024)).Bytes));
         await Execute("workspace-mkdir", ToolCatalog.WorkspaceMkdir, new { path = root + "/tree/empty" });
         await Execute("workspace-copy", ToolCatalog.WorkspaceCopy, new { source = root + "/source.txt", destination = root + "/tree/copy.txt" });
         var other = working ? "/home" : "/working";

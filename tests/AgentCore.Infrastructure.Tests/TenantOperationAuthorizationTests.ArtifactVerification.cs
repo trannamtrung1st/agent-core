@@ -35,6 +35,8 @@ public sealed partial class TenantOperationAuthorizationTests
         {
             Assert.Equal(artifact.ArtifactId, metadata.RootElement.GetProperty("artifactId").GetGuid());
             Assert.Equal(artifact.Sha256Hex, metadata.RootElement.GetProperty("sha256Hex").GetString());
+            Assert.Equal(artifact.ContentType, metadata.RootElement.GetProperty("contentType").GetString());
+            Assert.Equal(artifact.CreatedAt, metadata.RootElement.GetProperty("createdAt").GetDateTimeOffset());
             Assert.True(metadata.RootElement.GetProperty("tenantArtifactRead").GetBoolean());
             Assert.DoesNotContain("Unreturned file bytes", metadata.RootElement.GetRawText());
             foreach (var hidden in new[] { "sourceAttachmentId", "workspaceLogicalPath", "blobKey", "content", "bytes" }) Assert.False(metadata.RootElement.TryGetProperty(hidden, out _));
