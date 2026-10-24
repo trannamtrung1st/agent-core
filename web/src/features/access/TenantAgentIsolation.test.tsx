@@ -40,7 +40,7 @@ const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save coor
 it('previews an explicit draft and applies the exact three owner and security witnesses once', async () => {
   await open(); await preview(); expect(applies()).toHaveLength(0); save(); await screen.findByText('Configuration saved');
   expect(applies()).toHaveLength(1); expect(JSON.parse(String(applies()[0][1]?.body))).toMatchObject({ expectedRevision: 7, expected: { instance: 4, experience: 0, maintenance: 0 }, fingerprint: 'exact-preview', draft: { experienceEnabled: true, allowMaintenance: false } });
-  expect(screen.getByRole('switch', { name: 'Experience enabled' })).toBeChecked(); expect(screen.getByRole('button', { name: 'Save coordinated configuration' })).toBeDisabled();
+  expect(await screen.findByRole('switch', { name: 'Experience enabled' })).toBeChecked(); expect(screen.getByRole('button', { name: 'Save coordinated configuration' })).toBeDisabled();
 });
 it('retains the draft after a stale save and requires reload and a fresh deliberate preview', async () => {
   failure = 'stale'; await open(); await preview(); save(); await screen.findByText(/Access has changed since/);

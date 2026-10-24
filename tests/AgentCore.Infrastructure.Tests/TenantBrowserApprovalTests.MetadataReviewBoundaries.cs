@@ -86,7 +86,13 @@ public sealed partial class TenantBrowserApprovalTests
         await using (var db = f.Contexts!.CreateDbContext())
         {
             var bytes = (await db.Set<TenantApprovalRecord>().AsNoTracking().SingleAsync()).PayloadJson;
-            await db.GetService<IMigrator>().MigrateAsync("20261018053723_TenantBrowserCommandReview"); await db.Database.MigrateAsync();
+            var migrator = db.GetService<IMigrator>();
+            // Current Run payloads retain download references which an old schema
+            // cannot represent. Exercise the safe roundtrip and the guarded boundary.
+            await migrator.MigrateAsync("20261023180000_TenantPublicDownloads");
+            await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => migrator.MigrateAsync("20261018053723_TenantBrowserCommandReview"));
+            Assert.Contains("20261023180000_TenantPublicDownloads", await db.Database.GetAppliedMigrationsAsync());
+            await db.Database.MigrateAsync();
             Assert.False(db.Database.HasPendingModelChanges()); Assert.Equal(bytes, (await db.Set<TenantApprovalRecord>().AsNoTracking().SingleAsync()).PayloadJson);
         }
         Assert.Equal(decision, await ((ITenantApprovedOperationStore)f.Iam).FindApprovalDecisionAsync(s.Tenant, browser.RequestId));

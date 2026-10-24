@@ -64,8 +64,10 @@ public sealed class ManagementReadContractTests
             "background" => context with { OutputContract = AgentRunOutputContract.BackgroundOutcome }, _ => throw new ArgumentException()
         };
         var reads = TenantManagementReadContract.Allowed(context.Definition, context);
-        if (boundary == "scope") Assert.Equal(["harness.inspect", "configuration.inspect", "management.inspect"], reads);
-        else if (boundary == "capability") Assert.Equal(["harness.inspect"], reads); // Harness inspection uses trusted delegation, separately from Definition selection.
+        // Procedure activation is independent of self-management delegation.
+        if (boundary == "scope") Assert.Equal(["harness.inspect", "configuration.inspect", "management.inspect", "skills.load"], reads);
+        else if (boundary == "capability") Assert.Equal(["harness.inspect", "skills.load"], reads);
+        else if (boundary is "frozen" or "off") Assert.Equal(["skills.load"], reads);
         else Assert.Empty(reads);
     }
     [Fact]

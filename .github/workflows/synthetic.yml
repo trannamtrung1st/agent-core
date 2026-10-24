@@ -112,9 +112,13 @@ jobs:
         run: pwsh tests/AgentCore.Infrastructure.Tests/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
 
       - name: Backend Application tests
+        id: application-tests
         run: dotnet test tests/AgentCore.Application.Tests/AgentCore.Application.Tests.csproj --nologo --blame-hang --blame-hang-timeout 5m
 
       - name: Backend API tests
+        # Collect both suite results when Application assertions fail, while
+        # preserving the failed job and refusing to run after setup was skipped.
+        if: ${{ !cancelled() && steps.application-tests.outcome != 'skipped' }}
         run: dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --nologo
 
       - name: Preserve backend test diagnostics

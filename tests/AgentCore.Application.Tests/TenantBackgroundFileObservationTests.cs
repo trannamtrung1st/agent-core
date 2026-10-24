@@ -29,7 +29,7 @@ public sealed class TenantBackgroundFileObservationTests
         Assert.Contains(tools, t => t.Name == ToolCatalog.WorkComplete);
         foreach (var read in new[] { ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceSearch, ToolCatalog.OfficeDocumentInspect, ToolCatalog.OfficeSpreadsheetInspect, ToolCatalog.ArtifactsVerify })
             Assert.Contains(tools, t => t.Name == read);
-        Assert.All(tools, t => Assert.True(TenantTaskExecutionContract.IsTool(t.Name) || TenantTaskExecutionContract.IsNativeInspection(t.Name) || IamToolContracts.IsInspection(t.Name) || TenantCompletionToolContract.IsTool(t.Name) || t.Name is ToolCatalog.ExecutionWait or ToolCatalog.RequestAuthorization or ToolCatalog.WorkComplete, t.Name));
+        Assert.All(tools, t => Assert.True(TenantTaskExecutionContract.IsTool(t.Name) || TenantTaskExecutionContract.IsNativeInspection(t.Name) || IamToolContracts.IsInspection(t.Name) || TenantCompletionToolContract.IsTool(t.Name) || TenantBackgroundToolContract.IsTool(t.Name) || t.Name is ToolCatalog.ExecutionWait or ToolCatalog.RequestAuthorization or ToolCatalog.CapabilitiesLoad or ToolCatalog.SkillsLoad, t.Name));
         var authorization = Assert.Single(tools, t => t.Name == ToolCatalog.RequestAuthorization);
         using var schema = JsonDocument.Parse(authorization.ParametersJson);
         static IEnumerable<string?> Operations(JsonElement branch)
@@ -43,7 +43,7 @@ public sealed class TenantBackgroundFileObservationTests
             }
         }
         var operations = Operations(schema.RootElement).Distinct().ToArray();
-        Assert.All(operations, operation => Assert.Contains(operation, new[] { "inspect_workspace", "read_attachment", "verify_artifact", "mutate_workspace", "publish_artifact", "publish_workspace_artifact", "run_browser_command", "run_sandbox_command", "stop_sandbox_process", "reset_sandbox_environment", "inspect_sandbox_profiles", "inspect_sandbox_status", "inspect_sandbox_process", "inspect_background_completion", "read_connected_account", "use_connected_account", "inspect_credential_metadata" }));
+        Assert.All(operations, operation => Assert.Contains(operation, new[] { "send_http_request", "mutate_automation", "inspect_management", "inspect_automations", "inspect_continuity", "manage_memory", "start_background_work", "inspect_workspace", "read_attachment", "verify_artifact", "mutate_workspace", "publish_artifact", "publish_workspace_artifact", "run_browser_command", "run_sandbox_command", "stop_sandbox_process", "reset_sandbox_environment", "inspect_sandbox_profiles", "inspect_sandbox_status", "inspect_sandbox_process", "inspect_background_completion", "read_connected_account", "use_connected_account", "inspect_credential_metadata" }));
         Assert.DoesNotContain(ToolCatalog.BrowserFillCredential, authorization.ParametersJson);
         Assert.Contains("run_browser_command", operations);
         Assert.Contains("inspect_workspace", operations); Assert.Contains("verify_artifact", operations);

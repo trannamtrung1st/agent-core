@@ -52,7 +52,14 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(true, builtInAuthority: true); var prior = await WorkspaceReviewFixture(f);
         await using (var db = f.Contexts!.CreateDbContext())
-        { await db.GetService<IMigrator>().MigrateAsync("20261019023004_TenantWorkspaceMutationReview"); await db.Database.MigrateAsync(); }
+        {
+            var migrator = db.GetService<IMigrator>();
+            await migrator.MigrateAsync("20261023180000_TenantPublicDownloads");
+            await Assert.ThrowsAsync<SqliteException>(() => migrator.MigrateAsync("20261019023004_TenantWorkspaceMutationReview"));
+            Assert.Contains("20261023180000_TenantPublicDownloads", await db.Database.GetAppliedMigrationsAsync());
+            await db.Database.MigrateAsync();
+            Assert.False(db.Database.HasPendingModelChanges());
+        }
         Assert.Equal(prior.Request, await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(prior.Setup.Tenant, prior.Request.RequestId));
         var s = prior.Setup;
         var session = await f.Sessions.CreateAsync(s.Tenant, s.Agent.Instance.InstanceId, s.Owner, SessionMode.Text, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1);

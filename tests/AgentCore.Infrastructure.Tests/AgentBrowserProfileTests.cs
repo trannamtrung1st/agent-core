@@ -53,7 +53,7 @@ public sealed class AgentBrowserProfileTests
     }
 
     [Fact]
-    public async Task Active_instance_uses_browser_without_connection_and_archived_instance_is_denied_without_deleting_profile()
+    public async Task Unowned_instance_identity_never_authorizes_browser_or_deletes_a_profile()
     {
         var root = Path.Combine(Path.GetTempPath(), "agent-core-profile-" + Guid.NewGuid().ToString("N"));
         var instanceId = Guid.NewGuid(); var directory = Path.Combine(root, instanceId.ToString("D")); Directory.CreateDirectory(directory);
@@ -66,14 +66,18 @@ public sealed class AgentBrowserProfileTests
             var executor = new SessionToolExecutor( browser:browser, configurationGate:ToolConfigurationGates.AllowAll);
             var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instanceId);
             var call = new ModelToolCall("navigate", ToolCatalog.BrowserNavigate, """{"url":"http://127.0.0.1:5088/admin"}""");
-            var allowed = await executor.ExecuteAsync(BrowserDefinition(), Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission);
-            Assert.DoesNotContain("forbidden", allowed.Text); Assert.Equal(1, browser.NavigateCalls); Assert.Equal(instanceId, browser.BoundAgent);
+            // An active legacy instance ID is metadata, not a tenant Run claim.
+            // Owned access and archive retirement are exercised by
+            // TenantBrowserOwnershipTests and TenantSessionAccessTests.BrowserRetirement.
+            var denied = await executor.ExecuteAsync(BrowserDefinition(), Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission);
+            Assert.Contains("Trusted tenant execution is required", denied.Text);
+            Assert.Equal(0, browser.NavigateCalls); Assert.Null(browser.BoundAgent);
             await instances.UpdateWithExpectedRevisionAsync(new(instanceId, 1, Lifecycle: AgentInstanceLifecycle.Archived), now);
             foreach (var blocked in new[] { call, new ModelToolCall("snapshot", ToolCatalog.BrowserSnapshot, "{}"), new ModelToolCall("click", ToolCatalog.BrowserClick, """{"target":{"by":"role","value":"button","name":"el_aaaaaaaaaaaaaaaaaaaaaa"}}""") })
                 Assert.Contains("forbidden", (await executor.ExecuteAsync(BrowserDefinition(), Guid.NewGuid(), blocked, ToolLimits.MaxOutputBytes, admission: admission)).Text);
-            Assert.Equal(1, browser.NavigateCalls); Assert.Equal(0, browser.ObserveCalls); Assert.Equal(0, browser.ActCalls); Assert.True(File.Exists(marker));
+            Assert.Equal(0, browser.NavigateCalls); Assert.Equal(0, browser.ObserveCalls); Assert.Equal(0, browser.ActCalls); Assert.True(File.Exists(marker));
             var missing = await executor.ExecuteAsync(BrowserDefinition(), Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission with { AgentInstanceId = Guid.NewGuid() });
-            Assert.Contains("forbidden", missing.Text); Assert.Equal(1, browser.NavigateCalls);
+            Assert.Contains("forbidden", missing.Text); Assert.Equal(0, browser.NavigateCalls);
         }
         finally { Directory.Delete(root, true); }
     }

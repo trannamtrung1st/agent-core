@@ -24,7 +24,7 @@ public sealed class BrowserEnvironmentJourneyTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Authorized_configuration_inspection_reports_disabled_or_missing_engine_without_opening_context(bool enabled)
+    public async Task Configuration_adapter_reports_readiness_without_opening_context_and_unowned_executor_refuses(bool enabled)
     {
         var probes = 0;
         var browser = new NativePlaywrightBrowser(new BrowserOptions { Enabled = enabled, FixtureEnabled = false,
@@ -46,14 +46,20 @@ public sealed class BrowserEnvironmentJourneyTests
             Assert.True(gate.IsExecutionConfigured(call.Name));
             Assert.False(gate.IsConfigured(ToolCatalog.BrowserNavigate));
             Assert.False(gate.IsExecutionConfigured(ToolCatalog.BrowserNavigate));
-            var result = await executor.ExecuteAsync(definition, id, call, ToolLimits.MaxOutputBytes, admission: admission);
-            using var config = JsonDocument.Parse(result.Text);
+            // Readiness is an adapter contract. TenantBrowserReadService owns
+            // authorized model observations; a literal Session has no authority.
+            Assert.True(BrowserToolArguments.TryRequest(id, call.Name, JsonSerializer.SerializeToElement(new { }), out var request, out _));
+            var result = await browser.ExecuteAsync(request);
+            Assert.Null(result.ErrorCode);
+            using var config = JsonDocument.Parse(result.DataJson!);
             Assert.False(config.RootElement.GetProperty("available").GetBoolean());
             Assert.False(config.RootElement.GetProperty("contextOpen").GetBoolean());
             Assert.Equal("chromium", config.RootElement.GetProperty("engine").GetString());
-            Assert.DoesNotContain("private-profile", result.Text);
+            Assert.DoesNotContain("private-profile", result.DataJson);
             Assert.Null(browser.ContextFor(id));
             Assert.Equal(enabled ? 1 : 0, probes);
+            Assert.Contains("Trusted tenant execution is required", (await executor.ExecuteAsync(definition,
+                id, call, ToolLimits.MaxOutputBytes, admission: admission)).Text);
             Assert.Contains("forbidden", (await executor.ExecuteAsync(definition with { Environment = new RoleEnvironment(ToolAllowlist: []) },
                 id, call, ToolLimits.MaxOutputBytes, admission: admission)).Text);
         }

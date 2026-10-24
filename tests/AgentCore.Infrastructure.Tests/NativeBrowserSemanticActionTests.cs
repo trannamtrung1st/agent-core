@@ -50,10 +50,15 @@ public sealed class NativeBrowserSemanticActionTests
                 new RoleEnvironment(ToolAllowlist: [ToolCatalog.BrowserSnapshot]));
             var receipt = await executor.ExecuteAsync(definition, id, new("frame-root", ToolCatalog.BrowserSnapshot, JsonSerializer.Serialize(new { frameRef = reference })), ToolLimits.MaxOutputBytes,
                 admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
-            var persisted = AgentRunToolCallCheckpoint.Write([new(ModelRole.Tool, receipt.Text, ToolCallId: "frame-root", Name: ToolCatalog.BrowserSnapshot)]);
+            // A literal native-adapter Session does not authorize model execution.
+            Assert.Contains("Trusted tenant execution is required", receipt.Text);
+            // Keep the native observation serialization/masking assertion at its
+            // adapter boundary; owned model reads use TenantBrowserReadService.
+            var observationJson = JsonSerializer.Serialize(root);
+            var persisted = AgentRunToolCallCheckpoint.Write([new(ModelRole.Tool, observationJson, ToolCallId: "frame-root", Name: ToolCatalog.BrowserSnapshot)]);
             foreach (var forbidden in new[] { "frame-password-93742", "frame-token-93742", "DENIED-NESTED-CONTENT" })
                 Assert.DoesNotContain(forbidden, persisted);
-            Assert.Contains(reference, receipt.Text);
+            Assert.Contains(reference, observationJson);
             var target = new BrowserTarget("role", "button", Name: "Save frame");
             var scoped = await browser.ExecuteAsync(new(id, new BrowserObserve(target, FrameRef: reference)));
             Assert.Null(scoped.ErrorCode);

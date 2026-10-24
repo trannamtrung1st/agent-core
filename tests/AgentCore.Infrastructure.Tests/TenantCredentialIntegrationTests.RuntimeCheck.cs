@@ -425,6 +425,10 @@ public sealed partial class TenantCredentialIntegrationTests
             await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantCredentialCheckDispatches SET RunId={foreign} WHERE OperationId={request.Operation.OperationId}"));
             await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantCredentialCheckDispatches SET ActionHash={badHash} WHERE OperationId={request.Operation.OperationId}"));
             await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261017090143_TenantCredentialApprovalTargets"));
+            // Earlier safe Down steps can commit before a lossy step refuses.
+            // Restore the current model before querying through today's EF mapping.
+            await db.Database.MigrateAsync();
+            Assert.False(db.Database.HasPendingModelChanges());
         }
         Assert.Equal(receipt, await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(setup.Tenant, request.Operation.OperationId));
         Assert.NotNull((await ((ITenantCredentialCheckStore)f.Iam).FindCredentialCheckDispatchAsync(setup.Tenant, request.Operation.OperationId))!.CompletedAt);

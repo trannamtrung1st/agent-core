@@ -65,9 +65,10 @@ public sealed partial class TenantOperationAuthorizationTests
     private sealed class PublicReadPort : IWebSearchProvider, IPublicWebFetcher
     {
         public bool IsAvailable=>true; public bool Hold { get; init; } public int Calls;
+        public WebSearchRequest? LastSearch; public PublicWebFetchRequest? LastFetch;
         public TaskCompletionSource Entered { get; }=new(TaskCreationOptions.RunContinuationsAsynchronously); public TaskCompletionSource Release { get; }=new(TaskCreationOptions.RunContinuationsAsynchronously); public TaskCompletionSource Returned { get; }=new(TaskCreationOptions.RunContinuationsAsynchronously);
         private async Task Begin() { Interlocked.Increment(ref Calls); Entered.TrySetResult(); if(Hold)await Release.Task; Returned.TrySetResult(); }
-        public async ValueTask<WebSearchResult> SearchAsync(WebSearchRequest request,CancellationToken cancellationToken=default) { await Begin(); return new([new("Public","https://public.example/page","PUBLIC-NATIVE-WITNESS")],false); }
-        public async ValueTask<PublicWebFetchResult> FetchAsync(PublicWebFetchRequest request,CancellationToken cancellationToken=default) { await Begin(); return new("https://public.example/final","text/plain",new string('試',10000)+"PUBLIC-NATIVE-WITNESS",false,null,null); }
+        public async ValueTask<WebSearchResult> SearchAsync(WebSearchRequest request,CancellationToken cancellationToken=default) { LastSearch=request; await Begin(); return new([new("Public","https://public.example/page","PUBLIC-NATIVE-WITNESS")],false); }
+        public async ValueTask<PublicWebFetchResult> FetchAsync(PublicWebFetchRequest request,CancellationToken cancellationToken=default) { LastFetch=request; await Begin(); return new("https://public.example/final","text/plain",new string('試',10000)+"PUBLIC-NATIVE-WITNESS",false,null,null); }
     }
 }

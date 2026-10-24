@@ -58,7 +58,10 @@ public sealed partial class TenantCredentialIntegrationTests
 
     private async Task AccountTransferScenario(bool sqlite, string mode, string? reconciliation)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await RuntimeCredential(f, true);
+        // Controlled HTTP completes synchronously, but repeated real SQLite
+        // commits on a loaded runner must not consume this scenario's claim clock.
+        var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.Parse("2026-10-24T12:00:00Z"));
+        await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true); var s = await RuntimeCredential(f, true);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;
         var role = await f.Access.SaveRoleAsync(s.Owner.PrincipalId, s.Tenant, null, "Exact transfers", ["sessions.read", "agent-runs.read", "drive.read", "drive.write", "drive.delete", "agents.read", "workspaces.read", "workspaces.write"], await Revision());
         await f.Access.AssignRoleAsync(s.Owner.PrincipalId, s.Tenant, s.Agent.PrincipalId, role.RoleId, AccessScope.ForTenant(s.Tenant), await Revision());

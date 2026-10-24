@@ -83,11 +83,15 @@ public sealed partial class TenantBrowserApprovalTests
     {
         await using var f = await Fixture.Create(true, builtInAuthority: true); var s = await Prepare(f); var probe = Probe(s); var service = Service(f, probe);
         var prior = (await service.PreparePersonaAsync(new(s.Tenant, s.Run.AgentRunId), s.Agent.Instance.Persona with { Name = "Earlier request" }, s.Run.Revision, s.Run.Claim!.Generation)).Request!;
-        // Preserve an actual older-family row byte-for-byte through the disposable downgrade/upgrade.
+        // Preserve older-family bytes through a safe roundtrip. Current Run
+        // download references must refuse a downgrade that cannot retain them.
         await using (var db = f.Contexts!.CreateDbContext())
         {
             var priorBytes = (await db.Set<TenantApprovalRecord>().AsNoTracking().SingleAsync()).PayloadJson;
-            await db.GetService<IMigrator>().MigrateAsync("20261018025233_TenantSandboxReadReview");
+            var migrator = db.GetService<IMigrator>();
+            await migrator.MigrateAsync("20261023180000_TenantPublicDownloads");
+            await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => migrator.MigrateAsync("20261018025233_TenantSandboxReadReview"));
+            Assert.Contains("20261023180000_TenantPublicDownloads", await db.Database.GetAppliedMigrationsAsync());
             await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
             Assert.Equal(priorBytes, (await db.Set<TenantApprovalRecord>().AsNoTracking().SingleAsync()).PayloadJson);
         }

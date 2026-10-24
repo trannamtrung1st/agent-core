@@ -21,8 +21,13 @@ for (const width of [1440, 390]) test(`tenant original, working copy and Artifac
   const errors: string[] = [], obsolete: string[] = [], unexpected: string[] = [], consoleErrors: string[] = [];
   page.on('pageerror', error => errors.push(error.message)); page.on('console', entry => { if (entry.type() === 'error') consoleErrors.push(entry.text()); });
   page.on('request', request => { const path = new URL(request.url()).pathname; if (path.includes('owner-capability') || /^\/api\/v[12]\/(sessions|agent-instances|admin|file-preview)(\/|$)/.test(path) || request.headers()['x-agentcore-owner-capability']) obsolete.push(path); });
-  let expectedDeniedPath = '';
-  page.on('response', response => { const path = new URL(response.url()).pathname; if (response.status() >= 400 && !(response.status() === 403 && path === expectedDeniedPath)) unexpected.push(`${response.status()} ${path}`); });
+  let expectedDeniedPath = '', expectedStalePath = '', metadataRefusals = 0;
+  page.on('response', response => {
+    const path = new URL(response.url()).pathname;
+    if (response.status() < 400 || response.status() === 403 && path === expectedDeniedPath) return;
+    if (response.status() === 409 && path === expectedStalePath && metadataRefusals++ === 0) return;
+    unexpected.push(`${response.status()} ${path}`);
+  });
   try {
     const tenant = await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `File proof ${nonce}`, slug: `file-proof-${nonce}` }); const prefix = `/api/v2/tenants/${tenant.tenantId}`;
     const access = await call<{ revision: number }>(api, prefix + '/access/me');
@@ -34,8 +39,22 @@ for (const width of [1440, 390]) test(`tenant original, working copy and Artifac
     await page.getByRole('menuitem', { name: /Attach file/ }).click(); await (await chooser).setFiles({ name, mimeType: 'text/markdown', buffer: bytes });
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Keep this original file.'); await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('Hello from synthetic.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Ready', { exact: true })).toBeVisible();
     const original = page.locator('.entry-files').getByRole('group', { name, exact: true }); await expect(original).toBeVisible();
+    let staleMetadata = false;
+    await page.route(`**${prefix}/sessions/*/attachments/*`, async route => {
+      if (!staleMetadata && route.request().method() === 'GET') {
+        staleMetadata = true; expectedStalePath = new URL(route.request().url()).pathname;
+        await route.fulfill({ status: 409, contentType: 'application/problem+json', body: '{"reasonCode":"stale_revision"}' });
+      } else await route.continue();
+    });
     await original.getByRole('button', { name: `Preview ${name}`, exact: true }).click(); let preview = page.getByRole('dialog', { name, exact: true });
+    await expect.poll(() => metadataRefusals).toBe(1);
+    const refused = page.getByRole('dialog'); await expect(refused).toContainText('The file changed.');
+    await expect(refused).not.toContainText('const scope = "tenant";');
+    await page.keyboard.press('Escape'); await expect(refused).toBeHidden();
+    await expect(original.getByRole('button', { name: `Preview ${name}`, exact: true })).toBeEnabled();
+    await original.getByRole('button', { name: `Preview ${name}`, exact: true }).click();
     await expect(preview).toContainText('const scope = "tenant";'); await page.keyboard.press('Escape'); await expect(preview).toBeHidden();
     const originalDownload = page.waitForEvent('download'); await original.getByRole('button', { name: `Download ${name}`, exact: true }).click();
     expect(await readFile((await (await originalDownload).path())!)).toEqual(bytes);
@@ -63,7 +82,7 @@ for (const width of [1440, 390]) test(`tenant original, working copy and Artifac
     await files.getByRole('button', { name: 'Retry file', exact: true }).click(); await expect(artifact).toBeVisible();
     const restored = page.waitForEvent('download'); await artifact.getByRole('button', { name: `Download ${name}`, exact: true }).click();
     const download = await restored; expect(download.suggestedFilename()).toBe(name); expect(await readFile((await download.path())!)).toEqual(bytes);
-    expect(denied).toBe(true); expect(errors).toEqual([]); expect(obsolete).toEqual([]); expect(unexpected).toEqual([]);
-    expect(consoleErrors).toHaveLength(1); expect(consoleErrors[0]).toContain('403');
+    expect(staleMetadata).toBe(true); expect(metadataRefusals).toBe(1); expect(denied).toBe(true); expect(errors).toEqual([]); expect(obsolete).toEqual([]); expect(unexpected).toEqual([]);
+    expect(consoleErrors).toHaveLength(2); expect(consoleErrors[0]).toContain('409'); expect(consoleErrors[1]).toContain('403');
   } finally { await api.dispose(); }
 });
