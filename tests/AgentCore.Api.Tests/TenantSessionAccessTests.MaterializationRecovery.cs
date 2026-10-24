@@ -85,8 +85,28 @@ public sealed partial class TenantSessionAccessTests
             }
             await using (var db = await contexts.CreateDbContextAsync())
             {
+                static async Task<string[]> Schema(AgentCoreDbContext context)
+                {
+                    await context.Database.OpenConnectionAsync(); using var command = context.Database.GetDbConnection().CreateCommand();
+                    command.CommandText = "SELECT type || ':' || name || ':' || sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type,name";
+                    var schema = new List<string>(); using var rows = await command.ExecuteReaderAsync();
+                    while (await rows.ReadAsync()) schema.Add(rows.GetString(0));
+                    return schema.ToArray();
+                }
                 var migrations = (await db.Database.GetAppliedMigrationsAsync()).ToArray(); var index = Array.FindIndex(migrations, s => s.EndsWith("TenantHumanMaterializedArtifact", StringComparison.Ordinal)); Assert.True(index > 0);
-                await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync(migrations[index - 1])); Assert.False(db.Database.HasPendingModelChanges());
+                var schema = await Schema(db);
+                var blocked = await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync(migrations[index - 1]));
+                Assert.Equal(19, blocked.SqliteErrorCode);
+                // Earlier reversible Down steps may commit before the protected human provenance guard rejects rollback.
+                // Restore the current schema before using the still-current application host again.
+                await db.Database.MigrateAsync();
+                await using var reopened = await contexts.CreateDbContextAsync();
+                Assert.Equal(migrations, await reopened.Database.GetAppliedMigrationsAsync());
+                Assert.Equal(schema, await Schema(reopened));
+                Assert.Equal(JsonSerializer.Serialize(original), JsonSerializer.Serialize(await reopened.Artifacts.AsNoTracking().SingleAsync(a => a.ArtifactId == id.ToString("D"))));
+                Assert.False(reopened.Database.HasPendingModelChanges());
+                using var check = reopened.Database.GetDbConnection().CreateCommand(); check.CommandText = "PRAGMA foreign_key_check";
+                using var violations = await check.ExecuteReaderAsync(); Assert.False(await violations.ReadAsync());
             }
             Assert.Equal(v.Bytes, await owner.GetByteArrayAsync(v.SessionUrl + $"/artifacts/{id}/content"));
         }

@@ -1,4 +1,5 @@
-name: Cold CSRF diagnostic
+# Temporary diagnostic: remove this workflow after investigation. Full CI remains required.
+name: Cold CSRF cohort diagnostic
 
 on:
   workflow_dispatch:
@@ -12,9 +13,9 @@ concurrency:
 
 jobs:
   csrf:
-    name: Cold anonymous CSRF case (diagnostic)
+    name: Original API7 context (diagnostic)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     env:
       DOTNET_NOLOGO: "1"
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
@@ -35,28 +36,77 @@ jobs:
       - run: dotnet build tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --nologo
       - run: sudo python3 scripts/prepare-ci-apt.py
       - run: pwsh tests/AgentCore.Api.Tests/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
-      - name: Execute exact cold-start case
-        run: >-
-          dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj
-          --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~Tenant_model_existing_Automation_deletion_requires_exact_current_consent_and_preserves_history&DisplayName~sqlite: False&DisplayName~mode: %22changed%22'
-          --logger 'trx;LogFileName=csrf.trx'
-          --results-directory local/test-results/csrf-diagnostic
-      - name: Account for the exact selected case
+      - name: Execute original API7 context with current HTTP diagnostics
+        run: |
+          python3 - <<'PY'
+          import importlib.util, json, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("backend_shards", "scripts/backend-test-shards.py")
+          backend = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(backend)
+          cohort = {
+            "AgentCore.Api.Tests.DiagnosticLoggingTests.Stopping_a_hosted_pass_does_not_mint_a_diagnostic_id": 1,
+            "AgentCore.Api.Tests.IdentityAndTenantAccessTests.Password_change_reauthenticates_and_invalidates_a_second_device_cookie": 1,
+            "AgentCore.Api.Tests.SessionEventMapperProgressTests.Progress_without_operation_id_maps_null_and_does_not_embed_response_id": 1,
+            "AgentCore.Api.Tests.SpeechProviderBinderTests.Mixed_combinations_bind_without_keys": 5,
+            "AgentCore.Api.Tests.TenantAgentAccessTests.Tenant_Automation_direct_replay_is_factual_and_same_arguments_cannot_substitute_a_different_mutation_tool": 2,
+            "AgentCore.Api.Tests.TenantAgentAccessTests.Tenant_Automation_public_research_uses_independent_current_reads_and_needs_no_default_review": 12,
+            "AgentCore.Api.Tests.TenantAgentAccessTests.Tenant_Run_Profile_actual_SQLite_host_restart_retains_metadata_and_reloads_the_current_requester": 1,
+            "AgentCore.Api.Tests.TenantAgentAccessTests.Tenant_experience_manual_review_HTTP_is_closed_and_requires_an_unchanged_inspected_source": 2,
+            "AgentCore.Api.Tests.TenantAgentAccessTests.Tenant_experience_source_review_can_finish_NoAction_after_refusal_or_authorized_inspection_without_recording": 4,
+            "AgentCore.Api.Tests.TenantAgentAccessTests.Tenant_model_existing_Automation_deletion_requires_exact_current_consent_and_preserves_history": 10,
+            "AgentCore.Api.Tests.TenantAgentAccessTests.Tenant_model_manual_Automation_invocation_commits_one_occurrence_and_factual_receipt_then_executes_with_its_actual_human": 2,
+            "AgentCore.Api.Tests.TenantCredentialAccessTests.Tenant_OAuth_HTTP_preserves_host_disable_and_rejects_invalid_consent_forms": 1,
+            "AgentCore.Api.Tests.TenantCredentialAccessTests.Tenant_completion_waits_for_busy_parent_then_delivers_once_across_SQLite_reopen": 4,
+            "AgentCore.Api.Tests.TenantDefinitionAccessTests.Real_kestrel_rejects_declared_and_chunked_oversized_resource_bodies_without_mutation": 1,
+            "AgentCore.Api.Tests.TenantDefinitionAccessTests.Tenant_Sandbox_command_approval_and_human_controls_HTTP_bind_exact_witnesses_without_SDK_dispatch": 3,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Active_tenant_HTTP_cancellation_closes_saved_response_and_releases_capacity_before_a_noncooperative_model_returns": 2,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Human_materialization_access_hints_require_original_source_reads_and_report_independent_current_copy_authority": 2,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Human_materialization_actual_SQLite_host_recreation_preserves_provenance_independent_copy_and_deleted_owner_cleanup": 1,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Independent_Automation_wait_preserves_same_Run_fresh_generation_current_authority_and_durable_recovery": 30,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Session_metadata_HTTP_rechecks_original_login_and_security_after_storage_IO": 16,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_Artifact_verification_model_uses_independent_read_and_exact_durable_metadata_Review": 6,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_Browser_effect_HTTP_consent_drives_one_cold_native_navigation_or_current_gate_denial": 1,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_Compliance_image_turn_reads_current_knowledge_cites_exact_source_and_publishes_real_report_with_Markdown": 2,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_background_creation_consent_commits_exact_child_and_receipt_with_current_compound_authority": 20,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_background_file_read_uses_actual_owned_model_and_reports_once": 2,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_background_pending_Attachments_do_not_supply_read_evidence": 4,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_background_report_pending_consent_survives_actual_SQLite_host_recreation": 1,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_capability_discovery_preserves_actionable_invalid_receipts_and_bounds_equivalent_no_match": 8,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_live_reconnect_and_authority_boundaries_preserve_contiguous_prefix_and_exclude_late_output": 10,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_native_record_journey_keeps_unresolved_human_verification_page_observable_on_next_root": 1,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_owned_source_notice_and_on_demand_Skill_load_answer_once_without_replay_after_SQLite_host_recreation": 2,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_public_web_reads_use_current_executor_authority_and_never_release_revoked_observations": 56,
+            "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_public_web_tool_progress_completes_or_is_superseded_under_exact_owned_response": 4
+          }
+          result_root = Path("local/test-results/csrf-diagnostic")
+          # Current code, frozen original shard context: this is a diagnostic subset, not full CI.
+          plan = backend.make_plan(cohort, 1, os.environ["GITHUB_SHA"], "api")
+          plan["original_cohort_source"] = '938d4e0060e4d3a2086edbfa856eccedf0156ff0'
+          plan["original_cohort_plan_sha256"] = '2fa296ab8a905b2a6b652e393866961f43a24b08c6431a35cf399ab21546d43a'
+          plan["original_cohort_shard"] = 7
+          plan["sha256"] = backend.digest(plan)
+          backend.write_json(result_root / "cohort-plan.json", plan)
+          print("Executing fixed original API7 context: 33 methods, 218 cases; current source " + os.environ["GITHUB_SHA"], flush=True)
+          raise SystemExit(backend.execute_shard(plan, 1, result_root, "api"))
+          PY
+      - name: Account for the frozen original cohort
         if: always()
         run: |
           python3 - <<'PY'
+          import collections, json
+          from pathlib import Path
           import xml.etree.ElementTree as ET
-          root = ET.parse("local/test-results/csrf-diagnostic/csrf.trx").getroot()
-          ns = {"t": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
-          counters = root.find("t:ResultSummary/t:Counters", ns)
-          cases = root.findall("t:Results/t:UnitTestResult", ns)
-          assert counters is not None and int(counters.get("total", "0")) == 1
-          assert len(cases) == 1
-          name = cases[0].get("testName", "")
-          assert "Tenant_model_existing_Automation_deletion_requires_exact_current_consent_and_preserves_history" in name
-          assert 'sqlite: False, mode: "changed"' in name
-          print("Exactly one intended cold-start case was executed.")
+          root = Path("local/test-results/csrf-diagnostic")
+          plan = json.loads((root / "cohort-plan.json").read_text())
+          files = list(root.glob("shard-*/results.trx"))
+          assert len(files) == 1
+          trx = ET.parse(files[0]).getroot()
+          results = trx.findall(".//{*}UnitTestResult")
+          actual = collections.Counter(case.get("testName", "").split("(", 1)[0] for case in results)
+          assert actual == collections.Counter(plan["method_cases"]), "Original cohort case accounting differed"
+          assert len(results) == 218
+          print("Exactly the frozen original API7 cohort was executed: 33 methods, 218 cases.")
           PY
       - uses: actions/upload-artifact@v4
         if: always()
