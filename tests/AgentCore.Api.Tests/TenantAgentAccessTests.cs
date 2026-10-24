@@ -92,9 +92,34 @@ public sealed partial class TenantAgentAccessTests
     }
 
     private static async Task Login(HttpClient client, string login, string password)
-    { await Csrf(client); Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/api/v2/auth/login", new { login, password })).StatusCode); await Csrf(client); }
-    private static async Task Csrf(HttpClient client)
-    { var token = (await Json(await client.GetAsync("/api/v2/auth/csrf"))).GetProperty("token").GetString(); client.DefaultRequestHeaders.Remove("X-AgentCore-CSRF"); client.DefaultRequestHeaders.Add("X-AgentCore-CSRF", token); }
+    {
+        await Csrf(client, "before-login");
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/api/v2/auth/login", new { login, password })).StatusCode);
+        await Csrf(client, "after-login");
+    }
+    private static async Task Csrf(HttpClient client, string phase = "explicit")
+    {
+        using var response = await client.GetAsync("/api/v2/auth/csrf");
+        JsonDocument? json = null;
+        try { json = JsonDocument.Parse(await response.Content.ReadAsStringAsync()); }
+        catch (JsonException) { }
+        using (json)
+        {
+            var root = json?.RootElement ?? default;
+            var reason = "unavailable";
+            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("reasonCode", out var code)
+                && code.ValueKind == JsonValueKind.String && code.GetString() is { Length: > 0 and <= 64 } value
+                && value.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '-')) reason = value;
+            // Failed authentication setup must never print CSRF tokens, cookies or response bodies.
+            Assert.True(response.StatusCode == HttpStatusCode.OK, $"CSRF request status={(int)response.StatusCode}; phase={phase}; reasonCode={reason}");
+            JsonElement token = default;
+            Assert.True(root.ValueKind == JsonValueKind.Object && root.TryGetProperty("token", out token)
+                && token.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(token.GetString()),
+                $"CSRF status=200 response omitted a nonempty string token; phase={phase}");
+            client.DefaultRequestHeaders.Remove("X-AgentCore-CSRF");
+            client.DefaultRequestHeaders.Add("X-AgentCore-CSRF", token.GetString());
+        }
+    }
     private static async Task<long> Revision(HttpClient client, Guid tenant) => (await Json(await client.GetAsync($"/api/v2/tenants/{tenant}/access/me"))).GetProperty("revision").GetInt64();
     private static async Task<JsonElement> Json(HttpResponseMessage response)
     { using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync()); return json.RootElement.Clone(); }
