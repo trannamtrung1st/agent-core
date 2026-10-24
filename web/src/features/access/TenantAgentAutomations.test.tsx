@@ -114,6 +114,8 @@ it('acknowledges pending admission consent without claiming a Run exists or repl
   fireEvent.click(screen.getByRole('button', { name: 'Reload Automations' })); await waitFor(() => expect(writes()).toHaveLength(1));
 });
 
+// Hosted runs measured 33.5s/35.1s for these multi-step Ant Design journeys.
+// Keep every assertion and allow bounded rendering headroom for their reloads.
 it('authors an exact report destination through the shared picker and retains it after a stale write', async () => {
   await open(); await edit();
   fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Automation completion report' }));
@@ -132,7 +134,7 @@ it('authors an exact report destination through the shared picker and retains it
   fireEvent.click(screen.getByRole('button', { name: 'Save Automation' }));
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   expect(JSON.parse(String(writes()[1][1]?.body))).toMatchObject({ reportToSessionId: 'exact-report-conversation', expectedRevision: 22 });
-});
+}, 60_000);
 it('opens a configured report for editing and can explicitly remove that destination', async () => {
   current.items[0].automation.completionDelivery = 'toSession'; current.items[0].automation.reportToSessionId = 'exact-report-conversation';
   await open(); await edit();
@@ -198,7 +200,7 @@ it('keeps an edited draft until replacement is explicitly confirmed and starts t
   fireEvent.click(within(confirm).getByRole('button', { name: 'Replace draft' }));
   await waitFor(() => expect(screen.getByRole('textbox', { name: 'Automation name' })).toHaveValue('Review recent work'));
   expect(screen.getByRole('checkbox', { name: 'Enable automatic occurrences' })).not.toBeChecked(); expect(writes()).toHaveLength(0);
-});
+}, 60_000);
 it('can save a disabled known-source recipe despite model and event catalog refresh failures', async () => {
   catalogFailed = true; await newDraft(); await recipe('Review recent work');
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled());
