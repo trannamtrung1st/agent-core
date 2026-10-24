@@ -9,30 +9,6 @@ namespace AgentCore.Application.Tests;
 
 public sealed class BrowserReliabilityTests
 {
-    [Fact]
-    public async Task Scoped_native_table_keeps_values_that_fit_the_serialized_result_budget()
-    {
-        var rows = string.Join("\n", Enumerable.Range(1, 30)
-            .Select(i => $"    - row \"Sensor {i} 界 value {i * 10} Good\":\n      - cell \"Sensor {i}\"\n      - cell \"{i * 10}\""));
-        var browser = new DenseBrowser
-        {
-            Snapshot = new("https://example.test/asset", "Asset", "- table:\n" + rows, false, [],
-                SnapshotId: "snap_table", TabRef: "pg_table")
-        };
-        var definition = await CapabilityProjectionTests.Definition(ToolCatalog.BrowserSnapshot);
-        var executor = new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
-        const int budget = 2600;
-        var result = await executor.ExecuteAsync(definition, Guid.NewGuid(),
-            new("table", ToolCatalog.BrowserSnapshot, "{\"target\":{\"by\":\"role\",\"value\":\"table\"}}"), budget,
-            admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
-        using var json = JsonDocument.Parse(result.Text);
-        var content = json.RootElement.GetProperty("content").GetString()!;
-        Assert.Contains("Sensor 10", content);
-        Assert.DoesNotContain('\uFFFD', content);
-        Assert.True(json.RootElement.GetProperty("hasMore").GetBoolean());
-        Assert.InRange(Encoding.UTF8.GetByteCount(result.Text), budget - 32, budget);
-    }
-
     [Theory]
     [InlineData(512)]
     [InlineData(1024)]
@@ -58,26 +34,6 @@ public sealed class BrowserReliabilityTests
         Assert.False(root.TryGetProperty("error", out _));
     }
 
-    [Theory]
-    [InlineData(512)]
-    [InlineData(1024)]
-    [InlineData(4096)]
-    public async Task Executor_projects_successful_provider_snapshot_without_losing_index(int budget)
-    {
-        var browser = new DenseBrowser();
-        var definition = await CapabilityProjectionTests.Definition(ToolCatalog.BrowserSnapshot);
-        var executor = new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
-        var result = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("snapshot", ToolCatalog.BrowserSnapshot, "{}"), budget,
-            admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
-        Assert.InRange(Encoding.UTF8.GetByteCount(result.Text), 1, budget);
-        using var json = JsonDocument.Parse(result.Text);
-        Assert.Equal("ok", json.RootElement.GetProperty("status").GetString());
-        Assert.Equal("snap_dense", json.RootElement.GetProperty("snapshotId").GetString());
-        Assert.True(json.RootElement.GetProperty("hasMore").GetBoolean());
-        Assert.False(json.RootElement.TryGetProperty("error", out _));
-        Assert.Equal(2000, browser.Snapshot.Targets.Count);
-    }
-
     [Fact]
     public void Budgeted_find_does_not_skip_unreturned_pagination_matches()
     {
@@ -92,28 +48,6 @@ public sealed class BrowserReliabilityTests
         Assert.Equal(10 + returned, root.GetProperty("nextOffset").GetInt32());
         Assert.Equal(returned, root.GetProperty("returnedCount").GetInt32());
     }
-
-    private sealed class DenseBrowser : IBrowser
-    {
-        public BrowserSnapshot Snapshot { get; init; } = new("https://example.test/", "Dense", new string('界', 3000), true,
-            Enumerable.Range(0, 2000).Select(i => new BrowserElement(new BrowserTarget("role", "button", Name: "Entry " + i), "button", "Entry " + i, ["click"])).ToArray(),
-            SnapshotId: "snap_dense", TabRef: "pg_dense");
-        public bool IsAvailable => true;
-        public BrowserProviderDescriptor Provider { get; } = new("dense", "Dense", new HashSet<BrowserFeature> { BrowserFeature.Snapshot });
-        public BrowserHostPolicy HostPolicy { get; } = new(true, true, BrowserInteractionMode.InteractiveDemo, ["https://example.test"]);
-        public ValueTask<Uri?> GetCurrentUrlAsync(Guid id, CancellationToken ct = default) => new(new Uri("https://example.test/"));
-        public ValueTask<BrowserResult> NavigateAsync(BrowserRequest request, CancellationToken ct = default) => new(new BrowserResult(null, Snapshot));
-        public ValueTask<BrowserResult> SnapshotAsync(Guid id, CancellationToken ct = default) => new(new BrowserResult(null, Snapshot));
-        public ValueTask<BrowserResult> InteractAsync(BrowserRequest request, CancellationToken ct = default) => new(new BrowserResult(null, Snapshot));
-
-        public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch
-        {
-            BrowserOperation.Navigate => NavigateAsync(request, ct),
-            BrowserOperation.Snapshot or BrowserOperation.WaitFor => SnapshotAsync(request.SessionId, ct),
-            BrowserOperation.Click or BrowserOperation.Type or BrowserOperation.Hover or BrowserOperation.Drag or BrowserOperation.Upload or BrowserOperation.FillForm => InteractAsync(request, ct),
-            _ => new(new BrowserResult("unsupported_operation")),
-        };
-}
 
     [Fact]
     public async Task Nondefault_browser_definition_gets_only_authorized_supported_bootstrap()

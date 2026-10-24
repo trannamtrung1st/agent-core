@@ -15,6 +15,7 @@ public sealed partial class TenantBrowserApprovalTests
     {
         public int Bindings, Executions, Reads;
         public Func<Task>? BeforeGate, AfterRead;
+        public BrowserSnapshot Observation = new("http://127.0.0.1:5091/private", "Owned page", "Scoped private observation", false, []);
         public BrowserProviderDescriptor Provider => target.Provider;
         public BrowserHostPolicy HostPolicy => profileMode is { } mode ? target.HostPolicy with { ProfileMode = mode } : target.HostPolicy;
         public bool IsAvailable => true;
@@ -30,7 +31,7 @@ public sealed partial class TenantBrowserApprovalTests
             if (await request.TenantDispatchCheck(ct) is { } denied) return new(denied);
             Reads++; target.CommandRevision++;
             if (AfterRead is { } after) await after();
-            return new(null, new("http://127.0.0.1:5091/private", "Owned page", "Scoped private observation", false, []));
+            return new(null, Observation);
         }
     }
     private static TenantBrowserReadService ReadService(Fixture f, IBrowser browser) => new((ITenantRunStore)f.Iam, (ITenantSessionStore)f.Iam, f.Iam,
