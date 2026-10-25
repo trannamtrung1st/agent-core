@@ -121,8 +121,8 @@ public sealed partial class TenantCredentialIntegrationTests
         public TenantCredentialService Service => new(Iam, Credentials, Authorizer, Protector, Ids, Clock, Identity);
         public TenantCredentialBindingService BindingService => BindingServiceFor((ITenantCredentialBindingStore)Iam);
         public TenantCredentialBindingService BindingServiceFor(ITenantCredentialBindingStore bindings) => new(Iam, (ITenantAgentStore)Iam, Credentials, bindings, Authorizer, Identity,
-            BuiltIns, (ITenantDefinitionStore)Iam, Ids, TimeProvider.System);
-        public TenantAgentService Agents => new(Iam, (ITenantAgentStore)Iam, BuiltIns, Authorizer, Ids, TimeProvider.System, ownedDefinitions: (ITenantDefinitionStore)Iam);
+            BuiltIns, (ITenantDefinitionStore)Iam, Ids, Clock);
+        public TenantAgentService Agents => new(Iam, (ITenantAgentStore)Iam, BuiltIns, Authorizer, Ids, Clock, ownedDefinitions: (ITenantDefinitionStore)Iam);
         private IBuiltInAgentDefinitionStore? _builtIns;
         private AgentCore.Application.Agents.InheritedDefinitionResourceCatalog RunResourceCatalog()
         {

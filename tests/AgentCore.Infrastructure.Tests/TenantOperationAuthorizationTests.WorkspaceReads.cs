@@ -16,9 +16,9 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f);
         var store = WorkspaceReader(f); var service = WorkspaceService(f, store);
-        var home = AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), setup.Agent.Instance.InstanceId);
+        var home = AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), setup.Tenant, SpaceId(setup));
         var working = AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), setup.Agent.Instance.InstanceId, setup.Run.SessionId);
-        Assert.Empty((await service.ListAsync(setup.Tenant, setup.Agent.Instance.InstanceId, false, setup.Owner)).Items);
+        Assert.Empty((await service.ListAsync(setup.Tenant, SpaceId(setup), false, setup.Owner)).Items);
         Assert.Empty((await service.ListAsync(setup.Tenant, setup.Run.SessionId, true, setup.Owner)).Items);
         Assert.False(Directory.Exists(home)); Assert.False(Directory.Exists(working));
         var source = new CanonicalWorkspaceFilesystem(home, "/home"); source.Ensure();
@@ -26,25 +26,25 @@ public sealed partial class TenantOperationAuthorizationTests
         var scratch = new CanonicalWorkspaceFilesystem(working, "/working"); scratch.Ensure();
         await scratch.WriteAsync("/working/private.txt", "Private scratch"u8.ToArray(), 1024, 4096);
         var reader = await User(f, setup, "workspace-reader@example.test", ["agents.read", "sessions.read"]);
-        await Assert.ThrowsAsync<AccessDeniedException>(() => service.ListAsync(setup.Tenant, setup.Agent.Instance.InstanceId, false, reader).AsTask());
-        var homeScope = TenantWorkspaceRules.Home(setup.Tenant, setup.Agent.Instance.InstanceId); var scratchScope = TenantWorkspaceRules.Working(setup.Tenant, setup.Run.SessionId);
+        await Assert.ThrowsAsync<AccessDeniedException>(() => service.ListAsync(setup.Tenant, SpaceId(setup), false, reader).AsTask());
+        var homeScope = TenantWorkspaceRules.Home(setup.Tenant, SpaceId(setup)); var scratchScope = TenantWorkspaceRules.Working(setup.Tenant, setup.Run.SessionId);
         Assert.True(await f.Iam.OwnsResourceAsync(homeScope)); Assert.True(await f.Iam.OwnsResourceAsync(scratchScope));
         Assert.False(await f.Iam.OwnsResourceAsync(homeScope with { TenantId = f.Ids.NewId() }));
         Assert.False(await f.Iam.OwnsResourceAsync(TenantWorkspaceRules.Home(setup.Tenant, setup.Run.SessionId)));
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Read exact workspace", ["workspaces.read"], (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         var grant = await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, reader.PrincipalId, role.RoleId, homeScope, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
-        Assert.Equal("/home/private.txt", Assert.Single((await service.ListAsync(setup.Tenant, setup.Agent.Instance.InstanceId, false, reader)).Items).LogicalPath);
-        Assert.Equal("Private home thử nghiệm", Encoding.UTF8.GetString((await service.ReadAsync(setup.Tenant, setup.Agent.Instance.InstanceId, false, reader, "/home/private.txt")).Bytes));
+        Assert.Equal("/home/private.txt", Assert.Single((await service.ListAsync(setup.Tenant, SpaceId(setup), false, reader)).Items).LogicalPath);
+        Assert.Equal("Private home thử nghiệm", Encoding.UTF8.GetString((await service.ReadAsync(setup.Tenant, SpaceId(setup), false, reader, "/home/private.txt")).Bytes));
         await Assert.ThrowsAsync<AccessDeniedException>(() => service.ReadAsync(setup.Tenant, setup.Run.SessionId, true, reader, "/working/private.txt").AsTask());
         await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, reader.PrincipalId, role.RoleId, scratchScope, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         Assert.Equal("Private scratch", Encoding.UTF8.GetString((await service.ReadAsync(setup.Tenant, setup.Run.SessionId, true, reader, "/working/private.txt")).Bytes));
         Assert.Empty((await service.MetadataAsync(setup.Tenant, setup.Run.SessionId, true, reader, "/working/private.txt")).Bytes);
-        Assert.Single((await service.SearchAsync(setup.Tenant, setup.Agent.Instance.InstanceId, false, reader, "private")).Items);
-        await Assert.ThrowsAsync<AgentCoreException>(() => service.ReadAsync(setup.Tenant, setup.Agent.Instance.InstanceId, false, reader, "/working/private.txt").AsTask());
-        await Assert.ThrowsAsync<AccessDeniedException>(() => store.InspectTenantAsync(new(setup.Tenant, f.Ids.NewId(), setup.Run.SessionId), "/working/private.txt", 1024).AsTask());
-        await Assert.ThrowsAsync<AgentCoreException>(() => store.ListAsync(setup.Agent.Instance.InstanceId, "/home", null, 10).AsTask());
+        Assert.Single((await service.SearchAsync(setup.Tenant, SpaceId(setup), false, reader, "private")).Items);
+        await Assert.ThrowsAsync<AgentCoreException>(() => service.ReadAsync(setup.Tenant, SpaceId(setup), false, reader, "/working/private.txt").AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => store.InspectTenantAsync(new TenantWorkspaceReference.SessionWorking(setup.Tenant, f.Ids.NewId()), "/working/private.txt", 1024).AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => store.ListTenantAsync(new TenantWorkspaceReference.SpaceHome(setup.Tenant, f.Ids.NewId()), "/home", null, 10).AsTask());
         await f.Access.RevokeAssignmentAsync(setup.Owner.PrincipalId, setup.Tenant, grant.AssignmentId, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
-        await Assert.ThrowsAsync<AccessDeniedException>(() => service.ReadAsync(setup.Tenant, setup.Agent.Instance.InstanceId, false, reader, "/home/private.txt").AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => service.ReadAsync(setup.Tenant, SpaceId(setup), false, reader, "/home/private.txt").AsTask());
         Assert.Equal("Private scratch", Encoding.UTF8.GetString((await service.ReadAsync(setup.Tenant, setup.Run.SessionId, true, reader, "/working/private.txt")).Bytes));
     }
 
@@ -99,7 +99,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f); var frame = await ClaimArtifactRun(f, setup);
         var read = await WorkspaceReadCase(f, setup, true);
         var home = await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, read.Reader.PrincipalId, read.Grant.RoleId,
-            TenantWorkspaceRules.Home(setup.Tenant, setup.Agent.Instance.InstanceId), (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
+            TenantWorkspaceRules.Home(setup.Tenant, SpaceId(setup)), (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         await CancelArtifactRun(f, setup, frame);
         var current = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(setup.Tenant, frame.SessionId))!;
         var state = (await f.Iam.ReadTenantAsync(setup.Tenant))!;
@@ -139,23 +139,23 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Empty((await service.ListAsync(beta.Tenant.TenantId, betaAgent.Instance.InstanceId, false, betaActor)).Items);
         var sibling = await f.Sessions.CreateAsync(setup.Tenant, setup.Agent.Instance.InstanceId, setup.Owner, SessionMode.Text, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision, setup.Agent.Instance.Revision);
         await Assert.ThrowsAsync<AccessDeniedException>(() => service.ListAsync(setup.Tenant, sibling.Owner.SessionId, true, read.Reader).AsTask());
-        await Assert.ThrowsAsync<AccessDeniedException>(() => WorkspaceReader(f).ListTenantAsync(new(setup.Tenant, betaAgent.Instance.InstanceId, setup.Run.SessionId), "/working", null, 10).AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => WorkspaceReader(f).ListTenantAsync(new TenantWorkspaceReference.SessionWorking(beta.Tenant.TenantId, setup.Run.SessionId), "/working", null, 10).AsTask());
     }
 
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_safe_links_remain_readable_and_outside_targets_are_not_disclosed_or_followed(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f); var read = await WorkspaceReadCase(f, setup, false);
-        var root = AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), setup.Agent.Instance.InstanceId);
+        var root = AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), setup.Tenant, SpaceId(setup));
         File.CreateSymbolicLink(Path.Combine(root, "inside.txt"), "private.txt");
         var external = Path.Combine(f.Root, "outside-private.txt"); await File.WriteAllTextAsync(external, "Do not disclose");
         File.CreateSymbolicLink(Path.Combine(root, "outside.txt"), external);
         var service = WorkspaceService(f, WorkspaceReader(f));
-        Assert.Equal("Current private content", Encoding.UTF8.GetString((await service.ReadAsync(setup.Tenant, setup.Agent.Instance.InstanceId, false, read.Reader, "/home/inside.txt")).Bytes));
-        var page = await service.ListAsync(setup.Tenant, setup.Agent.Instance.InstanceId, false, read.Reader);
+        Assert.Equal("Current private content", Encoding.UTF8.GetString((await service.ReadAsync(setup.Tenant, SpaceId(setup), false, read.Reader, "/home/inside.txt")).Bytes));
+        var page = await service.ListAsync(setup.Tenant, SpaceId(setup), false, read.Reader);
         Assert.Equal("private.txt", page.Items.Single(i => i.LogicalPath == "/home/inside.txt").LinkTarget); Assert.Null(page.Items.Single(i => i.LogicalPath == "/home/outside.txt").LinkTarget);
-        Assert.Null(Assert.Single((await service.SearchAsync(setup.Tenant, setup.Agent.Instance.InstanceId, false, read.Reader, "outside")).Items).LinkTarget);
-        await Assert.ThrowsAsync<AgentCoreException>(() => service.ReadAsync(setup.Tenant, setup.Agent.Instance.InstanceId, false, read.Reader, "/home/outside.txt").AsTask());
+        Assert.Null(Assert.Single((await service.SearchAsync(setup.Tenant, SpaceId(setup), false, read.Reader, "outside")).Items).LinkTarget);
+        await Assert.ThrowsAsync<AgentCoreException>(() => service.ReadAsync(setup.Tenant, SpaceId(setup), false, read.Reader, "/home/outside.txt").AsTask());
         Assert.DoesNotContain(f.Root, System.Text.Json.JsonSerializer.Serialize(page));
         Assert.Equal("Do not disclose", await File.ReadAllTextAsync(external));
     }
@@ -166,7 +166,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f);
         var reader = await User(f, setup, "workspace-without-parent@example.test", ["workspaces.read"]);
         var service = WorkspaceService(f, WorkspaceReader(f));
-        await Assert.ThrowsAsync<AccessDeniedException>(() => service.ListAsync(setup.Tenant, setup.Agent.Instance.InstanceId, false, reader).AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => service.ListAsync(setup.Tenant, SpaceId(setup), false, reader).AsTask());
         await Assert.ThrowsAsync<AccessDeniedException>(() => service.ListAsync(setup.Tenant, setup.Run.SessionId, true, reader).AsTask());
         Assert.False(Directory.Exists(AgentWorkspacePhysicalPaths.AgentRoot(Path.Combine(f.Root, "workspaces"), setup.Agent.Instance.InstanceId)));
     }
@@ -175,13 +175,13 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         var root = Path.Combine(f.Root, "workspaces"); _ = WorkspaceReader(f);
         var path = working ? AgentWorkspacePhysicalPaths.WorkingDirectory(root, setup.Agent.Instance.InstanceId, setup.Run.SessionId)
-            : AgentWorkspacePhysicalPaths.HomeDirectory(root, setup.Agent.Instance.InstanceId);
+            : AgentWorkspacePhysicalPaths.SpaceHomeDirectory(root, setup.Tenant, SpaceId(setup));
         var files = new CanonicalWorkspaceFilesystem(path, working ? "/working" : "/home"); files.Ensure();
         var file = (working ? "/working" : "/home") + "/private.txt"; await files.WriteAsync(file, "Current private content"u8.ToArray(), 1024, 4096);
         var reader = await User(f, setup, "workspace-fenced-reader@example.test", ["agents.read", "sessions.read"]);
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Exact workspace read", ["workspaces.read"], (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         var grant = await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, reader.PrincipalId, role.RoleId,
-            working ? TenantWorkspaceRules.Working(setup.Tenant, setup.Run.SessionId) : TenantWorkspaceRules.Home(setup.Tenant, setup.Agent.Instance.InstanceId), (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
+            working ? TenantWorkspaceRules.Working(setup.Tenant, setup.Run.SessionId) : TenantWorkspaceRules.Home(setup.Tenant, SpaceId(setup)), (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         return (reader, grant, files, file);
     }
     private sealed class WorkspaceReadHook(ITenantWorkspaceReadStore inner, Func<Task> afterRead) : ITenantWorkspaceReadStore
@@ -192,8 +192,10 @@ public sealed partial class TenantOperationAuthorizationTests
         public async ValueTask<AgentWorkspaceContent> InspectTenantAsync(TenantWorkspaceReference owner, string path, int maxContentBytes, CancellationToken ct = default)
         { var result = await inner.InspectTenantAsync(owner, path, maxContentBytes, ct); if (maxContentBytes > 0 && Interlocked.Exchange(ref _fired, 1) == 0) await afterRead(); return result; }
     }
-    private static FileAgentInstanceWorkspaceStore WorkspaceReader(Fixture f) => new(Path.Combine(f.Root, "workspaces"), f.Instances, f.Sandboxes,
-        tenantAgents: (ITenantAgentStore)f.Iam, tenantSessions: (ITenantSessionStore)f.Iam);
+    private static Guid SpaceId(Environment value) => TenantWorkspaceRules.Context(value.Run).SpaceId;
+    private static TenantWorkspaceReference WorkspaceOwner(Environment value, bool working = false) =>
+        TenantWorkspaceRules.ForRun(value.Run, working ? "/working" : "/home");
+    private static FileSpaceWorkspaceStore WorkspaceReader(Fixture f) => new(Path.Combine(f.Root, "workspaces"), (ITenantSpaceStore)f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantAgentDecommissionStore)f.Iam, f.Sandboxes);
     private static TenantWorkspaceReadService WorkspaceService(Fixture f, ITenantWorkspaceReadStore store) => new(f.Iam, (ITenantAgentStore)f.Iam,
         (ITenantSessionStore)f.Iam, store, f.Identity, f.Authorizer);
 }

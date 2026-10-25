@@ -62,8 +62,9 @@ public sealed class AgentRunAdmission
     {
         if (activation.EvidenceJson is not { } evidence) return false;
         using var document = System.Text.Json.JsonDocument.Parse(evidence); var value = document.RootElement;
-        return value.TryGetProperty("EnvironmentKind", out var kind) && kind.ValueKind == System.Text.Json.JsonValueKind.String && kind.GetString() == "configuration"
-            && value.TryGetProperty("ContinuationTarget", out var target) && target.ValueKind == System.Text.Json.JsonValueKind.String && target.GetString() is { Length: > 0 and <= 64 }
+        return value.TryGetProperty("EnvironmentKind", out var kind) && kind.ValueKind == System.Text.Json.JsonValueKind.String && (kind.GetString() == "configuration"
+                && value.TryGetProperty("ContinuationTarget", out var target) && target.ValueKind == System.Text.Json.JsonValueKind.String && target.GetString() is { Length: > 0 and <= 64 }
+                || kind.GetString() == "context-transition" && value.TryGetProperty("ContextTransition", out var transition) && transition.ValueKind == System.Text.Json.JsonValueKind.Object)
             && value.TryGetProperty("InputBoundarySequence", out var boundary) && boundary.ValueKind == System.Text.Json.JsonValueKind.Number && boundary.TryGetInt64(out var sequence) && sequence >= 0;
     }
     public AgentRunTaskIntent? TaskIntent { get; }

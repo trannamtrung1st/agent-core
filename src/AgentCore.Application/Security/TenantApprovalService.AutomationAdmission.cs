@@ -95,6 +95,21 @@ public sealed partial class TenantApprovalService
             new("admissionScope", null, string.Join("; ", TenantAutomationAdmissionApprovalRules.Targets(r).Select(t => t.Permission).Distinct()), false),
             new("admissionLimit", null, "One exact reserved occurrence. No work is created before settlement. An exceptional grant covers only its named primary permission; all raw reads, other permissions and later tools remain independent.", false)
         };
+        if (p.Current.PinnedSpaceId is { } pinnedSpace && r.Operation.SpaceContext is { } pinWitness)
+        {
+            var scope = TenantSpaceService.Scope(r.TenantId, pinnedSpace);
+            var canReadSpace = (await authorizer.CheckOwnedTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("spaces.read"), scope, ct).ConfigureAwait(false)).Allowed;
+            var currentSpace = canReadSpace && security is ITenantSpaceStore spaces ? await spaces.FindSpaceAsync(r.TenantId, pinnedSpace, ct).ConfigureAwait(false) : null;
+            changes.Add(new("admissionSpace", null, $"{currentSpace?.Name ?? "Unavailable Space"} · {pinnedSpace:D} · captured revision {pinWitness.SpaceRevision}", false));
+            var profileLabel = "No Environment";
+            if (p.Current.PinnedEnvironmentId is { } pinnedEnvironment)
+            {
+                var canReadProfile = canReadSpace && (await authorizer.CheckOwnedTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("environments.read"), scope, ct).ConfigureAwait(false)).Allowed;
+                var currentProfile = canReadProfile && security is ITenantEnvironmentStore environments ? await environments.FindEnvironmentAsync(r.TenantId, pinnedSpace, pinnedEnvironment, ct).ConfigureAwait(false) : null;
+                profileLabel = $"{currentProfile?.Name ?? "Unavailable Environment"} · {pinnedEnvironment:D} · captured revision {pinWitness.EnvironmentRevision}";
+            }
+            changes.Add(new("admissionEnvironment", null, profileLabel, false));
+        }
         if (p.Conversation is { } conversation)
             changes.Add(new("admissionConversation", null, $"Conversation revision {conversation.SessionRevision} · input through entry sequence {conversation.InputBoundarySequence}", false));
         if (p.EventSource is { } source)

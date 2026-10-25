@@ -59,11 +59,9 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
         var migrations = db.Database.GetMigrations().ToArray();
         if (applied.Any(id => !migrations.Contains(id, StringComparer.Ordinal)))
             throw ResetRequired("data_reset_required: Installed schema predates the canonical filesystem baseline.");
-        var isModelUpgrade = migrations.LastOrDefault() == "20261025020000_CanonicalModelIdentity"
-            && (applied.LastOrDefault() == "20261025010000_TenantDynamicModels"
-                && applied.SequenceEqual(migrations.Take(migrations.Length - 1), StringComparer.Ordinal)
-                || applied.LastOrDefault() == "20261023190000_TenantPublicHttp"
-                && applied.SequenceEqual(migrations.Take(migrations.Length - 2), StringComparer.Ordinal));
+        var isModelUpgrade = migrations.LastOrDefault() == "20261025090000_CanonicalModelIdentity"
+            && applied.LastOrDefault() is "20261025085000_TenantDynamicModels" or "20261025080000_SpaceResourceApprovals"
+            && applied.SequenceEqual(migrations.Take(applied.Length), StringComparer.Ordinal);
         if (!applied.SequenceEqual(migrations, StringComparer.Ordinal) && !isModelUpgrade)
         {
             await using var existing = connection.CreateCommand();
@@ -693,6 +691,7 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
             ? null
             : JsonSerializer.Serialize(snapshot.PinnedPersona, Json);
         row.PinnedPersonaRevision = snapshot.PinnedPersonaRevision;
+        row.ContextSelectionJson = snapshot.ContextSelection is null ? null : JsonSerializer.Serialize(snapshot.ContextSelection, Json);
         row.PendingAgentInputIdsJson = JsonSerializer.Serialize(snapshot.PendingAgentInputIds, Json);
         row.OriginJson = JsonSerializer.Serialize(snapshot.Origin, Json);
         row.Surfaces = (int)snapshot.Surfaces;
@@ -832,7 +831,8 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
             row.PinnedPersonaRevision,
             JsonSerializer.Deserialize<SessionOrigin>(row.OriginJson, Json) ?? throw AgentCoreErrors.Persistence("Session origin is missing."),
             (SessionSurface)row.Surfaces,
-            JsonSerializer.Deserialize<Guid[]>(row.PendingAgentInputIdsJson, Json) ?? throw AgentCoreErrors.Persistence("Pending agent input intent is missing."));
+            JsonSerializer.Deserialize<Guid[]>(row.PendingAgentInputIdsJson, Json) ?? throw AgentCoreErrors.Persistence("Pending agent input intent is missing."),
+            row.ContextSelectionJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Spaces.SessionContextSelection>(row.ContextSelectionJson, Json));
     }
 
     internal static ConversationEntry ToEntry(EntryRecord row) =>

@@ -87,7 +87,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.WorkspaceRead is not null)
         {
             await RequireWorkspaceReadOperation(db, request, run, target, ct).ConfigureAwait(false);
-            await TenantWorkspaceReadOperationRules.ReviewerAsync(before, target.Instance.InstanceId, request.Operation.WorkspaceRead, request.OriginalInitiatorPrincipalId,
+            await TenantWorkspaceReadOperationRules.ReviewerAsync(before, target.Instance.InstanceId, request.Operation.WorkspaceRead, TenantWorkspaceRules.Context(request.Operation), request.OriginalInitiatorPrincipalId,
                 decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
         }
         if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.AttachmentRead is not null)
@@ -246,12 +246,13 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
                     next = TenantAgentChildScopes.RetainAvailable(next, run.AgentInstanceId, await ChildCatalogAsync(db, next.Tenant.TenantId, run.AgentInstanceId, managementChange, ct).ConfigureAwait(false));
                     await SqliteAgentInstanceStore.StageSkillsAsync(db, skillChange, null, ct).ConfigureAwait(false);
                 }
+                await ReconcileResourceSpaceBindings(db, request.TenantId, managementChange, audit, ct).ConfigureAwait(false);
                 if (managementChange.Resource is { } resourceChange)
                 {
                     next = TenantAgentChildScopes.RetainAvailable(next, run.AgentInstanceId, await ChildCatalogAsync(db, next.Tenant.TenantId, run.AgentInstanceId, managementChange, ct).ConfigureAwait(false));
                     await SqliteAgentInstanceStore.StageResourcesAsync(db, resourceChange, null, ct).ConfigureAwait(false);
                 }
-                if (managementChange.Binding is { } bindingPlan && !await StageTenantCredentialBinding(db, request.TenantId, bindingPlan.Value, bindingPlan.Remove, bindingPlan.CredentialRevision, ct).ConfigureAwait(false))
+                if (managementChange.Binding is { } bindingPlan && !await StageTenantCredentialBinding(db, request.TenantId, bindingPlan.Value, bindingPlan.Remove, bindingPlan.CredentialRevision, audit, ct).ConfigureAwait(false))
                     throw new SecurityConflictException("management_source_changed");
                 owned.Instance.HarnessManagementJson = updated.HarnessManagement is null ? null : JsonSerializer.Serialize(updated.HarnessManagement, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                 owned.Instance.UnattendedOfferingId = updated.UnattendedOfferingId; owned.Instance.UnattendedReasoningEffort = updated.UnattendedReasoningEffort;

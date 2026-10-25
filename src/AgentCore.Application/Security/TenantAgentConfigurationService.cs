@@ -41,7 +41,7 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
         var allowedSkills = readableSkills.Items.ToHashSet(StringComparer.Ordinal);
         var skillView = EffectiveSkillCatalogResolver.Resolve(effective, snapshot.Skills).Where(s => allowedSkills.Contains(s.Key)).ToArray();
         var visible = effective with { Skills = effective.SkillList.Where(s => allowedSkills.Contains("definition:" + s.Id)).ToArray(),
-            Environment = readableResources.All ? effective.Environment : RoleEnvironments.Of(effective) with { KnowledgeSources = [] } };
+            ExecutionPolicy = readableResources.All ? effective.ExecutionPolicy : DefinitionExecutionPolicies.Of(effective) with { KnowledgeSources = [] } };
         var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         var overview = AdminEffectiveConfigurationResolver.Resolve(snapshot.Agent.Instance, baseline, models, tools,
             Guid.TryParse(baseline.Id, out _) ? "TenantPublication" : "BuiltIn", status);

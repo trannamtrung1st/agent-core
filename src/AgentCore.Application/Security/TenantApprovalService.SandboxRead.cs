@@ -17,6 +17,7 @@ public sealed partial class TenantApprovalService
             var prepared = await reads.PrepareInspectionAsync(new(run.Owner, run.SessionId, run.AgentRunId, generation), kind, executionId, ct).ConfigureAwait(false);
             if (prepared.Run.Revision != expectedRunRevision) throw new SecurityConflictException("stale_revision");
             var operation = TenantApprovalRules.PrepareSandboxRead(ids.NewId(), run.AgentInstanceId, prepared.Read, prepared.Agent.Instance.Revision, prepared.Agent.Instance.PersonaRevision);
+            operation = TenantApprovalRules.ForRun(operation, run);
             if (!prepared.ReviewRequired) return await PreparationOutcome(prepared.Security, prepared.Run, operation, OperationDecisionKind.Allowed, "allowed", null, ct).ConfigureAwait(false);
             var qualified = false;
             foreach (var human in prepared.Security.Users.Where(u => u.Status == IdentityStatus.Active))

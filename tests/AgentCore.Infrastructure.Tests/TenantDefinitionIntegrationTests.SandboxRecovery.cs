@@ -33,7 +33,15 @@ public sealed partial class TenantDefinitionIntegrationTests
     [InlineData(false, "hostChanged")] [InlineData(true, "hostChanged")]
     public async Task Tenant_Sandbox_worker_preserves_factual_outcomes_current_authority_and_background_launch_evidence(bool sqlite, string outcome) => await SandboxRecoveryScenario(sqlite, outcome);
 
-    private static async Task SandboxRecoveryScenario(bool sqlite, string outcome)
+    [Theory]
+    [InlineData(false, "spaces.read")]
+    [InlineData(true, "spaces.read")]
+    [InlineData(false, "workspaces.write")]
+    [InlineData(true, "workspaces.write")]
+    public async Task Tenant_Sandbox_idle_mounts_retire_after_current_Space_or_workspace_authority_revocation(bool sqlite, string permission) =>
+        await SandboxRecoveryScenario(sqlite, "readyUnsettled", permission);
+
+    private static async Task SandboxRecoveryScenario(bool sqlite, string outcome, string? revokedContextPermission = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-recovery-" + Guid.NewGuid().ToString("N"));
         try
@@ -79,7 +87,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             await host.StartAsync();
             var options = new OpenSandboxOptions { Enabled = true, Endpoint = host.Urls.Single(), ApiKey = "synthetic-recovery-key", CanonicalWorkspaceRoot = root, WorkspaceDockerHostRoot = root };
             var mount = new CanonicalSandboxMountResolver(options).Resolve(s.Session.AgentInstanceId, s.Session.SessionId,
-                s.Run.Admission.Configuration!.Definition.StateIsolationPolicy?.HomeAccess ?? AgentCore.Domain.Definitions.HomeAccess.ReadWrite, create: true);
+                await RuntimeWorkspaceAccess(f, s), create: true);
             s = s with { Lease = s.Lease with { MountAuthority = mount.Authority, ProviderHostScope = new SandboxVerificationHost(options).Scope } };
             Assert.True(await storage.TryReserveTenantSandboxLeaseAsync(s.Write, s.Lease, 0, DateTimeOffset.UtcNow));
             Assert.True(await storage.TrySaveTenantSandboxLeaseFactsAsync(s.Tenant, s.Lease with { Revision = 2, State = SandboxLeaseState.Ready, ProviderId = "recovery-provider", BaselineProcesses = [] }, 1));
@@ -133,6 +141,15 @@ public sealed partial class TenantDefinitionIntegrationTests
                     new SessionNoBuiltinFallback(), f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), new(), f.Ids, TimeProvider.System);
                 await sessionService.ChangeAsync(s.Tenant, SandboxHuman(s), new(frame.SessionId, current.Snapshot.Revision, TenantSessionAction.Delete), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
             }
+            if (revokedContextPermission is not null)
+            {
+                var state = (await f.Iam.ReadTenantAsync(s.Tenant))!;
+                var context = TenantWorkspaceRules.Context(s.Run);
+                var scope = revokedContextPermission == "spaces.read" ? TenantSpaceService.Scope(s.Tenant, context.SpaceId) : TenantWorkspaceRules.Home(s.Tenant, context.SpaceId);
+                var assignment = state.Assignments.Single(a => a.PrincipalId == s.Session.ExecutorPrincipalId && a.Scope == scope
+                    && state.Roles.Single(r => r.RoleId == a.RoleId).Permissions.Contains(revokedContextPermission));
+                await f.Access.RevokeAssignmentAsync(s.Human.PrincipalId, s.Tenant, assignment.AssignmentId, state.Tenant.Revision);
+            }
             var recovered = sqlite ? new AgentCore.Infrastructure.Security.SqliteIamStore(f.Contexts!, f.Content) : f.Iam;
             storage = (ITenantSandboxRuntimeStore)recovered; services = SandboxApprovalServices(f, s, recovered);
             var p = SetupProfiles(f); var target = new TenantSandboxOperationTarget((ITenantSessionStore)f.Iam, (ITenantSandboxProfileStore)f.Iam, storage, s.Resolver, f.Authorizer, f.Iam, p.Images, p.Ready, TimeProvider.System);
@@ -148,12 +165,12 @@ public sealed partial class TenantDefinitionIntegrationTests
             var worker = new OpenSandboxService(options,f.Sandbox,null!,f.SessionStore,recoveryTime,tenantRuntime: storage,                approvedSandbox: services.Execution,tenantRuns: (ITenantRunStore)f.Iam,tenantGenerationAuthority: generation);
             await worker.ReconcileAsync();
             var facts = (await storage.ReadTenantSandboxExecutionFactsAsync(s.Tenant, frame.SessionId, execution.Id))!;
-            var kept = outcome is "background" or "backgroundCompleted" or "readyUnsettled";
+            var kept = revokedContextPermission is null && outcome is ("background" or "backgroundCompleted" or "readyUnsettled");
             Assert.Equal(outcome is "foreign" or "backgroundForeign" or "hostChanged" ? SandboxLeaseState.NeedsReconciliation : kept ? outcome == "background" ? SandboxLeaseState.Executing : SandboxLeaseState.Ready : SandboxLeaseState.Terminated, facts.Lease!.State);
             Assert.Equal(0, dispatches); Assert.Equal(kept || outcome is "foreign" or "backgroundForeign" or "hostChanged" ? 0 : 1, deletes);
             Assert.Equal(outcome is "background" or "backgroundCompleted" or "backgroundRevokedDuringStatus" ? 1 : 0, statuses);
             var effect = await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(s.Tenant, request.Operation.OperationId);
-            Assert.Equal(outcome == "notDispatched" ? TenantOperationOutcome.Denied : kept || outcome == "foregroundCompleted" || outcome.StartsWith("background", StringComparison.Ordinal) && outcome != "backgroundUnacknowledged" ? TenantOperationOutcome.Completed : TenantOperationOutcome.Indeterminate, effect!.Outcome);
+            Assert.Equal(outcome == "notDispatched" ? TenantOperationOutcome.Denied : kept || outcome is "foregroundCompleted" or "readyUnsettled" || outcome.StartsWith("background", StringComparison.Ordinal) && outcome != "backgroundUnacknowledged" ? TenantOperationOutcome.Completed : TenantOperationOutcome.Indeterminate, effect!.Outcome);
             Assert.Equal(outcome is not ("foreign" or "backgroundForeign" or "background" or "hostChanged"), facts.Execution.TerminationConfirmed);
             if (outcome == "backgroundCompleted") { Assert.Equal(SandboxExecutionState.Completed, facts.Execution.State); Assert.Contains("bounded retained", facts.Execution.Stdout); }
             if (outcome == "backgroundRevokedDuringStatus") Assert.DoesNotContain("bounded retained", facts.Execution.Stdout);

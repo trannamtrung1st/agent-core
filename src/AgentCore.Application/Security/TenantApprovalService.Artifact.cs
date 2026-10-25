@@ -45,6 +45,7 @@ public sealed partial class TenantApprovalService
         }
         var current = await configuration.ResolveAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
         var op = TenantApprovalRules.PrepareArtifact(ids.NewId(), run.AgentInstanceId, new(run.SessionId, workspace?.CanonicalArguments ?? inline!.CanonicalArguments, source), current.Agent.Instance.Revision, current.Agent.Instance.PersonaRevision);
+        op = TenantApprovalRules.ForRun(op, run);
         var prior = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.ExecutionContext!.RootActivationId, current.Agent.PrincipalId, op, ct).ConfigureAwait(false);
         if (prior is not null) return await DuplicateOutcome(state, run, prior, ct).ConfigureAwait(false);
         var compoundReview = false;

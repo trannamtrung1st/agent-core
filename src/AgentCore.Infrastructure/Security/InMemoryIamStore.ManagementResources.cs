@@ -26,6 +26,15 @@ public sealed partial class InMemoryIamStore
         && r.RootActivationId == run.Admission.Activation.RootActivationId && r.InstanceRevision > run.Admission.Configuration!.InstanceRevision);
     private void RequireResourcePin(string key, long? revision, AgentRun run, TenantAgent agent, CancellationToken ct)
     {
+        if (AgentCore.Domain.Spaces.SpaceResourceKeys.TryParse(key, out var sourceSpace, out var sourceId))
+        {
+            var tenant = run.Owner.TenantId!.Value;
+            var source = _spaces.GetValueOrDefault((tenant, sourceSpace)) is { DeletedAt: null }
+                && _spaceMemberships.GetValueOrDefault((tenant, sourceSpace, agent.Instance.InstanceId))?.AddedBindings.Any(b => b.Kind == AgentCore.Domain.Spaces.SpaceBindingKind.SpaceFile && b.ResourceKey == key) == true
+                ? _spaceResources.GetValueOrDefault((tenant, sourceSpace, sourceId)) : null;
+            TenantResourceRevisionRules.Require(key, revision, run, agent, instances.ReadTenantResourcesAsync(agent.Instance.InstanceId, ct).Result, spaceSource: source);
+            return;
+        }
         var inputs = HasResourcePinChanges(run) ? ResourcePinInputs(ManagementReader(run, null, ct), ct) : null;
         var pinned = run.Admission.Configuration!.Resources.SingleOrDefault(r => r.Key == key);
         TenantResourceRevisionRules.Require(key, revision, run, agent, inputs?.Snapshot.Resources ?? instances.ReadTenantResourcesAsync(agent.Instance.InstanceId, ct).Result,
@@ -45,8 +54,7 @@ public sealed partial class InMemoryIamStore
         if (material is { Name: not "conversation:user" })
         {
             if (sessionBacking.ReadTenantSession(request.TenantId, request.SessionId) is not { Snapshot.DurablyDeletedAt: null }) return false;
-            if (material.Workspace?.ResourceKey is { } key && !ChildCatalog(request.TenantId, request.Operation.InstanceId, null, ct)
-                .Contains(TenantAgentChildScopes.Scope(request.TenantId, request.Operation.InstanceId, "resource", key))) return false;
+            if (material.Workspace?.ResourceKey is { } key && !OwnsResourceAsync(TenantResourceScopes.Source(request.TenantId, request.Operation.InstanceId, key), ct).Result) return false;
             if (material.Attachment is { } input && attachmentBacking?.RetainedTenant(request.TenantId, input.SessionId, input.AttachmentId) is not { State: AttachmentState.Bound }) return false;
         }
         return TenantManagementResourceRules.Visible(request, visibility, instances.FindTenantBackingAsync(request.Operation.InstanceId, ct).Result?.Revision,

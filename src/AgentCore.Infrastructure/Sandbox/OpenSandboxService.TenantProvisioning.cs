@@ -33,7 +33,7 @@ public sealed partial class OpenSandboxService
             await (workspace ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareAsync(frame, receipt.Id, token);
             await Require(token);
             var mounted = MountResolver.Resolve(frame.Owner.AgentInstanceId, frame.SessionId,
-                (await TenantExecution.RequireAsync(frame, receipt.Id, token)).Request.Operation.SandboxCommand!.HomeAccess, create: true, ct: token);
+                (await TenantExecution.RequireAsync(frame, receipt.Id, token)).Request.Operation.SandboxCommand!.WorkspaceAccess ?? throw new AccessDeniedException("sandbox_workspace_context_required"), create: true, ct: token);
             await Require(token);
             var imageAuth = await Images.ResolveAuthAsync(lease.Profile, token, requireVerification: true, Require);
             var image = OciImageReference.Parse(lease.Profile.ImageReference);

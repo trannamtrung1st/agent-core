@@ -37,7 +37,7 @@ public sealed partial class TenantRunAdmissionTests
     }
     private static async Task<AgentRun> PrepareBackgroundReport(Fixture f,TenantBackgroundCompletion source)
     {
-        var configuration=(await f.RunConfiguration().ResolveAsync(source.Child.Owner.TenantId!.Value,source.Child.AgentInstanceId,default)).Configuration;
+        var configuration=(await f.RunConfiguration().ResolveInSpaceAsync(source.Child.Owner.TenantId!.Value,source.Child.AgentInstanceId,source.Parent!.Snapshot.ContextSelection!,default)).Configuration;
         return TenantBackgroundCompletionFactory.Create(source,configuration,source.Parent!.Snapshot.ModelSelection!,f.Ids.NewId(),f.Ids.NewId(),f.Ids.NewId(),f.Clock.GetUtcNow());
     }
     [Theory] [InlineData(false)] [InlineData(true)]

@@ -101,7 +101,7 @@ public sealed partial class SqliteIamStore
             var agent = await OwnedAgents(db, owner.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == owner.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false);
             if (agent is null || agent.Instance.Revision != expectedInstanceRevision) return false;
             TenantSessionRules.RequireExecutor((await ReadTenantAsync(db, owner.TenantId, ct).ConfigureAwait(false))!, Owned(agent));
-            TenantSessionRules.ValidateCreation(owner, snapshot, Owned(agent), initiator, audit);
+            TenantSessionRules.ValidateCreation(owner, snapshot, Owned(agent), initiator, audit, (await db.Set<SpaceRecord>().SingleOrDefaultAsync(s => s.TenantId == owner.TenantId && s.OwnerInstanceId == owner.AgentInstanceId.ToString("D") && s.DeletedAt == null, ct).ConfigureAwait(false))?.Domain() ?? throw new AccessDeniedException("private_space_unavailable"));
             if (await db.Sessions.AnyAsync(s => s.SessionId == snapshot.SessionId.ToString("D"), ct).ConfigureAwait(false)
                 || await db.Set<TenantSessionRecord>().AnyAsync(s => s.SessionId == snapshot.SessionId.ToString("D"), ct).ConfigureAwait(false)) return false;
             db.Sessions.Add(SqliteMemoryStore.ToRecord(snapshot));

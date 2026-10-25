@@ -26,6 +26,7 @@ public sealed partial class TenantSessionAccessTests
         public string ReadTool { get; init; } = ToolCatalog.AttachmentsRead;
         public bool ReadSubmittedSelector { get; init; }
         public bool HoldAfterRead { get; init; }
+        public TaskCompletionSource? ReadRelease { get; init; }
         public string Arguments { get; set; } = "{}";
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public ModelCapabilities Capabilities => inner.Capabilities;
@@ -51,7 +52,7 @@ public sealed partial class TenantSessionAccessTests
                 yield return new ModelToolCallEvent(new("read-bound-source", tool, args));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
-            if (ReadEnabled) { Entered.TrySetResult(); if (HoldAfterRead) await Task.Delay(Timeout.InfiniteTimeSpan, ct); }
+            if (ReadEnabled) { Entered.TrySetResult(); if (HoldAfterRead) { if (ReadRelease is { } release) await release.Task.WaitAsync(ct); else await Task.Delay(Timeout.InfiniteTimeSpan, ct); } }
             await foreach (var item in inner.GenerateAsync(request, ct)) yield return item;
         }
     }
@@ -67,7 +68,7 @@ public sealed partial class TenantSessionAccessTests
             var draft = await Json(await owner.PostAsJsonAsync(api + "/agent-definitions", new { name = "Attachment reader", expectedRevision = await Revision(owner, tenant) }));
             var draftId = draft.GetProperty("draftId").GetGuid();
             var candidate = System.Text.Json.Nodes.JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
-            candidate["environment"] = JsonSerializer.SerializeToNode(new {
+            candidate["executionPolicy"] = JsonSerializer.SerializeToNode(new {
                 harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(),
                 capabilities = new { mode = "Selected", resolvedCapabilities = new[] { ToolCatalog.AttachmentsRead }.Concat(readers).Distinct().ToArray() },
                 projection = new { alwaysCapabilities = readers.ToArray() } });

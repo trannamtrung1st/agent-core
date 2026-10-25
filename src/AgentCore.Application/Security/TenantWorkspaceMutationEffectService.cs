@@ -44,7 +44,7 @@ public sealed partial class TenantWorkspaceMutationEffectService(TenantOperation
             if (decision.Decision != OperationDecisionKind.Allowed) return new(decision.Decision, decision.ReasonCode);
         }
         await TenantWorkspaceEffectRules.RequireAuthority(state, run, args, iam, ct).ConfigureAwait(false);
-        var commit = new TenantWorkspaceEffectCommit(run.AgentRunId, frame.Generation, run.Revision, op, TenantWorkspaceMutationContract.ActionHash(run.SessionId, args.ParametersHash));
+        var commit = new TenantWorkspaceEffectCommit(run.AgentRunId, frame.Generation, run.Revision, op, TenantWorkspaceMutationContract.ActionHash(run, args.ParametersHash));
         var start = await effects.TryStartWorkspaceEffectAsync(Next(state), state.Tenant.Revision, commit, Audit(run, args, true, "workspace_mutation_dispatched"), ct).ConfigureAwait(false);
         if (start?.Receipt is { } existing) return Result(existing);
         if (start?.Fence is not { } fence)
@@ -111,7 +111,8 @@ public sealed partial class TenantWorkspaceMutationEffectService(TenantOperation
             var op = fence.Origin.DirectOperation!; var args = TenantWorkspaceMutationContract.Parse(fence.SessionId, op.ToolName, op.ArgumentsJson);
             var reason = outcome == TenantOperationOutcome.Completed ? TenantWorkspaceEffectRules.Completed : outcome == TenantOperationOutcome.Denied ? "workspace_mutation_not_applied" : TenantWorkspaceEffectRules.Uncertain;
             var path = args.Targets.First(t => t.Permission != "workspaces.read").Path;
-            var target = TenantWorkspaceRules.Scope(new(fence.TenantId, fence.Owner.AgentInstanceId, path.StartsWith("/working/", StringComparison.Ordinal) ? fence.SessionId : null));
+            var sourceRun = await runs.FindTenantRunAsync(fence.TenantId, fence.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
+            var target = TenantWorkspaceRules.Scope(TenantWorkspaceRules.ForRun(sourceRun, path));
             var audit = new AuthorizationAudit(ids.NewId(), fence.TenantId, fence.Owner.ExecutorPrincipalId!.Value, TenantWorkspaceEffectRules.Result, target.ResourceId!, "allowed", reason, time.GetUtcNow());
             var receipt = await effects.TrySettleWorkspaceEffectAsync(Next(state), state.Tenant.Revision, fence, outcome, reason, audit, recovery, ct, download).ConfigureAwait(false);
             if (receipt is not null) return receipt;

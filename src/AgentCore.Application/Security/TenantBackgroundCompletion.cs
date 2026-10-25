@@ -85,7 +85,8 @@ public sealed class TenantBackgroundCompletionService(ITenantRuntimeStore storag
                     if (prepared.Request is not null) continue;
                     if (prepared.Decision == OperationDecisionKind.Denied) throw new AccessDeniedException(prepared.ReasonCode);
                 }
-                var resolved = await configurations.ResolveAsync(source.Child.Owner.TenantId!.Value, source.Child.AgentInstanceId, ct).ConfigureAwait(false);
+                var resolved = await configurations.ResolveInSpaceAsync(source.Child.Owner.TenantId!.Value, source.Child.AgentInstanceId,
+                    source.Parent!.Snapshot.ContextSelection ?? throw new AccessDeniedException("space_context_required"), ct).ConfigureAwait(false);
                 var state = await security.ReadTenantAsync(source.Child.Owner.TenantId.Value, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
                 var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
                 var model = SessionModelBinder.RefreshDefault(models, resolved.Configuration.Configuration.Definition, source.Parent!.Snapshot.ModelSelection)

@@ -9,13 +9,13 @@ public sealed class TenantBackgroundCreationTarget(ITenantSessionStore sessions,
 {
     public async ValueTask<(TenantAgent Agent, ResolvedAgentRunConfiguration Configuration, TenantSession Session)> SnapshotAsync(AgentRun run, CancellationToken ct)
     {
-        var current = await configuration.ResolveAsync(run.Owner.TenantId!.Value, run.AgentInstanceId, ct).ConfigureAwait(false);
-        var session = await sessions.FindTenantSessionAsync(run.Owner.TenantId.Value, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+        var current = await configuration.ResolveInCapturedSpaceAsync(run, ct, selectionRevision: 1).ConfigureAwait(false);
+        var session = await sessions.FindTenantSessionAsync(run.Owner.TenantId!.Value, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         return (current.Agent, current.Configuration, session);
     }
     public async ValueTask<(TenantAgent Agent, ResolvedAgentRunConfiguration Configuration, TenantSession Session)> RequireAsync(TenantApprovalRequest request, AgentRun run, TenantSecurityState state, CancellationToken ct)
     {
-        var current = await configuration.ResolveAsync(request.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
+        var current = await configuration.ResolveInCapturedSpaceAsync(run, ct, selectionRevision: 1).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(request.TenantId, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         TenantWorkspaceEffectRules.Session(run, current.Agent, session);
         TenantBackgroundCreationRules.Require(request, run, current.Agent, current.Configuration.Configuration.Definition);

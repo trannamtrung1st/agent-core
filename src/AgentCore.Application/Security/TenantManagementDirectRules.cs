@@ -25,6 +25,7 @@ public static class TenantManagementDirectRules
             || audit.Decision != "allowed" || audit.ReasonCode != TenantManagementMutationRules.Completed)
             throw new SecurityConflictException("operation_mismatch");
         var rebuilt = TenantApprovalRules.PrepareManagementMutation(commit.Operation.OperationId, run.AgentInstanceId, value, reader.Agent.Instance.Revision, reader.Agent.Instance.PersonaRevision);
+        rebuilt = TenantApprovalRules.ForRun(rebuilt, run);
         if (rebuilt.ActionHash != commit.Operation.ActionHash) throw new SecurityConflictException("operation_mismatch");
     }
     public static async ValueTask AuthorityAsync(TenantManagementReader reader, PreparedManagementMutation value, IamAuthorizer iam, CancellationToken ct)

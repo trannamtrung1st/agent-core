@@ -32,7 +32,7 @@ public sealed class FileBuiltInDefinitionTemplateSource(IBuiltInAgentDefinitionS
                 throw AgentCoreErrors.Validation("Shipped template exceeds Definition resource limits.");
             resources.Add(path, new(path, kind, mediaType, content)); bytes += content.LongLength;
         }
-        foreach (var source in RoleEnvironments.Of(definition).KnowledgeList)
+        foreach (var source in DefinitionExecutionPolicies.Of(definition).KnowledgeList)
         {
             // Identity selects the trusted approved file; ResourcePath is only the draft binding path.
             if (string.IsNullOrWhiteSpace(source.Identity) || source.Identity.IndexOfAny(['/', '\\', '.', ':']) >= 0)
@@ -40,7 +40,7 @@ public sealed class FileBuiltInDefinitionTemplateSource(IBuiltInAgentDefinitionS
             Add(KnowledgeSourcePaths.ResolveBackingPath(source), AgentDefinitionResourceKind.Knowledge, "text/markdown",
                 await _knowledge.ReadUnlinkedAsync("/home/" + source.Identity + ".md", AgentResourceLimits.MaxItemBytes, ct).ConfigureAwait(false));
         }
-        if (RoleEnvironments.Of(definition).WorkspacePolicy.TemplateId is { } workspaceTemplate)
+        if (DefinitionExecutionPolicies.Of(definition).WorkspacePolicy.TemplateId is { } workspaceTemplate)
         {
             var prefix = "/working/" + workspaceTemplate;
             var visited = 0;

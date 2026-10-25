@@ -1,6 +1,7 @@
 import { expect, test, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 import { signInTenant } from './support/tenant-auth';
 import type { ModelAdmin, ModelPreset } from '../src/services/models';
+import { MessagePackHubProtocol } from '@microsoft/signalr-protocol-msgpack';
 const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password';
 async function call<T>(api: APIRequestContext, path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
@@ -24,6 +25,21 @@ async function select(page: Page, label: string, text: string) {
 
 test('protected-key onboarding, explicit default, stale connection recovery and responsive configuration', async ({ page }) => {
   const f = await setup(); const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  page.on('websocket', socket => {
+    if (!socket.url().includes('/hubs/session')) return;
+    socket.on('framereceived', ({ payload }) => {
+      if (typeof payload === 'string') return;
+      try {
+        const data = payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength) as ArrayBuffer;
+        for (const message of new MessagePackHubProtocol().parseMessages(data, { log() {} })) {
+          if (message.type !== 3 || !message.result?.error) continue;
+          const error = message.result.error;
+          const safe = JSON.stringify({ category: error.category, code: error.code });
+          errors.push(`Hub refusal: ${safe}`); console.error(`Hub refusal: ${safe}`);
+        }
+      } catch { /* Handshake and non-MessagePack control frames contain no acknowledgement. */ }
+    });
+  });
   try {
     await signInTenant(page, login, password); await page.goto(f.path());
     await expect(page.getByText('No provider connections you can read.')).toBeVisible();
@@ -87,9 +103,11 @@ test('protected-key onboarding, explicit default, stale connection recovery and 
       await expect(page.getByRole('button', { name: /^Edit model GPT-6 Luna/ })).toBeFocused();
     }
     await page.setViewportSize({ width: 1440, height: 900 });
-    const agent = await call<{ instance: { instanceId: string } }>(f.api, f.root + '/agents', {
+    const agent = await call<{ principalId: string; instance: { instanceId: string } }>(f.api, f.root + '/agents', {
       templateId: 'examiner', version: 1, expectedRevision: await f.revision()
     });
+    const contextRole = await call<{ roleId: string }>(f.api, f.root + '/roles', { name: 'Model fixture Space execution', permissions: ['spaces.read'], expectedRevision: await f.revision() });
+    await call(f.api, f.root + '/role-assignments', { principalId: agent.principalId, roleId: contextRole.roleId, expectedRevision: await f.revision() });
     await page.goto(`/t/${f.tenant}`);
     await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('GPT-6 Luna');
     const prompt = `synthetic authorization audit: agents.read ${agent.instance.instanceId}`;
@@ -121,12 +139,35 @@ test('protected-key onboarding, explicit default, stale connection recovery and 
     await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 1440, height: 900 });
 
+    // Model choice and Space context have independent authority and must survive together.
+    const shared = crypto.randomUUID();
+    await call(f.api, f.root + '/spaces', { spaceId: shared, name: 'Model integration space', description: '', instructions: 'Keep the selected model while using this Space.', expectedRevision: await f.revision() });
+    await call(f.api, f.root + `/spaces/${shared}/memberships/${agent.instance.instanceId}`, { responsibility: 'Examiner', instructions: '', disabledInheritedBindingKeys: [], addedBindings: [], expectedRevision: await f.revision(), expectedSpaceRevision: 1, expectedMembershipRevision: 0 }, 'PUT');
+    await page.getByRole('button', { name: 'Session Space', exact: true }).click();
+    const context = page.getByRole('dialog', { name: 'Session context', exact: true });
+    await page.getByRole('combobox', { name: 'Space', exact: true }).click();
+    await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByTitle(/^Model integration space · /).click();
+    await context.getByRole('button', { name: 'Apply to next turn', exact: true }).click();
+    await expect(context).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Session Space', exact: true })).toContainText('Model integration space');
+    await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('GPT-6 Luna');
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill(prompt);
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByText(reply, { exact: true })).toHaveCount(2);
+    const combined = await call<{ model: { offeringId: string } }>(f.api, f.root + `/sessions/${session}/conversation`);
+    expect(combined.model.offeringId).toBe(catalog.settings.defaultOfferingId);
+    const spaceContext = await call<{ selection: { spaceId: string } }>(f.api, f.root + `/sessions/${session}/context`);
+    expect(spaceContext.selection.spaceId).toBe(shared);
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Session Space', exact: true })).toContainText('Model integration space');
+    await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('GPT-6 Luna');
+
     await page.goto(f.path('models'));
     await page.getByRole('button', { name: `Inspect references for model GPT-6 Luna · Retained after real conflict`, exact: true }).click();
     const references = page.getByRole('dialog', { name: 'Model references: GPT-6 Luna · Retained after real conflict', exact: true });
     await select(page, 'Model reference category', 'Runs');
-    await expect(references.getByText('1 readable references', { exact: false })).toBeVisible();
-    await expect(references.getByText('Admitted Run pin', { exact: true })).toBeVisible();
+    await expect(references.getByText('2 readable references', { exact: false })).toBeVisible();
+    await expect(references.getByText('Admitted Run pin', { exact: true })).toHaveCount(2);
     await references.getByRole('button', { name: 'Close', exact: true }).last().click();
     await expect(page.getByRole('button', { name: 'Inspect references for model GPT-6 Luna · Retained after real conflict', exact: true })).toBeFocused();
     await page.getByRole('tab', { name: 'Defaults', exact: true }).click();
@@ -134,7 +175,7 @@ test('protected-key onboarding, explicit default, stale connection recovery and 
     await page.getByRole('button', { name: 'Save organization default' }).click();
     const defaultPreview = page.getByRole('dialog', { name: 'Apply model configuration change?', exact: true });
     await expect(defaultPreview.getByText('Instances: 1', { exact: true })).toBeVisible();
-    await expect(defaultPreview.getByText('Runs: 1', { exact: true })).toBeVisible();
+    await expect(defaultPreview.getByText('Runs: 2', { exact: true })).toBeVisible();
     await defaultPreview.getByRole('button', { name: 'Keep editing', exact: true }).click();
     expect((await call<ModelAdmin>(f.api, f.root + '/models')).settings.defaultOfferingId).toBe(catalog.settings.defaultOfferingId);
     expect(errors).toEqual([]);

@@ -31,6 +31,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var tenant = setup.Route.TenantId; var human = new TenantSessionInitiator(setup.Human.AccountId, setup.Human.AuthenticationSessionId, setup.Human.PrincipalId);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision;
         var agent = await f.Agents.CreateAsync(human.PrincipalId, tenant, "examiner", 1, await Revision());
+        await GrantModelFixtureSpaceRead(f, tenant, human.PrincipalId, agent.PrincipalId);
         var arguments = JsonSerializer.Serialize(new { permission = "agents.read", resourceType = "agent", resourceId = agent.Instance.InstanceId.ToString("D") });
         using var http = new ProviderHttpFixture(RuntimeToolWire(setup.Route, arguments), FinalWire(setup.Route));
         var global = new GlobalModelProbe(); await using var services = RuntimeServices(f, http, global);

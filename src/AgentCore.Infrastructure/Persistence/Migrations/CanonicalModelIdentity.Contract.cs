@@ -3,5 +3,5 @@ namespace AgentCore.Infrastructure.Persistence.Migrations;
 // Frozen forward-cutover contract; historical migration formulas remain unchanged.
 public partial class CanonicalModelIdentity
 {
-    internal static string ApprovalValuesConstraint => FrozenMigrationMetadata.Read("f4fdf7512e8065d97a1b4669a464e99b2fba5b03dff4a04339b5d95df352e22d");
+    internal static string ApprovalValuesConstraint => FrozenMigrationMetadata.Read("c4df2732fcbe10af08be4c816bf2b7ab674d77a77fdf9c3ad1f12a7169211a92");
 }

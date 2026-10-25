@@ -178,7 +178,7 @@ public static class TenantManagementResourceSources
     {
         if (source is null || source.Name == "conversation:user") return [];
         var tenant = reader.Security.Tenant.TenantId;
-        return source.Workspace is { } workspace ? TenantWorkspaceReadOperationRules.Targets(tenant, reader.Run.AgentInstanceId, workspace)
+        return source.Workspace is { } workspace ? TenantWorkspaceReadOperationRules.Targets(tenant, reader.Run.AgentInstanceId, workspace, TenantWorkspaceRules.Context(reader.Run))
             : source.Attachment is { } attachment ? TenantAttachmentReadRules.Targets(tenant, attachment)
             : TenantBrowserOperationRules.Targets(tenant, reader.Run.AgentInstanceId, reader.Run.SessionId, true);
     }
@@ -222,7 +222,7 @@ public static class TenantManagementResourceSources
         {
             if (request.Kind != ApprovalKind.Review || grant is not null || request.Operation.WorkspaceRead != workspace || receipt.ReasonCode != TenantWorkspaceReadOperationRules.Reason)
                 throw new AccessDeniedException("resource_source_unavailable");
-            await TenantWorkspaceReadOperationRules.ReviewerAsync(reader.Security, reader.Run.AgentInstanceId, workspace, request.OriginalInitiatorPrincipalId, decision.HumanPrincipalId, iam, ct).ConfigureAwait(false);
+            await TenantWorkspaceReadOperationRules.ReviewerAsync(reader.Security, reader.Run.AgentInstanceId, workspace, TenantWorkspaceRules.Context(reader.Run), request.OriginalInitiatorPrincipalId, decision.HumanPrincipalId, iam, ct).ConfigureAwait(false);
         }
         else if (source.Attachment is { } attachment)
         {

@@ -53,6 +53,7 @@ public sealed class TenantSandboxGenerationAuthority(IIamStore security, ITenant
             || lease.State == SandboxLeaseState.Executing && (target.Agent.Instance.Revision != request.Operation.ExpectedInstanceRevision || target.Agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision))
             throw new AccessDeniedException("sandbox_generation_authority_lost");
         TenantSandboxRuntimeRules.RequireCurrentPolicy(run, target.Agent, target.Baseline, pinned, target.Profile, lease.MountAuthority);
+        await TenantSandboxWorkspaceRules.RequireCurrentAsync(state, run, target.Agent, target.Baseline, lease.MountAuthority.WorkspaceAccess ?? throw new AccessDeniedException("sandbox_workspace_context_required"), authorizer, ct).ConfigureAwait(false);
         await TenantSandboxApprovalRules.RequireHumanAsync(state, request, decision, authorizer, ct).ConfigureAwait(false);
         var after = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false);
         var latest = await runs.FindTenantRunAsync(tenant, run.AgentRunId, ct).ConfigureAwait(false);

@@ -13,6 +13,7 @@ public sealed partial class TenantApprovalService
             var prepared = await (accountReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareAsync(
                 await AccountFrame(reference, expectedRunRevision, generation, ct).ConfigureAwait(false), intent, ct).ConfigureAwait(false);
             var operation = TenantApprovalRules.PrepareAccountRead(ids.NewId(), prepared.Agent.Instance.InstanceId, prepared.Read, prepared.Agent.Instance.Revision, prepared.Agent.Instance.PersonaRevision);
+            operation = TenantApprovalRules.ForRun(operation, prepared.Run);
             return await PersistAsync(reference, prepared.Run, prepared.State, prepared.Agent, operation, prepared.Snapshot, true, expectedRunRevision, generation, ct).ConfigureAwait(false);
         }
         catch (Exception e) when (e is AccessDeniedException or SecurityConflictException)

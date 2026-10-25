@@ -242,3 +242,11 @@ The normalized `AudioIngressFaultReceived` carries the captured speech epoch and
 ## Canonical tenant voice transport signals
 
 `TenantVoiceRuntimeBinding` pins the actual attachment root lease to one immutable Run-frame Runtime. Only normalized speech enters its mailbox. Its typed turn/interruption/unavailable signals queue supervised work outside that mailbox; none is a wire event or an execution grant. Raw PCM and input continuity stay in `SpeechRecognitionIngress`. A committed recognized turn publishes `transcript.final` with the exact durable entry ID/sequence after original-human admission. Ephemeral partial/discard/error/state events and PCM are delivered only under the actual current recipient/attachment checks, without replay. Pending activation and mode retirement do not create a Run or cancel accepted work.
+
+## Space and Environment context in normalized execution
+
+A Session stores a tenant-qualified next-turn selection; each Activation/Run captures immutable Space, own-Private Space, Membership and optional Environment identity/revision witnesses. Human input starts a fresh root in the selected context. Causal child work captures its parent Run context; independent schedule/manual/event work uses exact saved pins or Private plus no Environment when unpinned. Report destinations retain their separate captured conversation context.
+
+Webhook/Core subscription and coalescing snapshots retain optional exact Space/Environment pins. Receipt replay cannot retarget an accepted event after a subscription edit. Current membership, Space/profile gate and IAM are checked again at admission, restart, approval and effect. Invalid saved context suspends an Automation or records a skipped event with an explicit context reason; no fallback is selected. ExistingSession execution requires matching selection, including its Environment selection epoch.
+
+`ContextContinuation` is a closed internal Activation/origin for one explicit agent-requested switch-and-continue successor per human root. The incumbent Session mailbox stores the transition, and the existing atomic outcome transaction admits a new Run with maxAttempts=1 only after the source completes safely. Later human input, cancellation, unavailable destination, pending/uncertain effects or an existing successor withhold it. The original Run’s capture and receipts never change.

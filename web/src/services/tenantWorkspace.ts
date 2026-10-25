@@ -1,23 +1,26 @@
 import { identityFileMutation, identityRequest, tenantApi } from './identity';
 import type { AgentWorkspacePage } from './agentWorkspace';
 
-export type TenantWorkspaceOwner = { tenantId: string } & ({ kind: 'home'; instanceId: string } | { kind: 'working'; sessionId: string });
+export type TenantWorkspaceOwner = { tenantId: string } & ({ kind: 'home'; spaceId: string } | { kind: 'working'; sessionId: string });
+export type WorkspaceReference = { tenantId: string } & ({ kind: 'spaceHome'; spaceId: string; privateAlias?: boolean } | { kind: 'sessionWorking'; sessionId: string });
 export type TenantWorkspaceAccess = {
-  workspace: { tenantId: string; instanceId: string; sessionId: string | null; logicalRoot: string };
-  securityRevision: number; instanceRevision: number | null; canRead: boolean; canWrite: boolean; canDelete: boolean; readOnly: boolean;
-  instanceName: string | null; sessionTitle: string | null;
+  workspace: WorkspaceReference; securityRevision: number; ownerRevision: number;
+  canRead: boolean; canWrite: boolean; canDelete: boolean; readOnly: boolean;
+  workspaceName: string; sessionTitle: string | null;
 };
 export const workspaceRoot = (owner: TenantWorkspaceOwner) => owner.kind === 'home' ? '/home' : '/working';
 export const tenantWorkspaceApi = (owner: TenantWorkspaceOwner, suffix = '') => tenantApi(owner.tenantId,
-  `${owner.kind === 'home' ? `/agents/${encodeURIComponent(owner.instanceId)}` : `/sessions/${encodeURIComponent(owner.sessionId)}`}/workspace${suffix}`);
+  `${owner.kind === 'home' ? `/spaces/${encodeURIComponent(owner.spaceId)}` : `/sessions/${encodeURIComponent(owner.sessionId)}`}/workspace${suffix}`);
+export function sameWorkspace(owner: TenantWorkspaceOwner, reference: WorkspaceReference | null | undefined) {
+  return reference?.tenantId === owner.tenantId && (owner.kind === 'home'
+    ? reference.kind === 'spaceHome' && reference.spaceId === owner.spaceId && reference.privateAlias !== true
+    : reference.kind === 'sessionWorking' && reference.sessionId === owner.sessionId);
+}
 export async function readWorkspaceAccess(owner: TenantWorkspaceOwner, signal: AbortSignal): Promise<TenantWorkspaceAccess> {
   const value = await identityRequest<TenantWorkspaceAccess>(tenantWorkspaceApi(owner, '/access'), { signal });
-  if (value.workspace?.tenantId !== owner.tenantId || value.workspace.logicalRoot !== workspaceRoot(owner)
-    || (owner.kind === 'home' ? value.workspace.instanceId !== owner.instanceId || value.workspace.sessionId !== null : value.workspace.sessionId !== owner.sessionId)
-    || !Number.isSafeInteger(value.securityRevision) || value.securityRevision < 1
-    || (owner.kind === 'home' ? !Number.isSafeInteger(value.instanceRevision) || value.instanceRevision === null || value.instanceRevision < 1 || typeof value.instanceName !== 'string'
-      : value.instanceRevision !== null || value.instanceName !== null)
-    || typeof value.workspace.instanceId !== 'string' || !value.workspace.instanceId || value.sessionTitle !== null && typeof value.sessionTitle !== 'string'
+  if (!sameWorkspace(owner, value.workspace) || !Number.isSafeInteger(value.securityRevision) || value.securityRevision < 1
+    || !Number.isSafeInteger(value.ownerRevision) || value.ownerRevision < 1 || typeof value.workspaceName !== 'string'
+    || value.sessionTitle !== null && typeof value.sessionTitle !== 'string'
     || ![value.canRead, value.canWrite, value.canDelete, value.readOnly].every(flag => typeof flag === 'boolean'))
     throw new Error('Current workspace access is unavailable. Reload the workspace.');
   return value;

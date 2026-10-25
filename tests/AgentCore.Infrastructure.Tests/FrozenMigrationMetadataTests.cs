@@ -26,6 +26,9 @@ public sealed class FrozenMigrationMetadataTests
     // Original generated literal digests captured before extraction, independent of resource loading.
     public static TheoryData<string, string, string> OriginalConstraints => new()
     {
+        { "20261025012506_SpaceMembershipOwnership", "CK_TenantApprovalRequest_Values", "c3d774f8790cf8b52cbdd012556731a6df9713964ea08f15cb2bd3370b946d2f" },
+        { "20261025013639_SpaceEnvironmentsAndSecrets", "CK_TenantApprovalRequest_Values", "c3d774f8790cf8b52cbdd012556731a6df9713964ea08f15cb2bd3370b946d2f" },
+        { "20261025015353_SessionSpaceContext", "CK_TenantApprovalRequest_Values", "c3d774f8790cf8b52cbdd012556731a6df9713964ea08f15cb2bd3370b946d2f" },
         { "20261019023004_TenantWorkspaceMutationReview", "CK_TenantApprovalRequest_Values", "1dc7ebc70d6c458a8be931167318eaa492cbab6d6d3b0a226e25601871b5910e" },
         { "20261019035251_TenantWorkspaceOfficeReadReview", "CK_TenantApprovalRequest_Values", "f80f4bd00b2f15746c1d28c5c00650d1daf7e035d96ad69a1eff632b71f2bc11" },
         { "20261019041906_TenantWorkspaceOfficeMutation", "CK_TenantApprovalRequest_Values", "edd8d1823130ede8b42d81ddcd6f54fa1b4ca2483bc58f58e69c80ed09f65191" },
@@ -102,13 +105,15 @@ public sealed class FrozenMigrationMetadataTests
                     ? guard.Value.Replace("'office.spreadsheet.edit')", "'office.spreadsheet.edit','web.download')", StringComparison.Ordinal) : guard.Value;
                 Assert.Equal(expected, downloads[guard.Key]);
             }
-            await migrator.MigrateAsync("20261025010000_TenantDynamicModels");
+            await migrator.MigrateAsync("20261025080000_SpaceResourceApprovals");
+            var spaces = await Schema(db);
+            await migrator.MigrateAsync("20261025085000_TenantDynamicModels");
             var modelPredecessor = await Schema(db);
-            foreach (var guard in downloads.Where(item => item.Key.StartsWith("trigger:", StringComparison.Ordinal)))
+            foreach (var guard in spaces.Where(item => item.Key.StartsWith("trigger:", StringComparison.Ordinal)))
                 Assert.Equal(guard.Value, modelPredecessor[guard.Key]);
             await migrator.MigrateAsync();
             var current = await Schema(db);
-            Assert.Equal(145, current.Keys.Count(k => k.StartsWith("trigger:", StringComparison.Ordinal)));
+            Assert.Equal(186, current.Keys.Count(k => k.StartsWith("trigger:", StringComparison.Ordinal)));
             foreach (var guard in modelPredecessor.Where(item => item.Key.StartsWith("trigger:", StringComparison.Ordinal)))
             {
                 // Canonical identity changes these four field references. The

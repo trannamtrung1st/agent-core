@@ -55,10 +55,13 @@ public sealed partial class InMemoryIamStore
             }
             RequireAgentHuman(next.Tenant.TenantId, audit.ActorPrincipalId, change.Initiator);
             if (_tenants[next.Tenant.TenantId].Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult<TenantAgent?>(null);
+            var reconcileSpaces = change.Resource is not null || change.ActiveVersion is not null
+                ? PrepareResourceSpaceReconciliation(next.Tenant.TenantId, change, audit, ct) : null;
             if (change.Skill is not null || change.Resource is not null)
             {
                 if (change.Skill is { } skill) instances.MutateTenantSkillsAsync(skill, at, ct).GetAwaiter().GetResult();
                 else instances.MutateTenantResourcesAsync(change.Resource!, at, ct).GetAwaiter().GetResult();
+                reconcileSpaces?.Invoke();
                 _tenants[next.Tenant.TenantId] = next; _audit.Add(audit);
                 return ValueTask.FromResult<TenantAgent?>(current with { Instance = instances.FindTenantBackingAsync(change.InstanceId, ct).Result! });
             }
@@ -77,6 +80,7 @@ public sealed partial class InMemoryIamStore
                 if (metadata.AllowMaintenance != mutation.AllowMaintenance)
                     isolationBacking.ConfigureMaintenanceAsync(change.InstanceId, metadata.MaintenanceRevision, mutation.AllowMaintenance).GetAwaiter().GetResult();
             }
+            reconcileSpaces?.Invoke();
             foreach (var fact in AgentCore.Infrastructure.Persistence.CoreEventPersistence.Instance(current.Instance, updated,
                 AgentCore.Domain.Triggers.TriggerOwner.ForTenant(next.Tenant.TenantId, updated.InstanceId, current.PrincipalId))) AppendTenantCore(fact);
             _tenants[next.Tenant.TenantId] = next; _audit.Add(audit);

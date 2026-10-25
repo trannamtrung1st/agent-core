@@ -190,8 +190,8 @@ export function applyVoiceEnabled(
 }
 
 function omitBlankKnowledgeSources(candidate: DefinitionCandidate): DefinitionCandidate {
-  const environment = readRecord(candidate, ["environment"]);
-  const sources = environment?.knowledgeSources;
+  const executionPolicy = readRecord(candidate, ["executionPolicy"]);
+  const sources = executionPolicy?.knowledgeSources;
   if (!Array.isArray(sources)) {
     return candidate;
   }
@@ -206,7 +206,7 @@ function omitBlankKnowledgeSources(candidate: DefinitionCandidate): DefinitionCa
   if (kept.length === sources.length) {
     return candidate;
   }
-  return writePath(candidate, ["environment", "knowledgeSources"], kept);
+  return writePath(candidate, ["executionPolicy", "knowledgeSources"], kept);
 }
 
 export function cloneCandidate(candidate: DefinitionCandidate): DefinitionCandidate {

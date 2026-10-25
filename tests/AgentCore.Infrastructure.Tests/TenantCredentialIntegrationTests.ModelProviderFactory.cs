@@ -79,6 +79,12 @@ public sealed partial class TenantCredentialIntegrationTests
         Assert.Single(http.Requests);
     }
     private sealed record ProviderSetupState(ModelRoutePin Route, ProviderConnection Connection, ModelOffering Offering, HumanSessionReference Human);
+    private static async Task GrantModelFixtureSpaceRead(Fixture f, Guid tenant, Guid actor, Guid executor)
+    {
+        async Task<long> Revision() => (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision;
+        var role = await f.Access.SaveRoleAsync(actor, tenant, null, "Model fixture Space context", ["spaces.read"], await Revision());
+        await f.Access.AssignRoleAsync(actor, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision());
+    }
     private static async Task<ProviderSetupState> ProviderSetup(Fixture f, ModelProviderKind kind)
     {
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");

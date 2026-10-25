@@ -96,7 +96,7 @@ public sealed class TenantApprovalToolContractTests
         var definition = await CapabilityProjectionTests.Definition();
         definition = definition with { MemoryPolicy = MemoryPolicy.Disabled, StateIsolationPolicy = new(CrossSessionContinuity: false) };
         definition = definition with { SelfManagement = HarnessManagementPolicy.Disabled,
-            Environment = definition.Environment! with { Capabilities = new("Selected", [ToolCatalog.DriveAccounts]), ToolAllowlist = [ToolCatalog.DriveAccounts] } };
+            ExecutionPolicy = definition.ExecutionPolicy! with { Capabilities = new("Selected", [ToolCatalog.DriveAccounts]), ToolAllowlist = [ToolCatalog.DriveAccounts] } };
         var instance = Guid.NewGuid(); var session = Guid.NewGuid(); var activation = Guid.NewGuid(); var at = DateTimeOffset.UtcNow;
         var context = CapabilityProjectionTests.Context(definition) with {
             AgentInstanceId = instance, OwnedSessionId = session,
@@ -108,7 +108,7 @@ public sealed class TenantApprovalToolContractTests
         Assert.DoesNotContain("check_credential_connection", withoutBindings.ParametersJson);
         Assert.Contains("inspect_management", withoutBindings.ParametersJson); // Independent private Skill-read consent remains available.
         Assert.DoesNotContain(ToolCatalog.For(definition, context with { ExecutionContext = null }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
-        var unavailable = definition with { Environment = definition.Environment with { Capabilities = new("Selected", []), ToolAllowlist = [] } };
+        var unavailable = definition with { ExecutionPolicy = definition.ExecutionPolicy with { Capabilities = new("Selected", []), ToolAllowlist = [] } };
         var withoutCapability = Assert.Single(ToolCatalog.For(unavailable, context with { Definition = unavailable }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
         Assert.DoesNotContain("check_credential_connection", withoutCapability.ParametersJson);
         Assert.DoesNotContain("update_preferences", withoutCapability.ParametersJson);
@@ -197,7 +197,7 @@ public sealed class TenantApprovalToolContractTests
     public async Task Direct_preferences_are_context_only_and_require_explicit_Managed_auto_apply_in_both_projection_modes(bool capabilities)
     {
         var definition = await CapabilityProjectionTests.Definition();
-        definition = definition with { Environment = definition.Environment! with { Capabilities = capabilities ? definition.Environment!.Capabilities : null },
+        definition = definition with { ExecutionPolicy = definition.ExecutionPolicy! with { Capabilities = capabilities ? definition.ExecutionPolicy!.Capabilities : null },
             SelfManagement = new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], [], ManagedAutoApply: [ManagementAutoApply.ConversationPreferences]) };
         var session = Guid.NewGuid(); var activation = Guid.NewGuid();
         var context = CapabilityProjectionTests.Context(definition) with {

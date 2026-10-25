@@ -20,13 +20,25 @@ public sealed partial class TenantRunAdmissionTests
     private static TenantApprovalService ReportApprovals(Fixture f) => new(f.Iam, (ITenantApprovalStore)f.Iam, (ITenantAgentStore)f.Iam, AttachmentOperations(f), f.Authorizer,
         f.Identity, f.Ids, f.Clock, f.RunConfiguration(), new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)f.Iam,
         backgroundReports: ReportTarget(f), reportRuntime: (ITenantRuntimeStore)f.Iam, reportSourceReads: ReportSourceReads(f));
-    private static async Task<(BackgroundSetup Parent, TenantBackgroundCompletion Source, TenantApprovalRequest Request)> CompletedReportCase(Fixture f)
+    private static async Task<(BackgroundSetup Parent, TenantBackgroundCompletion Source, TenantApprovalRequest Request)> CompletedReportCase(Fixture f, bool sharedDestination = false)
     {
         var parent = await BackgroundParent(f); await WaitReadAuthority(f, parent); var child = await BackgroundChild(f, parent); var runtime = (ITenantRuntimeStore)f.Iam;
         await runtime.AdmitTenantImmediateAsync(parent.Frame, child.Session, child.Run, f.Ids.NewId());
         var claimed = await ClaimBackground(f, child.Run); var outcome = BackgroundOutcome(f, claimed.Run, claimed.Snapshot);
         await runtime.CommitTenantOutcomeAsync(claimed.Frame, outcome.Snapshot, claimed.Snapshot.Revision, outcome.Complete, null, f.Ids.NewId());
         await CompleteBackgroundParent(f, parent);
+        if (sharedDestination)
+        {
+            var s = parent.Setup;
+            async Task<long> Revision() => (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;
+            var spaces = new TenantSpaceService(f.Iam, (ITenantSpaceStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer, f.RunConfiguration(),
+                (ITenantCredentialBindingStore)f.Iam, f.Credentials, f.Ids, f.Clock);
+            var shared = await spaces.CreateAsync(s.Owner.PrincipalId, s.Tenant, f.Ids.NewId(), "Completion destination", "", "Report with shared context", await Revision());
+            await spaces.SetMemberAsync(s.Owner.PrincipalId, s.Tenant, shared.SpaceId, s.Agent.Instance.InstanceId, "", "", [], [], await Revision(), shared.Revision, 0);
+            var saved = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Session))!;
+            await ((ITenantSessionContextStore)f.Iam).SwitchTenantQuiescentContextAsync(new(saved.Owner, s.Owner, f.Ids.NewId(), shared.SpaceId, null, 0,
+                await Revision(), saved.Snapshot.Revision, saved.Snapshot.ContextSelection!.Revision, s.Agent.Instance.Revision), f.Ids.NewId());
+        }
         await new TenantOperationPolicyService(f.Iam, (ITenantOperationPolicyStore)f.Iam, f.Authorizer, f.Identity, f.Ids, f.Clock)
             .SaveAsync(parent.Setup.Tenant, parent.Setup.Owner, "agent-runs.create", new(OperationApprovalMode.Always, false), (await f.Iam.ReadTenantAsync(parent.Setup.Tenant))!.Tenant.Revision, 0);
         var source = Assert.Single(await runtime.ListTenantBackgroundCompletionsAsync(100));
@@ -41,7 +53,7 @@ public sealed partial class TenantRunAdmissionTests
     public async Task Tenant_report_creation_store_rechecks_exact_source_authority_and_receipt_replay_without_mutating_finished_child(bool sqlite, string boundary)
     {
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-20T01:00:00Z"));
-        await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true); var v = await CompletedReportCase(f); var tenant = v.Parent.Setup.Tenant;
+        await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true); var v = await CompletedReportCase(f, boundary == "shared-context"); var tenant = v.Parent.Setup.Tenant;
         var approvals = ReportApprovals(f); var requests = (ITenantApprovalStore)f.Iam; var runtime = (ITenantRuntimeStore)f.Iam; var runs = (ITenantRunStore)f.Iam;
         var request = await approvals.DecideAsync(tenant, v.Request.RequestId, v.Parent.Setup.Owner, true, v.Request.Operation.ActionHash, (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision, 1);
         var signal = Assert.Single(await requests.PendingApprovalSignalsAsync(100));
@@ -67,13 +79,23 @@ public sealed partial class TenantRunAdmissionTests
             Assert.True(await runtime.SettleTenantBackgroundReportApprovalAsync(signal, report, null, f.Ids.NewId()));
             Assert.False(await runtime.SettleTenantBackgroundReportApprovalAsync(signal, report, null, f.Ids.NewId()));
             var receipt = (await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(tenant, request.Operation.OperationId))!;
-            Assert.Equal(boundary == "replay" ? TenantOperationOutcome.Completed : TenantOperationOutcome.Denied, receipt.Outcome);
+            Assert.Equal(boundary is "replay" or "shared-context" ? TenantOperationOutcome.Completed : TenantOperationOutcome.Denied, receipt.Outcome);
             Assert.Equal(revision + 1, (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision);
         }
         Assert.Equal(v.Source.Child.Revision, (await runs.FindTenantRunAsync(tenant, v.Source.Child.AgentRunId))!.Revision);
         var created = await runs.FindTenantRunAsync(tenant, request.Operation.BackgroundReport!.RunId);
-        if (boundary == "replay") Assert.NotNull(created); else Assert.Null(created);
+        if (boundary is "replay" or "shared-context")
+        {
+            Assert.NotNull(created);
+            Assert.True(created.Admission.Configuration!.SpaceContext!.MatchesSelection(request.Operation.BackgroundReport.DestinationContext));
+            if (boundary == "shared-context") Assert.NotEqual(v.Source.Child.Admission.Configuration!.SpaceContext!.SpaceId,
+                created.Admission.Configuration.SpaceContext.SpaceId);
+        }
+        else Assert.Null(created);
     }
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public Task Completion_report_uses_the_destination_Sessions_context_and_retains_the_childs_original_source_context(bool sqlite) =>
+        Tenant_report_creation_store_rechecks_exact_source_authority_and_receipt_replay_without_mutating_finished_child(sqlite, "shared-context");
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_report_creation_filters_source_reads_before_totals_and_rechecks_reviewer_after_decision(bool sqlite)
     {

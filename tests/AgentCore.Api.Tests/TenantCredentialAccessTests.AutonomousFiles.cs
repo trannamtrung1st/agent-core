@@ -131,7 +131,7 @@ public sealed partial class TenantCredentialAccessTests
             model.ReadArguments = JsonSerializer.Serialize(new { path }); model.PublishArguments = JsonSerializer.Serialize(new { path, displayName = "independent." + kind });
         }
         var capabilities = new[] { model.ReadTool, model.WriteTool, ToolCatalog.ArtifactsCreateFromWorkspace };
-        candidate["environment"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(),
+        candidate["executionPolicy"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(),
             capabilities = new { mode = "Selected", resolvedCapabilities = capabilities }, projection = new { alwaysCapabilities = capabilities } });
         var draftId = draft.GetProperty("draftId").GetGuid();
         var saved = await Json(await owner.PutAsJsonAsync(api + $"/definition-drafts/{draftId}", new { candidate, expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 1 }));

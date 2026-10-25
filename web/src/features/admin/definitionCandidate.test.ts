@@ -62,14 +62,14 @@ describe("definitionCandidate", () => {
 
   it("omits blank knowledge identities when preparing a save", () => {
     const candidate = {
-      environment: {
+      executionPolicy: {
         knowledgeSources: [
           { identity: "policy", title: "Policy", citation: "policy@demo" },
           { identity: "  ", title: "", citation: "" }
         ]
       }
     };
-    expect(candidateForPersistence(candidate).environment).toEqual({
+    expect(candidateForPersistence(candidate).executionPolicy).toEqual({
       knowledgeSources: [{ identity: "policy", title: "Policy", citation: "policy@demo" }]
     });
   });

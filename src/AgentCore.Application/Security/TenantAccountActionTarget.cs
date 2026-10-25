@@ -28,7 +28,7 @@ public sealed class TenantAccountActionTarget(TenantOperationAuthorizer operatio
         else if (run.Status is not (AgentRunStatus.Running or AgentRunStatus.WaitingForApproval) || run.CancellationRequested) throw new AccessDeniedException("tenant_runtime_unavailable");
         if (frame.Owner != run.Owner || run.SessionId != frame.SessionId) throw new AccessDeniedException("tenant_context_mismatch");
         var (agent, baseline) = await configurations.BaselineAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
-        var snapshot = await bindings.ReadTenantCredentialBindingsAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("account_unavailable");
+        var snapshot = await configurations.CurrentCredentialBindingsAsync(run, ct, bindings).ConfigureAwait(false) ?? throw new AccessDeniedException("account_unavailable");
         var bound = snapshot.Bindings.SingleOrDefault(b => b.Binding.Reference == alias) ?? throw new AccessDeniedException("account_unavailable");
         if (snapshot.Agent.Instance.Revision != agent.Instance.Revision || snapshot.Agent.PrincipalId != run.Owner.ExecutorPrincipalId)
             throw new SecurityConflictException("account_source_changed");
@@ -87,7 +87,7 @@ public sealed class TenantAccountActionTarget(TenantOperationAuthorizer operatio
         if (!transports.Availability(source.Bound.Credential.Value, action.ToolName == ToolCatalog.EmailSend).Available) throw new AccessDeniedException("account_unavailable");
     }
     private ValueTask Permissions(TenantAccountActionSource source, PreparedAccountAction action, bool primary, CancellationToken ct) =>
-        TenantAccountActionRules.PermissionsAsync(source.State, source.Agent.Instance.InstanceId, action, source.Agent.PrincipalId, iam, primary, ct);
+        TenantAccountActionRules.PermissionsAsync(source.State, source.Agent.Instance.InstanceId, action, TenantWorkspaceRules.Context(source.Run), source.Agent.PrincipalId, iam, primary, ct);
     public async ValueTask<ITenantWorkspaceArtifactSource?> RequireSavedAsync(TenantApprovalRequest request, AgentRun run, CancellationToken ct = default, bool exactSecret = true)
     {
         var action = request.Operation.AccountAction ?? throw new SecurityConflictException("operation_mismatch");

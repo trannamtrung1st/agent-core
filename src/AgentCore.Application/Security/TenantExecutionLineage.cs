@@ -87,7 +87,7 @@ public static class TenantExecutionLineage
                     throw new AccessDeniedException("tenant_lineage_unavailable");
                 return run;
             }
-            if (context.Origin is not (ExecutionOrigin.ImmediateBackground or ExecutionOrigin.CompletionReport or ExecutionOrigin.ApprovalContinuation or ExecutionOrigin.ConfigurationContinuation)
+            if (context.Origin is not (ExecutionOrigin.ImmediateBackground or ExecutionOrigin.CompletionReport or ExecutionOrigin.ApprovalContinuation or ExecutionOrigin.ConfigurationContinuation or ExecutionOrigin.ContextContinuation)
                 || context.ParentRunId is not { } parentId || context.ParentActivationId is not { } activationId)
                 throw new AccessDeniedException("tenant_lineage_unavailable");
             var parent = await runReader(parentId, ct).ConfigureAwait(false)
@@ -115,6 +115,14 @@ public static class TenantExecutionLineage
                 }
                 else if (childRoot.Admission.Activation.SourceSessionId != run.SessionId) throw new AccessDeniedException("tenant_lineage_unavailable");
             }
+            if (context.Origin == ExecutionOrigin.ContextContinuation
+                && (a.Kind != ActivationKind.ContextContinuation || parent.Status != AgentRunStatus.Completed || parent.CancellationRequested
+                    || parent.SessionId != run.SessionId || run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
+                    || a.SourceEventId != parent.ActivationId || a.SourceEntryIds.Count != 0 || run.MaxAttempts != 1
+                    || a.DedupeKey != "context-continuation:" + context.RootActivationId.ToString("D")
+                    || TenantContextContinuationRules.Pending(parent) is not { } pending
+                    || run.Admission.Configuration?.SpaceContext is not { } capture || capture.SpaceId != pending.SpaceId || capture.EnvironmentId != pending.EnvironmentId
+                    || capture.SelectionRevision != pending.SelectionRevision)) throw new AccessDeniedException("tenant_lineage_unavailable");
             if (context.Origin == ExecutionOrigin.ConfigurationContinuation
                 && (a.Kind != ActivationKind.ConfigurationContinuation || !parent.IsTerminal || parent.Status != AgentRunStatus.Completed
                     || parent.SessionId != run.SessionId || run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
@@ -123,6 +131,7 @@ public static class TenantExecutionLineage
                 throw new AccessDeniedException("tenant_lineage_unavailable");
             if (context.Origin == ExecutionOrigin.ApprovalContinuation
                 && (a.Kind != ActivationKind.ApprovalContinuation || TenantConfigurationContinuationRules.Target(run) != TenantConfigurationContinuationRules.Target(parent)
+                    || TenantContextContinuationRules.InputBoundary(run) != TenantContextContinuationRules.InputBoundary(parent)
                     || TenantConfigurationContinuationRules.InputBoundary(run) != TenantConfigurationContinuationRules.InputBoundary(parent) || parent.SessionId != run.SessionId || parent.Admission.OutputContract != run.Admission.OutputContract
                     || parent.Result?.ContinuationRunId != run.AgentRunId || parent.Result.OutcomeKind != AgentRunOutcomeKind.Continued))
                 throw new AccessDeniedException("tenant_lineage_unavailable");

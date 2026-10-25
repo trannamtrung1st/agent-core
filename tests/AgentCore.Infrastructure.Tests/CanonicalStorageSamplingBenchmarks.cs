@@ -17,6 +17,8 @@ public sealed class StorageSamplingBenchmarkAttribute : FactAttribute
 
 public sealed class CanonicalStorageSamplingBenchmarks(ITestOutputHelper output)
 {
+    private readonly SpaceTestContext context = new();
+
     [StorageSamplingBenchmark]
     public async Task Two_large_git_trees_report_sample_and_watchdog_scan_cost_without_changing_enforcement()
     {
@@ -25,7 +27,7 @@ public sealed class CanonicalStorageSamplingBenchmarks(ITestOutputHelper output)
         {
             var resolver = new CanonicalSandboxMountResolver(new() { CanonicalWorkspaceRoot = root.FullName, WorkspaceDockerHostRoot = root.FullName });
             var owner = Guid.NewGuid(); var session = Guid.NewGuid();
-            var mounts = resolver.Resolve(owner, session, HomeAccess.ReadWrite, create: true);
+            var mounts = resolver.Resolve(owner, session, context.Access(HomeAccess.ReadWrite), create: true);
             foreach (var tree in new[] { mounts.Working, mounts.Home! })
             {
                 for (var directory = 0; directory < 120; directory++)
@@ -43,7 +45,7 @@ public sealed class CanonicalStorageSamplingBenchmarks(ITestOutputHelper output)
             output.WriteLine($"{System.Runtime.InteropServices.RuntimeInformation.OSDescription}; {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}; working={working.Entries} entries/{working.Bytes} bytes; home={home.Entries} entries/{home.Bytes} bytes");
             Measure("CheckUsage (both trees)", () => CanonicalSandboxMountResolver.CheckUsage(mounts, long.MaxValue, default));
             // Match the watchdog root-identity resolve: CheckUsage owns the single hard-link scan.
-            Measure("Resolve + CheckUsage (filesystem part of watchdog)", () => CanonicalSandboxMountResolver.CheckUsage(resolver.Resolve(owner, session, HomeAccess.ReadWrite, validateHardLinks: false), long.MaxValue, default));
+            Measure("Resolve + CheckUsage (filesystem part of watchdog)", () => CanonicalSandboxMountResolver.CheckUsage(resolver.Resolve(owner, session, context.Access(HomeAccess.ReadWrite), validateHardLinks: false), long.MaxValue, default));
             Assert.Throws<AgentCoreException>(() => CanonicalSandboxMountResolver.CheckUsage(mounts, 1, default));
         }
         finally { root.Delete(true); }

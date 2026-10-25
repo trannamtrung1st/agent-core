@@ -45,7 +45,7 @@ public sealed partial class TenantCredentialAccessTests
         var baseline = (await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 32))!;
         candidate["triggerPolicy"] = JsonSerializer.SerializeToNode(baseline.TriggerPolicy, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         string[] capabilities = [ToolCatalog.WorkspaceWrite, ToolCatalog.WorkspaceRead, ToolCatalog.ArtifactsCreateFromWorkspace];
-        candidate["environment"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(),
+        candidate["executionPolicy"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(),
             capabilities = new { mode = "Selected", resolvedCapabilities = capabilities }, projection = new { alwaysCapabilities = capabilities } });
         var draftId = draft.GetProperty("draftId").GetGuid();
         var saved = await Json(await owner.PutAsJsonAsync(api + $"/definition-drafts/{draftId}", new { candidate, expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 1 }));

@@ -14,7 +14,8 @@ public enum ActivationKind
     BackgroundCompleted,
     CoreEvent,
     ConfigurationContinuation,
-    ApprovalContinuation
+    ApprovalContinuation,
+    ContextContinuation
 }
 
 /// <summary>Immutable admission of one effective turn, including its ordered input batch.</summary>
@@ -51,12 +52,12 @@ public sealed class Activation
         AgentRunText.RequireOptionalId(sourceSessionId, "Source Session");
         AgentRunText.RequireOptionalId(sourceAgentRunId, "Source AgentRun");
         AgentRunText.RequireOptionalId(parentActivationId, "Parent Activation");
-        var continuation = kind is ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ConfigurationContinuation or ActivationKind.ApprovalContinuation;
+        var continuation = kind is ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ConfigurationContinuation or ActivationKind.ApprovalContinuation or ActivationKind.ContextContinuation;
         if (rootActivationId == Guid.Empty || continuation && (parentActivationId is null || parentActivationId == activationId
                 || rootActivationId == activationId || sourceAgentRunId is null || sourceSessionId is null)
             || !continuation && (rootActivationId != activationId || parentActivationId is not null || sourceAgentRunId is not null || sourceSessionId is not null))
             throw new ArgumentException("Independent Activations own their root; continuations require a distinct root and parent.");
-        if (kind == ActivationKind.ConfigurationContinuation && (sourceSessionId != sessionId || sourceAgentRunId is null
+        if (kind is ActivationKind.ConfigurationContinuation or ActivationKind.ContextContinuation && (sourceSessionId != sessionId || sourceAgentRunId is null
             || sourceEventId is null || entries.Length != 0 || evidenceJson is null))
             throw new ArgumentException("Configuration continuation requires its source Run in the same Session, bounded task evidence and no newly owned inputs.");
         if (kind == ActivationKind.ApprovalContinuation && (sourceSessionId != sessionId || sourceEventId is null || entries.Length != 0 || evidenceJson is null))

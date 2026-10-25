@@ -70,7 +70,7 @@ public sealed class NativeEffectiveConfigurationTests
         var definition = Sample("examiner", 1, "Examiner v1") with
         {
             ProviderPreferences = preferences,
-            Environment = new RoleEnvironment(
+            ExecutionPolicy = new DefinitionExecutionPolicy(
                 Harness: ["beta-harness", "alpha-harness"],
                 KnowledgeSources: [new KnowledgeSourceRef("handbook", "Handbook", "cite-handbook")],
                 ToolAllowlist: [ToolCatalog.KnowledgeRetrieve, ToolCatalog.WorkspaceCopy, ToolCatalog.WorkspaceRead],

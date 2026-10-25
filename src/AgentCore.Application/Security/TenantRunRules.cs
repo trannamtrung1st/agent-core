@@ -32,6 +32,7 @@ public static class TenantRunRules
             || input.Text.Length > 8000 || string.IsNullOrWhiteSpace(input.Text) && input.Attachments is not { Count: > 0 }
             || !ValidParts(input, run) || input.Envelope is not null || input.Failure is not null
             || run.Admission.Configuration?.InstanceRevision != agent.Instance.Revision || run.DefinitionId != agent.Instance.DefinitionId
+            || run.Admission.Configuration.SpaceContext is not { } space || !space.MatchesSelection(current.ContextSelection)
             || run.DefinitionVersion != agent.Instance.ActiveVersion || run.PinnedPersona != agent.Instance.Persona
             || run.Admission.Configuration.PersonaRevision != agent.Instance.PersonaRevision)
             throw new ArgumentException("Invalid tenant human Run admission.");

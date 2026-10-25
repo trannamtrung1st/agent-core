@@ -99,9 +99,9 @@ public sealed class WebPublicToolTests
         var v2 = await store.GetAsync("general-assistant", 2);
         Assert.NotNull(v1);
         Assert.NotNull(v2);
-        Assert.Empty(RoleEnvironments.Of(v1!).ToolList);
-        Assert.Contains(ToolCatalog.WebSearch, RoleEnvironments.Of(v2!).ToolList);
-        Assert.Contains(ToolCatalog.WebFetch, RoleEnvironments.Of(v2!).ToolList);
+        Assert.Empty(DefinitionExecutionPolicies.Of(v1!).ToolList);
+        Assert.Contains(ToolCatalog.WebSearch, DefinitionExecutionPolicies.Of(v2!).ToolList);
+        Assert.Contains(ToolCatalog.WebFetch, DefinitionExecutionPolicies.Of(v2!).ToolList);
     }
 
     private static SessionToolExecutor CreateExecutor(
@@ -124,7 +124,7 @@ public sealed class WebPublicToolTests
             new VoiceConfiguration(false, "default", 1.0),
             new ProviderPreferences("primary-stt", "primary-tts"),
             new Dictionary<string, string>(StringComparer.Ordinal),
-            new RoleEnvironment(ToolAllowlist: tools));
+            new DefinitionExecutionPolicy(ToolAllowlist: tools));
 
     private static AgentContext Context(AgentDefinition definition, bool modelSupportsTools) =>
         new(

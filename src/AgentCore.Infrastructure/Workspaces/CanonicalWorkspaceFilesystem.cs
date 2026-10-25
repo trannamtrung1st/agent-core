@@ -29,7 +29,7 @@ internal sealed partial class CanonicalWorkspaceFilesystem
 
     internal CanonicalWorkspaceFilesystem(string physicalRoot, string logicalRoot)
     {
-        if (logicalRoot is not "/home" and not "/working") throw new ArgumentException("Invalid workspace scope.");
+        if (logicalRoot is not "/home" and not "/working" and not "/private") throw new ArgumentException("Invalid workspace scope.");
         _root = Path.GetFullPath(physicalRoot);
         if (_root == Path.GetPathRoot(_root)) throw new ArgumentException("A dedicated owner root is required.");
         _logicalRoot = logicalRoot;
@@ -59,7 +59,7 @@ internal sealed partial class CanonicalWorkspaceFilesystem
         {
             using var root = OpenRoot(create: true);
             const string marker = ".canonical-layout";
-            const string format = "canonical-filesystem-1\n";
+            const string format = "canonical-filesystem-2\n";
             var existing = LStat(root, marker);
             if (existing is not null)
             {

@@ -148,7 +148,7 @@ public sealed partial class InMemoryIamStore : ITenantModelStore
         AuthorizationAudit audit, Func<bool> change, CancellationToken ct)
     {
         if (next.Tenant.TenantId != tenant || audit.ActorPrincipalId != human.PrincipalId) throw new ArgumentException("Invalid model owner.");
-        return WriteCredential(next, expected, audit, () =>
+        return WriteTenantResource(next, expected, audit, () =>
         {
             // The incumbent transaction holds the IAM and credential gates together.
             RequireAgentHuman(tenant, human.PrincipalId, human);

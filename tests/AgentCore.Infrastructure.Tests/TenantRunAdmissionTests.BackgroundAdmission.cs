@@ -18,6 +18,8 @@ public sealed partial class TenantRunAdmissionTests
     {
         var setup = await Setup(f, template, version);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision;
+        var contextRole = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Read execution context", ["spaces.read"], await Revision());
+        await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, setup.Agent.PrincipalId, contextRole.RoleId, AccessScope.ForTenant(setup.Tenant), await Revision());
         Guid? assignment = null;
         if (createAuthority)
         {
@@ -34,7 +36,7 @@ public sealed partial class TenantRunAdmissionTests
     }
     private static async Task<(SessionSnapshot Session, AgentRun Run)> BackgroundChild(Fixture f, BackgroundSetup parent, string call = "tool-call", string objective = "Private child task")
     {
-        var current = (await f.RunConfiguration().ResolveAsync(parent.Setup.Tenant, parent.Parent.AgentInstanceId, default)).Configuration;
+        var current = (await f.RunConfiguration().ResolveInCapturedSpaceAsync(parent.Parent, default, selectionRevision: 1)).Configuration;
         return BackgroundSessionAdmissionFactory.ForImmediate(f.Ids.NewSessionId(), f.Ids.NewId(), f.Ids.NewId(), f.Ids.NewId(), f.Ids.NewId(),
             parent.Snapshot, parent.Parent, call, objective, "Owned task", true, f.Clock.GetUtcNow(),
             ExecutionBudgetResolver.Resolve(current.Configuration.Definition, current.InstanceBudgets, false), current);
@@ -50,6 +52,8 @@ public sealed partial class TenantRunAdmissionTests
         var saved = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(parent.Setup.Tenant, child.Session.SessionId))!;
         Assert.Null(saved.Snapshot.ProfileId); Assert.Equal(parent.Setup.Owner.PrincipalId, saved.Owner.CreatedByPrincipalId);
         Assert.Equal(parent.Parent.Owner, result.Run.Owner); Assert.Null(result.Run.Owner.ProfileIdOrNull);
+        Assert.True(result.Run.Admission.Configuration!.SpaceContext!.SameLocation(parent.Parent.Admission.Configuration!.SpaceContext));
+        Assert.True(result.Run.Admission.Configuration.SpaceContext.MatchesSelection(saved.Snapshot.ContextSelection));
         var context = result.Run.Admission.ExecutionContext!;
         Assert.Equal(ExecutionOrigin.ImmediateBackground, context.Origin); Assert.Equal(parent.Parent.AgentRunId, context.ParentRunId);
         Assert.Equal(parent.Parent.ActivationId, context.ParentActivationId); Assert.Equal(parent.Parent.Admission.ExecutionContext!.RootActivationId, context.RootActivationId);

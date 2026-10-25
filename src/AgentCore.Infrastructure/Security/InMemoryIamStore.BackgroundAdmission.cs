@@ -23,6 +23,7 @@ public sealed partial class InMemoryIamStore
             var agent = FindTenantAgentAsync(tenant, frame.Owner.AgentInstanceId, ct).Result!;
             var now = (clock ?? TimeProvider.System).GetUtcNow();
             var root = TenantBackgroundAdmissionRules.Shape(frame, session, parent, snapshot, child, agent, now);
+            RequireSpaceExecutionSource(child, state, new IamAuthorizer(this), ct, admission: true).AsTask().GetAwaiter().GetResult();
             var baseline = Guid.TryParse(agent.Instance.DefinitionId, out var definition)
                 ? definitions.TenantPublication(tenant, definition, agent.Instance.ActiveVersion)?.Payload
                 : builtIns?.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).AsTask().GetAwaiter().GetResult();

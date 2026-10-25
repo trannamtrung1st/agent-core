@@ -67,7 +67,7 @@ public static class TenantArtifactReviewRules
         }
     }
     public static IEnumerable<(string Permission, AccessScope Scope)> SourceTargets(TenantApprovalRequest request) => request.Operation.ArtifactPublication?.Source is { } source
-        ? TenantArtifactSourceRules.Targets(request.TenantId, request.Operation.InstanceId, request.SessionId, source.Working, source.ResourceKey, source.AttachmentId) : [];
+        ? TenantArtifactSourceRules.Targets(request.TenantId, request.Operation.InstanceId, request.SessionId, source.Path, TenantWorkspaceRules.Context(request.Operation), source.ResourceKey, source.AttachmentId) : [];
     public static async ValueTask<bool> IndependentAsync(TenantSecurityState state, TenantApprovalRequest request, IamAuthorizer iam, CancellationToken ct)
     {
         if (TenantOperationPolicyService.Effective(state, PermissionCatalog.Get("artifacts.create")).IndependentReview) return true;

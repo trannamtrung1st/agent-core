@@ -227,7 +227,7 @@ public sealed class HistoricalImageRereadTests
         var now = time.GetUtcNow();
         definition ??= Support() with
         {
-            Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.AttachmentsRead])
+            ExecutionPolicy = new DefinitionExecutionPolicy(ToolAllowlist: [ToolCatalog.AttachmentsRead])
         };
         snapshot ??= new SessionSnapshot(
             1,
@@ -276,11 +276,11 @@ public sealed class HistoricalImageRereadTests
         new VoiceConfiguration(false, "default", 1.0),
         new ProviderPreferences(null, null),
         new Dictionary<string, string>(),
-        new RoleEnvironment(ToolAllowlist: [ToolCatalog.AttachmentsRead]));
+        new DefinitionExecutionPolicy(ToolAllowlist: [ToolCatalog.AttachmentsRead]));
 
     private static AgentDefinition SupportWithKnowledge() => Support() with
     {
-        Environment = new RoleEnvironment(
+        ExecutionPolicy = new DefinitionExecutionPolicy(
             KnowledgeSources:
             [
                 new KnowledgeSourceRef("support-order-policy", "Simulated order policy", "support-order-policy@demo")

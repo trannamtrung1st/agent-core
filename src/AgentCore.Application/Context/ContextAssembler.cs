@@ -8,13 +8,13 @@ namespace AgentCore.Application.Context;
 public enum ContextLayer { Core, Runtime, Evidence }
 public enum ContextPurpose { AgentExecution, Platform }
 public enum ContextSemantics { Instruction, TrustedFact, CurrentTask, UntrustedData }
-public enum ContextSourceKind { AgentCore, Definition, Instance, Environment, Session, AgentRun, Automation, BuiltInSkill, DefinitionSkill, InstanceSkill, User, Memory, Experience, Resource, Attachment, Tool, ExternalEvent }
+public enum ContextSourceKind { AgentCore, Definition, Instance, Space, Membership, Environment, Session, AgentRun, Automation, BuiltInSkill, DefinitionSkill, InstanceSkill, User, Memory, Experience, Resource, Attachment, Tool, ExternalEvent }
 public enum ContextSectionId
 {
     CoreToolUse, CoreWorkspace, CoreMemory, CoreReferences, CoreContinuity, CoreBackground, CoreAutomation, CoreBackgroundReport, CoreConfigurationContinuation, CoreBrowserLifecycle, CoreCleanup, CoreFinalization, CoreBackgroundFinalization, CoreSandboxRecovery, CoreInvalidStrategies, CoreCheckpointCapacity, CoreBackgroundCheckpointCapacity, CoreTerminalBrowser, CoreChallengedBrowser, CoreDialog, CoreRepeatedDialog, CoreBrowserObservation, CoreInitiative, CoreCompletion, CoreCompaction, CoreDraftEvaluation, CoreProtocolRepair, CoreSemanticResponse,
     OperatingContract, CoreTenantAuthority, BrowserRecoveryRules, CoreVoiceOutput, CoreAttachmentReading, CoreAttachmentReread, CoreStateObservation,
     CoreConfigurationAssistance, CoreHarnessAuthoring, CoreNoProgressBrowser, CoreTriggerAuthorization, CoreAutomationHistory, CoreScheduling, CoreMemoryReceipts, CoreInitiativePlan,
-    AgentIdentity, AgentInstructions, Policies, Session, Environment, RunTask, Capabilities, SkillCatalog, Skills, InstanceSkills,
+    AgentIdentity, AgentInstructions, Policies, Session, Space, SpaceInstructions, MembershipInstructions, Environment, RunTask, Capabilities, SkillCatalog, Skills, InstanceSkills,
     Scheduling, ExecutionFacts, ExecutionPhase, PreviousExecution, TenantRequester,
     Summary, Profile, Memory, MemoryReceipts, SchedulingEvidence, Experience, Continuity, References, Attachments, Trigger, History, CurrentUserTask, ToolResults, ApprovalOutcome
 }
@@ -78,7 +78,7 @@ public sealed record ContextSection
     public static ContextSection Runtime(ContextSectionId id, ContextSourceKind source, string text, string? revision = null,
         ContextSemantics semantics = ContextSemantics.Instruction)
     {
-        if (source is not (ContextSourceKind.Definition or ContextSourceKind.Instance or ContextSourceKind.Environment or ContextSourceKind.Session
+        if (source is not (ContextSourceKind.Definition or ContextSourceKind.Instance or ContextSourceKind.Space or ContextSourceKind.Membership or ContextSourceKind.Environment or ContextSourceKind.Session
             or ContextSourceKind.AgentRun or ContextSourceKind.Automation or ContextSourceKind.DefinitionSkill or ContextSourceKind.InstanceSkill)
             || semantics is not (ContextSemantics.Instruction or ContextSemantics.TrustedFact)
             || id >= ContextSectionId.Summary || id < ContextSectionId.AgentIdentity)
@@ -90,7 +90,10 @@ public sealed record ContextSection
             ContextSectionId.InstanceSkills => source == ContextSourceKind.InstanceSkill && semantics == ContextSemantics.Instruction,
             ContextSectionId.Policies => source is ContextSourceKind.Definition or ContextSourceKind.Instance or ContextSourceKind.AgentRun,
             ContextSectionId.RunTask => source is ContextSourceKind.Automation or ContextSourceKind.AgentRun,
-            ContextSectionId.Environment => source is ContextSourceKind.Definition or ContextSourceKind.Environment && semantics == ContextSemantics.TrustedFact,
+            ContextSectionId.Space => source == ContextSourceKind.Space && semantics == ContextSemantics.TrustedFact,
+            ContextSectionId.SpaceInstructions => source == ContextSourceKind.Space && semantics == ContextSemantics.Instruction,
+            ContextSectionId.MembershipInstructions => source == ContextSourceKind.Membership && semantics == ContextSemantics.Instruction,
+            ContextSectionId.Environment => source == ContextSourceKind.Environment && semantics == ContextSemantics.TrustedFact,
             ContextSectionId.Session => source == ContextSourceKind.Session && semantics == ContextSemantics.TrustedFact,
             ContextSectionId.TenantRequester => source == ContextSourceKind.AgentRun && semantics == ContextSemantics.TrustedFact,
             ContextSectionId.Capabilities or ContextSectionId.SkillCatalog or ContextSectionId.Scheduling or ContextSectionId.ExecutionFacts
@@ -149,7 +152,7 @@ public sealed record ContextManifest(int ContextFormatVersion, int CoreContractV
 public static class ContextAssembler
 {
     public const int ContextFormatVersion = 1;
-    public const int CoreContractVersion = 1;
+    public const int CoreContractVersion = 2;
     public const int MaxCoreCharacters = 65536;
     public const int MaxRuntimeCharacters = 131072;
     public const int MaxOptionalEvidenceCharacters = 65536;

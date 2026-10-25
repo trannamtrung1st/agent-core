@@ -15,7 +15,8 @@ public static class TenantBackgroundReportRules
     public static PreparedTenantOperation Lookup(TenantBackgroundCompletion source) => new(source.Child.AgentRunId,
         source.Child.AgentInstanceId, null, 1, 1, "", "", BackgroundReport: new(source.Child.Owner.TenantId!.Value,
             source.Child.SessionId, source.Child.AgentRunId, source.Child.Revision, source.Parent!.Owner.SessionId,
-            1, 0, Guid.Empty, Guid.Empty, Guid.Empty, "", "", new("lookup", "lookup", "lookup", null)));
+            1, 0, Guid.Empty, Guid.Empty, Guid.Empty, "", "", new("lookup", "lookup", "lookup", null), source.Parent.Snapshot.ContextSelection ?? throw new AccessDeniedException("space_context_required")),
+            SpaceContext: source.Child.Admission.Configuration?.SpaceContext?.Witness() ?? throw new AccessDeniedException("space_context_required"));
 
     // Consumed creation authority proves only this report. Current secondary access and
     // reviewer qualification still apply when its private result becomes visible.
@@ -29,6 +30,7 @@ public static class TenantBackgroundReportRules
             || request.OriginalInitiatorPrincipalId != report.Admission.ExecutionContext.OriginalInitiatorPrincipalId
             || p.ChildRunId != source.Child.AgentRunId || p.SourceRevision != source.Child.Revision || p.SessionId != source.Child.SessionId
             || p.ParentSessionId != report.SessionId || p.RunId != report.AgentRunId || p.ActivationId != report.ActivationId
+            || report.Admission.Configuration?.SpaceContext?.MatchesSelection(p.DestinationContext) != true
             || p.ResponseId != report.ResponseId || p.EvidenceJson != report.Admission.Activation.EvidenceJson
             || receipt.RequestId != request.RequestId || receipt.OperationId != request.Operation.OperationId
             || receipt.TenantId != request.TenantId || receipt.RunId != request.RunId || receipt.SessionId != request.SessionId
@@ -56,6 +58,7 @@ public static class TenantBackgroundReportRules
         Source(request, source.Child); TenantBackgroundCompletionFactory.RequireParent(source);
         var p = request.Operation.BackgroundReport!; var parent = source.Parent!;
         if (source.Item?.Status != CompletionInboxStatus.Pending || parent.Owner.SessionId != p.ParentSessionId
+            || p.DestinationContext != parent.Snapshot.ContextSelection
             || parent.Snapshot.Revision != p.ParentRevision || parent.Snapshot.DurableLastEntrySequence != p.InputBoundarySequence
             || agent.Instance.Revision != request.Operation.ExpectedInstanceRevision || agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision
             || agent.PrincipalId != request.ExecutorPrincipalId || agent.Instance.InstanceId != request.Operation.InstanceId
@@ -66,10 +69,13 @@ public static class TenantBackgroundReportRules
     public static async ValueTask ReadAsync(TenantSecurityState state, TenantApprovalRequest request, Guid human, IamAuthorizer iam, CancellationToken ct)
     {
         var p = request.Operation.BackgroundReport!;
-        foreach (var (key, scope) in new[] { ("agent-runs.create", AccessScope.ForTenant(request.TenantId)),
+        var targets = new List<(string, AccessScope)> { ("agent-runs.create", AccessScope.ForTenant(request.TenantId)),
             ("sessions.read", TenantSessionRules.Scope(request.TenantId, p.SessionId)),
             ("sessions.read", TenantSessionRules.Scope(request.TenantId, p.ParentSessionId)),
-            ("agent-runs.read", TenantRunRules.Scope(request.TenantId, p.ChildRunId)) })
+            ("agent-runs.read", TenantRunRules.Scope(request.TenantId, p.ChildRunId)),
+            ("spaces.read", TenantSpaceService.Scope(request.TenantId, p.DestinationContext.SpaceId)) };
+        if (p.DestinationContext.EnvironmentId is not null) targets.Add(("environments.read", TenantSpaceService.Scope(request.TenantId, p.DestinationContext.SpaceId)));
+        foreach (var (key, scope) in targets)
             if (!(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("approval_unavailable");
     }
@@ -98,7 +104,8 @@ public static class TenantBackgroundReportRules
     public static AgentRun Build(TenantApprovalRequest request, TenantBackgroundCompletion source, ResolvedAgentRunConfiguration resolved)
     {
         var p = request.Operation.BackgroundReport!;
-        if (TenantBackgroundCreationRules.Hash(resolved) != p.ConfigurationHash) throw new AccessDeniedException("operation_witness_changed");
+        if (TenantBackgroundCreationRules.Hash(resolved) != p.ConfigurationHash || resolved.Configuration.SpaceContext?.MatchesSelection(p.DestinationContext) != true)
+            throw new AccessDeniedException("operation_witness_changed");
         return TenantBackgroundCompletionFactory.Create(source, resolved, new(p.Model.OfferingId, p.Model.ConnectionId, p.Model.ExternalModelId, ModelSelectionSource.Host, p.Model.ReasoningEffort, Binding: p.Model.Binding),
             p.ActivationId, p.RunId, p.ResponseId, request.CreatedAt);
     }
@@ -109,6 +116,7 @@ public static class TenantBackgroundReportRules
         var resolved = new ResolvedAgentRunConfiguration(report.Admission.Configuration!, report.PinnedPersona, report.PinnedSkillCatalog, agent.Instance.ExecutionBudgets);
         if (report.AgentRunId != p.RunId || report.ActivationId != p.ActivationId || report.ResponseId != p.ResponseId
             || report.CreatedAtUtc != request.CreatedAt || report.Admission.Activation.EvidenceJson != p.EvidenceJson
+            || report.Admission.Configuration!.SpaceContext?.MatchesSelection(p.DestinationContext) != true
             || JsonSerializer.Serialize(report.PinnedModel) != JsonSerializer.Serialize(p.Model) || TenantBackgroundCreationRules.Hash(resolved) != p.ConfigurationHash)
             throw new SecurityConflictException("operation_mismatch");
     }

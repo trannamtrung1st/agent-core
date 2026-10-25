@@ -9,7 +9,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> contexts, IDefinitionResourceContentStore? definitionContent = null,
     IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null,
-    TimeProvider? clock = null, SqliteArtifactStore? artifactBacking = null, SqliteAttachmentStore? attachmentBacking = null, BrowserPrivacyAuthority? browserPrivacyAuthority = null, Func<TenantManagementInspectionProjection>? managementInspection = null) : IIamStore, ITenantSandboxRuntimeStore, ITenantSandboxVerificationStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
+    TimeProvider? clock = null, SqliteArtifactStore? artifactBacking = null, SqliteAttachmentStore? attachmentBacking = null, BrowserPrivacyAuthority? browserPrivacyAuthority = null, Func<TenantManagementInspectionProjection>? managementInspection = null) : IIamStore, ITenantSpaceStore, ITenantSpaceResourceStore, ITenantEnvironmentStore, ITenantSecretStore, ITenantSandboxRuntimeStore, ITenantSandboxVerificationStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
 {
     private readonly BrowserPrivacyAuthority privacyAuthority = BrowserPrivacyRules.FreezeAuthority(browserPrivacyAuthority ?? new(true, false, [], []));
     public async ValueTask<Account?> FindAccountAsync(string loginKey, CancellationToken ct = default)
@@ -172,6 +172,19 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
     }
     private async Task EnsureResourceOwnershipAsync(AgentCoreDbContext db, TenantSecurityState state, CancellationToken ct, Guid? creatingInstance = null)
     {
+        foreach (var assignment in state.Assignments.Where(a => TenantSecretService.TryId(a.Scope, out _)))
+            if (!await db.Set<AgentCore.Domain.Spaces.Secret>().AnyAsync(s => s.TenantId == state.Tenant.TenantId && s.SecretId == Guid.Parse(assignment.Scope.ResourceId!) && s.Status != AgentCore.Domain.Spaces.SecretStatus.Deleted, ct).ConfigureAwait(false))
+                throw new ArgumentException("A Secret assignment requires its actual tenant owner.");
+        foreach (var assignment in state.Assignments.Where(a => TenantSpaceService.TryId(a.Scope, out _)))
+            if (!await db.Set<SpaceRecord>().AnyAsync(s => s.TenantId == state.Tenant.TenantId && s.SpaceId == Guid.Parse(assignment.Scope.ResourceId!) && s.DeletedAt == null, ct).ConfigureAwait(false))
+                throw new ArgumentException("A Space assignment requires its actual tenant owner.");
+        foreach (var assignment in state.Assignments.Where(a => TenantResourceScopes.TrySpace(a.Scope, out _, out _)))
+        {
+            TenantResourceScopes.TrySpace(assignment.Scope, out var sourceSpace, out var sourceResource);
+            if (!await db.Set<AgentCore.Domain.Spaces.SpaceFileResource>().AnyAsync(r => r.TenantId == state.Tenant.TenantId && r.SpaceId == sourceSpace && r.ResourceId == sourceResource && r.DeletedAt == null
+                && db.Set<SpaceRecord>().Any(s => s.TenantId == r.TenantId && s.SpaceId == r.SpaceId && s.DeletedAt == null), ct).ConfigureAwait(false))
+                throw new ArgumentException("A Space resource assignment requires its actual current owner.");
+        }
         await RequireUserProfileReferencesAsync(db, state, ct).ConfigureAwait(false);
         await RequireLearnedMemoryReferences(db, state, ct).ConfigureAwait(false);
         var experienceOwners = await db.Set<TenantExperienceRecord>().AsNoTracking().Where(i => i.TenantId == state.Tenant.TenantId && i.UserPrincipalId != null)

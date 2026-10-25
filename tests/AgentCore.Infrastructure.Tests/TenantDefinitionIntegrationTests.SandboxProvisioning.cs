@@ -255,7 +255,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             await Assert.ThrowsAsync<ArgumentException>(() => storage.TrySaveTenantSandboxExecutionFactsAsync(s.Tenant,
                 saved.Execution with { Revision = 2, CommandStartedAt = now, DeadlineAt = now.AddSeconds(30) }, 1).AsTask());
             var options = new OpenSandboxOptions { CanonicalWorkspaceRoot = root, WorkspaceDockerHostRoot = root };
-            var mount = new CanonicalSandboxMountResolver(options).Resolve(frame.Owner.AgentInstanceId, frame.SessionId, request.Operation.SandboxCommand!.HomeAccess, create: true);
+            var mount = new CanonicalSandboxMountResolver(options).Resolve(frame.Owner.AgentInstanceId, frame.SessionId, request.Operation.SandboxCommand!.WorkspaceAccess!, create: true);
             Assert.True(await storage.TrySaveTenantSandboxLeaseFactsAsync(s.Tenant, saved.Lease with { Revision = 2, MountAuthority = mount.Authority,
                 InitializedAt = now, Initialization = new("Succeeded", saved.Lease.Profile.Id, saved.Lease.Profile.Revision, saved.Lease.Profile.InstanceRevision, now, now, 0) }, 1));
             await Assert.ThrowsAsync<SecurityConflictException>(() => services.Execution.StartCommandAsync(frame, winner.Execution.Id).AsTask()); // No linked provider yet.

@@ -4,8 +4,8 @@ namespace AgentCore.Application.Ports;
 
 public sealed record TenantSandboxApprovalVisibility(IReadOnlyList<Guid>? Instances, IReadOnlyList<string>? Profiles, IReadOnlyList<Guid>? Sessions, IReadOnlyList<Guid>? ControlInstances = null, IReadOnlyList<Guid>? ReadInstances = null);
 public sealed record TenantBrowserApprovalVisibility(IReadOnlyList<Guid>? ReadInstances, IReadOnlyList<Guid>? UseInstances, IReadOnlyList<Guid>? Sessions);
-public sealed record TenantWorkspaceMutationApprovalVisibility(IReadOnlyList<string>? Reads, IReadOnlyList<string>? Writes, IReadOnlyList<string>? Deletes, IReadOnlyList<Guid>? HomeAgents, IReadOnlyList<Guid>? Sessions);
-public sealed record TenantWorkspaceReadApprovalVisibility(IReadOnlyList<string>? Workspaces, IReadOnlyList<Guid>? HomeAgents, IReadOnlyList<Guid>? Sessions, IReadOnlyList<string>? Resources = null);
+public sealed record TenantWorkspaceMutationApprovalVisibility(IReadOnlyList<string>? Reads, IReadOnlyList<string>? Writes, IReadOnlyList<string>? Deletes, IReadOnlyList<Guid>? HomeSpaces, IReadOnlyList<Guid>? Sessions);
+public sealed record TenantWorkspaceReadApprovalVisibility(IReadOnlyList<string>? Workspaces, IReadOnlyList<Guid>? HomeSpaces, IReadOnlyList<Guid>? Sessions, IReadOnlyList<string>? Resources = null, IReadOnlyList<Guid>? ResourceAgents = null);
 public sealed record TenantAttachmentReadApprovalVisibility(IReadOnlyList<Guid>? Attachments, IReadOnlyList<Guid>? Sessions);
 public sealed record TenantArtifactReadApprovalVisibility(IReadOnlyList<Guid>? Artifacts, IReadOnlyList<Guid>? Sessions);
 public sealed record TenantCredentialReadApprovalVisibility(IReadOnlyList<Guid>? Credentials, IReadOnlyList<Guid>? Sessions, IReadOnlyList<Guid>? EmailCredentials = null, IReadOnlyList<Guid>? DriveCredentials = null, IReadOnlyList<Guid>? EmailDraftCredentials = null, IReadOnlyList<Guid>? EmailSendCredentials = null, IReadOnlyList<Guid>? DriveWriteCredentials = null, IReadOnlyList<Guid>? DriveDeleteCredentials = null);

@@ -111,7 +111,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var v = await ResourceSourceCase(f); var s = v.Setup;
         var frame = await ClaimArtifactRun(f, s); await GrantWorkspaceRuntimeReads(f, s, ["sessions.read", "agents.read"]);
         var sourceGrant = await GrantWorkspaceRuntimeReads(f, s, ["resources.read"], TenantAgentChildScopes.Scope(s.Tenant, s.Agent.Instance.InstanceId, "resource", v.Key));
-        Assert.False((await f.Authorizer.CheckAsync(s.Agent.PrincipalId, "workspaces.read", TenantWorkspaceRules.Home(s.Tenant, s.Agent.Instance.InstanceId))).Allowed);
+        Assert.False((await f.Authorizer.CheckAsync(s.Agent.PrincipalId, "workspaces.read", TenantWorkspaceRules.Home(s.Tenant, SpaceId(s)))).Allowed);
         Assert.Equal(v.Bytes, (await ResourceSources(f).CaptureAsync(frame, ToolCatalog.WorkspaceRead, v.Path)).CopyContent());
         await f.Access.RevokeAssignmentAsync(s.Owner.PrincipalId, s.Tenant, sourceGrant.AssignmentId, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
         Assert.Equal("executor_read_required", (await Assert.ThrowsAsync<AccessDeniedException>(() => ResourceSources(f).CaptureAsync(frame, ToolCatalog.WorkspaceRead, v.Path).AsTask())).ReasonCode);

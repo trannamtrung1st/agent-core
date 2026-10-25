@@ -17,6 +17,7 @@ public static class TenantBackgroundCompletionRules
         if (parent.Snapshot.Revision != expectedRevision) throw new SecurityConflictException("stale_revision");
         if (!report.IsInitialQueued || report.ResponseId is null || report.Owner != source.Child.Owner || report.CreatedAtUtc > now
             || report.CreatedAtUtc < source.Child.UpdatedAtUtc || configuration is null || configuration.InstanceRevision != agent.Instance.Revision
+            || configuration.SpaceContext is not { } context || !context.MatchesSelection(parent.Snapshot.ContextSelection)
             || configuration.PersonaRevision != agent.Instance.PersonaRevision || report.PinnedPersona != agent.Instance.Persona
             || agent.Instance.Lifecycle != AgentInstanceLifecycle.Active || report.DefinitionId != agent.Instance.DefinitionId || report.DefinitionVersion != agent.Instance.ActiveVersion
             || report.Checkpoint is not null || report.ApprovalRequestId is not null)

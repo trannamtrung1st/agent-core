@@ -8,6 +8,8 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class SandboxFilesystemPreparationTests : IDisposable
 {
+    private readonly SpaceTestContext context = new();
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), "sandbox-preparation-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
@@ -17,20 +19,20 @@ public sealed class SandboxFilesystemPreparationTests : IDisposable
         var options = new OpenSandboxOptions { CanonicalWorkspaceRoot = _root, WorkspaceDockerHostRoot = _root };
         var resolver = new CanonicalSandboxMountResolver(options);
         var owner = Guid.NewGuid(); var first = Guid.NewGuid();
-        var mounted = resolver.Resolve(owner, first, HomeAccess.ReadWrite, create: true);
+        var mounted = resolver.Resolve(owner, first, context.Access(HomeAccess.ReadWrite), create: true);
         var file = Path.Combine(mounted.Home!.PhysicalRoot, "retained");
         await File.WriteAllTextAsync(file, "original");
         var modified = File.GetLastWriteTimeUtc(file);
         var nested = Path.Combine(mounted.Home.PhysicalRoot, "project");
         Directory.CreateDirectory(nested); File.SetUnixFileMode(nested, (UnixFileMode)0x1ed);
         File.SetUnixFileMode(mounted.Home.PhysicalRoot, (UnixFileMode)0x1ed);
-        var results = await Task.WhenAll(Enumerable.Range(0, 12).Select(_ => Task.Run(() => resolver.Resolve(owner, Guid.NewGuid(), HomeAccess.ReadWrite, create: true))));
+        var results = await Task.WhenAll(Enumerable.Range(0, 12).Select(_ => Task.Run(() => resolver.Resolve(owner, Guid.NewGuid(), context.Access(HomeAccess.ReadWrite), create: true))));
         Assert.All(results, result => Assert.Equal(mounted.Authority.HomeIdentity, result.Authority.HomeIdentity));
         Assert.Equal((UnixFileMode)0x1c0, File.GetUnixFileMode(mounted.Home.PhysicalRoot));
         Assert.Equal((UnixFileMode)0x1ed, File.GetUnixFileMode(nested));
         Assert.Equal("original", await File.ReadAllTextAsync(file));
         Assert.Equal(modified, File.GetLastWriteTimeUtc(file));
-        Assert.Equal(mounted.Authority, resolver.Resolve(owner, first, HomeAccess.ReadWrite, create: true).Authority);
+        Assert.Equal(mounted.Authority, resolver.Resolve(owner, first, context.Access(HomeAccess.ReadWrite), create: true).Authority);
     }
 
     [Fact]
@@ -54,7 +56,7 @@ public sealed class SandboxFilesystemPreparationTests : IDisposable
         var historical = System.Text.Json.JsonSerializer.Deserialize<SandboxMountAuthority>("""{"WorkingIdentity":"working","HomeIdentity":null,"HomeAccess":0,"Uid":501,"Gid":20}""")!;
         Assert.Equal(0, historical.CompatibilityContract);
         var resolver = new CanonicalSandboxMountResolver(new() { CanonicalWorkspaceRoot = _root, WorkspaceDockerHostRoot = _root });
-        var current = resolver.Resolve(Guid.NewGuid(), Guid.NewGuid(), HomeAccess.Disabled, create: true).Authority;
+        var current = resolver.Resolve(Guid.NewGuid(), Guid.NewGuid(), context.Access(HomeAccess.Disabled), create: true).Authority;
         Assert.Equal(SandboxProfileVerification.CurrentContractVersion, current.CompatibilityContract);
         Assert.NotEqual(current, current with { CompatibilityContract = historical.CompatibilityContract });
     }

@@ -7,20 +7,20 @@ namespace AgentCore.Application.Security;
 public sealed class TenantWorkspaceReadService(IIamStore security, ITenantAgentStore agents, ITenantSessionStore sessions,
     ITenantWorkspaceReadStore files, IdentityService identity, IamAuthorizer authorizer)
 {
-    private sealed record View(TenantSecurityState State, TenantAgent Agent, TenantSession? Session, TenantWorkspaceReference Workspace);
+    private sealed record View(TenantSecurityState State, TenantWorkspaceOwnership Ownership)
+    {
+        public TenantWorkspaceReference Workspace => Ownership.Owner;
+    }
     private async ValueTask<View> Require(Guid tenant, Guid id, bool working, HumanSessionReference human, CancellationToken ct)
     {
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
-        var session = working ? await sessions.FindTenantSessionAsync(tenant, id, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable") : null;
-        var instance = session?.Owner.AgentInstanceId ?? id;
-        var agent = await agents.FindTenantAgentAsync(tenant, instance, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        if (session is not null && session.Owner.ExecutorPrincipalId != agent.PrincipalId) throw new AccessDeniedException("resource_unavailable");
-        var workspace = new TenantWorkspaceReference(tenant, instance, session?.Owner.SessionId);
-        var parent = working ? TenantSessionRules.Scope(tenant, id) : AccessScope.ForResource(tenant, "agent", instance.ToString("D"));
-        foreach (var (permission, scope) in new[] { (working ? "sessions.read" : "agents.read", parent), ("workspaces.read", TenantWorkspaceRules.Scope(workspace)) })
+        TenantWorkspaceReference workspace = working ? new TenantWorkspaceReference.SessionWorking(tenant, id) : new TenantWorkspaceReference.SpaceHome(tenant, id);
+        var ownership = await new TenantWorkspaceOwnerResolver((ITenantSpaceStore)security, agents, sessions).ResolveAsync(workspace, ct).ConfigureAwait(false);
+        var (read, parent) = TenantWorkspaceMutationRules.Parent(workspace);
+        foreach (var (permission, scope) in new[] { (read, parent), ("workspaces.read", TenantWorkspaceRules.Scope(workspace)) })
             if (!(await authorizer.CheckOwnedTenantAsync(state, human.PrincipalId, PermissionCatalog.Get(permission), scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("resource_unavailable");
-        return new(state, agent, session, workspace);
+        return new(state, ownership);
     }
     private async ValueTask<T> Fenced<T>(Guid tenant, Guid id, bool working, HumanSessionReference human, Func<View, CancellationToken, ValueTask<T>> read, CancellationToken ct)
     {
@@ -30,8 +30,8 @@ public sealed class TenantWorkspaceReadService(IIamStore security, ITenantAgentS
         var after = await Require(tenant, id, working, human, ct).ConfigureAwait(false);
         var authority = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         if (authority.Tenant.Revision != before.State.Tenant.Revision || after.State.Tenant.Revision != before.State.Tenant.Revision || after.Workspace != before.Workspace
-            || after.Agent.Instance.Revision != before.Agent.Instance.Revision || after.Session?.Owner != before.Session?.Owner
-            || after.Session?.Snapshot.Revision != before.Session?.Snapshot.Revision) throw new SecurityConflictException("stale_revision");
+            || after.Ownership.Revision != before.Ownership.Revision || after.Ownership.Agent?.Instance.Revision != before.Ownership.Agent?.Instance.Revision
+            || after.Ownership.Session?.Owner != before.Ownership.Session?.Owner) throw new SecurityConflictException("stale_revision");
         return result;
     }
     public ValueTask<AgentWorkspacePage> ListAsync(Guid tenant, Guid id, bool working, HumanSessionReference human, string? path = null,

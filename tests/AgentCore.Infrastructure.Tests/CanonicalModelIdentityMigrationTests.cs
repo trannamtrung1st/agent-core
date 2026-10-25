@@ -13,9 +13,9 @@ public sealed partial class TenantCredentialIntegrationTests
     {
         await using var f = await Fixture.Create(true);
         await using var db = f.Contexts!.CreateDbContext();
-        await db.GetService<IMigrator>().MigrateAsync("20261025010000_TenantDynamicModels");
+        await db.GetService<IMigrator>().MigrateAsync("20261025085000_TenantDynamicModels");
         var before = await IdentityGuards(db);
-        Assert.Equal(145, before.Count);
+        Assert.Equal(186, before.Count);
         await db.Database.MigrateAsync();
         var after = await IdentityGuards(db);
         Assert.Equal(before.Keys.Order(), after.Keys.Order());
@@ -54,9 +54,9 @@ public sealed partial class TenantCredentialIntegrationTests
         var snapshot = AgentRunTestFixtures.Snapshot(new(Guid.NewGuid(), Guid.NewGuid()), definition, f.Clock.GetUtcNow());
         await f.Memory.SaveAsync(snapshot, 0);
         await using var db = f.Contexts!.CreateDbContext();
-        var error = await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261025010000_TenantDynamicModels"));
+        var error = await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261025085000_TenantDynamicModels"));
         Assert.Contains("LegacyModelDataResetRequired", error.Message);
-        Assert.Equal("20261025020000_CanonicalModelIdentity", (await db.Database.GetAppliedMigrationsAsync()).Last());
+        Assert.Equal("20261025090000_CanonicalModelIdentity", (await db.Database.GetAppliedMigrationsAsync()).Last());
         var retained = (await f.Memory.LoadAsync(snapshot.SessionId))!;
         Assert.Equal(snapshot.ModelSelection, retained.ModelSelection); Assert.Equal(snapshot.Entries.Single().Text, retained.Entries.Single().Text);
     }
@@ -68,12 +68,12 @@ public sealed partial class TenantCredentialIntegrationTests
     public async Task DynamicModels_canonical_identity_refuses_retired_document_fields_before_renaming_columns(string property, string value)
     {
         await using var f = await Fixture.Create(true); await using var db = f.Contexts!.CreateDbContext();
-        await db.GetService<IMigrator>().MigrateAsync("20261025010000_TenantDynamicModels");
+        await db.GetService<IMigrator>().MigrateAsync("20261025085000_TenantDynamicModels");
         var document = "{\"nested\":{\"" + property + "\":" + value + "}}";
         await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO AgentDefinitionDrafts (DraftId,DefinitionId,Revision,CandidateJson,SourceKind,CreatedAtUtc,UpdatedAtUtc) VALUES ({"retired-model-field"},{"retained-definition"},{1L},{document},{0},{0L},{0L})");
         var error = await Assert.ThrowsAsync<SqliteException>(() => db.Database.MigrateAsync());
         Assert.Contains("LegacyModelDataResetRequired", error.Message);
-        Assert.Equal("20261025010000_TenantDynamicModels", (await db.Database.GetAppliedMigrationsAsync()).Last());
+        Assert.Equal("20261025085000_TenantDynamicModels", (await db.Database.GetAppliedMigrationsAsync()).Last());
         await db.Database.OpenConnectionAsync(); await using var command = db.Database.GetDbConnection().CreateCommand();
         command.CommandText = "SELECT CandidateJson FROM AgentDefinitionDrafts WHERE DraftId='retired-model-field'";
         Assert.Equal(document, await command.ExecuteScalarAsync());

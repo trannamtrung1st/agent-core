@@ -66,6 +66,9 @@ public sealed partial class SqliteIamStore
         return WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
         {
             var key = credentialId.ToString("D");
+            if (await db.Set<EnvironmentVariableRecord>().AnyAsync(v => v.TenantId == next.Tenant.TenantId && v.CredentialId == key, ct).ConfigureAwait(false)
+                || await db.Set<SpaceAddedBindingRecord>().AnyAsync(b => b.TenantId == next.Tenant.TenantId && b.Kind == AgentCore.Domain.Spaces.SpaceBindingKind.Credential && b.ResourceKey == key, ct).ConfigureAwait(false))
+                throw new SecurityConflictException("credential_has_context_references");
             if (next.Assignments.Any(a => a.Scope == TenantCredentialRules.Scope(next.Tenant.TenantId, credentialId)))
                 throw new ArgumentException("Deleting a credential must retire its direct assignments.");
             var root = await db.Set<TenantCredentialRecord>().SingleOrDefaultAsync(r => r.CredentialId == key && r.TenantId == next.Tenant.TenantId && r.DeletedAt == null, ct).ConfigureAwait(false);

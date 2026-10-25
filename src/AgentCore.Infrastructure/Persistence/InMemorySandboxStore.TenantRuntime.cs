@@ -29,6 +29,9 @@ public sealed partial class InMemorySandboxStore
     internal void SaveTenantExecution(SandboxExecution execution) => _executions[execution.Id] = execution;
     internal SandboxExecution? ApprovalOperation(Guid operation) => _executions.Values.SingleOrDefault(e => e.OperationId == operation);
     internal bool HasUnretiredInstanceLease(Guid instance) => _leases.Values.Any(l => l.AgentInstanceId == instance && l.State != SandboxLeaseState.Terminated);
+    internal bool HasUnretiredSpaceLease(Guid tenant, Guid space, Guid? instance = null) => _leases.Values.Any(l => (instance is null || l.AgentInstanceId == instance) && l.State != SandboxLeaseState.Terminated
+        && (l.TenantId is null || l.TenantId == tenant && (l.MountAuthority?.WorkspaceAccess?.Context is not { } context
+            || context.SpaceId == space || context.PrivateSpaceId == space)));
     internal bool HasLease(Guid session) => _leases.ContainsKey(session);
     internal bool HasExecution(Guid execution) => _executions.ContainsKey(execution);
     internal bool HasOperation(Guid session, Guid run, string call) => _executions.Values.Any(e => e.SessionId == session && e.AgentRunId == run && e.ToolCallId == call);

@@ -22,6 +22,7 @@ public sealed partial class TenantCredentialIntegrationTests
         Assert.Equal(1, presetSummary.OfferingReferences);
         await service.SaveDefaultAsync(human, tenant, setup.Offering.OfferingId, "medium", await Revision(), 0);
         var visible = await f.Agents.CreateAsync(human.PrincipalId, tenant, "examiner", 1, await Revision());
+        await GrantModelFixtureSpaceRead(f, tenant, human.PrincipalId, visible.PrincipalId);
         var hidden = await f.Agents.CreateAsync(human.PrincipalId, tenant, "examiner", 1, await Revision());
         async Task Configure(TenantAgent agent)
         {

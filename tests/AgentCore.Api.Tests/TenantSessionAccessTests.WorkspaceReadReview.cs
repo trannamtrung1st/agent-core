@@ -49,7 +49,13 @@ public sealed partial class TenantSessionAccessTests
     [Fact]
     public Task Tenant_knowledge_pending_consent_survives_actual_SQLite_host_recreation() => WorkspaceReadReviewFlow(true, false, false, "approve", restart: true, resource: true, knowledge: true);
 
-    private async Task WorkspaceReadReviewFlow(bool sqlite, bool working, bool list, string decision, bool restart = false, bool search = false, bool resource = false, bool knowledge = false)
+    [Theory] [InlineData(false, "approve")] [InlineData(true, "approve")] [InlineData(false, "reject")] [InlineData(true, "reject")]
+    public Task Space_knowledge_read_Review_uses_actual_source_scope_and_exact_observation(bool sqlite, string decision) =>
+        WorkspaceReadReviewFlow(sqlite, false, false, decision, resource: true, knowledge: true, spaceResource: true);
+    [Fact] public Task Space_knowledge_read_pending_consent_survives_actual_SQLite_host_recreation() =>
+        WorkspaceReadReviewFlow(true, false, false, "approve", restart: true, resource: true, knowledge: true, spaceResource: true);
+
+    private async Task WorkspaceReadReviewFlow(bool sqlite, bool working, bool list, string decision, bool restart = false, bool search = false, bool resource = false, bool knowledge = false, bool spaceResource = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-workspace-read-review-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         var proof = !sqlite && !working && !list && !search && decision == "approve" && !resource && System.Environment.GetEnvironmentVariable("AGENTCORE_WORKSPACE_READ_UI_PROOF") == "1";
@@ -70,7 +76,23 @@ public sealed partial class TenantSessionAccessTests
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
             var instanceRevision = 1L; string? knowledgeIdentity = null;
-            if (resource)
+            if (spaceResource)
+            {
+                var home = (await factory.Services.GetRequiredService<ITenantSpaceStore>().FindPrivateSpaceAsync(tenant, instance))!;
+                Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(api + $"/spaces/{home.SpaceId}/workspace/content?path=/home/reviewed-note.txt&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent(Encoding.UTF8.GetBytes(body)))).StatusCode);
+                var spaceSourceId=Guid.NewGuid();
+                var savedResponse=await owner.PutAsJsonAsync(api+$"/spaces/{home.SpaceId}/resources/{spaceSourceId}",new {
+                    sourcePath="/home/reviewed-note.txt",logicalPath="reviewed-note.txt",kind="Knowledge",expectedRevision=await Revision(owner,tenant),expectedSpaceRevision=home.Revision,expectedResourceRevision=0 });
+                Assert.True(savedResponse.IsSuccessStatusCode,await savedResponse.Content.ReadAsStringAsync());
+                var key=AgentCore.Domain.Spaces.SpaceResourceKeys.Create(home.SpaceId,spaceSourceId);
+                path=AgentCore.Domain.Spaces.SpaceResourceKeys.VirtualPath(home.SpaceId,spaceSourceId,"reviewed-note.txt");
+                model.KnowledgeIdentity=knowledgeIdentity=key;
+                var member=Assert.Single(await factory.Services.GetRequiredService<ITenantSpaceStore>().ReadMembershipsAsync(tenant,home.SpaceId));
+                Assert.Equal(HttpStatusCode.OK,(await owner.PutAsJsonAsync(api+$"/spaces/{home.SpaceId}/memberships/{instance}",new {
+                    responsibility="Reader",instructions="",disabledInheritedBindingKeys=Array.Empty<string>(),addedBindings=new[]{new{kind="SpaceFile",resourceKey=key}},
+                    expectedRevision=await Revision(owner,tenant),expectedSpaceRevision=home.Revision+1,expectedMembershipRevision=member.Revision })).StatusCode);
+            }
+            else if (resource)
             {
                 var savedResponse = await owner.PostAsJsonAsync(api + $"/agents/{instance}/resources", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
                     input = new { logicalPath = "reviewed-note.txt", kind = knowledge ? AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Knowledge : AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Reference, mediaType = "text/plain", content = Encoding.UTF8.GetBytes(body) } });
@@ -97,11 +119,11 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(workspace + $"/content?path={Uri.EscapeDataString(named)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent("Unrelated literal body"u8.ToArray()))).StatusCode);
             }
             var access = factory.Services.GetRequiredService<TenantAccessService>();
-            var role = await access.SaveRoleAsync(human, tenant, null, "Exact workspace observation", ["agents.read", "sessions.read", resource ? "resources.read" : "workspaces.read"], await Revision(owner, tenant));
+            var role = await access.SaveRoleAsync(human, tenant, null, "Exact workspace observation", new[] { "agents.read", "sessions.read", resource ? "resources.read" : "workspaces.read" }.Concat(spaceResource ? ["spaces.read"] : []).ToArray(), await Revision(owner, tenant));
             await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
             Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/" + (resource ? "resources.read" : "workspaces.read"), new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
             var sent = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Read only the exact reviewed workspace observation", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
-            Assert.Equal(HttpStatusCode.Accepted, sent.StatusCode); var sourceId = (await Json(sent)).GetProperty("runId").GetGuid();
+            Assert.True(sent.StatusCode == HttpStatusCode.Accepted, await sent.Content.ReadAsStringAsync()); var sourceId = (await Json(sent)).GetProperty("runId").GetGuid();
             var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var waiting = await AwaitBrowserRestartRun(runs, tenant, sourceId, true);
             Assert.Equal(AgentRunStatus.WaitingForApproval, waiting.Status); Assert.Null(waiting.Claim);
             if (search)

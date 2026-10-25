@@ -17,7 +17,7 @@ public sealed partial class TerminalDisplayRepairTests
     public async Task Invalid_discovery_returns_distinct_actionable_receipt_without_admitting_load(string arguments)
     {
         await using var runtime = CreateCore(new InvalidDiscoveryModel(arguments), null, null, [],
-            environment: new RoleEnvironment(Capabilities: new("Selected", [ToolCatalog.CapabilitiesLoad]), Projection: new([])));
+            environment: new DefinitionExecutionPolicy(Capabilities: new("Selected", [ToolCatalog.CapabilitiesLoad]), Projection: new([])));
         await runtime.AttachAsync();
         Assert.True(await runtime.SubmitUserTextAsync("Discover a tool."));
         await runtime.WaitUntilIdleAsync();

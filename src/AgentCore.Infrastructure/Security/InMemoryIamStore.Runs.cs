@@ -70,6 +70,7 @@ public sealed partial class InMemoryIamStore
             if (agent is null || agent.Instance.Revision != admission.ExpectedInstanceRevision) return ValueTask.FromResult<TenantRunAdmissionResult?>(null);
             if (agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
             TenantSessionRules.RequireExecutor(before, agent); ct.ThrowIfCancellationRequested();
+            RequireSpaceExecutionSource(run, before, new IamAuthorizer(this), ct, admission: true).AsTask().GetAwaiter().GetResult();
             var speechSession = sessionBacking.ReadTenantSession(next.Tenant.TenantId, run.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
             TenantVoiceRules.Speech(admission, initiator, speechSession.Owner, speechSession.Snapshot.Mode, speechOperation);
             TenantInputInterruptionRules.Shape(admission);

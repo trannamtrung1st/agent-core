@@ -26,7 +26,7 @@ public sealed partial class TenantSessionAccessTests
         var draft = await definitions.CreateAsync(actor, tenant, "Policy freshness", await Revision(owner, tenant));
         draft = await definitions.UpdateAsync(actor, tenant, draft.DraftId, draft.Candidate with {
             AgentInstructions = "PINNED_OLD_INSTRUCTIONS: answer the current task clearly.",
-            Environment = new(Capabilities: new("Selected", [ToolCatalog.WebFetch])), StateIsolationPolicy = new(HomeAccess: HomeAccess.ReadWrite)
+            ExecutionPolicy = new(Capabilities: new("Selected", [ToolCatalog.WebFetch])), StateIsolationPolicy = new(HomeAccess: HomeAccess.ReadWrite)
         }, await Revision(owner, tenant), draft.Revision);
         await definitions.PublishAsync(actor, tenant, draft.DraftId, await Revision(owner, tenant), draft.Revision);
         var created = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = Guid.Parse(draft.DefinitionId), version = 1, expectedRevision = await Revision(owner, tenant) }));
@@ -42,7 +42,7 @@ public sealed partial class TenantSessionAccessTests
         Assert.True(RolePermissions.AllowsTool((await authority.CurrentDefinitionAsync(run))!, ToolCatalog.WebFetch));
         var fork = await definitions.ForkAsync(actor, tenant, Guid.Parse(draft.DefinitionId), 1, await Revision(owner, tenant));
         fork = await definitions.UpdateAsync(actor, tenant, fork.DraftId, fork.Candidate with {
-            AgentInstructions = "NEW_INSTRUCTIONS_MUST_WAIT_FOR_NEXT_RUN", Environment = new(Capabilities: new("Selected", [ToolCatalog.WorkspaceRead])),
+            AgentInstructions = "NEW_INSTRUCTIONS_MUST_WAIT_FOR_NEXT_RUN", ExecutionPolicy = new(Capabilities: new("Selected", [ToolCatalog.WorkspaceRead])),
             StateIsolationPolicy = new(HomeAccess: HomeAccess.Disabled)
         }, await Revision(owner, tenant), fork.Revision);
         await definitions.PublishAsync(actor, tenant, fork.DraftId, await Revision(owner, tenant), fork.Revision);

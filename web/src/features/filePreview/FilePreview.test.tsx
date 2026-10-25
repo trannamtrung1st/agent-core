@@ -112,8 +112,8 @@ it.each([['docx', false], ['xlsx', false], ['docx', true], ['xlsx', true]] as co
 });
 
 it.each(['home', 'working'] as const)('loads tenant preview policy for a %s workspace without owner authentication', async kind => {
-  const owner = kind === 'home' ? { kind, tenantId: 'organization', instanceId: 'agent' } : { kind, tenantId: 'organization', sessionId: 'session' };
-  render(<FilePreviewButton file={{ kind: 'tenantWorkspace', owner, instanceId: 'agent', path: `/${kind}/readme.txt`, metadata }} />);
+  const owner = kind === 'home' ? { kind, tenantId: 'organization', spaceId: 'space' } : { kind, tenantId: 'organization', sessionId: 'session' };
+  render(<FilePreviewButton file={{ kind: 'tenantWorkspace', owner, path: `/${kind}/readme.txt`, metadata }} />);
   fireEvent.click(screen.getByRole('button', { name: 'Preview readme.txt' }));
   await screen.findByText('current content');
   expect(loadPreviewOptions).toHaveBeenCalledWith('organization', expect.any(AbortSignal));

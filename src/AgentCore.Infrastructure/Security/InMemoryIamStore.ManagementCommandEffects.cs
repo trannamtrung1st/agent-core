@@ -38,6 +38,7 @@ public sealed partial class InMemoryIamStore
             }
             else change = TenantManagementMutationRules.Change(reader, value, source);
             var candidate = TenantAgentConfigurationRules.Apply(reader.Agent.Instance, change, at);
+            var reconcileSpaces = PrepareResourceSpaceReconciliation(before.Tenant.TenantId, change, audit, ct);
             next = TenantAgentChildScopes.RetainAvailable(next, run.AgentInstanceId, ChildCatalog(before.Tenant.TenantId, run.AgentInstanceId, change, ct));
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct);
             var updatedRun = run.RecordDirectLocalEffect(run.Revision, commit.Generation, commit.Operation.OperationId, commit.Operation.ActionHash, at);
@@ -55,6 +56,7 @@ public sealed partial class InMemoryIamStore
             foreach (var fact in AgentCore.Infrastructure.Persistence.CoreEventPersistence.Instance(reader.Agent.Instance, candidate,
                 AgentCore.Domain.Triggers.TriggerOwner.ForTenant(before.Tenant.TenantId, run.AgentInstanceId, reader.Agent.PrincipalId))) AppendTenantCore(fact);
             sessionBacking.SaveTenantOperationRun(updatedRun, run.Revision);
+            reconcileSpaces();
             _operationReceipts.Add(receipt.OperationId, receipt); _tenants[before.Tenant.TenantId] = next;
             _audit.Add(TenantOperationAuditRules.WithLocalEffectResult(audit, before, run, receipt.OperationId) with { At = at });
             return receipt;

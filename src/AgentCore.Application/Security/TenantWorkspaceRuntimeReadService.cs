@@ -24,13 +24,13 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
         {
             var source = await (resources ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireKnowledgeMetadataAsync(frame, args.Identity!, ct, approved, live, audit).ConfigureAwait(false);
             var resolved = TenantKnowledgeReadContract.Resolve(source.Run.Admission.Configuration!.Definition, source.Run.Admission.Configuration.Resources, args.Identity!);
-            return new(source.Run, source.Security, source.Session, source.Agent, new(source.Observation.TenantId, source.Observation.InstanceId), source.Observation, Knowledge: resolved.Source);
+            return new(source.Run, source.Security, source.Session, source.Agent, TenantWorkspaceRules.ForRun(source.Run, "/home"), source.Observation, Knowledge: resolved.Source);
         }
         if (TenantWorkspaceReadContract.IsResourcePath(args.Path))
         {
             if (tool is ToolCatalog.WorkspaceList or ToolCatalog.WorkspaceSearch) return await RequireCollection(frame, tool, args, ct, audit, approved, live).ConfigureAwait(false);
             var source = await (resources ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireMetadataAsync(frame, tool, args.Path, ct, approved, live, audit).ConfigureAwait(false);
-            return new(source.Run, source.Security, source.Session, source.Agent, new(source.Observation.TenantId, source.Observation.InstanceId), source.Observation);
+            return new(source.Run, source.Security, source.Session, source.Agent, TenantWorkspaceRules.ForRun(source.Run, "/home"), source.Observation);
         }
         var tenant = frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
         var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct).ConfigureAwait(false);
@@ -44,13 +44,13 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
         var current = await configurations.CurrentPolicyAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
         if (current.Agent.PrincipalId != run.Owner.ExecutorPrincipalId || !TenantTaskExecutionContract.Allows(run, current.Definition) || !TenantWorkspaceReadContract.Allows(run.Admission.Configuration!.Definition, tool)
             || !TenantWorkspaceReadContract.Allows(current.Definition, tool)) throw new AccessDeniedException("capability_unavailable");
-        var owner = new TenantWorkspaceReference(tenant, run.AgentInstanceId, args.Path.StartsWith("/working", StringComparison.Ordinal) ? run.SessionId : null);
+        var owner = TenantWorkspaceRules.ForRun(run, args.Path);
         TenantWorkspaceRules.Path(owner, args.Path, TenantWorkspaceReadContract.IsFile(tool));
         if (args.Cursor is not null && tool == ToolCatalog.WorkspaceList) TenantWorkspaceRules.Path(owner, args.Cursor);
         var isolation = StateIsolationAccess.RestrictDefinition(run.Admission.Configuration.Definition, current.Definition).StateIsolationPolicy ?? StateIsolationPolicy.Default;
-        if (owner.SessionId is null && isolation.HomeAccess == HomeAccess.Disabled) throw new AccessDeniedException("home_access_disabled");
+        if (!owner.IsWorking && isolation.HomeAccess == HomeAccess.Disabled) throw new AccessDeniedException("home_access_disabled");
         var targets = new List<(string Permission, AccessScope Scope)> { ("sessions.read", TenantSessionRules.Scope(tenant, run.SessionId)) };
-        if (owner.SessionId is null) targets.Add(("agents.read", AccessScope.ForResource(tenant, "agent", run.AgentInstanceId.ToString("D"))));
+        if (!owner.IsWorking) targets.Add(TenantWorkspaceMutationRules.Parent(owner));
         targets.Add(("workspaces.read", TenantWorkspaceRules.Scope(owner)));
         foreach (var (key, scope) in targets)
         {
@@ -83,7 +83,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
     private static AgentWorkspaceContent ResourceContent(TenantResourceSource source, bool body)
     {
         var resource = source.Observation.Resource;
-        return new(new(source.Observation.InstanceId, resource.VirtualPath, resource.MediaType, resource.ByteLength, DateTimeOffset.UnixEpoch), body ? source.CopyContent() : []);
+        return new(new(null, resource.VirtualPath, resource.MediaType, resource.ByteLength, DateTimeOffset.UnixEpoch, ResourceInstanceId: resource.SpaceSource is null ? source.Observation.InstanceId : null, ResourceSpaceSource: resource.SpaceSource), body ? source.CopyContent() : []);
     }
     private static string Hash(string value) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     private async ValueTask<(Read Before, string Output, string Hash)> InspectCore(TenantRuntimeFrame frame, ModelToolCall call, int remainingBytes,
@@ -172,6 +172,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
             var observed = await InspectCore(frame, call, remainingBytes, ct).ConfigureAwait(false);
             var exact = TenantApprovalRules.PrepareWorkspaceRead(ids.NewId(), frame.Owner.AgentInstanceId,
                 Witness(frame.SessionId, call, observed.Hash, observed.Before.Resource?.Resource.Key, observed.Before.Resource?.ResourceRevision, observed.Before.Collection?.MembersJson, observed.Before.Knowledge, observed.Before.Attachments?.MembersJson), observed.Before.Agent.Instance.Revision, observed.Before.Agent.Instance.PersonaRevision);
+            exact = TenantApprovalRules.ForRun(exact, observed.Before.Run);
             var prior = await approvals.FindRootApprovalAsync(observed.Before.Workspace.TenantId, observed.Before.Run.Admission.ExecutionContext!.RootActivationId,
                 observed.Before.Agent.PrincipalId, exact, ct).ConfigureAwait(false);
             if (prior is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(prior));

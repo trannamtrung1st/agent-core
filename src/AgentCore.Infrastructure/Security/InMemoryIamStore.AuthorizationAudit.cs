@@ -14,10 +14,11 @@ public sealed partial class InMemoryIamStore : ITenantAuthorizationAuditStore
             if (!_tenants.TryGetValue(proof.Workspace.TenantId, out var state) || state.Tenant.Revision != proof.SecurityRevision) return ValueTask.FromResult(false);
             try { RequireHumanSession(proof.Workspace.TenantId, proof.Human); }
             catch (AccessDeniedException) { return ValueTask.FromResult(false); }
-            var agent = FindTenantAgentAsync(proof.Workspace.TenantId, proof.Workspace.InstanceId, ct).Result;
-            var session = proof.Workspace.SessionId is { } id ? sessionBacking.ReadTenantSession(proof.Workspace.TenantId, id) : null;
-            if (agent is null || agent.Instance.Revision != proof.InstanceRevision || !TenantWorkspaceMutationRules.Matches(proof.Workspace, agent, session)) return ValueTask.FromResult(false);
-            var allowed = TenantWorkspaceMutationRules.Writable(agent, session)
+            TenantWorkspaceOwnership owner;
+            try { owner = new TenantWorkspaceOwnerResolver(this, this, this).ResolveAsync(proof.Workspace, ct).GetAwaiter().GetResult(); }
+            catch (AccessDeniedException) { return ValueTask.FromResult(false); }
+            if (owner.Revision != proof.OwnerRevision) return ValueTask.FromResult(false);
+            var allowed = owner.Writable
                 && TenantWorkspaceMutationRules.Allowed(state, proof.Workspace, proof.Human.PrincipalId, proof.Permission, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             if (allowed != (proof.Audit.Decision == "allowed")) return ValueTask.FromResult(false);
             if (_audit.SingleOrDefault(a => a.AuditId == proof.Audit.AuditId) is { } existing) return ValueTask.FromResult(existing == proof.Audit);

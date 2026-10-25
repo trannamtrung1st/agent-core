@@ -15,7 +15,7 @@ public sealed partial class TenantCredentialIntegrationTests
     public async Task DynamicModels_legacy_definition_and_override_documents_refuse_upgrade_before_schema_mutation(string property, string value)
     {
         await using var f = await Fixture.Create(true);
-        const string predecessor = "20261023190000_TenantPublicHttp";
+        const string predecessor = "20261025080000_SpaceResourceApprovals";
         await using (var db = f.Contexts!.CreateDbContext())
         {
             await db.GetService<IMigrator>().MigrateAsync(predecessor);
@@ -39,7 +39,7 @@ public sealed partial class TenantCredentialIntegrationTests
         await using var f = await Fixture.Create(true);
         await using (var db = f.Contexts!.CreateDbContext())
         {
-            await db.GetService<IMigrator>().MigrateAsync("20261023190000_TenantPublicHttp");
+            await db.GetService<IMigrator>().MigrateAsync("20261025080000_SpaceResourceApprovals");
             await db.Database.ExecuteSqlRawAsync("INSERT INTO UserProfiles (ProfileId,PreferencesJson,Revision,UpdatedAtUtc) VALUES ('retained-independent-profile','{{}}',9,123)");
         }
         await ((SqliteMemoryStore)f.Memory).EnsureCreatedAsync();

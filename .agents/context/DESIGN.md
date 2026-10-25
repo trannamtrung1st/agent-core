@@ -5,6 +5,8 @@ colors:
   primary: "#1668dc"
   primaryBg: "#15325b"
   focus: "#3c89e8"
+  linkText: "#3c89e8"
+  linkTextHover: "#69b1ff"
   error: "#dc4446"
   success: "#49aa19"
   successHover: "#6abe39"
@@ -881,3 +883,5 @@ The existing bounded connection Drawer pairs the safe protected-key name with La
 The [completion comparison](../../.impeccable/review/model-completion/design-comparison.md), [capture manifest](../../.impeccable/review/model-completion/captures.json) and [source manifest](../../.impeccable/review/model-completion/source-sha256.json) record this successor packet. Its [fresh full finish review](../../.impeccable/review/model-completion/finish-review.md) returns SHIP for the represented scope after individually inspecting all 16 captures: onboarding and both catalogs at 1440/768/390/320px, missing-default and credential editor at 1440/320px. This documenter checked all 16 dimensions/SHA256 and all eight packet source hashes; it relies on that visual review and did not independently reopen the images. The superseded default-missing-before image is excluded.
 
 Functional evidence remains separate: the documenter inspected log footers recording 62 focused frontend cases, the production build (10.15s), 49 focused API cases, two SQLite/InMemory replacement cases, two store/reference compatibility cases and two Synthetic browser journeys (53.0s). Parent-reported MCP interactions exercised native keyboard filters/reset, registration counts, fake-key replacement with millisecond-equal readback after rename and unavailable-default recovery. Captures use disposable Real SQLite with fake protected keys and metadata-only configuration; no provider inference, Session or Run was started for the packet. No browser, server, test or detector was run by this documentation pass. Unpictured states, measured contrast, physical devices, provider/security qualification, CI, full-proposal and milestone acceptance remain outside its boundary. Only a new scoped `dynamicModelsCompletionDocumentationRefresh` inspection record is appended; older model-final records, source/documentation fingerprints and timestamps remain historical, and pre-existing sidecar drift is not repaired.
+
+Shared Ant Design link text and selected Tab text use `{colors.linkText}` on dark surfaces; the filled primary button retains its primary color. This keeps ordinary small action text above 4.5:1 against the container. The shared owner is `web/src/app/antdTheme.ts`.

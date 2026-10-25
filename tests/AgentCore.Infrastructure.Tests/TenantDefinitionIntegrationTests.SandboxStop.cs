@@ -75,7 +75,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             var options = new OpenSandboxOptions { Enabled = true, Endpoint = server.Urls.Single(), ApiKey = "synthetic-stop-key", CanonicalWorkspaceRoot = root, WorkspaceDockerHostRoot = root };
             s = await PrepareRuntimeSandbox(f, options: options);
             var mount = new CanonicalSandboxMountResolver(options).Resolve(s.Session.AgentInstanceId, s.Session.SessionId,
-                s.Run.Admission.Configuration!.Definition.StateIsolationPolicy?.HomeAccess ?? AgentCore.Domain.Definitions.HomeAccess.ReadWrite, create: true);
+                await RuntimeWorkspaceAccess(f, s), create: true);
             await mount.Working.WriteAsync("/working/keep.txt", "retained bytes"u8.ToArray(), 1024, long.MaxValue, default);
             s = s with { Lease = s.Lease with { MountAuthority = mount.Authority, BaselineProcesses = [], SelectedProfileId = s.Lease.Profile.Id } };
             Assert.True(await storage.TryReserveTenantSandboxLeaseAsync(s.Write, s.Lease, 0, DateTimeOffset.UtcNow));

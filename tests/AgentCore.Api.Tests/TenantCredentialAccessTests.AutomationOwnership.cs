@@ -63,6 +63,7 @@ public sealed partial class TenantCredentialAccessTests
         var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
         var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
         var access = factory.Services.GetRequiredService<TenantAccessService>();
+        await GrantAutomationPrivateContext(factory, owner, tenant, human, agent);
         if (mode is not ("missing-executor" or "due-cursor"))
         {
             var role = await access.SaveRoleAsync(human, tenant, null, "Execute owned Automations", ["automations.run", "sessions.create", "agent-runs.create"], await Revision(owner, tenant));
@@ -237,6 +238,11 @@ public sealed partial class TenantCredentialAccessTests
             if (++passes > 100) Assert.Fail($"Stalled {run.Status} {run.Failure?.Code} requests={model.Requests.Count} progress={run.Progress?.Summary} checkpoint={run.Checkpoint?.ToString()} retry={run.NextRetryAtUtc}");
             await Task.Delay(25, deadline.Token); }
         Assert.True(run.Status == AgentRunStatus.Completed, $"{run.Status}: {run.Failure?.Code}; {run.Failure?.Summary}");
+        var ownContext = (await factory.Services.GetRequiredService<ITenantSpaceStore>().FindPrivateSpaceAsync(tenant, instance))!;
+        Assert.Equal(ownContext.SpaceId, run.Admission.Configuration!.SpaceContext!.SpaceId);
+        Assert.Null(run.Admission.Configuration.SpaceContext.EnvironmentId);
+        var selectedContext = (await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(tenant, run.SessionId))!.Snapshot.ContextSelection!;
+        Assert.True(run.Admission.Configuration.SpaceContext.MatchesSelection(selectedContext));
         Assert.Contains("Owned automation completed", run.Result!.Text); Assert.NotEmpty(model.Requests);
         var context = run.Admission.ExecutionContext!;
         Assert.Equal(run.ActivationId, context.RootActivationId); Assert.Null(context.ParentRunId); Assert.Null(context.ParentActivationId);

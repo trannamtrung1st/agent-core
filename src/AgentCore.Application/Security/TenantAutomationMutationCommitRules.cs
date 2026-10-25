@@ -11,6 +11,7 @@ public static class TenantAutomationMutationCommitRules
         TenantLocalEffectRules.RequireDirectRun(source.Reader.Run, commit.Generation, now);
         TenantAutomationMutationRules.Validate(source, commit.Prepared);
         var op = TenantApprovalRules.PrepareAutomationMutation(commit.OperationId, source.Reader.Run.AgentInstanceId, commit.Prepared, source.Reader.Agent.Instance.Revision, source.Reader.Agent.Instance.PersonaRevision);
+        op = TenantApprovalRules.ForRun(op, source.Reader.Run);
         if (commit.Prepared.SemanticReviewRequired || commit.ExpectedRunRevision != source.Reader.Run.Revision || commit.RunId != source.Reader.Run.AgentRunId
             || commit.ExpectedInstanceRevision != source.Reader.Agent.Instance.Revision || commit.ActionHash != op.ActionHash || commit.OperationId == Guid.Empty
             || string.IsNullOrWhiteSpace(commit.SourceCallId) || commit.SourceCallId.Length > 200 || commit.ParametersHash != TenantAutomationMutationRules.ParametersHash(commit.Prepared.ToolName, commit.Prepared.ArgumentsJson))

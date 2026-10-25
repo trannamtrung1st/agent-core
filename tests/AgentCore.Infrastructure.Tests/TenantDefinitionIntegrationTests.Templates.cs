@@ -79,7 +79,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             Assert.False(await f.Definitions.TrySaveDefinitionDraftAsync(next, 2, forged with { Revision = 2 }, 1, f.Audit(owner.TenantId, owner.OwnerPrincipalId, Guid.Parse(draft.DefinitionId))));
         var publication = await service.PublishAsync(owner.OwnerPrincipalId, owner.TenantId, draft.DraftId, 2, 1);
         Assert.Equal("Original workspace bytes", System.Text.Encoding.UTF8.GetString((await service.ReadPublicationResourceAsync(owner.OwnerPrincipalId, owner.TenantId, Guid.Parse(draft.DefinitionId), 1, welcome.ResourceId)).Content));
-        Assert.Equal("notes", publication.Payload.Environment!.WorkspacePolicy.TemplateId);
+        Assert.Equal("notes", publication.Payload.ExecutionPolicy!.WorkspacePolicy.TemplateId);
         Assert.Equal("Changed shipped file after capture.", await File.ReadAllTextAsync(files.Welcome));
     }
 
@@ -170,7 +170,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             var f = new TemplateFiles();
             var source = (await Fixture.ShippedTemplates().ReadAsync("customer-support", 3))!;
             f.Definition = source.Definition with { Id = "shipped-test", Version = 1,
-                Environment = source.Definition.Environment! with { Workspace = new("notes") },
+                ExecutionPolicy = source.Definition.ExecutionPolicy! with { Workspace = new("notes") },
                 Skills = [new("approved-files", "Approved files", "Use approved files.", "Read the supplied workspace note.", SkillProjection.OnDemand, false, [], ["notes/welcome.txt"])] };
             Directory.CreateDirectory(Path.GetDirectoryName(f.Welcome)!); Directory.CreateDirectory(Path.GetDirectoryName(f.Knowledge)!);
             await File.WriteAllBytesAsync(f.Knowledge, source.Resources.Single().Content);

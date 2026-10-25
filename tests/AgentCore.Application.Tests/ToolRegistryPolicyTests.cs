@@ -268,7 +268,7 @@ public sealed class ToolRegistryPolicyTests
             new VoiceConfiguration(false, "default", 1.0),
             new ProviderPreferences("primary-stt", "primary-tts"),
             new Dictionary<string, string>(StringComparer.Ordinal),
-            new RoleEnvironment(ToolAllowlist: tools));
+            new DefinitionExecutionPolicy(ToolAllowlist: tools));
 
     private static AgentContext Context(
         AgentDefinition definition,

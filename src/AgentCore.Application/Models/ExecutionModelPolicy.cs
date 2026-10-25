@@ -201,5 +201,5 @@ public static class ExecutionModelPolicy
     }
 
     private static bool RequiresBrowserTools(AgentDefinition definition) =>
-        definition.Environment?.ToolList.Any(tool => tool.StartsWith("browser.", StringComparison.Ordinal)) == true;
+        definition.ExecutionPolicy?.ToolList.Any(tool => tool.StartsWith("browser.", StringComparison.Ordinal)) == true;
 }

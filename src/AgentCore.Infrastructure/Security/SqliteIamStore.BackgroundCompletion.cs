@@ -92,6 +92,7 @@ public sealed partial class SqliteIamStore
         var agentRow = await OwnedAgents(db, tenant).SingleOrDefaultAsync(a => a.Instance.InstanceId == report.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false) ?? throw new AccessDeniedException("executor_unavailable");
         var agent = Owned(agentRow); TenantSessionRules.RequireExecutor(state, agent); var now = (clock ?? TimeProvider.System).GetUtcNow();
         TenantBackgroundCompletionRules.Shape(source, report, agent, expectedParentRevision, now);
+        await RequireSpaceExecutionSource(db, report, state, new IamAuthorizer(this), ct, admission: true).ConfigureAwait(false);
         var root = await TenantExecutionLineage.RootAsync(source.Child, this, ct).ConfigureAwait(false);
         await TenantCompletionDestinationRules.CommunicationAsync(state, source, new IamAuthorizer(this), ct, requireNoReview: true).ConfigureAwait(false);
         var baseline = Guid.TryParse(agent.Instance.DefinitionId, out var definition)

@@ -28,9 +28,14 @@ public static class TenantSessionRules
             throw new AccessDeniedException("model_context_required");
         binding.RequireIdentity(model.OfferingId, model.ConnectionId, model.ExternalModelId);
     }
-    public static void ValidateCreation(TenantSessionRoot owner, SessionSnapshot snapshot, TenantAgent agent, TenantSessionInitiator initiator, AuthorizationAudit audit)
+    public static void ValidateCreation(TenantSessionRoot owner, SessionSnapshot snapshot, TenantAgent agent, TenantSessionInitiator initiator, AuthorizationAudit audit, AgentCore.Domain.Spaces.Space privateSpace)
     {
-        if (owner.TenantId != agent.TenantId || owner.SessionId == Guid.Empty || owner.SessionId != snapshot.SessionId
+        snapshot.ContextSelection?.Validate();
+        if (snapshot.ContextSelection is not { EnvironmentId: null, Revision: 1, EffectiveAfterRunId: null, TransitionId: null } selection
+            || selection.TenantId != owner.TenantId || selection.SpaceId != privateSpace.SpaceId || selection.EnvironmentSelectionEpoch != 0
+            || privateSpace.TenantId != owner.TenantId || privateSpace.OwnerInstanceId != owner.AgentInstanceId || privateSpace.Kind != AgentCore.Domain.Spaces.SpaceKind.Private
+            || privateSpace.DeletedAt is not null || selection.UpdatedAt != snapshot.CreatedAt
+            || owner.TenantId != agent.TenantId || owner.SessionId == Guid.Empty || owner.SessionId != snapshot.SessionId
             || owner.AgentInstanceId != agent.Instance.InstanceId || owner.AgentInstanceId != snapshot.AgentInstanceId
             || owner.ExecutorPrincipalId != agent.PrincipalId || owner.CreatedByPrincipalId != initiator.PrincipalId || audit.ActorPrincipalId != initiator.PrincipalId
             || audit.TenantId != owner.TenantId || owner.CreatedAt != snapshot.CreatedAt || snapshot.UpdatedAt != snapshot.CreatedAt

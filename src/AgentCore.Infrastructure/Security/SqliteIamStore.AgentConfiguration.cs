@@ -74,6 +74,8 @@ public sealed partial class SqliteIamStore
                 maintenance.AllowAgentConsolidation = mutation.AllowMaintenance; maintenance.Revision++;
             }
         }
+        if (change.Resource is not null || change.ActiveVersion is not null)
+            await ReconcileResourceSpaceBindings(db, next.Tenant.TenantId, change, audit, ct).ConfigureAwait(false);
         row.PersonaJson = JsonSerializer.Serialize(updated.Persona, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         if (change.Resource?.Resource is { } binding)
         {

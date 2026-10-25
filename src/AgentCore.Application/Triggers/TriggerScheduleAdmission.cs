@@ -369,7 +369,7 @@ public static class TriggerScheduleAdmission
             0,
             null,
             null,
-            null, executionTarget: registration.ExecutionTarget, completionDelivery: registration.CompletionDelivery, triggerId: registration.Triggers.Single().TriggerId);
+            null, executionTarget: registration.ExecutionTarget, completionDelivery: registration.CompletionDelivery, triggerId: registration.Triggers.Single().TriggerId, pinnedSpaceId: registration.PinnedSpaceId, pinnedEnvironmentId: registration.PinnedEnvironmentId);
     }
 
     public static Automation Advance(

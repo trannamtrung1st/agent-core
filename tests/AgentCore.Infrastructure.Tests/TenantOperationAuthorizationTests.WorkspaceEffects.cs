@@ -42,12 +42,12 @@ public sealed partial class TenantOperationAuthorizationTests
         await Assert.ThrowsAsync<ArgumentException>(() => service.ExecuteAsync(frame, staleHash).AsTask());
         Assert.Null(await ((ITenantWorkspaceOperationStore)f.Iam).FindDirectOperationReceiptAsync(s.Tenant, frame.RunId, staleHash.Id));
         Assert.Equal("edited literal: thử nghiệm", Encoding.UTF8.GetString((await files.InspectTenantAsync(
-            new(s.Tenant, s.Agent.Instance.InstanceId, working ? frame.SessionId : null), root + "/source.txt", 1024)).Bytes));
+            WorkspaceOwner(s, working), root + "/source.txt", 1024)).Bytes));
         await Execute("workspace-mkdir", ToolCatalog.WorkspaceMkdir, new { path = root + "/tree/empty" });
         await Execute("workspace-copy", ToolCatalog.WorkspaceCopy, new { source = root + "/source.txt", destination = root + "/tree/copy.txt" });
         var other = working ? "/home" : "/working";
         await Execute("workspace-cross-copy", ToolCatalog.WorkspaceCopy, new { source = root + "/tree", destination = other + "/cross-root" });
-        var owner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId, working ? null : frame.SessionId);
+        var owner = WorkspaceOwner(s, !working);
         Assert.Equal("edited literal: thử nghiệm", Encoding.UTF8.GetString((await files.InspectTenantAsync(owner, other + "/cross-root/copy.txt", 1024)).Bytes));
         Assert.Contains((await files.ListTenantAsync(owner, other + "/cross-root", null, 100)).Items, i => i.Directory && i.LogicalPath.EndsWith("/empty"));
         var denied = new ModelToolCall("workspace-sensitive-delete", ToolCatalog.WorkspaceDelete, JsonSerializer.Serialize(new { path = root + "/source.txt" }));

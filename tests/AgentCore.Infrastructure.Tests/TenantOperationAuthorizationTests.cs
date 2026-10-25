@@ -71,6 +71,9 @@ public sealed partial class TenantOperationAuthorizationTests
         var login = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;
         var actor = new TenantSessionInitiator(owner.AccountId, login.SessionId, owner.OwnerPrincipalId);
         var agent = await f.Agents.CreateAsync(actor.PrincipalId, owner.TenantId, templateId, version, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
+        var privateSpace = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(owner.TenantId, agent.Instance.InstanceId))!;
+        var contextRole = await f.Access.SaveRoleAsync(actor.PrincipalId, owner.TenantId, null, "Read assigned Private context", ["spaces.read"], (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
+        await f.Access.AssignRoleAsync(actor.PrincipalId, owner.TenantId, agent.PrincipalId, contextRole.RoleId, TenantSpaceService.Scope(owner.TenantId, privateSpace.SpaceId), (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
         var session = await f.Sessions.CreateAsync(owner.TenantId, agent.Instance.InstanceId, actor, SessionMode.Text, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision, 1);
         var receipt = await f.RunService().SubmitTextAsync(owner.TenantId, session.Owner.SessionId, actor, f.Ids.NewId(), "Inspect access", (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision, 1);
         return new(owner.TenantId, actor, agent, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(owner.TenantId, receipt.RunId))!);

@@ -45,6 +45,7 @@ public static class TenantAutomationRules
         && a.Revision == b.Revision && a.TriggerRevision == b.TriggerRevision && a.Name == b.Name && a.Instructions == b.Instructions
         && a.NextOccurrenceAtUtc == b.NextOccurrenceAtUtc && a.ExpiresAtUtc == b.ExpiresAtUtc && a.OccurrenceCount == b.OccurrenceCount
         && a.ModelOverrideOfferingId == b.ModelOverrideOfferingId && a.ModelOverrideReasoningEffort == b.ModelOverrideReasoningEffort
+        && a.PinnedSpaceId == b.PinnedSpaceId && a.PinnedEnvironmentId == b.PinnedEnvironmentId
         && a.RequiresTools == b.RequiresTools && a.RequiresVision == b.RequiresVision && a.ExecutionTarget == b.ExecutionTarget && a.CompletionDelivery == b.CompletionDelivery
         && a.SuspensionReason == b.SuspensionReason && JsonSerializer.Serialize(a.Provenance) == JsonSerializer.Serialize(b.Provenance)
         && a.Triggers.Count == b.Triggers.Count && a.Triggers.Zip(b.Triggers).All(pair => pair.First.TriggerId == pair.Second.TriggerId
@@ -140,6 +141,13 @@ public static class TenantAutomationRules
     }
     public static void TechnicalAdvance(Automation current, Automation advanced, DateTimeOffset at)
     {
+        if (TenantAutomationContextRules.IsSuspension(advanced))
+        {
+            if (current.Status != AutomationStatus.Active || !Same(current.WithScheduleAdvance(AutomationStatus.SuspendedPolicy,
+                current.NextOccurrenceAtUtc, current.OccurrenceCount, current.Revision + 1, at, advanced.SuspensionReason), advanced))
+                throw new ArgumentException("Context suspension must preserve the exact saved source and occurrence progress.");
+            return;
+        }
         var decision = TriggerScheduleAdmission.Decide(current, at);
         if (decision.Kind is not (ScheduleAdmissionKind.Expire or ScheduleAdmissionKind.Complete)
             || !Same(TriggerScheduleAdmission.Advance(current, decision, at), advanced))
@@ -149,6 +157,10 @@ public static class TenantAutomationRules
     {
         var current = value.Current; var next = value.Next; var occurrence = value.Occurrence; var root = value.SessionOwner; var run = value.Run;
         Owner(current, agent); Owner(next, agent);
+        var space = run.Admission.Configuration?.SpaceContext ?? throw new AccessDeniedException("space_context_required");
+        if (space.TenantId != agent.TenantId || space.SpaceId != (current.PinnedSpaceId ?? space.PrivateSpaceId) || space.EnvironmentId != current.PinnedEnvironmentId
+            || occurrence.PinnedSpaceId != current.PinnedSpaceId || occurrence.PinnedEnvironmentId != current.PinnedEnvironmentId
+            || !space.MatchesSelection(value.Session.ContextSelection)) throw new AccessDeniedException("automation_context_mismatch");
         if ((occurrence.SourceKind == TriggerSourceKind.ManualInvocation) != (manualInitiator is not null)) throw new ArgumentException("Manual admission requires its actual human invoker.");
         var context = run.Admission.ExecutionContext;
         var at = run.CreatedAtUtc;

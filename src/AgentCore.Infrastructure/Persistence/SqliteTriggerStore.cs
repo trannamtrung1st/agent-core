@@ -1107,6 +1107,7 @@ internal static class TriggerStoreMapping
         ModelOverrideReasoningEffort = registration.ModelOverrideReasoningEffort,
         RequiresVision = registration.RequiresVision,
         RequiresTools = registration.RequiresTools,
+        PinnedSpaceId = registration.PinnedSpaceId, PinnedEnvironmentId = registration.PinnedEnvironmentId,
     };
 
     public static Automation ToRegistration(AutomationRecord row) => new(
@@ -1131,7 +1132,7 @@ internal static class TriggerStoreMapping
         row.ModelOverrideReasoningEffort,
         row.RequiresVision,
         row.Name, new((AutomationExecutionTargetKind)row.ExecutionTargetKind, ParseOptional(row.TargetSessionId)),
-        new(ParseOptional(row.ReportToSessionId)), row.RequiresTools);
+        new(ParseOptional(row.ReportToSessionId)), row.RequiresTools, row.PinnedSpaceId, row.PinnedEnvironmentId);
 
     public static AutomationTriggerRecordEntity ToChild(Guid parentId, AutomationTriggerRecord t) => new()
     {
@@ -1158,6 +1159,7 @@ internal static class TriggerStoreMapping
         TargetSessionId = occurrence.ExecutionTarget.SessionId?.ToString("D"),
         ReportToSessionId = occurrence.CompletionDelivery.SessionId?.ToString("D"),
         TriggerId = occurrence.TriggerId?.ToString("D"),
+        PinnedSpaceId = occurrence.PinnedSpaceId, PinnedEnvironmentId = occurrence.PinnedEnvironmentId,
         OccurrenceId = occurrence.OccurrenceId.ToString("D"),
         DedupeKey = occurrence.DedupeKey,
         AutomationId = occurrence.AutomationId?.ToString("D"),
@@ -1221,7 +1223,7 @@ internal static class TriggerStoreMapping
         ParseOptional(row.ClaimId),
         FromUnix(row.ClaimLeaseExpiresAtUtc),
         ReadModelPin(row), ParseOptional(row.ExecutionSessionId), ParseOptional(row.AcceptedAgentRunId), ParseOptional(row.LiveSessionId), FromUnix(row.LiveEvaluationCompletedAtUtc),
-        new((AutomationExecutionTargetKind)row.ExecutionTargetKind, ParseOptional(row.TargetSessionId)), new(ParseOptional(row.ReportToSessionId)), triggerId: ParseOptional(row.TriggerId));
+        new((AutomationExecutionTargetKind)row.ExecutionTargetKind, ParseOptional(row.TargetSessionId)), new(ParseOptional(row.ReportToSessionId)), triggerId: ParseOptional(row.TriggerId), pinnedSpaceId: row.PinnedSpaceId, pinnedEnvironmentId: row.PinnedEnvironmentId);
 
     private static ExecutionModelPin? ReadModelPin(TriggerOccurrenceRecord row)
     {

@@ -159,7 +159,7 @@ public sealed partial class TenantDefinitionAccessTests
                 {
                     using var body = await JsonDocument.ParseAsync(http.Request.Body); var value = body.RootElement;
                     Assert.Equal(metadata["agent-core-generation"], value.GetProperty("ownerValue").GetString());
-                    await http.Response.WriteAsJsonAsync(new { contractVersion = 4, runtimeUser = value.GetProperty("uid").GetInt32() + ":" + value.GetProperty("gid").GetInt32(), topology = "linux", imageId = "fixture", imageUser = "fixture" });
+                    await http.Response.WriteAsJsonAsync(new { contractVersion = AgentCore.Domain.Conversation.SandboxProfileVerification.CurrentContractVersion, runtimeUser = value.GetProperty("uid").GetInt32() + ":" + value.GetProperty("gid").GetInt32(), topology = "linux", imageId = "fixture", imageUser = "fixture" });
                 }
                 else if (path.Contains("/endpoints/")) await http.Response.WriteAsJsonAsync(new { endpoint = new Uri(peer.Urls.Single()).Authority });
                 else if (path == "/ping") await http.Response.WriteAsJsonAsync(new { status = "ok" });
@@ -207,7 +207,7 @@ public sealed partial class TenantDefinitionAccessTests
             var draft = await definitions.CreateAsync(actor, tenant, "Model Sandbox command", await Revision(owner, tenant));
             draft = await definitions.UpdateAsync(actor, tenant, draft.DraftId, draft.Candidate with { SandboxPolicy = new(profileId, [profileId]),
                 TriggerPolicy = independentOrigin is null ? draft.Candidate.TriggerPolicy : (await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 32))!.TriggerPolicy,
-                Environment = new(Projection: backgroundTask && independentOrigin is null ? new([ToolCatalog.BackgroundStart]) : null, Capabilities: new("Selected", (backgroundTask && independentOrigin is null ? new[] { ToolCatalog.BackgroundStart } : []).Concat(control ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProcessStop, ToolCatalog.SandboxReset] : choice == "inspect" || readKind is not null ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus] : new[] { ToolCatalog.SandboxExec }).ToArray())) }, await Revision(owner, tenant), draft.Revision);
+                ExecutionPolicy = new(Projection: backgroundTask && independentOrigin is null ? new([ToolCatalog.BackgroundStart]) : null, Capabilities: new("Selected", (backgroundTask && independentOrigin is null ? new[] { ToolCatalog.BackgroundStart } : []).Concat(control ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProcessStop, ToolCatalog.SandboxReset] : choice == "inspect" || readKind is not null ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus] : new[] { ToolCatalog.SandboxExec }).ToArray())) }, await Revision(owner, tenant), draft.Revision);
             await definitions.PublishAsync(actor, tenant, draft.DraftId, await Revision(owner, tenant), draft.Revision);
             var created = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = Guid.Parse(draft.DefinitionId), version = 1, expectedRevision = await Revision(owner, tenant) }));
             var instance = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = created.GetProperty("principalId").GetGuid();
@@ -258,7 +258,7 @@ public sealed partial class TenantDefinitionAccessTests
                 session = run.SessionId;
                 var pinned = Assert.Single(run.Admission.Configuration!.Definition.ExecutionSandboxProfiles!);
                 var options = factory.Services.GetRequiredService<OpenSandboxOptions>();
-                var mounts = new CanonicalSandboxMountResolver(options).Resolve(instance, session, run.Admission.Configuration.Definition.StateIsolationPolicy?.HomeAccess ?? AgentCore.Domain.Definitions.HomeAccess.ReadWrite, create: true);
+                var mounts = new CanonicalSandboxMountResolver(options).Resolve(instance, session, new(TenantWorkspaceRules.Context(run), run.Admission.Configuration.Definition.StateIsolationPolicy?.HomeAccess ?? AgentCore.Domain.Definitions.HomeAccess.ReadWrite, AgentCore.Domain.Definitions.HomeAccess.Disabled, false), create: true);
                 var at = proofClock.GetUtcNow();
                 lease = new(session, instance, Guid.NewGuid(), 1, pinned, SandboxLeaseState.Provisioning, null, at, at.AddMinutes(10), MountAuthority: mounts.Authority,
                     AdmissionRunId: run.AgentRunId, AdmissionToolCallId: "seed-existing", TenantId: tenant, ExecutorPrincipalId: executor,

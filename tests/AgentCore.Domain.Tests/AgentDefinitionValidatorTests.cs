@@ -129,7 +129,7 @@ public sealed class AgentDefinitionValidatorTests
             new VoiceConfiguration(true, "default", 1.0),
             new ProviderPreferences("primary-stt", "primary-tts"),
             new Dictionary<string, string>(),
-            new RoleEnvironment(ToolAllowlist: tools));
+            new DefinitionExecutionPolicy(ToolAllowlist: tools));
     }
 
     [Fact]

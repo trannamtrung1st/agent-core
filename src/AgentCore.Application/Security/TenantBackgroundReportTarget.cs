@@ -13,7 +13,8 @@ public sealed class TenantBackgroundReportTarget(ITenantRuntimeStore runtime, IT
     {
         var source = await runtime.ReadTenantBackgroundCompletionAsync(owner, child, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("completion_unavailable");
         TenantBackgroundCompletionFactory.RequireParent(source);
-        var current = await configurations.ResolveAsync(owner.TenantId!.Value, owner.AgentInstanceId, ct).ConfigureAwait(false);
+        var current = await configurations.ResolveInSpaceAsync(owner.TenantId!.Value, owner.AgentInstanceId,
+            source.Parent!.Snapshot.ContextSelection ?? throw new AccessDeniedException("space_context_required"), ct).ConfigureAwait(false);
         var state = await security.ReadTenantAsync(owner.TenantId.Value, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         TenantSessionRules.RequireExecutor(state, current.Agent);
         if (sourceReads is not null) await sourceReads.RequireAuthorizedAsync(source, state, ct).ConfigureAwait(false);
@@ -30,7 +31,8 @@ public sealed class TenantBackgroundReportTarget(ITenantRuntimeStore runtime, IT
         TenantApprovalRules.Validate(request, current.Source.Child, current.Agent);
         TenantBackgroundReportRules.Require(request, current.Source, current.Agent, current.Configuration.Configuration.Definition);
         var p = request.Operation.BackgroundReport!; var model = current.Model;
-        if (p.Model != new PreparedBackgroundModel(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort, model.Binding)
+        if (current.Configuration.Configuration.SpaceContext?.MatchesSelection(p.DestinationContext) != true
+            || p.Model != new PreparedBackgroundModel(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort, model.Binding)
             || p.ConfigurationHash != TenantBackgroundCreationRules.Hash(current.Configuration)) throw new AccessDeniedException("operation_witness_changed");
         var root = await TenantExecutionLineage.RootAsync(current.Source.Child, runs, ct).ConfigureAwait(false);
         await TenantBackgroundReportRules.ExecutorAsync(current.State, request, root, current.Configuration.Configuration.Definition, iam, ct, current.Source).ConfigureAwait(false);

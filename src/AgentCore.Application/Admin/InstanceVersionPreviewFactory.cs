@@ -17,7 +17,7 @@ public static class InstanceVersionPreviewFactory
             .Select(field => section + "." + field.Key))
             .Concat(Enum.GetValues<ExecutionBudgetClass>().Where(kind => baseline.ExecutionBudgets?.Get(kind) != target.ExecutionBudgets?.Get(kind)).Select(kind => "executionBudgets." + kind))
             .Concat(new (string Key, bool Changed)[] { ("identity", Different(baseline.Identity, target.Identity)), ("goals", Different(baseline.Goals, target.Goals)),
-                ("environment", Different(baseline.Environment, target.Environment)), ("metadata", Different(baseline.Metadata, target.Metadata)),
+                ("executionPolicy", Different(baseline.ExecutionPolicy, target.ExecutionPolicy)), ("metadata", Different(baseline.Metadata, target.Metadata)),
                 ("selfManagement", Different(baseline.SelfManagement, target.SelfManagement)) }.Where(x => x.Changed).Select(x => x.Key)).ToArray();
         var preserved = InstanceSettingsResolver.Sections.SelectMany(section => InstanceSettingsResolver.Overrides(instance.SettingsOverrides ?? new(), section).Keys.Select(field => section + "." + field))
             .Concat(Enum.GetValues<ExecutionBudgetClass>().Where(kind => instance.ExecutionBudgets?.Get(kind) is not null).Select(kind => "executionBudgets." + kind))

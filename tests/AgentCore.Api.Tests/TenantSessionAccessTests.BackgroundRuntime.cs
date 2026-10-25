@@ -119,7 +119,7 @@ public sealed partial class TenantSessionAccessTests
             }
             if (independentTask) candidate["triggerPolicy"] = JsonSerializer.SerializeToNode((await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 32))!.TriggerPolicy, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             var capabilities = fileCapabilities ?? new[] { ToolCatalog.BackgroundStart, ToolCatalog.AttachmentsRead, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList };
-            candidate["environment"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(),
+            candidate["executionPolicy"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(),
                 capabilities = new { mode = "Selected", resolvedCapabilities = capabilities }, projection = new { alwaysCapabilities = capabilities.Where(c => c != ToolCatalog.AttachmentsRead).ToArray() } });
             var draftId = draft.GetProperty("draftId").GetGuid();
             var saved = await Json(await owner.PutAsJsonAsync(api + $"/definition-drafts/{draftId}", new { candidate, expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 1 }));

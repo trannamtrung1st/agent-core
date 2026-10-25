@@ -143,7 +143,7 @@ public sealed partial class MessagingSkillJourneyTests
             Voice = new VoiceConfiguration(true, "default", 1),
             ProviderPreferences = new ProviderPreferences(null, null),
             Skills = skills,
-            Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceRead])
+            ExecutionPolicy = new DefinitionExecutionPolicy(ToolAllowlist: [ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceRead])
         };
 
     private static SkillSpec Skill(string id, string procedure) =>

@@ -13,7 +13,7 @@ public static class TenantAttachmentMaterializationRules
         if (source.TenantId != state.Tenant.TenantId || source.SessionId != session.Owner.SessionId || !TenantAttachmentRules.Available(source, at))
             throw new AccessDeniedException("resource_unavailable");
         await TenantAttachmentRules.PermissionsAsync(state, human, source.SessionId, source.AttachmentId, "attachments.read", iam, ct).ConfigureAwait(false);
-        var workspace = new TenantWorkspaceReference(state.Tenant.TenantId, session.Owner.AgentInstanceId, source.SessionId);
+        var workspace = new TenantWorkspaceReference.SessionWorking(state.Tenant.TenantId, source.SessionId);
         if (!await TenantWorkspaceMutationRules.Allowed(state, workspace, human, "workspaces.write", iam, ct).ConfigureAwait(false)
             || !(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get("artifacts.create"), TenantSessionRules.Scope(state.Tenant.TenantId, source.SessionId), ct).ConfigureAwait(false)).Allowed)
             throw new AccessDeniedException("resource_unavailable");

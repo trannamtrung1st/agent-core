@@ -16,6 +16,7 @@ public sealed partial class TenantApprovalService
             var source=await (webTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(new(run.Owner,run.SessionId,run.AgentRunId,generation),ToolCatalog.HttpRequest,ct,allowReview:true).ConfigureAwait(false);
             var value=TenantHttpRequestContract.Parameters(run.SessionId,args);
             var op=TenantApprovalRules.PrepareHttpRequest(ids.NewId(),run.AgentInstanceId,value,source.Agent.Instance.Revision,source.Agent.Instance.PersonaRevision);
+            op = TenantApprovalRules.ForRun(op, run);
             var prior=await approvals.FindRootApprovalAsync(reference.TenantId,run.Admission.ExecutionContext!.RootActivationId,source.Agent.PrincipalId,op,ct).ConfigureAwait(false);
             if(prior is not null)return await DuplicateOutcome(source.State,run,prior,ct).ConfigureAwait(false);
             var decision=await operations.Evaluate(source.State,run.Admission.ExecutionContext!,op.Permission,TenantApprovalRules.Scope(reference.TenantId,op),ct).ConfigureAwait(false);

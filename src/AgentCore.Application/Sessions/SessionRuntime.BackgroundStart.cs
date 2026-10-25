@@ -45,7 +45,7 @@ public sealed partial class SessionRuntime
                 || args.TryGetProperty("title", out var title) && (title.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(title.GetString()) || title.GetString()!.Length > 80)
                 || args.TryGetProperty("reportCompletion", out var report) && report.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
             { input.Completed.TrySetResult(SkillLoadAdmission.Error("invalid", "Provide a bounded objective, optional title and completion preference.")); return; }
-            var resolved = await _tools.ResolveRunConfigurationAsync(_snapshot, ct).ConfigureAwait(false);
+            var resolved = await _tools.ResolveRunConfigurationAsync(_snapshot, ct, source).ConfigureAwait(false);
             var selection = _snapshot.ModelSelection;
             if (source.Owner.TenantId is not null)
                 selection = await (_runAuthority as AgentCore.Application.Security.TenantRunExecutionAuthority ?? throw new AccessDeniedException("tenant_context_required"))

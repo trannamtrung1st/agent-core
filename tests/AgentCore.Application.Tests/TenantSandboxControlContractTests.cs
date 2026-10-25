@@ -36,7 +36,7 @@ public sealed class TenantSandboxControlContractTests
     {
         var definition = await CapabilityProjectionTests.Definition();
         definition = definition with { SelfManagement = HarnessManagementPolicy.Disabled, SandboxPolicy = null, ExecutionSandboxProfiles = [],
-            Environment = definition.Environment! with { Capabilities = new("Selected", [ToolCatalog.SandboxReset]) } };
+            ExecutionPolicy = definition.ExecutionPolicy! with { Capabilities = new("Selected", [ToolCatalog.SandboxReset]) } };
         var session = Guid.NewGuid(); var activation = Guid.NewGuid();
         var context = CapabilityProjectionTests.Context(definition) with { AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session,
             ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, ExecutionOrigin.UserMessage) };

@@ -116,6 +116,12 @@ public static class TenantAccessEndpoints
             await access.RevokeAssignmentAsync(actor.PrincipalId, actor.TenantId, assignmentId, expectedRevision, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false);
             return Results.NoContent();
         }));
+        group.MapGet("/access/resources/{resourceType}/{resourceId}/editor", (string resourceType, string resourceId, int? page, int? principalPage, string? search,
+            HttpContext http, TenantResourceAccessService access, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            return Results.Json(await access.ReadAsync(actor.TenantId, resourceType, resourceId, IdentityHttp.TenantHuman(http), page ?? 0, principalPage ?? 0, search, ct).ConfigureAwait(false));
+        }));
         group.MapGet("/access/resources/{resourceType}/{resourceId}", (string resourceType, string resourceId, int? page, int? pageSize,
             HttpContext http, TenantAccessService access, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

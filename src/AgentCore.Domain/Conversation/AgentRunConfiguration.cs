@@ -12,13 +12,13 @@ public sealed class AgentRunConfiguration
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public AgentRunConfiguration(AgentDefinition definition, long instanceRevision, long personaRevision,
         IReadOnlyList<EffectiveAgentResource> resources, IReadOnlyList<AgentCore.Domain.Credentials.AgentCredentialBinding>? credentialBindings = null,
-        IReadOnlyDictionary<string, RuntimeFieldSource>? fieldSources = null, BrowserIsolation? resolvedBrowserIsolation = null, AgentRunContinuitySettings? continuitySettings = null)
+        IReadOnlyDictionary<string, RuntimeFieldSource>? fieldSources = null, BrowserIsolation? resolvedBrowserIsolation = null, AgentRunContinuitySettings? continuitySettings = null, AgentCore.Domain.Spaces.RunSpaceContext? spaceContext = null, IReadOnlyList<AgentCore.Domain.Spaces.SpaceResourceBinding>? spaceBindings = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(resources);
         if (instanceRevision < 0 || personaRevision < 0) throw new ArgumentException("Configuration revisions cannot be negative.");
         if (resources.Select(r => r.Key).Distinct(StringComparer.Ordinal).Count() != resources.Count
-            || resources.Any(r => r.Key is null || !(r.Key.StartsWith("definition:", StringComparison.Ordinal) || r.Key.StartsWith("instance:", StringComparison.Ordinal))
+            || resources.Any(r => r.Key is null || !(r.Key.StartsWith("definition:", StringComparison.Ordinal) || r.Key.StartsWith("instance:", StringComparison.Ordinal) || AgentCore.Domain.Spaces.SpaceResourceKeys.TryParse(r.Key, out _, out _))
                 || r.ContentSha256.Length != 64 || r.ContentSha256.Any(c => !char.IsAsciiHexDigit(c)) || r.ByteLength <= 0))
             throw new ArgumentException("Resource manifest identity/content is invalid.");
         FieldSources = new ReadOnlyDictionary<string, RuntimeFieldSource>((fieldSources ?? new Dictionary<string, RuntimeFieldSource>()).OrderBy(p => p.Key, StringComparer.Ordinal).ToDictionary(p => p.Key, p => p.Value));
@@ -28,10 +28,26 @@ public sealed class AgentRunConfiguration
         if (continuitySettings is { } continuity && (continuity.ExperienceRevision < 0 || continuity.MaintenanceRevision < 0
             || continuity.ExperienceEnabled && continuity.ExperienceRevision == 0 || continuity.AllowMaintenance && continuity.MaintenanceRevision == 0))
             throw new ArgumentException("Continuity opt-ins require their actual owner revisions.");
+        spaceContext?.Validate(); SpaceContext = spaceContext;
+        foreach (var resource in Resources)
+        {
+            var spaceKey = AgentCore.Domain.Spaces.SpaceResourceKeys.TryParse(resource.Key, out var sourceSpace, out var sourceResource);
+            if (spaceKey != (resource.SpaceSource is not null)) throw new ArgumentException("Resource origin and manifest identity disagree.");
+            if (resource.SpaceSource is not { } origin) continue;
+            origin.Validate();
+            if (spaceContext is null || origin.TenantId != spaceContext.TenantId || origin.SpaceId != spaceContext.SpaceId
+                || origin.SpaceId != sourceSpace || origin.ResourceId != sourceResource
+                || resource.VirtualPath != AgentCore.Domain.Spaces.SpaceResourceKeys.VirtualPath(origin.SpaceId, origin.ResourceId, resource.LogicalPath))
+                throw new ArgumentException("Space resources require their actual captured source owner.");
+        }
+        foreach (var binding in spaceBindings ?? []) binding.Validate();
+        SpaceBindings = Array.AsReadOnly((spaceBindings ?? []).ToArray());
         ContinuitySettings = continuitySettings;
         ResolvedBrowserIsolation = resolvedBrowserIsolation;
         Definition = Freeze(definition) with { ExecutionResources = Resources };
-        var bytes = continuitySettings is not null
+        var bytes = spaceContext is not null
+            ? JsonSerializer.SerializeToUtf8Bytes(new { Definition, InstanceRevision, PersonaRevision, Resources, CredentialBindings, FieldSources, ResolvedBrowserIsolation, ContinuitySettings, SpaceContext, SpaceBindings }, Json)
+            : continuitySettings is not null
             ? JsonSerializer.SerializeToUtf8Bytes(new { Definition, InstanceRevision, PersonaRevision, Resources, CredentialBindings, FieldSources, ResolvedBrowserIsolation, ContinuitySettings }, Json)
             : resolvedBrowserIsolation is null
             ? JsonSerializer.SerializeToUtf8Bytes(new { Definition, InstanceRevision, PersonaRevision, Resources, CredentialBindings, FieldSources }, Json)
@@ -47,6 +63,8 @@ public sealed class AgentRunConfiguration
     public IReadOnlyList<AgentCore.Domain.Credentials.AgentCredentialBinding> CredentialBindings { get; }
     public BrowserIsolation? ResolvedBrowserIsolation { get; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<AgentCore.Domain.Spaces.SpaceResourceBinding> SpaceBindings { get; }
+    public AgentCore.Domain.Spaces.RunSpaceContext? SpaceContext { get; }
     public AgentRunContinuitySettings? ContinuitySettings { get; }
 
     private static IReadOnlyList<T> Copy<T>(IReadOnlyList<T> values) => Array.AsReadOnly(values.ToArray());
@@ -58,7 +76,7 @@ public sealed class AgentRunConfiguration
         InitiativePolicy = d.InitiativePolicy with { Triggers = Copy(d.InitiativePolicy.Triggers) },
         TriggerPolicy = d.TriggerPolicy is { } trigger ? trigger with { AllowedSourceKinds = Copy(trigger.AllowedSourceKinds) } : null,
         Skills = Copy(d.SkillList.Select(s => s with { RequiredCapabilities = Copy(s.RequiredCapabilities), ResourcePaths = Copy(s.ResourcePaths) }).ToArray()),
-        Environment = d.Environment is { } env ? env with {
+        ExecutionPolicy = d.ExecutionPolicy is { } env ? env with {
             Harness = Copy(env.HarnessList), KnowledgeSources = Copy(env.KnowledgeList), ToolAllowlist = env.ToolAllowlist is null ? null : Copy(env.ToolAllowlist),
             Capabilities = env.Capabilities is { } caps ? caps with { ResolvedCapabilities = Copy(caps.ResolvedCapabilities) } : null,
             Projection = env.Projection is { } projection ? projection with { AlwaysCapabilities = Copy(projection.AlwaysCapabilities) } : null

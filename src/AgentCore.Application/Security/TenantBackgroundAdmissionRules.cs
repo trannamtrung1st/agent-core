@@ -30,6 +30,8 @@ public static class TenantBackgroundAdmissionRules
             || snapshot.Entries.Count != 1 || snapshot.Entries[0].Text is not { Length: > 0 } objective
             || objective.Length > AgentRunLimits.MaxBackgroundObjectiveCharacters || snapshot.Title is not { Length: > 0 and <= 80 }
             || configuration is null || configuration.InstanceRevision != agent.Instance.Revision || configuration.PersonaRevision != agent.Instance.PersonaRevision
+            || configuration.SpaceContext is not { } context || !context.SameLocation(parent.Admission.Configuration?.SpaceContext)
+            || !context.MatchesSelection(snapshot.ContextSelection)
             || child.PinnedPersona != agent.Instance.Persona || child.DefinitionId != agent.Instance.DefinitionId || child.DefinitionVersion != agent.Instance.ActiveVersion
             || agent.PrincipalId != frame.Owner.ExecutorPrincipalId || agent.TenantId != frame.Owner.TenantId
             || agent.Instance.Lifecycle != AgentInstanceLifecycle.Active)
@@ -78,5 +80,6 @@ public static class TenantBackgroundAdmissionRules
         && existing.Admission.Activation.DedupeKey == proposed.Admission.Activation.DedupeKey
         && existing.Admission.TaskIntent?.Text == proposed.Admission.TaskIntent?.Text
         && saved.Origin.InitialTitle == candidate.Origin.InitialTitle
+        && existing.Admission.Configuration?.SpaceContext is { } context && context.SameLocation(proposed.Admission.Configuration?.SpaceContext)
         && saved.Origin.ReportCompletionToOrigin == candidate.Origin.ReportCompletionToOrigin;
 }

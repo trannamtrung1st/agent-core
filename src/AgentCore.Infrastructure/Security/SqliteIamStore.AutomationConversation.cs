@@ -22,6 +22,10 @@ public sealed partial class SqliteIamStore
     private async Task RequireAutomationConversationAdmission(AgentCoreDbContext db, TenantSecurityState state, TenantAutomationAdmission admission,
         Guid? human, PreparedAutomationAdmission? consent, bool preparing, CancellationToken ct)
     {
+        await RequireSpaceExecutionSource(db, admission.Run, state, new IamAuthorizer(this), ct, admission: true).ConfigureAwait(false);
+        var context = admission.Run.Admission.Configuration!.SpaceContext!;
+        await TenantAutomationContextRules.PermissionsAsync(state, admission.Run.Owner.ExecutorPrincipalId!.Value, context.SpaceId, context.EnvironmentId is not null,
+            human, new IamAuthorizer(this), ct).ConfigureAwait(false);
         var target = await RequireAutomationConversation(db, state, admission.Current, human, consent?.Conversation, ct);
         if (target is null) return;
         var previousRuns = (await OwnedRuns(db, target.Owner.TenantId).AsNoTracking().Where(r => r.SessionId == target.Owner.SessionId.ToString("D"))

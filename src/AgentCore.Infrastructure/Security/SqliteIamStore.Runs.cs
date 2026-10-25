@@ -116,6 +116,7 @@ public sealed partial class SqliteIamStore
             var value = TenantRunRules.Admit(new(root.Domain(), frame is null ? current : liveSnapshot!), admission, agent, initiator, live: frame is not null);
             var sources = admission.Attachments ?? [];
             var currentState = (await ReadTenantAsync(db, next.Tenant.TenantId, ct).ConfigureAwait(false))!;
+            await RequireSpaceExecutionSource(db, run, currentState, new IamAuthorizer(this), ct, admission: true).ConfigureAwait(false);
             TenantInputInterruptionRules.Shape(admission);
             await TenantInputInterruptionRules.PermissionsAsync(currentState, initiator.PrincipalId, admission.Interruption, new IamAuthorizer(this), ct).ConfigureAwait(false);
             await TenantAttachmentBindingRules.PermissionsAsync(currentState, initiator.PrincipalId, run.SessionId, sources, new IamAuthorizer(this), ct).ConfigureAwait(false);

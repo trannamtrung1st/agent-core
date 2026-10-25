@@ -18,7 +18,8 @@ public sealed partial class SqliteIamStore
         var deleteAll = visibility.ResourceDeletes is { Agents: null }; var deleteAgents = Ids(visibility.ResourceDeletes?.Agents); var deleteChildren = Keys(visibility.ResourceDeletes?.Children);
         var workspaceAll = workspace is { Workspaces: null }; var workspaces = Keys(workspace?.Workspaces);
         var resourceAll = workspace is { Resources: null }; var resources = Keys(workspace?.Resources);
-        var homeAll = workspace is { HomeAgents: null }; var homes = Ids(workspace?.HomeAgents);
+        var homeAll = workspace is { HomeSpaces: null }; var homes = Ids(workspace?.HomeSpaces);
+        var resourceAgentAll = workspace is { ResourceAgents: null }; var resourceAgents = Ids(workspace?.ResourceAgents);
         var workspaceSessionAll = workspace is { Sessions: null }; var workspaceSessions = Ids(workspace?.Sessions);
         var attachmentAll = attachment is { Attachments: null }; var attachments = Ids(attachment?.Attachments);
         var attachmentSessionAll = attachment is { Sessions: null }; var attachmentSessions = Ids(attachment?.Sessions);
@@ -50,10 +51,12 @@ public sealed partial class SqliteIamStore
                    OR EXISTS (SELECT 1 FROM AgentInstanceResources binding WHERE binding.InstanceId=TenantApprovalRequests.InstanceId
                     AND ('instance:'||binding.ResourceId)=json_extract(TenantApprovalRequests.PayloadJson,'$.Operation.ManagementMutation.Resource.Source.Workspace.ResourceKey'))
                    OR json_extract(PayloadJson,'$.Operation.ManagementMutation.Resource.Source.Workspace.ResourceKey') IS NULL)
-                  AND (json_extract(PayloadJson,'$.Operation.ManagementMutation.Resource.Source.Workspace.Working')=1 OR {homeAll} OR InstanceId IN (SELECT value FROM json_each({homes})))
+                  AND (json_extract(PayloadJson,'$.Operation.ManagementMutation.Resource.Source.Workspace.Working')=1
+                    OR (json_type(PayloadJson,'$.Operation.ManagementMutation.Resource.Source.Workspace.ResourceKey')='text' AND ({resourceAgentAll} OR InstanceId IN (SELECT value FROM json_each({resourceAgents}))))
+                    OR (json_extract(PayloadJson,'$.Operation.ManagementMutation.Resource.Source.Workspace.ResourceKey') IS NULL AND ({homeAll} OR (CASE WHEN substr(json_extract(json_extract(PayloadJson,'$.Operation.ManagementMutation.Resource.Source.Workspace.ArgumentsJson'),'$.path'),1,9)='/private/' THEN json_extract(PayloadJson,'$.Operation.SpaceContext.PrivateSpaceId') ELSE json_extract(PayloadJson,'$.Operation.SpaceContext.SpaceId') END) IN (SELECT value FROM json_each({homes})))))
                   AND CASE WHEN json_type(PayloadJson,'$.Operation.ManagementMutation.Resource.Source.Workspace.ResourceKey')='text'
                    THEN {resourceAll} OR (InstanceId||':'||json_extract(PayloadJson,'$.Operation.ManagementMutation.Resource.Source.Workspace.ResourceKey')) IN (SELECT value FROM json_each({resources}))
-                   ELSE {workspaceAll} OR (CASE WHEN json_extract(PayloadJson,'$.Operation.ManagementMutation.Resource.Source.Workspace.Working')=1 THEN 'working:'||SessionId ELSE 'home:'||InstanceId END) IN (SELECT value FROM json_each({workspaces})) END)
+                   ELSE {workspaceAll} OR (CASE WHEN json_extract(PayloadJson,'$.Operation.ManagementMutation.Resource.Source.Workspace.Working')=1 THEN 'working:'||SessionId ELSE 'home:'||(CASE WHEN substr(json_extract(json_extract(PayloadJson,'$.Operation.ManagementMutation.Resource.Source.Workspace.ArgumentsJson'),'$.path'),1,9)='/private/' THEN json_extract(PayloadJson,'$.Operation.SpaceContext.PrivateSpaceId') ELSE json_extract(PayloadJson,'$.Operation.SpaceContext.SpaceId') END) END) IN (SELECT value FROM json_each({workspaces})) END)
                  WHEN json_type(PayloadJson,'$.Operation.ManagementMutation.Resource.Source.Attachment')='object' THEN NOT (
                   ({attachmentSessionAll} OR SessionId IN (SELECT value FROM json_each({attachmentSessions})))
                   AND ({attachmentAll} OR json_extract(PayloadJson,'$.Operation.ManagementMutation.Resource.Source.Attachment.AttachmentId') IN (SELECT value FROM json_each({attachments})))

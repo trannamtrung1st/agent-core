@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalAppUrl, parseAppRoute } from '../../app/appRoute';
-import { parseAccessRoute, tenantDefinitionPath, tenantDraftPath, tenantCredentialPath, tenantSandboxPath, tenantApprovalPath, tenantAgentPath, tenantAccessPath, tenantModelsPath } from './accessRoute';
+import { parseAccessRoute, tenantDefinitionPath, tenantDraftPath, tenantCredentialPath, tenantSandboxPath, tenantApprovalPath, tenantAgentPath, tenantAccessPath, tenantModelsPath, tenantSpacePath } from './accessRoute';
 const tenant = '11111111-1111-4111-8111-111111111111';
 describe('canonical access navigation', () => {
   it('owns exact AI model administration routes and the separate system metadata catalog', () => {
@@ -87,4 +87,14 @@ it.each(['accounts','organizations','operators'])('pins System %s independently 
   expect(parseAccessRoute('/system/'+page)).toEqual({area:'access',view:'system',page});
   expect(canonicalAppUrl('/system/'+page)).toBe('/system/'+page);
   expect(parseAccessRoute('/system/'+page+'/extra')?.view).toBe('not-found');
+});
+
+it('uses exact Space routes and refuses the retired Instance home route', () => {
+  for (const spacePage of ['overview', 'members', 'workspace', 'environments', 'access'] as const) {
+    const path = tenantSpacePath(tenant, tenant, spacePage);
+    expect(parseAccessRoute(path)).toMatchObject({ tenantId: tenant, page: 'spaces', spaceId: tenant, spacePage });
+    expect(canonicalAppUrl(path)).toBe(path);
+  }
+  expect(parseAccessRoute(`/t/${tenant}/admin/agents/${tenant}/workspace`)?.view).toBe('not-found');
+  expect(parseAccessRoute(tenantAccessPath(tenant, 'secrets'))).toMatchObject({ tenantId: tenant, page: 'secrets' });
 });

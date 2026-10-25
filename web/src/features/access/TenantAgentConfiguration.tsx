@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, App, Button, Flex, Typography } from 'antd';
 import { identityRequest, tenantApi, type TenantContext } from '../../services/identity';
 import { tenantAgentApi, readTenantAgentEditor, patchTenantAgentSettings, type TenantAgentEditor } from '../../services/tenantAgentConfiguration';
+import type { TenantSpace } from '../../services/tenantSpaces';
 import type { listModels } from '../../services/api';
 import { followAppLink } from '../../app/appLink';
 import { AgentConfigurationPanel } from '../admin/AgentConfigurationLayout';
@@ -11,7 +12,7 @@ import type { InstanceSettingsTransport } from '../admin/useInstanceSettingsCont
 import { isPersonaDraftDirty, parsePersonaJson, personaFieldsToJson, syncPersonaOnTabChange, type PersonaFields } from '../admin/instanceManagedControls';
 import { TenantAgentHeading } from './TenantAgentHeading';
 import { AccessError, AccessLoading } from './AccessFeedback';
-import { tenantAccessPath, tenantAgentPath } from './accessRoute';
+import { tenantSpacePath, tenantAccessPath, tenantAgentPath } from './accessRoute';
 import { useAccessDraftGuard } from './useAccessDraftGuard';
 import { useIdentityQuery } from './useIdentityQuery';
 import { useTenantCommand } from './useTenantCommand';
@@ -22,6 +23,7 @@ export function TenantAgentConfiguration({ context, id, page }: { context: Tenan
 function TenantAgentProfile({ context, id }: { context: TenantContext; id: string }) {
   const tenant = context.tenant.tenantId; const { message } = App.useApp(); const command = useTenantCommand();
   const state = useIdentityQuery<TenantAgentEditor>(tenantAgentApi(tenant, id, '/editor'));
+  const privateSpace = useIdentityQuery<TenantSpace>(tenantAgentApi(tenant, id, '/private-space'));
   const [saved, setSaved] = useState<PersonaFields>(); const [persona, setPersona] = useState<PersonaFields>(); const [json, setJson] = useState(''); const [tab, setTab] = useState('form'); const [error, setError] = useState<string>(); const initialized = useRef(false);
   useEffect(() => { if (!state.data) return; const value = state.data.agent.instance.persona; setSaved(value); if (!initialized.current) { initialized.current = true; setPersona(value); setJson(personaFieldsToJson(value)); } }, [state.data]);
   const dirty = !!saved && !!persona && isPersonaDraftDirty(saved, tab, persona, json);
@@ -41,6 +43,7 @@ function TenantAgentProfile({ context, id }: { context: TenantContext; id: strin
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={reload} /> : view && persona && <>
       <TenantAgentHeading view={view} />
+      {privateSpace.data && <Typography.Link href={tenantSpacePath(tenant, privateSpace.data.spaceId)} onClick={followAppLink}>Open Private Space</Typography.Link>}
       <AgentConfigurationPanel title="Persona" label="Persona editor" description="Persona guides this agent’s behavior. Core permissions and approvals remain independent." bodyGap="section">
         <InstancePersonaFields persona={persona} onChange={value => { setPersona(value); setError(undefined); }} tab={tab} onTabChange={next => { const result = syncPersonaOnTabChange(tab, next, persona, json); if (!result.ok) { setError(result.error); return; } setPersona(result.persona); setJson(result.personaJsonDraft); setTab(next); setError(undefined); }} json={json} onJsonChange={value => { setJson(value); setError(undefined); }} disabled={!writable || command.busy || command.requiresReload} />
         {error && <Alert type="error" showIcon title={error} />}

@@ -12,11 +12,11 @@ public static class CapabilityProjectionTelemetry
         var projected = tools ?? [];
         var names = projected.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
         var skills = (context?.PinnedSkillCatalog ?? []).Where(s => context?.ActiveSkillKeys?.Contains(s.Key) == true).SelectMany(s => s.RequiredCapabilities ?? []).ToHashSet();
-        var always = definition.Environment?.Projection?.AlwaysCapabilities ?? [];
+        var always = definition.ExecutionPolicy?.Projection?.AlwaysCapabilities ?? [];
         var loaded = context?.LoadedCapabilityIds ?? [];
         void Measure(string kind, long count) => RuntimeTelemetry.RecordCapabilityProjection(kind, count, null, model);
-        Measure("authorizedCapabilityCount", RoleEnvironments.Of(definition).ToolList.Count);
-        Measure("eligibleCapabilityCount", definition.Environment?.Capabilities is null ? projected.Count : ToolCatalog.Eligible(definition, context, gate).Count);
+        Measure("authorizedCapabilityCount", DefinitionExecutionPolicies.Of(definition).ToolList.Count);
+        Measure("eligibleCapabilityCount", definition.ExecutionPolicy?.Capabilities is null ? projected.Count : ToolCatalog.Eligible(definition, context, gate).Count);
         Measure("projectedCapabilityCount", projected.Count);
         Measure("projectedToolSchemaBytes", System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(projected).LongLength);
         Measure("capabilityLoadInvocationCount", loadCalls);

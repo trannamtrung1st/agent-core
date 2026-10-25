@@ -10,7 +10,8 @@ namespace AgentCore.Application.Security;
 
 public sealed record TenantHumanInputReceipt(TenantRunReceipt Run, long EntrySequence);
 public sealed record TenantRunReceipt(bool Created, Guid RunId, Guid EntryId, Guid ResponseId, Guid ActivationId, Guid RootActivationId, long SessionRevision, long SecurityRevision);
-public sealed record TenantRunMetadata(TrustedExecutionContext Context, Guid AgentInstanceId, AgentRunStatus Status, long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, Guid? ContinuationRunId = null, AgentRunOutcomeKind? OutcomeKind = null, bool CanCancel = false);
+public sealed record TenantRunMetadata(TrustedExecutionContext Context, Guid AgentInstanceId, AgentRunStatus Status, long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt,
+    AgentCore.Domain.Spaces.RunSpaceWitness SpaceContext, Guid? ContinuationRunId = null, AgentRunOutcomeKind? OutcomeKind = null, bool CanCancel = false);
 
 public sealed class TenantRunService(IIamStore security, ITenantSessionStore sessions, ITenantRunStore runs,
     TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer authorizer, ITenantModelCatalogReader modelCatalogs, IIdGenerator ids, TimeProvider time, TenantRunCancellationService? cancellations = null, ITenantRunControl? control = null, ITenantAttachmentStore? attachments = null, ITenantSessionInputControl? inputs = null,
@@ -67,7 +68,10 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         }
         if (requestIsolation is not null && await requestIsolation.HasTenantRequestBoundaryAsync(session.Owner, ct).ConfigureAwait(false)) throw RequestIsolation.FreshSessionRequired();
         if (state.Tenant.Revision != expectedSecurityRevision || session.Snapshot.Revision != expectedSessionRevision) throw new SecurityConflictException("stale_revision");
-        var (agent, resolved) = await configurations.ResolveAsync(tenant, session.Owner.AgentInstanceId, ct).ConfigureAwait(false);
+        var (agent, resolved) = await configurations.ResolveInSpaceAsync(tenant, session.Owner.AgentInstanceId, session.Snapshot.ContextSelection ?? throw new AccessDeniedException("space_context_required"), ct).ConfigureAwait(false);
+        var spaceContext = resolved.Configuration.SpaceContext ?? throw new AccessDeniedException("space_context_required");
+        await Require(state, initiator.PrincipalId, "spaces.read", TenantSpaceService.Scope(tenant, spaceContext.SpaceId), ct).ConfigureAwait(false);
+        if (spaceContext.EnvironmentId is not null) await Require(state, initiator.PrincipalId, "environments.read", TenantSpaceService.Scope(tenant, spaceContext.SpaceId), ct).ConfigureAwait(false);
         if (agent.PrincipalId != session.Owner.ExecutorPrincipalId) throw new AccessDeniedException("executor_unavailable");
         if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
         TenantSessionRules.RequireExecutor(state, agent);
@@ -96,7 +100,7 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         var selected = SessionModelBinder.RefreshDefault(models, definition, session.Snapshot.ModelSelection)
             ?? throw AgentCoreErrors.Validation("A resolved model is required.");
-        var composerInput = parts is null ? null : await composer!.PinAsync(agent.Instance.InstanceId, context, definition, resolved.Skills, parts, ct).ConfigureAwait(false);
+        var composerInput = parts is null ? null : await composer!.PinAsync(agent.Instance.InstanceId, context, definition, resolved.Skills, parts, resolved.Configuration.SpaceContext!.Witness(), ct).ConfigureAwait(false);
         var active = composerInput is null ? resolved.Skills.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray()
             : AgentCore.Application.Composer.ComposerInputRules.ActiveSkills(definition, resolved.Skills, composerInput.ExplicitSkillKeys);
         var run = AgentRun.Create(runId, AgentRunOwner.ForTenant(tenant, agent.Instance.InstanceId, agent.PrincipalId),
@@ -155,7 +159,8 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         var canCancel = !run.IsTerminal && (await authorizer.CheckTenantAsync(state, initiator.PrincipalId, PermissionCatalog.Get("agent-runs.cancel"), TenantRunRules.Scope(tenant, runId), ct).ConfigureAwait(false)).Allowed;
         var current = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, initiator, ct).ConfigureAwait(false);
         if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
-        return new(run.Admission.ExecutionContext!, run.AgentInstanceId, run.Status, run.Revision, run.CreatedAtUtc, run.UpdatedAtUtc, run.Result?.ContinuationRunId, run.Result?.OutcomeKind, canCancel);
+        return new(run.Admission.ExecutionContext!, run.AgentInstanceId, run.Status, run.Revision, run.CreatedAtUtc, run.UpdatedAtUtc,
+            (run.Admission.Configuration?.SpaceContext ?? throw new AccessDeniedException("space_context_required")).Witness(), run.Result?.ContinuationRunId, run.Result?.OutcomeKind, canCancel);
     }
     public async ValueTask<TenantRunMetadata> CancelAsync(Guid tenant, Guid runId, TenantSessionInitiator initiator, long expectedSecurityRevision, long expectedRunRevision, CancellationToken ct = default)
     {
@@ -163,7 +168,8 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         var request = await service.PrepareAsync(tenant, runId, initiator, expectedSecurityRevision, expectedRunRevision, ct).ConfigureAwait(false);
         var saved = control is null ? await service.CommitAsync(request, ct).ConfigureAwait(false)
             : await control.CancelAsync(request, ct).ConfigureAwait(false);
-        return new(saved.Admission.ExecutionContext!, saved.AgentInstanceId, saved.Status, saved.Revision, saved.CreatedAtUtc, saved.UpdatedAtUtc);
+        return new(saved.Admission.ExecutionContext!, saved.AgentInstanceId, saved.Status, saved.Revision, saved.CreatedAtUtc, saved.UpdatedAtUtc,
+            (saved.Admission.Configuration?.SpaceContext ?? throw new AccessDeniedException("space_context_required")).Witness());
     }
     private async ValueTask Require(TenantSecurityState state, Guid actor, string permission, AccessScope scope, CancellationToken ct)
     { var result = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get(permission), scope, ct).ConfigureAwait(false); if (!result.Allowed) throw new AccessDeniedException(result.ReasonCode); }

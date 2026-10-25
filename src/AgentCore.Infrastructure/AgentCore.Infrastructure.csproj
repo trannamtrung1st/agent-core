@@ -93,5 +93,9 @@
     <EmbeddedResource Include="Persistence/Migrations/Sql/20261023120000_TenantHarnessCommandAuthoring.*" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Persistence/Migrations/Sql/20261023140000_TenantConfigurationRemedyAuthoring.*" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Persistence/Migrations/Sql/20261023160000_RetireEmbeddedRunApproval.*" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261025040000_SpaceWorkspaceOwnership.*" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261025060000_ContextSuccessor.*" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261025050000_SpaceAutomationPins.*" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261025080000_SpaceResourceApprovals.*" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

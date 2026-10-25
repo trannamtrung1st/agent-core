@@ -13,6 +13,7 @@ public sealed partial class TenantApprovalService
         var context = source.Child.Admission.ExecutionContext!;
         var op = TenantApprovalRules.PrepareReportSourceRead(ids.NewId(), source.Child.AgentInstanceId, TenantReportSourceReadRules.Witness(source),
             current.Agent.Instance.Revision, current.Agent.Instance.PersonaRevision);
+        op = TenantApprovalRules.ForRun(op, source.Child);
         var prior = await reads.PriorAsync(source, ct).ConfigureAwait(false);
         if (prior is not null)
         {

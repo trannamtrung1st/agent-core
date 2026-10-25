@@ -123,10 +123,14 @@ public static class TenantManagementResourceRules
         var source = plan.Source;
         if (source is null || source.Name == "conversation:user") return true;
         if (source.Workspace is { } file)
+        {
+            var owner = TenantWorkspaceRules.ForCaptured(request.TenantId, file.SessionId, AgentCore.Application.Tools.TenantWorkspaceReadContract.Parse(file.ToolName, file.ArgumentsJson).Path, TenantWorkspaceRules.Context(request.Operation));
             return workspace is not null && (workspace.Sessions is null || workspace.Sessions.Contains(file.SessionId))
-                && (file.Working || workspace.HomeAgents is null || workspace.HomeAgents.Contains(request.Operation.InstanceId))
-                && (file.ResourceKey is { } resource ? workspace.Resources is null || workspace.Resources.Contains(request.Operation.InstanceId.ToString("D") + ":" + resource)
-                    : workspace.Workspaces is null || workspace.Workspaces.Contains(file.Working ? "working:" + file.SessionId.ToString("D") : "home:" + request.Operation.InstanceId.ToString("D")));
+                && (file.Working || (file.ResourceKey is not null ? workspace.ResourceAgents is null || workspace.ResourceAgents.Contains(request.Operation.InstanceId)
+                    : workspace.HomeSpaces is null || workspace.HomeSpaces.Contains(owner.OwnerId)))
+                && (file.ResourceKey is { } resource ? workspace.Resources is null || workspace.Resources.Contains(TenantResourceScopes.Source(request.TenantId, request.Operation.InstanceId, resource).ResourceId!)
+                    : workspace.Workspaces is null || workspace.Workspaces.Contains(TenantWorkspaceRules.Scope(owner).ResourceId!));
+        }
         if (source.Attachment is { } input)
             return attachment is not null && (attachment.Sessions is null || attachment.Sessions.Contains(input.SessionId))
                 && (attachment.Attachments is null || attachment.Attachments.Contains(input.AttachmentId));

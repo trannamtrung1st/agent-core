@@ -20,7 +20,7 @@ public sealed class TenantWorkspaceReadContractTests
     public async Task Tenant_projection_keeps_immutable_capability_and_current_execution_boundaries(bool capabilities)
     {
         var definition = await CapabilityProjectionTests.Definition(); var names = new[] { ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList, ToolCatalog.OfficeDocumentInspect, ToolCatalog.OfficeSpreadsheetInspect };
-        definition = definition with { Environment = definition.Environment! with { Capabilities = capabilities ? new("Selected", names) : null, ToolAllowlist = names } };
+        definition = definition with { ExecutionPolicy = definition.ExecutionPolicy! with { Capabilities = capabilities ? new("Selected", names) : null, ToolAllowlist = names } };
         var session = Guid.NewGuid(); var activation = Guid.NewGuid();
         var context = CapabilityProjectionTests.Context(definition) with { AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session,
             ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, ExecutionOrigin.UserMessage) };
@@ -32,7 +32,7 @@ public sealed class TenantWorkspaceReadContractTests
             Assert.DoesNotContain(ToolProjectionService.Project(definition, context with { OwnedSessionId = Guid.NewGuid() }, ToolConfigurationGates.AllowAll), t => t.Name == name);
             Assert.DoesNotContain(ToolProjectionService.Project(definition, context with { ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), null, session, Guid.NewGuid(), activation, activation, null, null, ExecutionOrigin.ScheduledOccurrence) }, ToolConfigurationGates.AllowAll), t => t.Name == name);
         }
-        var noGrants = definition with { Environment = definition.Environment with { Capabilities = capabilities ? new("Selected", []) : null, ToolAllowlist = [] } };
+        var noGrants = definition with { ExecutionPolicy = definition.ExecutionPolicy with { Capabilities = capabilities ? new("Selected", []) : null, ToolAllowlist = [] } };
         Assert.DoesNotContain(ToolProjectionService.Project(noGrants, context with { Definition = noGrants }, ToolConfigurationGates.AllowAll), t => TenantWorkspaceReadContract.IsRead(t.Name));
         var legacy = ToolCatalog.For(definition, context with { ExecutionContext = null, LoadedCapabilityIds = names }, ToolConfigurationGates.AllowAll);
         Assert.Equal(ToolRegistry.Get(ToolCatalog.WorkspaceRead).ModelDefinition.Description, Assert.Single(legacy, t => t.Name == ToolCatalog.WorkspaceRead).Description);

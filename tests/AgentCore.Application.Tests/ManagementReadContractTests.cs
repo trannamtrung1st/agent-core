@@ -13,7 +13,7 @@ public sealed class ManagementReadContractTests
     private static AgentContext Context()
     {
         var policy = new HarnessManagementPolicy(HarnessManagementMode.Managed, [HarnessManagementScope.Settings, HarnessManagementScope.AutomationPreferences], [], []);
-        var definition = SampleDefinitions.Examiner with { SelfManagement = policy, Environment = new(Capabilities: new("Selected", TenantManagementReadContract.Tools), Projection: new([])) };
+        var definition = SampleDefinitions.Examiner with { SelfManagement = policy, ExecutionPolicy = new(Capabilities: new("Selected", TenantManagementReadContract.Tools), Projection: new([])) };
         var session = Guid.NewGuid(); var activation = Guid.NewGuid();
         return new(definition, [], "", null, SessionMode.Text, null, false, null, new(Guid.NewGuid(), TriggerKind.UserTurn, "Inspect settings"),
             AgentInstanceId: Guid.NewGuid(), OwnedSessionId: session, Harness: new(policy, 1, 1))
@@ -58,7 +58,7 @@ public sealed class ManagementReadContractTests
             "frozen" => context with { Harness = context.Harness! with { Policy = context.Harness.Policy with { Frozen = true } } },
             "off" => context with { Definition = context.Definition with { SelfManagement = HarnessManagementPolicy.Disabled } },
             "scope" => context with { Harness = context.Harness! with { Policy = context.Harness.Policy with { Scopes = [] } }, Definition = context.Definition with { SelfManagement = context.Definition.SelfManagement! with { Scopes = [] } } },
-            "capability" => context with { Definition = context.Definition with { Environment = new(Capabilities: new("Selected", [])) } },
+            "capability" => context with { Definition = context.Definition with { ExecutionPolicy = new(Capabilities: new("Selected", [])) } },
             "model" => context with { ModelSupportsTools = false },
             "foreign_session" => context with { OwnedSessionId = Guid.NewGuid() },
             "background" => context with { OutputContract = AgentRunOutputContract.BackgroundOutcome }, _ => throw new ArgumentException()

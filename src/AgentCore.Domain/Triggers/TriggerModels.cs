@@ -551,8 +551,9 @@ public sealed class Automation
         bool requiresVision = false,
         string? name = null,
         AutomationExecutionTarget? executionTarget = null,
-        AutomationCompletionDelivery? completionDelivery = null, bool requiresTools = false)
- : this(automationId, owner, status, instructions, new[] { new AutomationTriggerRecord(automationId, trigger, revision: triggerRevision) }, nextOccurrenceAtUtc, expiresAtUtc, occurrenceCount, revision, triggerRevision, provenance, suspensionReason, modelOverrideOfferingId, modelOverrideReasoningEffort, requiresVision, name, executionTarget, completionDelivery, requiresTools) { }
+        AutomationCompletionDelivery? completionDelivery = null, bool requiresTools = false,
+        Guid? pinnedSpaceId = null, Guid? pinnedEnvironmentId = null)
+ : this(automationId, owner, status, instructions, new[] { new AutomationTriggerRecord(automationId, trigger, revision: triggerRevision) }, nextOccurrenceAtUtc, expiresAtUtc, occurrenceCount, revision, triggerRevision, provenance, suspensionReason, modelOverrideOfferingId, modelOverrideReasoningEffort, requiresVision, name, executionTarget, completionDelivery, requiresTools, pinnedSpaceId, pinnedEnvironmentId) { }
 
     public Automation(
         Guid automationId,
@@ -572,9 +573,12 @@ public sealed class Automation
         bool requiresVision = false,
         string? name = null,
         AutomationExecutionTarget? executionTarget = null,
-        AutomationCompletionDelivery? completionDelivery = null, bool requiresTools = false)
+        AutomationCompletionDelivery? completionDelivery = null, bool requiresTools = false,
+        Guid? pinnedSpaceId = null, Guid? pinnedEnvironmentId = null)
     {
         RequiresTools = requiresTools;
+        AutomationContextPins.Validate(owner, pinnedSpaceId, pinnedEnvironmentId);
+        PinnedSpaceId = pinnedSpaceId; PinnedEnvironmentId = pinnedEnvironmentId;
         if (automationId == Guid.Empty)
         {
             throw new ArgumentException("Registration identifier is required.", nameof(automationId));
@@ -677,6 +681,11 @@ public sealed class Automation
     public AutomationExecutionTarget ExecutionTarget { get; }
     public AutomationCompletionDelivery CompletionDelivery { get; }
 
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? PinnedSpaceId { get; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? PinnedEnvironmentId { get; }
+
     public bool RequiresVision { get; }
     public bool RequiresTools { get; }
 
@@ -707,7 +716,7 @@ public sealed class Automation
             ModelOverrideOfferingId,
             ModelOverrideReasoningEffort,
             RequiresVision,
-            Name, ExecutionTarget, CompletionDelivery, RequiresTools);
+            Name, ExecutionTarget, CompletionDelivery, RequiresTools, PinnedSpaceId, PinnedEnvironmentId);
 
     public Automation WithScheduleAdvance(
         AutomationStatus status,
@@ -732,7 +741,7 @@ public sealed class Automation
             ModelOverrideOfferingId,
             ModelOverrideReasoningEffort,
             RequiresVision,
-            Name, ExecutionTarget, CompletionDelivery, RequiresTools);
+            Name, ExecutionTarget, CompletionDelivery, RequiresTools, PinnedSpaceId, PinnedEnvironmentId);
 
     public Automation WithCancellation(long revision, DateTimeOffset cancelledAt) =>
         new(
@@ -751,7 +760,7 @@ public sealed class Automation
             ModelOverrideOfferingId,
             ModelOverrideReasoningEffort,
             RequiresVision,
-            Name, ExecutionTarget, CompletionDelivery, RequiresTools);
+            Name, ExecutionTarget, CompletionDelivery, RequiresTools, PinnedSpaceId, PinnedEnvironmentId);
 
     public Automation WithModelOverride(
         string? offeringId,
@@ -774,7 +783,7 @@ public sealed class Automation
             offeringId,
             reasoningEffort,
             RequiresVision,
-            Name, ExecutionTarget, CompletionDelivery, RequiresTools);
+            Name, ExecutionTarget, CompletionDelivery, RequiresTools, PinnedSpaceId, PinnedEnvironmentId);
 
     private static string? OptionalModelToken(string? value, int max, string name)
     {
@@ -820,8 +829,11 @@ public sealed class TriggerOccurrence
         Guid? acceptedAgentRunId = null,
         Guid? liveSessionId = null,
         DateTimeOffset? liveEvaluationCompletedAtUtc = null,
-        AutomationExecutionTarget? executionTarget = null, AutomationCompletionDelivery? completionDelivery = null, Guid? triggerId = null)
+        AutomationExecutionTarget? executionTarget = null, AutomationCompletionDelivery? completionDelivery = null, Guid? triggerId = null,
+        Guid? pinnedSpaceId = null, Guid? pinnedEnvironmentId = null)
     {
+        AutomationContextPins.Validate(owner, pinnedSpaceId, pinnedEnvironmentId);
+        PinnedSpaceId = pinnedSpaceId; PinnedEnvironmentId = pinnedEnvironmentId;
         if (occurrenceId == Guid.Empty)
         {
             throw new ArgumentException("Occurrence identifier is required.", nameof(occurrenceId));
@@ -915,6 +927,10 @@ public sealed class TriggerOccurrence
         LiveEvaluationCompletedAtUtc = liveEvaluationCompletedAtUtc;
     }
 
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? PinnedSpaceId { get; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? PinnedEnvironmentId { get; }
     public AutomationExecutionTarget ExecutionTarget { get; }
     public AutomationCompletionDelivery CompletionDelivery { get; }
     public Guid? TriggerId { get; }
@@ -966,7 +982,7 @@ public sealed class TriggerOccurrence
         return new(OccurrenceId, DedupeKey, AutomationId, Owner, SourceKind, ScheduledAtUtc, ObservedAtUtc, AdmittedAtUtc,
             evidence, SourceEventId, TriggerRevision, Disposition, DispositionReason, RoutingRevision, RoutingUpdatedAtUtc,
             ClaimId, ClaimLeaseExpiresAtUtc, ModelPin, ExecutionSessionId, AcceptedAgentRunId, LiveSessionId, LiveEvaluationCompletedAtUtc,
-            ExecutionTarget, CompletionDelivery, TriggerId);
+            ExecutionTarget, CompletionDelivery, TriggerId, PinnedSpaceId, PinnedEnvironmentId);
     }
 
     public TriggerOccurrence WithModelPin(ExecutionModelPin pin) =>
@@ -989,7 +1005,7 @@ public sealed class TriggerOccurrence
                 RoutingUpdatedAtUtc,
                 ClaimId,
                 ClaimLeaseExpiresAtUtc,
-                pin, ExecutionSessionId, AcceptedAgentRunId, LiveSessionId, LiveEvaluationCompletedAtUtc, ExecutionTarget, CompletionDelivery, TriggerId)
+                pin, ExecutionSessionId, AcceptedAgentRunId, LiveSessionId, LiveEvaluationCompletedAtUtc, ExecutionTarget, CompletionDelivery, TriggerId, PinnedSpaceId, PinnedEnvironmentId)
             : this;
 
     public TriggerOccurrence WithLiveSession(Guid sessionId, long expectedRevision, DateTimeOffset atUtc)
@@ -1015,7 +1031,7 @@ public sealed class TriggerOccurrence
             RoutingRevision + 1, atUtc, disposition == OccurrenceRoutingDisposition.LivePrepared ? ClaimId : null,
             disposition == OccurrenceRoutingDisposition.LivePrepared ? ClaimLeaseExpiresAtUtc : null,
             modelPin: ModelPin, acceptedAgentRunId: runId, liveSessionId: sessionId,
-            liveEvaluationCompletedAtUtc: completedAt, executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId);
+            liveEvaluationCompletedAtUtc: completedAt, executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId, pinnedSpaceId: PinnedSpaceId, pinnedEnvironmentId: PinnedEnvironmentId);
 
     public TriggerOccurrence WithExecutionAcceptance(Guid sessionId, Guid agentRunId, long expectedRevision,
         DateTimeOffset acceptedAtUtc)
@@ -1025,7 +1041,7 @@ public sealed class TriggerOccurrence
         return new TriggerOccurrence(OccurrenceId, DedupeKey, AutomationId, Owner, SourceKind, ScheduledAtUtc,
             ObservedAtUtc, AdmittedAtUtc, EvidenceJson, SourceEventId, TriggerRevision,
             OccurrenceRoutingDisposition.AcceptedDurable, null, RoutingRevision + 1, acceptedAtUtc, null, null,
-            ModelPin, sessionId, agentRunId, executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId);
+            ModelPin, sessionId, agentRunId, executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId, pinnedSpaceId: PinnedSpaceId, pinnedEnvironmentId: PinnedEnvironmentId);
     }
 
     public TriggerOccurrence WithRouting(
@@ -1057,7 +1073,7 @@ public sealed class TriggerOccurrence
             acceptedAgentRunId: disposition == OccurrenceRoutingDisposition.AcceptedLive ? AcceptedAgentRunId : null,
             liveSessionId: disposition == OccurrenceRoutingDisposition.AcceptedLive ? LiveSessionId : null,
             liveEvaluationCompletedAtUtc: disposition == OccurrenceRoutingDisposition.AcceptedLive ? LiveEvaluationCompletedAtUtc : null,
-            executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId);
+            executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId, pinnedSpaceId: PinnedSpaceId, pinnedEnvironmentId: PinnedEnvironmentId);
 
     private static void RequireUtc(DateTimeOffset value, string name)
     {

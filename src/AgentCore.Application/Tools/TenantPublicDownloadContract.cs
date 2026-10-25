@@ -18,8 +18,8 @@ public static class TenantPublicDownloadContract
             if (value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString()) || value.GetString()!.Length > 1024)
                 throw new ArgumentException("Use an exact owned file destination.");
             path = value.GetString()!;
-            if (!path.StartsWith("/home/", StringComparison.Ordinal) && !path.StartsWith("/working/", StringComparison.Ordinal)) throw new ArgumentException("Use an owned home or working file.");
-            TenantWorkspaceRules.Path(new(Guid.Empty, Guid.Empty, path.StartsWith("/working/", StringComparison.Ordinal) ? session : null), path, file: true);
+            if (!path.StartsWith("/home/", StringComparison.Ordinal) && !path.StartsWith("/private/", StringComparison.Ordinal) && !path.StartsWith("/working/", StringComparison.Ordinal)) throw new ArgumentException("Use an owned home or working file.");
+            TenantWorkspaceRules.ValidatePath(path, file: true);
         }
         var canonical = path is null ? JsonSerializer.Serialize(new { url }) : JsonSerializer.Serialize(new { url, path });
         return new(ToolCatalog.WebDownload, path ?? Directory, null, [], [], canonical, TenantWorkspaceMutationContract.Hash(ToolCatalog.WebDownload + "\n" + canonical));

@@ -29,6 +29,7 @@ public sealed partial class TenantApprovalService
         var value = new PreparedBackgroundStart(reference.TenantId, run.SessionId, ids.NewSessionId(), ids.NewId(), ids.NewId(), ids.NewId(), ids.NewId(),
             task.Objective, task.Title, task.ReportCompletion, primary, TenantBackgroundCreationRules.Hash(resolved), new(run.PinnedModel.OfferingId, run.PinnedModel.ConnectionId, run.PinnedModel.ExternalModelId, run.PinnedModel.ReasoningEffort, run.PinnedModel.Binding));
         var op = TenantApprovalRules.PrepareBackgroundStart(ids.NewId(), run.AgentInstanceId, value, agent.Instance.Revision, agent.Instance.PersonaRevision);
+        op = TenantApprovalRules.ForRun(op, run);
         var previous = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.ExecutionContext!.RootActivationId, agent.PrincipalId, op, ct).ConfigureAwait(false);
         if (previous is not null) return await DuplicateOutcome(state, run, previous, ct).ConfigureAwait(false);
         var compound = await TenantBackgroundCreationRules.CompoundReviewAsync(state, run.Admission.ExecutionContext.OriginalInitiatorPrincipalId, primary, authorizer, ct).ConfigureAwait(false);

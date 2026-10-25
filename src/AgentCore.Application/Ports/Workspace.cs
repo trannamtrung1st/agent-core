@@ -17,7 +17,6 @@ public sealed record WorkspacePatchResult(
 
 public interface ISessionWorkspace
 {
-    ValueTask CopyAcrossScopesAsync(Guid sessionId, string source, string destination, CancellationToken cancellationToken = default);
 
     ValueTask EnsureAsync(Guid sessionId, AgentDefinition definition, CancellationToken cancellationToken = default);
     ValueTask RequireDirectoryAsync(Guid sessionId, AgentDefinition definition, string path, CancellationToken ct = default) =>

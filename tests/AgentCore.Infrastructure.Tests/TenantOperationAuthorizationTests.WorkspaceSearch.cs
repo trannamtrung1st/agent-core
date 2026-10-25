@@ -75,7 +75,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var v = await WorkspaceReviewFixture(f, working: working, search: true); var s = v.Setup;
         var root = working ? AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), s.Agent.Instance.InstanceId, s.Run.SessionId)
-            : AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), s.Agent.Instance.InstanceId);
+            : AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), s.Tenant, SpaceId(s));
         var path = Path.Combine(root, "nonmatch.txt"); var stamp = File.GetLastWriteTimeUtc(path); var length = new FileInfo(path).Length;
         await File.WriteAllTextAsync(path, "Private".PadRight((int)length, 'X')); File.SetLastWriteTimeUtc(path, stamp);
         var view = await v.Approvals.ReadViewAsync(s.Tenant, v.Request.RequestId, s.Owner);

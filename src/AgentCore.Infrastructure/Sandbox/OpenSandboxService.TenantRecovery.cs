@@ -111,32 +111,7 @@ public sealed partial class OpenSandboxService
                         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
                         catch { lease = await ReadLeaseAsync(lease, ct) ?? lease; }
                     }
-                    lease = await SaveAsync(lease with { State = SandboxLeaseState.Terminating, CleanupReason = lease.CleanupReason ?? (stopPending ? "processStop" : "authorityOrLifetime"),
-                        CleanupPasses = checked(lease.CleanupPasses + 1), LastCleanupAttemptAt = time.GetUtcNow() }, ct);
-                    var confirmed = await TryTerminateRemoteAsync(lease, ct);
-                    if (execution is not null)
-                    {
-                        execution = await ReadReceiptAsync(lease, execution.Id, ct) ?? execution;
-                        if (!execution.TerminationConfirmed || confirmed && !execution.RemoteTerminationConfirmed)
-                        {
-                            var denied = !execution.FilesystemEffectsMayHaveOccurred && execution.State == SandboxExecutionState.Dispatching;
-                            var reset = lease.CleanupReason == "reset" && execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running;
-                            var stopped = execution.ProcessStop is not null && execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running;
-                            execution = await SaveReceiptAsync(execution with {
-                                State = execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running ? denied || reset || stopped ? SandboxExecutionState.Canceled : SandboxExecutionState.Indeterminate : execution.State,
-                                Phase = denied ? "notDispatched" : execution.Phase, FinishedAt = execution.FinishedAt ?? time.GetUtcNow(),
-                                CancellationReason = reset ? "humanReset" : stopped ? "humanStop" : execution.CancellationReason,
-                                RemoteTerminationConfirmed = confirmed, TerminationConfirmed = execution.TerminationConfirmed || confirmed || denied }, false, ct);
-                        }
-                    }
-                    await SaveAsync(lease with { State = confirmed ? SandboxLeaseState.Terminated : SandboxLeaseState.NeedsReconciliation,
-                        ActiveExecutionId = confirmed ? null : lease.ActiveExecutionId,
-                        TransitionPhase = lease.SelectionWitness is null ? lease.TransitionPhase : confirmed ? "awaitingReview" : "retirement",
-                        SafeMessage = lease.ProviderHostScope != HostScope ? "Sandbox server or workspace mapping changed. Ask the host operator to restore the original mapping or confirm retirement on its original server. This generation cannot be adopted or replayed."
-                            : confirmed ? "Owned generation retirement confirmed. Canonical files and durable outcomes are retained; no command or initialization was replayed."
-                            : "Owned generation retirement is pending. Writes may still occur; the saved action cannot replay." }, ct);
-                    if (execution?.ApprovalRequestId is not null && approvedSandbox is not null)
-                        await approvedSandbox.SettleAsync(lease.TenantId!.Value, lease.SessionId, execution.Id, ct);
+                    await RetireTenantLeaseLockedAsync(lease, execution, stopPending ? "processStop" : "authorityOrLifetime", ct);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
                 catch { /* Preserve the exact durable fence for a later bounded pass. Never replay an effect. */ }
@@ -146,4 +121,35 @@ public sealed partial class OpenSandboxService
         }
         finally { _tenantRecoveryGate.Release(); }
     }
+    private async ValueTask<SandboxLease> RetireTenantLeaseLockedAsync(SandboxLease lease, SandboxExecution? execution, string reason, CancellationToken ct)
+    {
+        lease = await SaveAsync(lease with { State = SandboxLeaseState.Terminating, CleanupReason = lease.CleanupReason ?? reason,
+            CleanupPasses = checked(lease.CleanupPasses + 1), LastCleanupAttemptAt = time.GetUtcNow() }, ct);
+        var confirmed = await TryTerminateRemoteAsync(lease, ct);
+        if (execution is not null)
+        {
+            execution = await ReadReceiptAsync(lease, execution.Id, ct) ?? execution;
+            if (!execution.TerminationConfirmed || confirmed && !execution.RemoteTerminationConfirmed)
+            {
+                var denied = !execution.FilesystemEffectsMayHaveOccurred && execution.State == SandboxExecutionState.Dispatching;
+                var reset = lease.CleanupReason == "reset" && execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running;
+                var stopped = execution.ProcessStop is not null && execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running;
+                execution = await SaveReceiptAsync(execution with {
+                    State = execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running ? denied || reset || stopped ? SandboxExecutionState.Canceled : SandboxExecutionState.Indeterminate : execution.State,
+                    Phase = denied ? "notDispatched" : execution.Phase, FinishedAt = execution.FinishedAt ?? time.GetUtcNow(),
+                    CancellationReason = reset ? "humanReset" : stopped ? "humanStop" : execution.CancellationReason,
+                    RemoteTerminationConfirmed = confirmed, TerminationConfirmed = execution.TerminationConfirmed || confirmed || denied }, false, ct);
+            }
+        }
+        lease = await SaveAsync(lease with { State = confirmed ? SandboxLeaseState.Terminated : SandboxLeaseState.NeedsReconciliation,
+            ActiveExecutionId = confirmed ? null : lease.ActiveExecutionId,
+            TransitionPhase = lease.SelectionWitness is null ? lease.TransitionPhase : confirmed ? "awaitingReview" : "retirement",
+            SafeMessage = lease.ProviderHostScope != HostScope ? "Sandbox server or workspace mapping changed. Ask the host operator to restore the original mapping or confirm retirement on its original server. This generation cannot be adopted or replayed."
+                : confirmed ? "Owned generation retirement confirmed. Canonical files and durable outcomes are retained; no command or initialization was replayed."
+                : "Owned generation retirement is pending. Writes may still occur; the saved action cannot replay." }, ct);
+        if (execution?.ApprovalRequestId is not null && approvedSandbox is not null)
+            await approvedSandbox.SettleAsync(lease.TenantId!.Value, lease.SessionId, execution.Id, ct);
+        return lease;
+    }
+
 }

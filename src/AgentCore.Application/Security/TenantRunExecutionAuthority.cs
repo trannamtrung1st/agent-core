@@ -10,8 +10,10 @@ public sealed partial class TenantRunExecutionAuthority(TenantOperationAuthorize
     TenantRunConfigurationResolver configurations, TenantBrowserEffectService? browserEffects = null, TenantBrowserReadService? browserReads = null,
     TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantAttachmentRuntimeContextService? attachmentContext = null,
     TenantWaitSourceAuthority? waitSources = null, TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantEventReadAuthority? eventReads = null, TenantRunSourceAuthority? sourceAuthority = null, ITenantModelCatalogReader? configurationModels = null, AgentCore.Application.Tools.IToolConfigurationGate? configurationTools = null, TenantPublicWebReadService? publicWebReads = null, TenantHttpEffectService? httpEffects = null,
-    ILogger<TenantRunExecutionAuthority>? logger = null) : IAgentRunAuthority, ITenantRunContext
+    ILogger<TenantRunExecutionAuthority>? logger = null, TenantContextToolService? contextTools = null) : IAgentRunAuthority, ITenantRunContext
 {
+    public ValueTask RecordContextOutputFailureAsync(TenantRunReference reference, string reason, CancellationToken ct) =>
+        operations.RecordFailureAsync(reference, "variables.resolve", reason, ExecutionAuthorizationPurpose.EffectEligibility, ct);
     public ValueTask RecordAccountOutputFailureAsync(TenantRunReference reference, string reason, CancellationToken ct) =>
         operations.RecordFailureAsync(reference, reason == "account_metadata_unavailable" ? "credentials.read" : "credentials.use", reason, ExecutionAuthorizationPurpose.EffectEligibility, ct);
     public ValueTask<AgentDefinition?> CurrentDefinitionAsync(AgentRun run, CancellationToken cancellationToken = default) => CurrentDefinitionCoreAsync(run, true, cancellationToken);
@@ -84,6 +86,7 @@ public sealed partial class TenantRunExecutionAuthority(TenantOperationAuthorize
                     if(httpEffects is not null)await httpEffects.RequireStoredAsync(after.Run,cancellationToken).ConfigureAwait(false);
                     else if(TenantHttpReferences.Read(after.Run).Count>0)throw new AccessDeniedException("http_source_changed");
                     phase = "credential_read";
+                    if (contextTools is not null) await contextTools.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     if (credentialReads is not null) await credentialReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     phase = "artifact_read";
                     if (artifactReads is not null) await artifactReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);

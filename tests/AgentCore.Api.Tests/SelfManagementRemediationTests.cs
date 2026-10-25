@@ -31,7 +31,7 @@ public sealed class SelfManagementRemediationTests
             new(new(HarnessManagementMode.Assisted), new([HarnessManagementScope.Settings])));
         var resolver = services;
         var baseline = (await NativeInstanceConfigurationSeed.ResolveAsync(resolver, owner.InstanceId)).Configuration.Definition;
-        var selected = RoleEnvironments.Of(baseline).ToolList.Where(name => name != "workspace.read").ToArray();
+        var selected = DefinitionExecutionPolicies.Of(baseline).ToolList.Where(name => name != "workspace.read").ToArray();
         await NativeInstanceConfigurationSeed.SettingsAsync(services, owner.InstanceId, "capabilities", policy.InstanceRevision,
             new Dictionary<string, JsonElement> { ["selected"] = JsonSerializer.SerializeToElement(selected) }, []);
         var current = (await NativeInstanceConfigurationSeed.ResolveAsync(resolver, owner.InstanceId)).Configuration.Definition;

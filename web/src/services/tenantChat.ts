@@ -23,6 +23,15 @@ let createAllowed = false;
 const manageHints = new Map<string, boolean>();
 function path(suffix: string) { if (!chatTenantId) throw new Error('Choose an organization before opening Chat.'); return tenantApi(chatTenantId, suffix); }
 export const tenantChatAccess = () => request<TenantContext>(path('/access/me'));
+export async function tenantComposerSpace(instance: string, session?: string | null): Promise<string> {
+  if (session) {
+    const view = await request<import('./tenantSessionContext').SessionContextView>(path(`/sessions/${encodeURIComponent(session)}/context`));
+    if (!view.space || view.state === 'stale') throw new Error('Choose an available Session Space before selecting its files.');
+    return view.selection.spaceId;
+  }
+  const space = await request<import('./tenantSpaces').TenantSpace>(path(`/agents/${encodeURIComponent(instance)}/private-space`));
+  return space.spaceId;
+}
 export const tenantComposerChoices = (instance: string, params: URLSearchParams) => request<{ items: import('./messageParts').ComposerChoice[]; nextCursor: string | null }>(path(`/agents/${encodeURIComponent(instance)}/composer?${params}`));
 export const tenantChatModels = (instanceId?: string) => request<ModelCatalog>(path('/chat/models') + (instanceId ? `?instanceId=${encodeURIComponent(instanceId)}` : ''));
 export async function tenantSessionMetadata(id: string) {

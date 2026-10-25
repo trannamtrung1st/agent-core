@@ -9,7 +9,7 @@ public sealed partial class InMemoryIamStore
 {
     public ValueTask<bool> TryCheckCredentialOAuthAsync(TenantSecurityState next, long expectedSecurityRevision, Guid credentialId,
         CredentialOAuthInitiator initiator, long expectedCredentialRevision, long expectedSecretRevision, CredentialOAuthCheck check,
-        AuthorizationAudit audit, CancellationToken ct = default) => ValueTask.FromResult(WriteCredential(next, expectedSecurityRevision, audit, () =>
+        AuthorizationAudit audit, CancellationToken ct = default) => ValueTask.FromResult(WriteTenantResource(next, expectedSecurityRevision, audit, () =>
         {
             if (audit.ActorPrincipalId != initiator.PrincipalId) throw new ArgumentException("Invalid OAuth actor.");
             RequireHumanSession(next.Tenant.TenantId, initiator);
@@ -25,7 +25,7 @@ public sealed partial class InMemoryIamStore
         AuthorizationAudit audit, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next); attempt = TenantCredentialOAuthRules.Attempt(attempt);
-        return ValueTask.FromResult(WriteCredential(next, expectedSecurityRevision, audit, () =>
+        return ValueTask.FromResult(WriteTenantResource(next, expectedSecurityRevision, audit, () =>
         {
             if (attempt.TenantId != next.Tenant.TenantId || audit.ActorPrincipalId != attempt.PrincipalId) throw new ArgumentException("Invalid OAuth ownership.");
             RequireHumanSession(attempt.TenantId, new(attempt.AccountId, attempt.AuthenticationSessionId, attempt.PrincipalId));
@@ -58,7 +58,7 @@ public sealed partial class InMemoryIamStore
         long expectedSecretRevision, AuthorizationAudit audit, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next); value = TenantCredentialRules.Freeze(value);
-        return ValueTask.FromResult(WriteCredential(next, expectedSecurityRevision, audit, () =>
+        return ValueTask.FromResult(WriteTenantResource(next, expectedSecurityRevision, audit, () =>
         {
             var a = _credentialOAuthAttempts.GetValueOrDefault(id); var now = OAuthNow;
             if (a is null || a.Outcome != CredentialOAuthOutcome.Claimed || a.Revision != claimRevision || a.ExpiresAt <= now
@@ -75,7 +75,7 @@ public sealed partial class InMemoryIamStore
         long expectedCredentialRevision, long expectedSecretRevision, AuthorizationAudit audit, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next);
-        return ValueTask.FromResult(WriteCredential(next, expectedSecurityRevision, audit, () =>
+        return ValueTask.FromResult(WriteTenantResource(next, expectedSecurityRevision, audit, () =>
         {
             if (audit.ActorPrincipalId != initiator.PrincipalId) throw new ArgumentException("Invalid OAuth actor.");
             RequireHumanSession(next.Tenant.TenantId, initiator);

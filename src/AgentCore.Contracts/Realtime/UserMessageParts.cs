@@ -27,4 +27,5 @@ public sealed class UserResourceReferenceDto
     [Key("agentRunId")] public string? AgentRunId { get; set; }
     [Key("skillKey")] public string? SkillKey { get; set; }
     [Key("selectedRevision")] public long? SelectedRevision { get; set; }
+    [Key("spaceId")] public string? SpaceId { get; set; }
 }

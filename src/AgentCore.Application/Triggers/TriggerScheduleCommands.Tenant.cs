@@ -98,9 +98,13 @@ public static partial class TriggerScheduleCommands
         var enabled = input.Tool == ToolCatalog.AutomationEnable || input.Tool != ToolCatalog.AutomationDisable &&
             (args.TryGetProperty("enabled", out var enable) ? enable.GetBoolean() : current?.Status == AutomationStatus.Active || current is null && preset is null && schedule is not null);
         var target = ChatTarget(args, session, current); var delivery = ChatDelivery(args, session, current);
+        Guid? Pin(string key, Guid? previous) => args.TryGetProperty(key, out var value) ? value.ValueKind == JsonValueKind.Null ? null : value.GetGuid() : previous;
+        var pinnedSpace = Pin("pinnedSpaceId", current?.PinnedSpaceId);
+        var spaceChanged = current?.PinnedSpaceId != pinnedSpace;
+        var pinnedEnvironment = Pin("pinnedEnvironmentId", spaceChanged ? null : current?.PinnedEnvironmentId);
         return new(enabled, name, instructions, schedule, Setting("offeringId", current?.ModelOverrideOfferingId), Setting("reasoningEffort", current?.ModelOverrideReasoningEffort),
             OptionalRequirement(args, "requiresTools") ?? current?.RequiresTools ?? true, OptionalRequirement(args, "requiresVision") ?? current?.RequiresVision ?? false,
-            events, delivery.SessionId, target.SessionId, preset?.PresetId, preset?.PresetVersion);
+            events, delivery.SessionId, target.SessionId, preset?.PresetId, preset?.PresetVersion, pinnedSpace, pinnedEnvironment);
     }
     private static TriggerSchedule? ScheduleOrNull(this Automation value) => value.IsSchedule ? value.Schedule : null;
     private static JsonObject ScheduleArguments(TriggerSchedule schedule)

@@ -24,7 +24,9 @@ public sealed class TenantWorkspaceMutationContractTests
         var args = TenantWorkspaceMutationContract.Parse(session, ToolCatalog.WorkspaceCopy, """{"destination":"/working/copy.txt","source":"/home/source.txt"}""");
         Assert.Equal(new[] { ("/home/source.txt", "workspaces.read"), ("/working/copy.txt", "workspaces.write") }, args.Targets);
         Assert.Equal(args.ParametersHash, TenantWorkspaceMutationContract.Parse(session, args.Tool, args.CanonicalArguments).ParametersHash);
-        Assert.NotEqual(TenantWorkspaceMutationContract.ActionHash(session, args.ParametersHash), TenantWorkspaceMutationContract.ActionHash(Guid.NewGuid(), args.ParametersHash));
+        var context = new AgentCore.Domain.Spaces.RunSpaceWitness(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null, 1, 1, null, 0, 1);
+        Assert.NotEqual(TenantWorkspaceMutationContract.ActionHash(session, args.ParametersHash, context), TenantWorkspaceMutationContract.ActionHash(Guid.NewGuid(), args.ParametersHash, context));
+        Assert.NotEqual(TenantWorkspaceMutationContract.ActionHash(session, args.ParametersHash, context), TenantWorkspaceMutationContract.ActionHash(session, args.ParametersHash, context with { SpaceId = Guid.NewGuid() }));
         Assert.Throws<ArgumentException>(() => TenantWorkspaceMutationContract.Parse(session, ToolCatalog.WorkspaceMove, """{"source":"/home/source.txt","destination":"/working/copy.txt"}"""));
     }
 

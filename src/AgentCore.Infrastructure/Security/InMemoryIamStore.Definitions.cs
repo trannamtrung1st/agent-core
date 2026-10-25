@@ -11,6 +11,8 @@ public sealed partial class InMemoryIamStore
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (instances.CredentialGate) lock (definitions.TenantGate)
             return ValueTask.FromResult(AgentCore.Application.Models.TenantModelRules.TryId(scope, out _) ? OwnsModelResource(scope)
+                : TenantSecretService.TryId(scope, out var secret) ? _secrets.GetValueOrDefault((scope.TenantId!.Value, secret)) is { Status: not AgentCore.Domain.Spaces.SecretStatus.Deleted }
+                : TenantSpaceService.TryId(scope, out var space) ? _spaces.GetValueOrDefault((scope.TenantId!.Value, space)) is { DeletedAt: null }
                 : TenantEventAdmissionRules.TryId(scope, out var coreEvent) ? sessionBacking.CoreEvents.OwnsTenantEvent(scope.TenantId!.Value, coreEvent)
                 : TenantWebhookRules.TryId(scope, out var webhook) ? webhookBacking.OwnsTenantSource(scope.TenantId!.Value, webhook)
                 : TenantAutomationRules.TryId(scope, out var automation) ? automationBacking.OwnsTenantAutomation(scope.TenantId!.Value, automation)
@@ -24,6 +26,7 @@ public sealed partial class InMemoryIamStore
                 : TenantCredentialRules.TryId(scope, out var credential) ? credentials?.OwnsTenantCredential(scope.TenantId!.Value, credential) == true
                 : TenantAgentChildScopes.TryParse(scope, out var instance, out _)
                 ? ChildCatalog(scope.TenantId!.Value, instance, null, ct).Contains(scope)
+                : TenantResourceScopes.TrySpace(scope, out var sourceSpace, out var sourceResource) ? FindSpaceResourceAsync(scope.TenantId!.Value, sourceSpace, sourceResource, ct).Result is not null
                 : TenantDefinitionResourceScopes.TryParse(scope, out var resource) ? OwnsDefinitionResource(scope.TenantId!.Value, resource)
                 : scope.Kind == AccessScopeKind.Resource && scope.ResourceType == "definition"
                 && scope.TenantId is { } tenant && tenant != Guid.Empty && Guid.TryParseExact(scope.ResourceId, "D", out var id) && scope.ResourceId == id.ToString("D")

@@ -42,6 +42,7 @@ public sealed class TenantPreferenceOperationService(ITenantPreferenceOperationS
         if (expectedInstanceRevision is { } expected && target.Instance.Revision != expected) throw new SecurityConflictException("stale_revision");
         var prepared = TenantApprovalRules.PreparePreferences(ids.NewId(), run.AgentInstanceId, TenantPreferenceToolContract.Parameters(patch),
             target.Instance.Revision, target.Instance.PersonaRevision);
+        prepared = TenantApprovalRules.ForRun(prepared, run);
         var previous = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.Activation.RootActivationId,
             target.PrincipalId, prepared, ct).ConfigureAwait(false);
         if (previous is not null)
@@ -60,7 +61,7 @@ public sealed class TenantPreferenceOperationService(ITenantPreferenceOperationS
         _ = InstanceSettingsRules.ResolvePatch(baseline, target.Instance.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear, models, aliases);
         var at = time.GetUtcNow();
         var commit = new TenantPreferenceCommit(prepared.OperationId, run.AgentRunId, generation, run.Revision, callId, patch.CanonicalArguments,
-            patch.ParametersHash, target.Instance.Revision, TenantPreferenceToolContract.ActionHash(run.AgentInstanceId, target.Instance.Revision, patch.ParametersHash));
+            patch.ParametersHash, target.Instance.Revision, TenantPreferenceToolContract.ActionHash(run, target.Instance.Revision, patch.ParametersHash));
         var audit = new AuthorizationAudit(ids.NewId(), reference.TenantId, run.Owner.ExecutorPrincipalId!.Value, "operations.preferences.apply", run.AgentInstanceId.ToString("D"), "allowed", "operation_completed", at);
         TenantOperationReceipt? receipt;
         try { receipt = await effects.TryCommitPreferencesAsync(state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } }, state.Tenant.Revision, commit, audit, ct).ConfigureAwait(false); }

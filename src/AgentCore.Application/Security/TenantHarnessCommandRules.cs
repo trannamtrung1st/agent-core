@@ -58,7 +58,7 @@ public static class TenantHarnessCommandRules
             }
             else
             {
-                var knowledge = RoleEnvironments.Of(reader.Baseline).KnowledgeList.SingleOrDefault(k => k.Identity == id);
+                var knowledge = DefinitionExecutionPolicies.Of(reader.Baseline).KnowledgeList.SingleOrDefault(k => k.Identity == id);
                 var item = views.SingleOrDefault(r => r.Key == id) ?? views.SingleOrDefault(r => r.Origin == "Instance" && r.LogicalPath == "knowledge/" + id)
                     ?? (knowledge is null ? null : views.SingleOrDefault(r => r.Origin == "Definition" && r.LogicalPath == KnowledgeSourcePaths.ResolveBackingPath(knowledge)))
                     ?? throw new AccessDeniedException("resource_read_required");
@@ -79,8 +79,8 @@ public static class TenantHarnessCommandRules
                     || !RolePermissions.AllowsTool(reader.Baseline, id)) throw new AccessDeniedException("tool_selection_unavailable");
                 section = "capabilities";
                 set = tool == "harness.tool.configure" ? (object)new { allowUnreadUnsupportedTypes = args.GetProperty("allowUnreadUnsupportedTypes").GetBoolean() }
-                    : new { selected = (args.GetProperty("enabled").GetBoolean() ? RoleEnvironments.Of(reader.Current).ToolList.Append(id)
-                        : RoleEnvironments.Of(reader.Current).ToolList.Where(t => t != id)).Distinct(StringComparer.Ordinal).ToArray() };
+                    : new { selected = (args.GetProperty("enabled").GetBoolean() ? DefinitionExecutionPolicies.Of(reader.Current).ToolList.Append(id)
+                        : DefinitionExecutionPolicies.Of(reader.Current).ToolList.Where(t => t != id)).Distinct(StringComparer.Ordinal).ToArray() };
             }
             command = new { expectedInstanceRevision = owner.Revision, section, set, clear = Array.Empty<string>() };
         }

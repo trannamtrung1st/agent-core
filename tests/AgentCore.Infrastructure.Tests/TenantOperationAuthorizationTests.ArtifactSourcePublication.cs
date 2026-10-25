@@ -69,7 +69,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Empty((await ((ITenantArtifactStore)f.Artifacts).ListTenantAsync(s.Tenant, frame.SessionId, null, null, 20)).Items);
         Assert.Null(await ((ITenantArtifactOperationStore)f.Iam).FindDirectOperationReceiptAsync(s.Tenant, frame.RunId, "changed-source"));
         Assert.DoesNotContain(await f.Iam.ReadAuditAsync(s.Tenant, 200), a => a.Action == TenantArtifactOperationRules.AuditAction);
-        var actual = await WorkspaceReader(f).InspectTenantAsync(new(s.Tenant, s.Agent.Instance.InstanceId, frame.SessionId), "/working/source.bin", 4096);
+        var actual = await WorkspaceReader(f).InspectTenantAsync(WorkspaceOwner(s, true), "/working/source.bin", 4096);
         Assert.Equal(new byte[] { 0, 255, 128, 4 }, actual.Bytes);
     }
 

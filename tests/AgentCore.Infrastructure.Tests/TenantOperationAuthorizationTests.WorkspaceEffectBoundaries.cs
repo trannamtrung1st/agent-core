@@ -32,7 +32,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var agent = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(state.Tenant.TenantId, run.AgentInstanceId))!;
         var args = TenantWorkspaceMutationContract.Parse(run.SessionId, call.Name, call.ArgumentsJson);
         var op = new AgentRunDirectOperation(f.Ids.NewId(), call.Id, call.Name, args.CanonicalArguments, args.ParametersHash, agent.Instance.Revision, agent.Instance.PersonaRevision);
-        var commit = new TenantWorkspaceEffectCommit(run.AgentRunId, frame.Generation, run.Revision, op, TenantWorkspaceMutationContract.ActionHash(run.SessionId, args.ParametersHash));
+        var commit = new TenantWorkspaceEffectCommit(run.AgentRunId, frame.Generation, run.Revision, op, TenantWorkspaceMutationContract.ActionHash(run, args.ParametersHash));
         var scope = TenantWorkspaceRules.Scope(TenantWorkspaceEffectRules.Owner(run, args.Path!));
         var start = await ((ITenantWorkspaceOperationStore)f.Iam).TryStartWorkspaceEffectAsync(state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } }, state.Tenant.Revision, commit,
             new(f.Ids.NewId(), state.Tenant.TenantId, agent.PrincipalId, TenantWorkspaceEffectRules.Dispatch, scope.ResourceId!, "allowed", "workspace_mutation_dispatched", f.Clock.GetUtcNow()));
@@ -46,7 +46,7 @@ public sealed partial class TenantOperationAuthorizationTests
             afterEffect: () => throw new IOException("Private native acknowledgement lost"));
         var service = WorkspaceEffects(f, hook); var first = await service.ExecuteAsync(v.Frame, v.Call);
         Assert.Equal(TenantOperationOutcome.Indeterminate, first.Receipt!.Outcome); Assert.DoesNotContain("Private native", JsonSerializer.Serialize(first));
-        var content = await WorkspaceReader(f).InspectTenantAsync(new(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId), "/working/saved.txt", 1024);
+        var content = await WorkspaceReader(f).InspectTenantAsync(WorkspaceOwner(v.Setup, true), "/working/saved.txt", 1024);
         Assert.Equal("Exact mutation body", System.Text.Encoding.UTF8.GetString(content.Bytes));
         await f.Access.RevokeAssignmentAsync(v.Setup.Owner.PrincipalId, v.Setup.Tenant, v.Grant.AssignmentId, (await f.Iam.ReadTenantAsync(v.Setup.Tenant))!.Tenant.Revision);
         Assert.Equal(first, await service.ExecuteAsync(v.Frame, v.Call)); Assert.Equal(1, count);
@@ -72,7 +72,7 @@ public sealed partial class TenantOperationAuthorizationTests
             else await f.Access.RevokeAssignmentAsync(v.Setup.Owner.PrincipalId, v.Setup.Tenant, v.Grant.AssignmentId, (await f.Iam.ReadTenantAsync(v.Setup.Tenant))!.Tenant.Revision);
         }));
         var result = await service.ExecuteAsync(v.Frame, v.Call); Assert.Equal(TenantOperationOutcome.Indeterminate, result.Receipt!.Outcome);
-        var content = await WorkspaceReader(f).InspectTenantAsync(new(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId), "/working/saved.txt", 1024);
+        var content = await WorkspaceReader(f).InspectTenantAsync(WorkspaceOwner(v.Setup, true), "/working/saved.txt", 1024);
         Assert.Equal("original", System.Text.Encoding.UTF8.GetString(content.Bytes));
         if (cancellation)
         {
@@ -94,7 +94,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(1, await service.RecoverAsync()); Assert.Equal(0, await service.RecoverAsync()); Assert.Equal(0, calls);
         var receipt = await ((ITenantDirectOperationStore)f.Iam).FindDirectOperationReceiptAsync(v.Setup.Tenant, v.Frame.RunId, v.Call.Id);
         Assert.Equal(TenantOperationOutcome.Indeterminate, receipt!.Outcome); Assert.Equal(fence.Origin.DirectOperation!.OperationId, receipt.OperationId);
-        Assert.Empty((await WorkspaceReader(f).ListTenantAsync(new(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId), "/working", null, 100)).Items);
+        Assert.Empty((await WorkspaceReader(f).ListTenantAsync(WorkspaceOwner(v.Setup, true), "/working", null, 100)).Items);
     }
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_effects_concurrent_same_call_dispatches_only_one_native_mutation(bool sqlite)
@@ -144,7 +144,7 @@ public sealed partial class TenantOperationAuthorizationTests
         clock.Advance(TimeSpan.FromMinutes(6)); Assert.Equal(1, await WorkspaceEffects(f).RecoverAsync()); Assert.Equal(0, await WorkspaceEffects(f).RecoverAsync());
         var receipt = await ((ITenantDirectOperationStore)f.Iam).FindDirectOperationReceiptAsync(v.Setup.Tenant, v.Frame.RunId, v.Call.Id);
         Assert.Equal(result.UnsettledOperationId, receipt!.OperationId); Assert.Equal(TenantOperationOutcome.Indeterminate, receipt.Outcome);
-        Assert.Equal("Exact mutation body", System.Text.Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(new(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId), "/working/saved.txt", 1024)).Bytes));
+        Assert.Equal("Exact mutation body", System.Text.Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(WorkspaceOwner(v.Setup, true), "/working/saved.txt", 1024)).Bytes));
     }
 
     [Theory] [InlineData(false)] [InlineData(true)]

@@ -771,6 +771,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             job.Then = null;
             job.Ended?.TrySetResult(false);
             job.HumanInputCompleted?.TrySetResult(job.InputCommit);
+            job.ContextCompleted?.TrySetResult(job.ContextResult);
             job.Applied.TrySetResult();
         }
 
@@ -1079,6 +1080,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case TenantInputReceived tenantInput:
                     HandleTenantInput(tenantInput);
                     break;
+                case TenantContextReceived tenantContext:
+                    HandleTenantContext(tenantContext);
+                    break;
                 case TenantForegroundReceived tenantForeground:
                     HandleTenantForeground(tenantForeground);
                     break;
@@ -1227,6 +1231,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case TenantInputReceived tenantInput:
                 tenantInput.Completed.TrySetResult(null);
+                break;
+            case TenantContextReceived tenantContext:
+                tenantContext.Completed.TrySetResult(null);
                 break;
             case TenantForegroundReceived tenantForeground:
                 tenantForeground.Completed.TrySetResult(false);
@@ -2376,6 +2383,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ExperienceContext: null,
                     ContinuityContext: null)
                 {
+                    CurrentContextTools = await _tools.ContextToolsAsync(capturedRun, evaluationToken).ConfigureAwait(false),
                     TenantManagementReadSources = tenantSkills.Sources,
                     EffectiveSpeechLocale = SpeechLocale.Resolve(capturedSnapshot).Effective,
                     Configuration = capturedRun?.Admission.Configuration ?? resolved?.Configuration,
@@ -2587,7 +2595,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var invalidCalls = new InvalidToolCallRecovery(messages.ToArray());
         var executionRun = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun : null;
         var previousFacts = executionRun is null ? null : await PreviousExecutionFactsAsync(executionRun, cancellationToken).ConfigureAwait(false);
-        var budgetTools = ExecutionDefinition.Environment?.Capabilities is null
+        var budgetTools = ExecutionDefinition.ExecutionPolicy?.Capabilities is null
             ? WithOfferedTools(request, authorizedTools, trigger, model).Tools
             : ToolCatalog.Eligible(ExecutionDefinition,
                 await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, cancellationToken), _tools.ConfigurationGate);
@@ -2682,7 +2690,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
             await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
                 overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
-            if (evidence.DialogPending && ExecutionDefinition.Environment?.Capabilities is not null)
+            if (evidence.DialogPending && ExecutionDefinition.ExecutionPolicy?.Capabilities is not null)
             {
                 var recoveryContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken).ConfigureAwait(false);
                 var dialogRecovery = await RequestCapabilityLoadAsync(cause, request.ResponseId, "{}", recoveryContext, generateToken, dialogRecovery: true).ConfigureAwait(false);
@@ -3821,7 +3829,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         return;
                     }
                     if (call.Name.StartsWith("browser.", StringComparison.Ordinal) && BrowserDialogPending(executionResult.Text)
-                        && ExecutionDefinition.Environment?.Capabilities is not null)
+                        && ExecutionDefinition.ExecutionPolicy?.Capabilities is not null)
                     {
                         var recoveryContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken).ConfigureAwait(false);
                         var dialogRecovery = await RequestCapabilityLoadAsync(cause, request.ResponseId, "{}", recoveryContext, generateToken, dialogRecovery: true).ConfigureAwait(false);
@@ -5977,6 +5985,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         public TenantMemoryPlan? LearningPlan { get; init; }
         public TenantDeliveryReceipt? Receipt { get; init; }
         public TenantSessionForeground? Foreground { get; init; }
+        public TenantContextSwitch? ContextSwitch { get; init; }
+        public TaskCompletionSource<TenantContextSwitchResult?>? ContextCompleted { get; init; }
+        public TenantContextSwitchResult? ContextResult { get; set; }
         public TenantHumanInput? HumanInput { get; init; }
         public TaskCompletionSource<TenantHumanInputCommit?>? HumanInputCompleted { get; init; }
         public TenantHumanInputCommit? InputCommit { get; set; }
@@ -6065,7 +6076,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         TaskCompletionSource<bool>? ended = null,
         bool userConversationTerminal = false,
         AgentRun? admittedRun = null,
-        AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null, IReadOnlyList<Guid>? completionSourceRunIds = null, bool tenantApprovalBarrier = false, TenantDeliveryReceipt? tenantReceipt = null, TenantSessionForeground? tenantForeground = null, TenantHumanInput? tenantInput = null, TaskCompletionSource<TenantHumanInputCommit?>? tenantInputCompleted = null)
+        AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null, IReadOnlyList<Guid>? completionSourceRunIds = null, bool tenantApprovalBarrier = false, TenantDeliveryReceipt? tenantReceipt = null, TenantSessionForeground? tenantForeground = null, TenantHumanInput? tenantInput = null, TaskCompletionSource<TenantHumanInputCommit?>? tenantInputCompleted = null, TenantContextSwitch? tenantContext = null, TaskCompletionSource<TenantContextSwitchResult?>? tenantContextCompleted = null)
     {
         if (_tenantTerminalCommitted || (_tenantApprovalPending || _tenantApprovalSuspended) && !tenantApprovalBarrier)
         { ended?.TrySetResult(false); tenantInputCompleted?.TrySetResult(null); return; }
@@ -6083,7 +6094,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             BeginUserConversationTerminalPersist();
         }
 
-        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal, admittedRun, runOutcome, completionSourceRunId, completionSourceRunIds) { OnAdmitted = onAdmitted, LearningPlan = userConversationTerminal ? _tenantMemoryPlan : null, Receipt = tenantReceipt, Foreground = tenantForeground, HumanInput = tenantInput, HumanInputCompleted = tenantInputCompleted };
+        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal, admittedRun, runOutcome, completionSourceRunId, completionSourceRunIds) { OnAdmitted = onAdmitted, LearningPlan = userConversationTerminal ? _tenantMemoryPlan : null, Receipt = tenantReceipt, Foreground = tenantForeground, HumanInput = tenantInput, HumanInputCompleted = tenantInputCompleted, ContextSwitch = tenantContext, ContextCompleted = tenantContextCompleted };
         BeginWork();
         _pendingPersist[token] = job;
         if (!_persistJobs.Writer.TryWrite(job))
@@ -6120,18 +6131,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
             if (input.Error is not null)
             {
-                if (job.Receipt is not null || job.Foreground is not null || job.HumanInput is not null)
+                if (job.Receipt is not null || job.Foreground is not null || job.HumanInput is not null || job.ContextSwitch is not null)
                 {
                     // A refused human receipt/surface change must not fail the independently
                     // authorized Run or leak uncommitted state into an ordinary snapshot.
-                    job.Ended?.TrySetException(input.Error); job.HumanInputCompleted?.TrySetException(input.Error); return;
+                    job.Ended?.TrySetException(input.Error); job.HumanInputCompleted?.TrySetException(input.Error); job.ContextCompleted?.TrySetException(input.Error); return;
                 }
                 if (_runtimeOwner?.TenantId is not null && _boundAgentRun is not null
                     && input.Error is AgentCore.Application.Security.AccessDeniedException denied
-                    && (denied.ReasonCode.StartsWith("http_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("public_web_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("memory_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("continuity_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("experience_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("automation_", StringComparison.Ordinal)
+                    && (denied.ReasonCode.StartsWith("resource_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("workspace_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("context_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("http_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("public_web_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("memory_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("continuity_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("experience_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("automation_", StringComparison.Ordinal)
                         || AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(_boundAgentRun)))
                 {
-                    var source = new[] { "public_web", "automation", "experience", "continuity", "memory", "profile", "account" }
+                    var source = new[] { "resource", "workspace", "context", "public_web", "automation", "experience", "continuity", "memory", "profile", "account" }
                         .FirstOrDefault(family => denied.ReasonCode.StartsWith(family + "_", StringComparison.Ordinal)) ?? "conversation";
                     await RefuseProtectedOutputAsync(input.Context, cancellationToken, source).ConfigureAwait(false);
                     job.Ended?.TrySetResult(false); return;
@@ -6198,7 +6209,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (job.Receipt is { } receipt && saved.Entries.SingleOrDefault(e => e.EntryId == receipt.EntryId) is { } received)
                     _tenantReceiptEvidence[received.EntryId] = received;
                 if (job.InputCommit?.Admission.Created != false) AdoptPersisted(job.Proposed, saved, job.Kind);
-                if (_runtimeOwner?.TenantId is not null) _snapshot = CarryTenantReceipts(_snapshot, saved) with { Surfaces = _snapshot.Surfaces | saved.Surfaces,
+                if (_runtimeOwner?.TenantId is not null) _snapshot = CarryTenantReceipts(_snapshot, saved) with { ContextSelection = saved.ContextSelection, Surfaces = _snapshot.Surfaces | saved.Surfaces,
                     LastEntrySequence = Math.Max(_snapshot.DurableLastEntrySequence, saved.DurableLastEntrySequence),
                     LastUserActivityAt = (_snapshot.LastUserActivityAt ?? DateTimeOffset.MinValue) > (saved.LastUserActivityAt ?? DateTimeOffset.MinValue) ? _snapshot.LastUserActivityAt : saved.LastUserActivityAt };
                 if (job.InputCommit?.Interrupted is { } interrupted)
@@ -6249,6 +6260,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
             CompleteTenantInputInterruption(job.HumanInputCompleted);
             job.HumanInputCompleted?.TrySetResult(job.InputCommit);
+            job.ContextCompleted?.TrySetResult(job.ContextResult);
             job.Applied.TrySetResult();
         }
     }
@@ -6356,7 +6368,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     }
 
     private static bool IsCoalescableCheckpoint(PersistJob job) =>
-        job.Kind == PersistKind.Checkpoint && job.Then is null && job.Ended is null && job.HumanInput is null;
+        job.Kind == PersistKind.Checkpoint && job.Then is null && job.Ended is null && job.HumanInput is null && job.ContextSwitch is null;
 
     private async Task<PersistJob> CoalesceQueuedCheckpointsAsync(PersistJob job, CancellationToken cancellationToken)
     {
@@ -6396,6 +6408,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         job.Ended?.TrySetResult(false);
         if (error is not null) job.HumanInputCompleted?.TrySetException(error);
         else job.HumanInputCompleted?.TrySetResult(job.InputCommit);
+        if (error is not null) job.ContextCompleted?.TrySetException(error);
+        else job.ContextCompleted?.TrySetResult(job.ContextResult);
         job.Applied.TrySetResult();
     }
 
@@ -6483,7 +6497,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (_runtimeOwner?.TenantId is not null) toSave = CarryTenantReceipts(toSave, _durableSnapshot) with { Surfaces = toSave.Surfaces | _durableSnapshot.Surfaces,
             LastEntrySequence = Math.Max(toSave.DurableLastEntrySequence, _durableSnapshot.DurableLastEntrySequence),
             LastUserActivityAt = (toSave.LastUserActivityAt ?? DateTimeOffset.MinValue) > (_durableSnapshot.LastUserActivityAt ?? DateTimeOffset.MinValue) ? toSave.LastUserActivityAt : _durableSnapshot.LastUserActivityAt };
-        if (job.HumanInput is { } humanInput)
+        if (_runtimeOwner?.TenantId is not null && job.ContextSwitch is null) toSave = toSave with { ContextSelection = _durableSnapshot.ContextSelection };
+        // Context reads and transitions can advance the stored Run independently of a
+        // queued response snapshot. Inspect the authoritative checkpoint before choosing
+        // the atomic terminal path, rather than a possibly older mailbox projection.
+        var tenantTerminalRun = job.UserConversationTerminal && _boundAgentRun is { } terminalSource
+            ? await _agentRuns.GetAsync(terminalSource.Owner, terminalSource.AgentRunId, cancellationToken).ConfigureAwait(false) : null;
+        if (job.ContextSwitch is { } contextSwitch)
+        {
+            job.ContextResult = await ((ITenantRuntimeContextWriter)_store).SaveContextAsync(toSave, _durableRevision, contextSwitch, cancellationToken).ConfigureAwait(false);
+            toSave = toSave with { ContextSelection = job.ContextResult.Selection, Revision = job.ContextResult.SessionRevision };
+        }
+        else if (job.HumanInput is { } humanInput)
         {
             job.InputCommit = await ((ITenantRuntimeInputWriter)_store).SaveInputAsync(toSave, _durableRevision, humanInput, cancellationToken).ConfigureAwait(false);
             toSave = job.InputCommit.Snapshot;
@@ -6514,9 +6539,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
             foreach (var id in admitted.Run.Admission.Activation.SourceEntryIds) _admittedAgentInputs.TryAdd(id, 0);
         }
-        else if (job.UserConversationTerminal && _boundAgentRun is { Status: AgentRunStatus.Running, Claim: { } terminalClaim } terminalRun
+        else if (job.UserConversationTerminal && tenantTerminalRun is { Status: AgentRunStatus.Running, Claim: { } terminalClaim } terminalRun
             && !terminalRun.CancellationRequested
-            && (AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(terminalRun) || terminalRun.Admission.OutputContract == AgentRunOutputContract.CompletionReport || AgentCore.Application.Security.TenantCredentialReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountActionReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantConfigurationContinuationRules.HasRemedyAttempt(terminalRun) || job.LearningPlan is not null || await _agentRuns.HasCompletionAcknowledgmentAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false))
+            && (AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(terminalRun) || terminalRun.Admission.OutputContract == AgentRunOutputContract.CompletionReport || AgentCore.Application.Security.TenantCredentialReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountActionReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantSpaceResourceReadRules.Read(terminalRun).Count > 0 || TenantContextToolContract.HasObservationOrTransition(terminalRun) || AgentCore.Application.Security.TenantConfigurationContinuationRules.HasRemedyAttempt(terminalRun) || job.LearningPlan is not null || await _agentRuns.HasCompletionAcknowledgmentAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false))
             && toSave.Entries.LastOrDefault(e => e.Role == ConversationRole.Assistant && e.ResponseId == terminalRun.ResponseId) is { Status: EntryStatus.Completed } finalEntry)
         {
             var current = await _agentRuns.GetAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false)

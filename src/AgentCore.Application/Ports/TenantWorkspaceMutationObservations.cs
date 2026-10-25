@@ -17,5 +17,5 @@ public static class WorkspaceMutationObservationLimits
     public const int MaxProbes = 32;
     public const int MaxNodes = 4096;
     public const int MaxDepth = 64;
-    public const long MaxBytes = AgentWorkspaceLimits.MaxInstanceBytes;
+    public const long MaxBytes = AgentWorkspaceLimits.MaxSpaceBytes;
 }

@@ -44,7 +44,7 @@ public sealed class SecretaryIdentityTests
         Assert.False(secretary.MemoryPolicy?.UserPromotion);
         Assert.True(secretary.TriggerPolicy?.Enabled);
         Assert.True(secretary.TriggerPolicy?.AllowUserScheduling);
-        Assert.Equal(RoleEnvironments.Of(assistant).ToolList, RoleEnvironments.Of(secretary).ToolList);
+        Assert.Equal(DefinitionExecutionPolicies.Of(assistant).ToolList, DefinitionExecutionPolicies.Of(secretary).ToolList);
         Assert.Equal(
             ["store.signin", "store.product.manage", "store.order.review", "store.inventory.review", "store.promotion.manage", "store.daily.review"],
             secretary.SkillList.Select(skill => skill.Id).ToArray());
@@ -56,7 +56,7 @@ public sealed class SecretaryIdentityTests
         Assert.Contains("browser.find", signin.Procedure, StringComparison.Ordinal);
         Assert.DoesNotContain("browser.click fill_credential", signin.Procedure, StringComparison.Ordinal);
         Assert.Contains("Detached work cannot fill credentials", signin.Procedure, StringComparison.Ordinal);
-        Assert.DoesNotContain(ToolCatalog.CredentialsList, RoleEnvironments.Of(secretary).ToolList);
+        Assert.DoesNotContain(ToolCatalog.CredentialsList, DefinitionExecutionPolicies.Of(secretary).ToolList);
         var daily = secretary.SkillList.Single(skill => skill.Id == "store.daily.review");
         Assert.Contains("Visit each required review area at most once", daily.Procedure, StringComparison.Ordinal);
         Assert.Contains("Do not restart the whole review", daily.Procedure, StringComparison.Ordinal);
@@ -79,7 +79,7 @@ public sealed class SecretaryIdentityTests
 
 
         Assert.All(secretary.SkillList, skill => Assert.NotEmpty(skill.RequiredCapabilities));
-        Assert.DoesNotContain("demo.sensitive_action", RoleEnvironments.Of(secretary).ToolList);
+        Assert.DoesNotContain("demo.sensitive_action", DefinitionExecutionPolicies.Of(secretary).ToolList);
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public sealed class SecretaryIdentityTests
         var bare = SampleDefinitions.Examiner with
         {
             Skills = [product],
-            Environment = RoleEnvironment.Empty with { ToolAllowlist = [ToolCatalog.WorkspaceRead] }
+            ExecutionPolicy = DefinitionExecutionPolicy.Empty with { ToolAllowlist = [ToolCatalog.WorkspaceRead] }
         };
         using var args = JsonDocument.Parse("""{"ids":["definition:store.product.manage"]}""");
         Assert.True(SkillLoadAdmission.TryParseIds(args.RootElement, out var requested, out _));

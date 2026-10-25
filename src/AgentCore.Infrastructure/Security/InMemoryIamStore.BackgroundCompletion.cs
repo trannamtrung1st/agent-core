@@ -79,6 +79,7 @@ public sealed partial class InMemoryIamStore
             var agent = FindTenantAgentAsync(tenant, report.AgentInstanceId, ct).Result!;
             var now = (clock ?? TimeProvider.System).GetUtcNow();
             TenantBackgroundCompletionRules.Shape(source, report, agent, expectedParentRevision, now);
+            RequireSpaceExecutionSource(report, state, new IamAuthorizer(this), ct, admission: true).AsTask().GetAwaiter().GetResult();
             var root = TenantExecutionLineage.RootAsync(source.Child, this, ct).AsTask().GetAwaiter().GetResult();
             TenantCompletionDestinationRules.CommunicationAsync(state, source, new IamAuthorizer(this), ct, requireNoReview: true).AsTask().GetAwaiter().GetResult();
             var baseline = Guid.TryParse(agent.Instance.DefinitionId, out var definition)

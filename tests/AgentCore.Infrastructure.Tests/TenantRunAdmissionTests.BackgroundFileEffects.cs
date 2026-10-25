@@ -42,10 +42,9 @@ public sealed partial class TenantRunAdmissionTests
             var changed = await runtime.ApplyTenantRuntimeCommandAsync(active.Run.Owner, active.Run.AgentRunId, new AgentRunCommand.Checkpoint(active.Run.Revision, f.Clock.GetUtcNow(), active.Frame.Generation, checkpoint, null), f.Ids.NewId());
             active = (changed, active.Frame, active.Snapshot);
         }
-        var files = new FileAgentInstanceWorkspaceStore(Path.Combine(f.Root, "workspaces"), f.Instances, f.Sandboxes,
-            tenantAgents: (ITenantAgentStore)f.Iam, tenantSessions: (ITenantSessionStore)f.Iam);
-        await files.WriteTenantAsync(new(setup.Tenant, setup.Agent.Instance.InstanceId), "/home/transaction-source.txt", "Exact file"u8.ToArray(), _ => ValueTask.CompletedTask);
-        var captured = await files.CaptureArtifactSourceTenantAsync(new(setup.Tenant, setup.Agent.Instance.InstanceId), "/home/transaction-source.txt");
+        var files = new FileSpaceWorkspaceStore(Path.Combine(f.Root, "workspaces"), (ITenantSpaceStore)f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantAgentDecommissionStore)f.Iam, f.Sandboxes);
+        await files.WriteTenantAsync(TenantWorkspaceRules.ForRun(active.Run, "/home"), "/home/transaction-source.txt", "Exact file"u8.ToArray(), _ => ValueTask.CompletedTask);
+        var captured = await files.CaptureArtifactSourceTenantAsync(TenantWorkspaceRules.ForRun(active.Run, "/home"), "/home/transaction-source.txt");
         await f.Access.RevokeAssignmentAsync(setup.Owner.PrincipalId, setup.Tenant, parentRead.AssignmentId, await Revision());
         async Task<TenantOperationReceipt?> Commit()
         {
@@ -61,7 +60,7 @@ public sealed partial class TenantRunAdmissionTests
             var parsed = TenantWorkspaceMutationContract.Parse(active.Run.SessionId, ToolCatalog.WorkspaceWrite, """{"path":"/home/transaction.txt","content":"Exact file"}""");
             var operation = new AgentRunDirectOperation(f.Ids.NewId(), "background-file-boundary", ToolCatalog.WorkspaceWrite, parsed.CanonicalArguments, parsed.ParametersHash, setup.Agent.Instance.Revision, setup.Agent.Instance.PersonaRevision);
             var start = await ((ITenantWorkspaceOperationStore)f.Iam).TryStartWorkspaceEffectAsync(next, state.Tenant.Revision,
-                new(active.Run.AgentRunId, active.Frame.Generation, active.Run.Revision, operation, TenantWorkspaceMutationContract.ActionHash(active.Run.SessionId, parsed.ParametersHash)),
+                new(active.Run.AgentRunId, active.Frame.Generation, active.Run.Revision, operation, TenantWorkspaceMutationContract.ActionHash(active.Run, parsed.ParametersHash)),
                 new(f.Ids.NewId(), setup.Tenant, setup.Agent.PrincipalId, TenantWorkspaceEffectRules.Dispatch, TenantWorkspaceRules.Scope(TenantWorkspaceEffectRules.Owner(active.Run, parsed.Path!)).ResourceId!, "allowed", "workspace_mutation_dispatched", f.Clock.GetUtcNow()));
             Assert.NotNull(start?.Fence); return start?.Receipt;
         }

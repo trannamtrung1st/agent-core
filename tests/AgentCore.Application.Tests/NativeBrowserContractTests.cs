@@ -127,7 +127,7 @@ public sealed class NativeBrowserContractTests
         var forced = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("trace", "browser.hover", "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789abcdefghijkl\"}}"),
             ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
         Assert.Contains("forbidden", forced.Text);
-        var unauthorized = await executor.ExecuteAsync(definition with { Environment = new RoleEnvironment(ToolAllowlist: ["browser.navigate"]) },
+        var unauthorized = await executor.ExecuteAsync(definition with { ExecutionPolicy = new DefinitionExecutionPolicy(ToolAllowlist: ["browser.navigate"]) },
             Guid.NewGuid(), new("trace", "browser.hover", "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789abcdefghijkl\"}}"), ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
         Assert.Contains("forbidden", unauthorized.Text);
         Assert.Equal(1, subset.Commands); // Only the explicit low-level adapter fixture navigation ran.
@@ -180,7 +180,7 @@ public sealed class NativeBrowserContractTests
         }
         Assert.Equal(0, browser.Commands);
         Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("config", ToolCatalog.BrowserConfiguration, "{\"enabled\":true}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
-        Assert.Contains("forbidden", (await executor.ExecuteAsync(definition with { Environment = new RoleEnvironment(ToolAllowlist: []) }, Guid.NewGuid(), new("config", ToolCatalog.BrowserConfiguration, "{}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
+        Assert.Contains("forbidden", (await executor.ExecuteAsync(definition with { ExecutionPolicy = new DefinitionExecutionPolicy(ToolAllowlist: []) }, Guid.NewGuid(), new("config", ToolCatalog.BrowserConfiguration, "{}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
     }
 
     private static AgentDefinition Definition(params string[] names)
@@ -189,7 +189,7 @@ public sealed class NativeBrowserContractTests
             new("answerNewTurn", true, true), new("balanced", false, "en", 2048),
             new(false, 60_000, 120_000, 1, ["longSilence"], 0), new(false, "default", 1),
             new("primary-stt", "primary-tts"), new Dictionary<string, string>(),
-            new RoleEnvironment(ToolAllowlist: names));
+            new DefinitionExecutionPolicy(ToolAllowlist: names));
     }
     private sealed class Subset(bool advanced = false) : IBrowser,IBrowserRuntimeReadiness
     {

@@ -73,6 +73,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<OpenSandboxService>();
         services.TryAddSingleton<ISandboxService>(provider => provider.GetRequiredService<OpenSandboxService>());
         services.TryAddSingleton<ITenantSandboxVerifier>(provider => provider.GetRequiredService<OpenSandboxService>());
+        services.TryAddSingleton<ITenantSpaceWorkspaceCleanup>(provider => provider.GetRequiredService<FileSpaceWorkspaceStore>());
+        services.TryAddSingleton<AgentCore.Application.Workspaces.TenantSpaceWorkspaceCleanupService>();
+        services.TryAddSingleton<ITenantSandboxContextIsolation>(provider => provider.GetRequiredService<OpenSandboxService>());
         services.TryAddSingleton<ITenantSandboxCommandExecutor>(provider => provider.GetRequiredService<OpenSandboxService>());
         services.TryAddSingleton<OpenSandboxReadiness>();
         services.TryAddSingleton<ISandboxReadiness>(provider => provider.GetRequiredService<OpenSandboxReadiness>());
@@ -246,22 +249,24 @@ public static class InfrastructureServiceCollectionExtensions
                 new InMemoryDefinitionDraftEvaluationStore(provider.GetRequiredService<IAgentDefinitionAdminStore>()));
 
         }
-        services.TryAddSingleton<ICredentialProtector>(p => new LocalCredentialProtector(persistence.CredentialProtectionKeyRoot));
+        services.TryAddSingleton<LocalCredentialProtector>(_ => new LocalCredentialProtector(persistence.CredentialProtectionKeyRoot));
+        services.TryAddSingleton<ICredentialProtector>(p => p.GetRequiredService<LocalCredentialProtector>());
+        services.TryAddSingleton<ISecretProtector>(p => p.GetRequiredService<LocalCredentialProtector>());
         services.TryAddSingleton<AgentCore.Application.Drive.DriveService>();
         services.TryAddSingleton<IAttachmentProcessor, AttachmentProcessor>();
         services.TryAddSingleton<DefinitionPublicationResourceReader>();
-        services.TryAddSingleton<IAgentInstanceWorkspaceStore>(provider =>
+        services.TryAddSingleton<FileSpaceWorkspaceStore>(provider =>
         {
             var options = provider.GetRequiredService<PersistenceOptions>();
-            return new FileAgentInstanceWorkspaceStore(options.WorkspaceRoot,
-                provider.GetRequiredService<IAgentInstanceStore>(), provider.GetRequiredService<ISandboxStore>(),
-                tenantAgents: provider.GetRequiredService<ITenantAgentStore>(), tenantSessions: provider.GetRequiredService<ITenantSessionStore>());
+            return new FileSpaceWorkspaceStore(options.WorkspaceRoot, provider.GetRequiredService<ITenantSpaceStore>(),
+                provider.GetRequiredService<ITenantAgentStore>(), provider.GetRequiredService<ITenantSessionStore>(), provider.GetRequiredService<ITenantAgentDecommissionStore>(), provider.GetRequiredService<ISandboxStore>());
         });
-        services.TryAddSingleton<ITenantWorkspaceReadStore>(provider => (ITenantWorkspaceReadStore)provider.GetRequiredService<IAgentInstanceWorkspaceStore>());
-        services.TryAddSingleton<ITenantWorkspaceMutationStore>(provider => (ITenantWorkspaceMutationStore)provider.GetRequiredService<IAgentInstanceWorkspaceStore>());
-        services.TryAddSingleton<ITenantWorkspaceArtifactSourceStore>(provider => (ITenantWorkspaceArtifactSourceStore)provider.GetRequiredService<IAgentInstanceWorkspaceStore>());
+        services.TryAddSingleton<ITenantAgentWorkspaceCleanup>(provider => provider.GetRequiredService<FileSpaceWorkspaceStore>());
+        services.TryAddSingleton<ITenantWorkspaceReadStore>(provider => (ITenantWorkspaceReadStore)provider.GetRequiredService<FileSpaceWorkspaceStore>());
+        services.TryAddSingleton<ITenantWorkspaceMutationStore>(provider => (ITenantWorkspaceMutationStore)provider.GetRequiredService<FileSpaceWorkspaceStore>());
+        services.TryAddSingleton<ITenantWorkspaceArtifactSourceStore>(provider => (ITenantWorkspaceArtifactSourceStore)provider.GetRequiredService<FileSpaceWorkspaceStore>());
         services.TryAddSingleton<AgentCore.Application.Security.TenantArtifactSourceTarget>();
-        services.TryAddSingleton<ITenantWorkspaceMutationObservationStore>(provider => (ITenantWorkspaceMutationObservationStore)provider.GetRequiredService<IAgentInstanceWorkspaceStore>());
+        services.TryAddSingleton<ITenantWorkspaceMutationObservationStore>(provider => (ITenantWorkspaceMutationObservationStore)provider.GetRequiredService<FileSpaceWorkspaceStore>());
         services.TryAddSingleton<AgentCore.Application.Security.TenantWorkspaceMutationService>();
         services.TryAddSingleton<AgentCore.Application.Security.TenantWorkspaceReadService>();
         services.TryAddSingleton<AdminLifecycleCoordinator>();

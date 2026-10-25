@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Domain.Spaces;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Agents;
 using AgentCore.Domain.Conversation;
@@ -11,10 +12,10 @@ public static class TenantWorkspaceReadOperationRules
 {
     public const string Reason = "workspace_read_authorized";
     public const string AuditAction = "operations.workspace.read";
-    public static IEnumerable<(string Permission, AccessScope Scope)> Targets(Guid tenant, Guid instance, PreparedWorkspaceRead value)
+    public static IEnumerable<(string Permission, AccessScope Scope)> Targets(Guid tenant, Guid instance, PreparedWorkspaceRead value, RunSpaceWitness context)
     {
         yield return ("sessions.read", TenantSessionRules.Scope(tenant, value.SessionId));
-        if (!value.Working && value.AttachmentMembersJson is null) yield return ("agents.read", AccessScope.ForResource(tenant, "agent", instance.ToString("D")));
+        if ((value.ResourceKey is not null || value.ResourceMembersJson is not null) && value.AttachmentMembersJson is null) yield return ("agents.read", AccessScope.ForResource(tenant, "agent", instance.ToString("D")));
         if (value.AttachmentMembersJson is not null)
         {
             foreach (var member in TenantApprovalRules.AttachmentReadMembers(value)) yield return ("attachments.read", TenantAttachmentRules.Scope(tenant, member.AttachmentId));
@@ -22,11 +23,13 @@ public static class TenantWorkspaceReadOperationRules
         }
         if (value.ResourceMembersJson is not null)
         {
-            foreach (var member in TenantApprovalRules.ResourceReadMembers(value)) yield return ("resources.read", TenantAgentChildScopes.Scope(tenant, instance, "resource", member.Key));
+            foreach (var member in TenantApprovalRules.ResourceReadMembers(value)) yield return ("resources.read", TenantResourceScopes.Source(tenant, instance, member.Key));
             yield break;
         }
-        yield return value.ResourceKey is { } key ? ("resources.read", TenantAgentChildScopes.Scope(tenant, instance, "resource", key))
-            : ("workspaces.read", TenantWorkspaceRules.Scope(new(tenant, instance, value.Working ? value.SessionId : null)));
+        var owner = TenantWorkspaceRules.ForCaptured(tenant, value.SessionId, TenantWorkspaceReadContract.Parse(value.ToolName, value.ArgumentsJson).Path, context);
+        if (value.ResourceKey is null) yield return TenantWorkspaceMutationRules.Parent(owner);
+        yield return value.ResourceKey is { } key ? ("resources.read", TenantResourceScopes.Source(tenant, instance, key))
+            : ("workspaces.read", TenantWorkspaceRules.Scope(owner));
     }
     public static void Require(PreparedWorkspaceRead value, AgentRun run, TenantAgent agent, AgentDefinition current, TenantSession session)
     {
@@ -37,7 +40,7 @@ public static class TenantWorkspaceReadOperationRules
             if (selected.Source != value.Knowledge || selected.Resource.Key != value.ResourceKey) throw new SecurityConflictException("knowledge_source_changed");
             args = args with { Path = selected.Resource.VirtualPath };
         }
-        var owner = new TenantWorkspaceReference(agent.TenantId, agent.Instance.InstanceId, value.Working ? value.SessionId : null);
+        var owner = TenantWorkspaceRules.ForRun(run, args.Path);
         if (value.AttachmentMembersJson is not null)
         {
             _ = TenantApprovalRules.AttachmentReadMembers(value);
@@ -77,23 +80,23 @@ public static class TenantWorkspaceReadOperationRules
         if (value.ResourceKey is not { } key) return;
         TenantResourceRevisionRules.Require(key, value.ResourceRevision, run, agent, resources);
     }
-    public static async ValueTask PermissionsAsync(TenantSecurityState state, Guid instance, PreparedWorkspaceRead value, Guid principal, IamAuthorizer iam, CancellationToken ct)
+    public static async ValueTask PermissionsAsync(TenantSecurityState state, Guid instance, PreparedWorkspaceRead value, RunSpaceWitness context, Guid principal, IamAuthorizer iam, CancellationToken ct)
     {
-        foreach (var (key, scope) in Targets(state.Tenant.TenantId, instance, value))
+        foreach (var (key, scope) in Targets(state.Tenant.TenantId, instance, value, context))
             if (!(await iam.CheckOwnedTenantAsync(state, principal, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed) throw new AccessDeniedException("executor_read_required");
     }
-    public static async ValueTask<bool> IndependentAsync(TenantSecurityState state, Guid instance, PreparedWorkspaceRead value, Guid? requester, IamAuthorizer iam, CancellationToken ct)
+    public static async ValueTask<bool> IndependentAsync(TenantSecurityState state, Guid instance, PreparedWorkspaceRead value, RunSpaceWitness context, Guid? requester, IamAuthorizer iam, CancellationToken ct)
     {
-        foreach (var (key, scope) in Targets(state.Tenant.TenantId, instance, value))
+        foreach (var (key, scope) in Targets(state.Tenant.TenantId, instance, value, context))
             if (TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(key)).IndependentReview &&
                 (key is "workspaces.read" or "resources.read" or "attachments.read" || await TenantSandboxReadOperationRules.NeedsReviewAsync(state, requester, key, scope, iam, ct).ConfigureAwait(false))) return true;
         return false;
     }
-    public static async ValueTask ReviewerAsync(TenantSecurityState state, Guid instance, PreparedWorkspaceRead value, Guid? requester, Guid human, IamAuthorizer iam, CancellationToken ct)
+    public static async ValueTask ReviewerAsync(TenantSecurityState state, Guid instance, PreparedWorkspaceRead value, RunSpaceWitness context, Guid? requester, Guid human, IamAuthorizer iam, CancellationToken ct)
     {
         if (!state.Users.Any(u => u.PrincipalId == human && u.Status == IdentityStatus.Active)) throw new AccessDeniedException("approver_unqualified");
-        await PermissionsAsync(state, instance, value, human, iam, ct).ConfigureAwait(false);
-        foreach (var (key, scope) in Targets(state.Tenant.TenantId, instance, value))
+        await PermissionsAsync(state, instance, value, context, human, iam, ct).ConfigureAwait(false);
+        foreach (var (key, scope) in Targets(state.Tenant.TenantId, instance, value, context))
         {
             if (key is not ("workspaces.read" or "resources.read" or "attachments.read") && !await TenantSandboxReadOperationRules.NeedsReviewAsync(state, requester, key, scope, iam, ct).ConfigureAwait(false)) continue;
             if (TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(key)).IndependentReview && requester == human) throw new AccessDeniedException("independent_reviewer_required");

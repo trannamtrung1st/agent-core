@@ -6,6 +6,8 @@ The [IAM stabilization follow-up](docs/reports/iam-stabilization-2026-10-24.md) 
 
 Tenant-owned dynamic model management is implemented locally: five adapter kinds, protected provider connections, explicit offerings/defaults and canonical Chat/authoring/runtime selection. The [delivery audit](docs/reports/dynamic-model-management-delivery-2026-10-25.md#final-requirement-audit) records focused offline/Synthetic evidence, migration/reset policy and unrun live-provider/CI limits.
 
+The [model and Space integration](docs/reports/model-space-main-integration-2026-10-25.md) records combined migration, authority and conversation verification after synchronizing main. Inference offerings remain tenant scoped; Space/Environment selection retains independent membership and IAM checks.
+
 Agent Core is a lightweight runtime for creating persistent AI identities capable of natural, real-time conversation.
 
 An agent can represent a customer service representative, examiner, tutor, friend, interviewer, receptionist, or another role. The goal of the MVP is not to build a general-purpose autonomous-agent platform. The goal is to prove that one reusable Agent Core can inhabit different identities and interact naturally through text and voice.
@@ -52,6 +54,8 @@ Agent Core is proprietary software. Source availability does not grant permissio
 - [Demo Scenarios](docs/09-demo-scenarios.md)
 
 ## Implementation baseline
+
+The Space/Environment successor replaces persistent Instance home ownership with tenant Spaces, protected Private Spaces, per-Session context and immutable Run captures. Membership controls contextual resource availability; optional Environments contain on-demand typed variables, and Secrets remain protected tenant resources. [Current implementation evidence](docs/reports/space-environment-implementation-2026-10-25.md) tracks qualification and remaining integration; [operator cutover](docs/space-environment-cutover.md) covers matching code/schema/root deployment and recoverable backups. Historical IAM/MVP delivery reports do not accept this successor.
 
 The original MVP and post-MVP freeze summaries are historical records. Their old authentication/route examples are not current interfaces. Milestone status and links to their frozen evidence belong to the [Implementation Plan](docs/18-implementation-plan.md) and [dated reports](docs/reports/); see the [MVP handoff](docs/reports/m12-mvp-handoff.md) for that original scope.
 

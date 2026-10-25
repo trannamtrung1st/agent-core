@@ -12,6 +12,8 @@ public static class ToolPolicy
         IToolConfigurationGate configurationGate,
         ToolExecutionAdmission? admission = null)
     {
+        if (TenantContextToolContract.IsTool(toolName))
+            return admission is { TenantId: not null, AgentRunId: not null, AgentRunGeneration: not null, SupportsTools: true } && TenantContextToolContract.Allows(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (!ToolRegistry.TryGet(toolName, out var descriptor))
         {
             return ToolPolicyDecision.Deny;
@@ -95,13 +97,13 @@ public static class ToolPolicy
         if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)
             return admission is { AgentInstanceId: not null, SupportsTools: true } ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
 
-        if (descriptor.DefinitionAuthorizable && definition.Environment?.Capabilities is not null && !RolePermissions.AllowsTool(definition, toolName)) return ToolPolicyDecision.Deny;
+        if (descriptor.DefinitionAuthorizable && definition.ExecutionPolicy?.Capabilities is not null && !RolePermissions.AllowsTool(definition, toolName)) return ToolPolicyDecision.Deny;
 
         if (descriptor.OfferRule == ToolOfferRule.HarnessAuthority)
             return ToolPolicyDecision.Deny;
 
         if (toolName == ToolCatalog.CapabilitiesLoad)
-            return definition.Environment?.Capabilities is not null && admission is { SupportsTools: true }
+            return definition.ExecutionPolicy?.Capabilities is not null && admission is { SupportsTools: true }
                 && (admission is { Detached: false, TriggerKind: TriggerKind.UserTurn }
                     || admission.AgentInstanceId is not null && ToolResources.IsOccurrence(admission.TriggerKind))
                 ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
@@ -151,7 +153,7 @@ public static class ToolPolicy
         }
 
         if (descriptor.OfferRule is ToolOfferRule.RoleAllowlist or ToolOfferRule.ConfigurationWhenRoleAllows
-            && !RoleEnvironments.Of(definition).ToolList.Contains(toolName, StringComparer.Ordinal))
+            && !DefinitionExecutionPolicies.Of(definition).ToolList.Contains(toolName, StringComparer.Ordinal))
         {
             return ToolPolicyDecision.Deny;
         }
@@ -197,6 +199,8 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (TenantContextToolContract.IsTool(descriptor.Name))
+            return context is { ModelSupportsTools: true, ExecutionContext: not null } && context.CurrentContextTools.Contains(descriptor.Name, StringComparer.Ordinal) && TenantContextToolContract.Allows(definition, descriptor.Name);
         if (context?.ExecutionContext is { } message && descriptor.Name == ToolCatalog.AppMessageSend)
             return context is { ModelSupportsTools: true, DetachedExecution: false, IntermediateMessagingAllowed: true, ConfigurationContinuationTarget: null,
                     AgentInstanceId: not null, OwnedSessionId: not null }
@@ -204,7 +208,7 @@ public static class ToolPolicy
                 && ApplicationMessageToolPolicy.AllowsConversation(message, context.OutputContract, context.RunTaskIntent);
         if (context?.ExecutionContext is { } discovery && descriptor.Name == ToolCatalog.CapabilitiesLoad)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
-                && discovery.SessionId == context.OwnedSessionId && definition.Environment?.Capabilities is not null && TenantTaskExecutionContract.Allows(context);
+                && discovery.SessionId == context.OwnedSessionId && definition.ExecutionPolicy?.Capabilities is not null && TenantTaskExecutionContract.Allows(context);
         if (context?.ExecutionContext is not null && TenantManagementMutationContract.IsTool(descriptor.Name))
             return TenantManagementMutationContract.Allowed(definition, context).Contains(descriptor.Name);
         if (context?.ExecutionContext is not null && descriptor.Name == ToolCatalog.SkillsLoad)
@@ -294,7 +298,7 @@ public static class ToolPolicy
         if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)
             return context is { AgentInstanceId: not null, ModelSupportsTools: true, CredentialMetadataAvailable: true };
 
-        if (descriptor.DefinitionAuthorizable && definition.Environment?.Capabilities is not null && !RolePermissions.AllowsTool(definition, descriptor.Name)) return false;
+        if (descriptor.DefinitionAuthorizable && definition.ExecutionPolicy?.Capabilities is not null && !RolePermissions.AllowsTool(definition, descriptor.Name)) return false;
 
         if (context is not null && !context.ModelSupportsTools)
         {
@@ -323,7 +327,7 @@ public static class ToolPolicy
             return false;
 
         if (descriptor.Name == ToolCatalog.CapabilitiesLoad)
-            return definition.Environment?.Capabilities is not null && context is { ModelSupportsTools: true }
+            return definition.ExecutionPolicy?.Capabilities is not null && context is { ModelSupportsTools: true }
                 && (context is { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn }
                     || context.AgentInstanceId is not null && ToolResources.IsOccurrence(context.Trigger.Kind));
 
@@ -357,13 +361,13 @@ public static class ToolPolicy
             && (context.Trigger.Kind == TriggerKind.UserTurn || ToolResources.IsOccurrence(context.Trigger.Kind));
         return descriptor.OfferRule switch
         {
-            ToolOfferRule.RoleAllowlist => RoleEnvironments.Of(definition).ToolList.Contains(
+            ToolOfferRule.RoleAllowlist => DefinitionExecutionPolicies.Of(definition).ToolList.Contains(
                 descriptor.Name,
                 StringComparer.Ordinal),
             ToolOfferRule.SessionAttachmentsWhenRoleAllows => context is not null
                 && ToolCatalog.SessionHasAttachments(context),
             ToolOfferRule.ConfigurationWhenRoleAllows =>
-                RoleEnvironments.Of(definition).ToolList.Contains(descriptor.Name, StringComparer.Ordinal)
+                DefinitionExecutionPolicies.Of(definition).ToolList.Contains(descriptor.Name, StringComparer.Ordinal)
                 && configurationGate.IsConfigured(descriptor.Name),
             ToolOfferRule.CurrentExecutionCapability => context is not null
                 && context.Trigger.Kind == TriggerKind.UserTurn

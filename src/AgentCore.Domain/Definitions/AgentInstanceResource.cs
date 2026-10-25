@@ -10,4 +10,6 @@ public sealed record AgentDefinitionResourceState(Guid InstanceId, Guid Resource
 
 /// <summary>Origin and immutable content address are execution identity; display paths never shadow another origin.</summary>
 public sealed record EffectiveAgentResource(string Key, string LogicalPath, AgentDefinitionResourceKind Kind,
-    string MediaType, string ContentSha256, long ByteLength, string VirtualPath);
+    string MediaType, string ContentSha256, long ByteLength, string VirtualPath,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    AgentCore.Domain.Spaces.SpaceResourceOrigin? SpaceSource = null);

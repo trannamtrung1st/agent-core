@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace AgentCore.Application.Security;
 
 public sealed class TenantAgentDecommissionCleanup(ITenantAgentDecommissionStore store, IBrowser browser,
-    IAgentInstanceWorkspaceStore workspace, IIdGenerator ids, TimeProvider time, ILogger<TenantAgentDecommissionCleanup>? logger = null)
+    ITenantAgentWorkspaceCleanup files, IIdGenerator ids, TimeProvider time, ILogger<TenantAgentDecommissionCleanup>? logger = null)
 {
     private readonly SemaphoreSlim gate = new(1, 1); private Guid? cursor;
     public async ValueTask<int> RecoverAsync(CancellationToken ct = default)
@@ -26,7 +26,7 @@ public sealed class TenantAgentDecommissionCleanup(ITenantAgentDecommissionStore
     public async ValueTask<bool> ReconcileAsync(TenantBrowserAgentOwner owner, CancellationToken ct = default)
     {
         try {
-            if (!await store.IsAgentDecommissionedAsync(owner, ct) || browser is not ITenantBrowserProfileControl profiles || workspace is not ITenantAgentWorkspaceCleanup files) return false;
+            if (!await store.IsAgentDecommissionedAsync(owner, ct) || browser is not ITenantBrowserProfileControl profiles) return false;
             ValueTask<bool> Still(CancellationToken token) => store.IsAgentDecommissionedAsync(owner, token);
             var observed = await profiles.ReadTenantProfileAsync(owner, ct);
             if (observed.Busy || observed.InFlightOperation is not null) return false;

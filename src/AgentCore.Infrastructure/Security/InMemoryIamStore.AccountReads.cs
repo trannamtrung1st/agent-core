@@ -27,7 +27,7 @@ public sealed partial class InMemoryIamStore
     {
         var read = request.Operation.AccountRead!;
         var session = sessionBacking.ReadTenantSession(request.TenantId, read.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
-        var bound = ReadTenantCredentialBindingsAsync(request.TenantId, agent.Instance.InstanceId).Result?.Bindings.SingleOrDefault(b => b.Binding.BindingId == read.Credential.BindingId)
+        var bound = ContextCredentialBindings(run).SingleOrDefault(b => b.Binding.BindingId == read.Credential.BindingId)
             ?? throw new AccessDeniedException("account_source_changed");
         TenantAccountReadRules.Require(read, run, agent, session, TenantAgentDefinitionBaseline(agent), bound, exactSecret);
         if (read.Source is { } original)

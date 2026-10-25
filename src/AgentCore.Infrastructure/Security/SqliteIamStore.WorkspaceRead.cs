@@ -25,15 +25,10 @@ public sealed partial class SqliteIamStore
         }
         if (value.ResourceKey is not null || value.ResourceMembersJson is not null)
         {
-            var inputs = await HasResourcePinChanges(db, run, ct).ConfigureAwait(false) ? await ResourcePinInputs(db, await ManagementReader(db, run, null, ct).ConfigureAwait(false), ct).ConfigureAwait(false) : null;
-            var resources = inputs?.Snapshot.Resources ?? await SqliteAgentInstanceStore.ReadResourcesAsync(db, agent.Instance.InstanceId, ct).ConfigureAwait(false);
             var members = value.ResourceMembersJson is null ? new[] { new PreparedResourceReadMember(value.ResourceKey!, value.ResourceRevision!.Value) } : TenantApprovalRules.ResourceReadMembers(value);
             foreach (var member in members)
-            {
-                var pinned = run.Admission.Configuration!.Resources.SingleOrDefault(r => r.Key == member.Key);
-                TenantResourceRevisionRules.Require(member.Key, member.Revision, run, agent, resources, inputs is null || pinned is null ? null : RetainedResourcePin(inputs, pinned));
-            }
+                await RequireResourcePin(db, member.Key, member.Revision, run, agent, ct).ConfigureAwait(false);
         }
-        await TenantWorkspaceReadOperationRules.PermissionsAsync((await ReadTenantAsync(db, tenant, ct).ConfigureAwait(false))!, agent.Instance.InstanceId, value, agent.PrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+        await TenantWorkspaceReadOperationRules.PermissionsAsync((await ReadTenantAsync(db, tenant, ct).ConfigureAwait(false))!, agent.Instance.InstanceId, value, TenantWorkspaceRules.Context(run), agent.PrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
     }
 }

@@ -73,6 +73,7 @@ public sealed partial class TenantCredentialIntegrationTests
             new(connection.ConnectionId, preset?.PresetId, externalId, "Explicit live offering", transport, capabilities, true, false), await Revision(), 0);
         await models.SaveDefaultAsync(human, tenant, offering.OfferingId, null, await Revision(), 0);
         var agent = await f.Agents.CreateAsync(human.PrincipalId, tenant, "examiner", 1, await Revision());
+        await GrantModelFixtureSpaceRead(f, tenant, human.PrincipalId, agent.PrincipalId);
         using var clients = new LiveModelHttpClients(endpoints);
         var probe = new GlobalModelProbe();
         await using var services = RuntimeServices(f, clients, probe, modelEndpoints: endpoints);

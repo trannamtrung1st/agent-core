@@ -1,6 +1,7 @@
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Triggers;
+using AgentCore.Domain.Spaces;
 
 namespace AgentCore.Application.Execution;
 
@@ -36,7 +37,8 @@ public static class BackgroundSessionAdmissionFactory
             LifecycleSource: LifecycleTransitionSource.System, LifecycleChangedAt: now,
             ModelSelection: new(model.OfferingId, model.ConnectionId, model.ExternalModelId,
                 parent.ModelSelection?.SelectionSource ?? ModelSelectionSource.Host, model.ReasoningEffort, parent.ModelSelection?.HasExplicitReasoningEffort == true, model.Binding), PinnedPersona: persona,
-            PinnedPersonaRevision: configuration.PersonaRevision, Origin: origin, Surfaces: SessionSurface.BackgroundWork);
+            PinnedPersonaRevision: configuration.PersonaRevision, Origin: origin, Surfaces: SessionSurface.BackgroundWork,
+            ContextSelection: configuration.SpaceContext is { } context ? SessionContextSelection.FromCapture(context, now) : null);
         return (session, run);
     }
 
@@ -105,7 +107,8 @@ public static class BackgroundSessionAdmissionFactory
             LifecycleChangedAt: admittedAtUtc,
             ModelSelection: new SessionModelSelection(model.OfferingId, model.ConnectionId, model.ExternalModelId,
                 ModelSelectionSource.Host, model.ReasoningEffort, Binding: model.Binding), PinnedPersona: persona,
-            PinnedPersonaRevision: personaRevision, Origin: origin, Surfaces: origin.InitialSurface);
+            PinnedPersonaRevision: personaRevision, Origin: origin, Surfaces: origin.InitialSurface,
+            ContextSelection: configuration?.SpaceContext is { } context ? SessionContextSelection.FromCapture(context, admittedAtUtc) : null);
         return (session, run);
     }
 }

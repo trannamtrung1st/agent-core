@@ -13,7 +13,8 @@ public sealed record Credential(Guid CredentialId, string DisplayName, Credentia
     string ProtectedPayload, int ProtectionVersion, long Revision, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc,
     CredentialPurpose Purpose = CredentialPurpose.General, EmailAccountProfile? EmailAccount = null, long SecretRevision = 0, DriveAccountProfile? DriveAccount = null, ContainerRegistryProfile? ContainerRegistry = null);
 public sealed record AgentCredentialBinding(Guid BindingId, Guid AgentInstanceId, Guid CredentialId,
-    string Reference, long Revision, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
+    string Reference, long Revision, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid? ContextSpaceId = null);
 
 public static class CredentialRules
 {

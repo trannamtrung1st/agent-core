@@ -65,7 +65,7 @@
     "scenario": "support",
     "owner": "demo"
   },
-  "environment": {
+  "executionPolicy": {
     "harness": [
       "support-turn-taking"
     ],

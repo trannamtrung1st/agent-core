@@ -8,18 +8,27 @@ namespace AgentCore.Application.Security;
 public sealed partial class TenantToolAuthorization(ITenantRunStore runs, TenantOperationAuthorizer authorizer, TimeProvider time,
     TenantApprovalService? approvals = null, TenantRunConfigurationResolver? configuration = null,
     TenantPreferenceOperationService? preferences = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserReadService? browserReads = null,
-    TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactOperationService? artifactPublications = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null, TenantAttachmentRuntimeContextService? tenantAttachments = null, IOfficeProcessor? office = null, Func<TenantRuntimeStateService>? runtimeState = null, TenantMemoryOperationService? memoryOperations = null, TenantContinuityReadService? continuityReads = null, TenantExperienceOperationService? experienceOperations = null, TenantAutomationReadService? automationReads = null, TenantAutomationMutationService? automationMutations = null, TenantManagementOperationTarget? managementTargets = null, TenantPublicWebReadService? publicWebReads = null)
+    TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactOperationService? artifactPublications = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null, TenantAttachmentRuntimeContextService? tenantAttachments = null, IOfficeProcessor? office = null, Func<TenantRuntimeStateService>? runtimeState = null, TenantMemoryOperationService? memoryOperations = null, TenantContinuityReadService? continuityReads = null, TenantExperienceOperationService? experienceOperations = null, TenantAutomationReadService? automationReads = null, TenantAutomationMutationService? automationMutations = null, TenantManagementOperationTarget? managementTargets = null, TenantPublicWebReadService? publicWebReads = null, TenantContextToolService? contextTools = null)
 {
-    internal async ValueTask<AgentCore.Application.Execution.ResolvedAgentRunConfiguration?> ResolveConfigurationAsync(AgentCore.Domain.Conversation.SessionSnapshot snapshot, CancellationToken ct)
+    internal async ValueTask<AgentCore.Application.Execution.ResolvedAgentRunConfiguration?> ResolveConfigurationAsync(AgentCore.Domain.Conversation.SessionSnapshot snapshot, CancellationToken ct,
+        AgentCore.Domain.Conversation.AgentRun? childSource = null)
     {
         var owner = await runs.ResolveTenantSessionOwnerAsync(snapshot.SessionId, ct).ConfigureAwait(false);
         if (owner is null) return null;
         if (configuration is null || owner.AgentInstanceId != snapshot.AgentInstanceId || snapshot.ProfileId is not null)
             throw new AccessDeniedException("tenant_configuration_unavailable");
-        var resolved = await configuration.ResolveAsync(owner.TenantId, owner.AgentInstanceId, ct).ConfigureAwait(false);
+        if (childSource is not null && (childSource.Owner.TenantId != owner.TenantId || childSource.AgentInstanceId != owner.AgentInstanceId
+            || childSource.SessionId != owner.SessionId || childSource.Owner.ExecutorPrincipalId != owner.ExecutorPrincipalId))
+            throw new AccessDeniedException("tenant_context_mismatch");
+        var resolved = childSource is not null
+            ? await configuration.ResolveInCapturedSpaceAsync(childSource, ct, selectionRevision: 1).ConfigureAwait(false)
+            : await configuration.ResolveInSpaceAsync(owner.TenantId, owner.AgentInstanceId,
+                snapshot.ContextSelection ?? throw new AccessDeniedException("space_context_required"), ct).ConfigureAwait(false);
         if (resolved.Agent.PrincipalId != owner.ExecutorPrincipalId) throw new AccessDeniedException("tenant_configuration_unavailable");
         return resolved.Configuration;
     }
+    internal ValueTask<IReadOnlyList<string>> ContextToolsAsync(AgentCore.Domain.Conversation.AgentRun run, CancellationToken ct) =>
+        contextTools?.OfferedAsync(run, ct) ?? ValueTask.FromResult<IReadOnlyList<string>>([]);
     private sealed record Boundary(bool Tenant, bool Allowed, TenantRunReference? Reference, string Reason);
     private async ValueTask<Boundary> Resolve(Guid session, ToolExecutionAdmission? admission, string tool, CancellationToken ct)
     {
@@ -49,6 +58,7 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
                     && TenantConfigurationContinuationRules.Target(run) is null;
                 return new(true, allowedMessage, reference, allowedMessage ? "allowed" : "application_message_unavailable");
             }
+            if (TenantContextToolContract.IsTool(tool)) return new(true, TenantTaskExecutionContract.Allows(run), reference, "context_tool_unavailable");
             if (TenantManagementMutationContract.IsTool(tool))
             {
                 var allowedChange = TenantManagementReadContract.Allows(run);
@@ -61,7 +71,7 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
             }
             if (tool == ToolCatalog.CapabilitiesLoad)
             {
-                var allowedDiscovery = TenantTaskExecutionContract.Allows(run) && run.Admission.Configuration?.Definition.Environment?.Capabilities is not null;
+                var allowedDiscovery = TenantTaskExecutionContract.Allows(run) && run.Admission.Configuration?.Definition.ExecutionPolicy?.Capabilities is not null;
                 return new(true, allowedDiscovery, reference, allowedDiscovery ? "allowed" : "capability_discovery_unavailable");
             }
             if (TenantBackgroundToolContract.IsTool(tool))
@@ -136,6 +146,12 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
         if (call.Name is ToolCatalog.SkillsLoad or ToolCatalog.CapabilitiesLoad) return Error("invalid", "context_load_requires_runtime");
         try
         {
+            if (TenantContextToolContract.IsTool(call.Name))
+            {
+                if (contextTools is null || admission?.AgentRunGeneration is not { } generation) return Error("forbidden", "context_tool_unavailable");
+                var run = await runs.FindTenantRunAsync(boundary.Reference!.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
+                return await contextTools.ExecuteAsync(new(run.Owner, session, run.AgentRunId, generation), call, remainingBytes, ct).ConfigureAwait(false);
+            }
             if (TenantManagementMutationContract.IsTool(call.Name))
             {
                 if (managementTargets is null || admission?.AgentRunGeneration is not { } generation) return Error("forbidden", "tenant_effect_unavailable");

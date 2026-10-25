@@ -16,8 +16,8 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Tenant_workspace_primitives_first_copy_authority_loss_reports_retained_preparation_as_possible_mutation(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
-        var files = WorkspaceReader(f); var owner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId);
-        var physical = AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), owner.InstanceId);
+        var files = WorkspaceReader(f); var owner = WorkspaceOwner(s);
+        var physical = AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), s.Tenant, SpaceId(s));
         await new CanonicalWorkspaceFilesystem(physical, "/home").WriteAsync("/home/source.txt", "source"u8.ToArray(), 1024, 4096);
         var fired = false;
         ValueTask Gate(CancellationToken ct)
@@ -36,9 +36,9 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
         var grant = await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read", "workspaces.read", "workspaces.write", "workspaces.delete"]);
-        var files = WorkspaceReader(f); var sourceOwner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId, s.Run.SessionId); var destinationOwner = sourceOwner with { SessionId = null };
-        var home = AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), sourceOwner.InstanceId);
-        var working = AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), sourceOwner.InstanceId, s.Run.SessionId);
+        var files = WorkspaceReader(f); var sourceOwner = WorkspaceOwner(s, true); var destinationOwner = WorkspaceOwner(s);
+        var home = AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), s.Tenant, SpaceId(s));
+        var working = AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), s.Agent.Instance.InstanceId, s.Run.SessionId);
         await new CanonicalWorkspaceFilesystem(working, "/working").WriteAsync("/working/source.txt", "private literal source"u8.ToArray(), 4096, 4096);
         var fired = false;
         async ValueTask Gate(CancellationToken ct)
@@ -55,8 +55,8 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Tenant_workspace_primitives_copy_preserves_links_without_following_or_disclosing_external_targets(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
-        var files = WorkspaceReader(f); var sourceOwner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId); var destinationOwner = sourceOwner with { SessionId = s.Run.SessionId };
-        var home = AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), sourceOwner.InstanceId);
+        var files = WorkspaceReader(f); var sourceOwner = WorkspaceOwner(s); var destinationOwner = WorkspaceOwner(s, true);
+        var home = AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), s.Tenant, SpaceId(s));
         var native = new CanonicalWorkspaceFilesystem(home, "/home"); native.Ensure(); native.Mkdir("/home/tree/empty");
         var outside = Path.Combine(f.Root, "outside-private.txt"); await File.WriteAllTextAsync(outside, "unavailable external secret");
         File.CreateSymbolicLink(Path.Combine(home, "tree", "outside"), outside);
@@ -72,8 +72,8 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
         var grant = await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read", "workspaces.read", "workspaces.write", "workspaces.delete"]);
-        var files = WorkspaceReader(f); var owner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId, s.Run.SessionId);
-        var physical = AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), owner.InstanceId, owner.SessionId!.Value);
+        var files = WorkspaceReader(f); var owner = WorkspaceOwner(s, true);
+        var physical = AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), s.Agent.Instance.InstanceId, s.Run.SessionId);
         var native = new CanonicalWorkspaceFilesystem(physical, "/working"); await native.WriteAsync("/working/source.txt", "original"u8.ToArray(), 4096, 4096);
         var fired = false;
         async ValueTask Gate(CancellationToken ct)
@@ -97,8 +97,8 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
         var grant = await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read", "workspaces.read", "workspaces.write", "workspaces.delete"]);
-        var files = WorkspaceReader(f); var owner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId);
-        var physical = AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), owner.InstanceId); var fired = false;
+        var files = WorkspaceReader(f); var owner = WorkspaceOwner(s);
+        var physical = AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), s.Tenant, SpaceId(s)); var fired = false;
         async ValueTask Gate(CancellationToken ct)
         {
             if (!fired && Directory.Exists(Path.Combine(physical, "first")))
@@ -115,8 +115,8 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Tenant_workspace_primitives_validate_all_scope_and_shape_before_callback_or_root_creation(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
-        var files = WorkspaceReader(f); var owner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId);
-        var physical = AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), owner.InstanceId); var called = false;
+        var files = WorkspaceReader(f); var owner = WorkspaceOwner(s);
+        var physical = AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), s.Tenant, SpaceId(s)); var called = false;
         ValueTask Gate(CancellationToken ct) { called = true; throw new AccessDeniedException("permission_denied"); }
         foreach (var bad in new[] { new WorkspaceStructuralOperation("delete", Path: "/working/foreign"), new("delete", Path: "/home"),
             new("mkdir", Path: "/home/*.txt"), new("move", Source: "/home/a", Destination: "/home/../b"), new("unknown", Path: "/home/a") })
@@ -124,11 +124,11 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.False(called); Assert.False(Directory.Exists(physical));
         var denied = await files.StructureTenantAsync(owner, [new("mkdir", Path: "/home/denied")], Gate);
         Assert.True(called); Assert.False(denied.Completed); Assert.False(denied.MutationsMayHaveOccurred); Assert.False(Directory.Exists(physical));
-        var otherSession = await f.Sessions.CreateAsync(s.Tenant, owner.InstanceId, s.Owner, SessionMode.Text, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, s.Agent.Instance.Revision);
-        foreach (var foreign in new[] { owner with { TenantId = f.Ids.NewId() }, owner with { InstanceId = f.Ids.NewId() } })
+        var otherSession = await f.Sessions.CreateAsync(s.Tenant, s.Agent.Instance.InstanceId, s.Owner, SessionMode.Text, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, s.Agent.Instance.Revision);
+        foreach (var foreign in new[] { new TenantWorkspaceReference.SpaceHome(f.Ids.NewId(), owner.OwnerId), new TenantWorkspaceReference.SpaceHome(s.Tenant, f.Ids.NewId()) })
             await Assert.ThrowsAsync<AccessDeniedException>(() => files.CopyTenantAsync(owner, "/home/a", foreign, "/home/b", _ => ValueTask.CompletedTask).AsTask());
-        await Assert.ThrowsAsync<AccessDeniedException>(() => files.CopyTenantAsync(owner with { SessionId = s.Run.SessionId }, "/working/a",
-            owner with { SessionId = otherSession.Owner.SessionId }, "/working/b", _ => ValueTask.CompletedTask).AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => files.CopyTenantAsync(WorkspaceOwner(s, true), "/working/a",
+            new TenantWorkspaceReference.SessionWorking(s.Tenant, otherSession.Owner.SessionId), "/working/b", _ => ValueTask.CompletedTask).AsTask());
         Assert.False(Directory.Exists(physical));
     }
 
@@ -136,13 +136,13 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Tenant_workspace_primitives_recheck_lifecycle_after_async_callback_and_freeze_batch_input(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
-        var files = WorkspaceReader(f); var owner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId);
+        var files = WorkspaceReader(f); var owner = WorkspaceOwner(s);
         var operations = new WorkspaceStructuralOperation[] { new("mkdir", Path: "/home/literal") };
         var result = await files.StructureTenantAsync(owner, operations, _ => { operations[0] = new("mkdir", Path: "/home/substituted"); return ValueTask.CompletedTask; });
-        Assert.True(result.Completed); var physical = AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), owner.InstanceId);
+        Assert.True(result.Completed); var physical = AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), s.Tenant, SpaceId(s));
         Assert.True(Directory.Exists(Path.Combine(physical, "literal"))); Assert.False(Directory.Exists(Path.Combine(physical, "substituted")));
         result = await files.StructureTenantAsync(owner, [new("mkdir", Path: "/home/archived-write")], async ct => {
-            await f.Agents.SetLifecycleAsync(s.Owner.PrincipalId, s.Tenant, owner.InstanceId, AgentInstanceLifecycle.Archived, (await f.Iam.ReadTenantAsync(s.Tenant, ct))!.Tenant.Revision, s.Agent.Instance.Revision, ct);
+            await f.Agents.SetLifecycleAsync(s.Owner.PrincipalId, s.Tenant, s.Agent.Instance.InstanceId, AgentInstanceLifecycle.Archived, (await f.Iam.ReadTenantAsync(s.Tenant, ct))!.Tenant.Revision, s.Agent.Instance.Revision, ct);
         });
         Assert.False(result.Completed); Assert.False(result.MutationsMayHaveOccurred); Assert.False(Directory.Exists(Path.Combine(physical, "archived-write")));
     }
@@ -151,10 +151,9 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Tenant_workspace_primitives_patch_bounds_UTF8_growth_overlap_and_frozen_input(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
-        var owner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId);
-        var physical = AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), owner.InstanceId); var native = new CanonicalWorkspaceFilesystem(physical, "/home");
-        var files = new FileAgentInstanceWorkspaceStore(Path.Combine(f.Root, "workspaces"), f.Instances, f.Sandboxes, maxFileBytes: 7,
-            tenantAgents: (ITenantAgentStore)f.Iam, tenantSessions: (ITenantSessionStore)f.Iam);
+        var owner = WorkspaceOwner(s);
+        var physical = AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), s.Tenant, SpaceId(s)); var native = new CanonicalWorkspaceFilesystem(physical, "/home");
+        var files = new FileSpaceWorkspaceStore(Path.Combine(f.Root, "workspaces"), (ITenantSpaceStore)f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantAgentDecommissionStore)f.Iam, f.Sandboxes, maxFileBytes: 7);
         await native.WriteAsync("/home/text.txt", Encoding.UTF8.GetBytes("éx"), 7, 4096);
         var quota = await Assert.ThrowsAsync<AgentCoreException>(() => files.PatchTenantAsync(owner, "/home/text.txt", [new("x", "漢漢")], _ => ValueTask.CompletedTask).AsTask());
         Assert.Equal("WorkspaceQuotaExceeded", quota.Code); Assert.Equal("éx", Encoding.UTF8.GetString(await native.ReadAsync("/home/text.txt", 7)));
@@ -173,10 +172,9 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Tenant_workspace_primitives_copy_retains_partial_quota_effect_and_never_executes_later_operations(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
-        var owner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId);
-        var physical = AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), owner.InstanceId); var native = new CanonicalWorkspaceFilesystem(physical, "/home");
-        var files = new FileAgentInstanceWorkspaceStore(Path.Combine(f.Root, "workspaces"), f.Instances, f.Sandboxes, maxFileBytes: 2,
-            tenantAgents: (ITenantAgentStore)f.Iam, tenantSessions: (ITenantSessionStore)f.Iam);
+        var owner = WorkspaceOwner(s);
+        var physical = AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), s.Tenant, SpaceId(s)); var native = new CanonicalWorkspaceFilesystem(physical, "/home");
+        var files = new FileSpaceWorkspaceStore(Path.Combine(f.Root, "workspaces"), (ITenantSpaceStore)f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantAgentDecommissionStore)f.Iam, f.Sandboxes, maxFileBytes: 2);
         await native.WriteAsync("/home/source/large.txt", "oversized"u8.ToArray(), 100, 4096);
         var result = await files.StructureTenantAsync(owner, [new("mkdir", Path: "/home/completed"), new("copy", Source: "/home/source", Destination: "/home/partial"),
             new("mkdir", Path: "/home/must-not-execute")], _ => ValueTask.CompletedTask);

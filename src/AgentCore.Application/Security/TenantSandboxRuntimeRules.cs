@@ -38,7 +38,8 @@ public static class TenantSandboxRuntimeRules
             throw new AccessDeniedException("sandbox_setup_changed");
         var isolation = StateIsolationPolicy.Restrict(run.Admission.Configuration!.Definition.StateIsolationPolicy ?? StateIsolationPolicy.Default,
             current.StateIsolationPolicy ?? StateIsolationPolicy.Default);
-        if (mounted is not null && mounted.HomeAccess != isolation.HomeAccess)
+        if (mounted is not null && (mounted.WorkspaceAccess is null || mounted.WorkspaceAccess.Context != TenantWorkspaceRules.Context(run)
+            || !TenantSandboxOperationRules.WithinPolicy(mounted.HomeAccess, isolation.HomeAccess) || !TenantSandboxOperationRules.WithinPolicy(mounted.WorkspaceAccess.PrivateAccess, isolation.HomeAccess)))
             throw new AccessDeniedException("sandbox_mount_policy_changed");
     }
     public static async ValueTask RequirePermissionsAsync(TenantSecurityState state, AgentRun run, SandboxProfile profile, IamAuthorizer authorizer, CancellationToken ct)

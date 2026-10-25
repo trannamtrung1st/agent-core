@@ -1,3 +1,4 @@
+using AgentCore.Domain.Conversation;
 using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
@@ -21,10 +22,10 @@ public sealed partial class TenantOperationAuthorizationTests
         var call = new ModelToolCall("exact-private-target", ToolCatalog.WorkspaceWrite, JsonSerializer.Serialize(new { path = root + "/private.txt", content = "user supplied replacement" }));
         var first = await target.PrepareAsync(frame, call); var next = await target.PrepareAsync(frame, call);
         Assert.Equal(first.ObservationHash, next.ObservationHash); Assert.Equal("workspaces.write", first.Permission);
-        Assert.Equal(TenantWorkspaceRules.Scope(new(s.Tenant, s.Agent.Instance.InstanceId, working ? frame.SessionId : null)), first.Scope);
+        Assert.Equal(TenantWorkspaceRules.Scope(WorkspaceOwner(s, working)), first.Scope);
         Assert.False((await f.Authorizer.CheckAsync(s.Agent.PrincipalId, "workspaces.write", first.Scope)).Allowed);
         Assert.False((await f.Authorizer.CheckAsync(s.Agent.PrincipalId, "workspaces.read", first.Scope)).Allowed);
-        Assert.Equal("Private model bytes: thử nghiệm", System.Text.Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(new(s.Tenant, s.Agent.Instance.InstanceId, working ? frame.SessionId : null), root + "/private.txt", 1024)).Bytes));
+        Assert.Equal("Private model bytes: thử nghiệm", System.Text.Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(WorkspaceOwner(s, working), root + "/private.txt", 1024)).Bytes));
         await SeedRuntimeWorkspace(f, s, working, "private.txt", "changed same private target"u8.ToArray());
         Assert.NotEqual(first.ObservationHash, (await target.PrepareAsync(frame, call)).ObservationHash);
         Assert.Equal("executor_read_required", (await Assert.ThrowsAsync<AccessDeniedException>(() => target.PrepareAsync(frame,
@@ -42,7 +43,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var call = new ModelToolCall("private-race", ToolCatalog.WorkspaceWrite, """{"path":"/working/missing.txt","content":"literal"}""");
         Assert.Equal("executor_read_required", (await Assert.ThrowsAsync<AccessDeniedException>(() => MutationTargets(f, probe).PrepareAsync(frame, call).AsTask())).ReasonCode);
         Assert.Equal(1, probe.Calls);
-        Assert.Empty((await WorkspaceReader(f).ListTenantAsync(new(s.Tenant, s.Agent.Instance.InstanceId, frame.SessionId), "/working", null, 100)).Items);
+        Assert.Empty((await WorkspaceReader(f).ListTenantAsync(WorkspaceOwner(s, true), "/working", null, 100)).Items);
     }
 
     [Theory] [InlineData(false)] [InlineData(true)]
@@ -50,7 +51,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
         await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read"]);
-        await GrantWorkspaceRuntimeReads(f, s, ["workspaces.read"], TenantWorkspaceRules.Home(s.Tenant, s.Agent.Instance.InstanceId));
+        await GrantWorkspaceRuntimeReads(f, s, ["workspaces.read"], TenantWorkspaceRules.Home(s.Tenant, SpaceId(s)));
         await SeedRuntimeWorkspace(f, s, false, "source.txt");
         var probe = new MutationObservationProbe(WorkspaceReader(f), () => Task.CompletedTask); var service = MutationTargets(f, probe);
         var copy = new ModelToolCall("cross-root-target", ToolCatalog.WorkspaceCopy, """{"source":"/home/source.txt","destination":"/working/destination.txt"}""");
@@ -61,7 +62,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await Assert.ThrowsAsync<AccessDeniedException>(() => service.PrepareAsync(frame with { SessionId = Guid.NewGuid() }, copy).AsTask());
         Assert.Equal(2, probe.Calls);
         await Assert.ThrowsAsync<AccessDeniedException>(() => ((ITenantWorkspaceMutationObservationStore)WorkspaceReader(f)).ObserveMutationTenantAsync(
-            new(Guid.NewGuid(), s.Agent.Instance.InstanceId), [new("/home/source.txt", true, false)]).AsTask());
+            new TenantWorkspaceReference.SpaceHome(Guid.NewGuid(), SpaceId(s)), [new("/home/source.txt", true, false)]).AsTask());
     }
 
     [Theory] [InlineData(false)] [InlineData(true)]
@@ -75,7 +76,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await GrantWorkspaceRuntimeReads(f, s, ["workspaces.write"], TenantWorkspaceRules.Working(s.Tenant, frame.SessionId));
         var observed = await service.PrepareAsync(frame, batch); Assert.Equal("workspaces.delete", observed.Permission); Assert.Equal(1, probe.Calls);
         Assert.False((await f.Authorizer.CheckAsync(s.Agent.PrincipalId, "workspaces.delete", observed.Scope)).Allowed);
-        Assert.Empty((await WorkspaceReader(f).ListTenantAsync(new(s.Tenant, s.Agent.Instance.InstanceId, frame.SessionId), "/working", null, 100)).Items);
+        Assert.Empty((await WorkspaceReader(f).ListTenantAsync(WorkspaceOwner(s, true), "/working", null, 100)).Items);
     }
 
     [Theory] [InlineData(false, false, "Disabled")] [InlineData(true, false, "Disabled")]

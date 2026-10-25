@@ -27,7 +27,7 @@ public sealed partial class SqliteIamStore
                 var row = await OwnedRuns(db, request.TenantId).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == id.ToString("D"), token).ConfigureAwait(false);
                 return row is null ? null : AgentRunStoreMapping.ToDomain(row);
             }, ct).ConfigureAwait(false);
-            var bound = await CredentialOperationTarget(db, request.TenantId, request.Operation.InstanceId, credential.BindingId, credential.CredentialId, ct).ConfigureAwait(false);
+            var bound = await ContextCredentialTarget(db, run, credential.BindingId, credential.CredentialId, ct).ConfigureAwait(false);
             TenantBrowserCredentialRules.RequireBinding(run, agent, bound, baseline); TenantBrowserCredentialRules.RequireWitness(credential, bound);
         }
         if (request.Status == TenantApprovalStatus.Pending && value.Artifacts is not null)

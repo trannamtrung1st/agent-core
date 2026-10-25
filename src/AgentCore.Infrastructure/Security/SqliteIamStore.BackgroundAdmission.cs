@@ -23,6 +23,7 @@ public sealed partial class SqliteIamStore
         var agentRow = await OwnedAgents(db, tenant).SingleAsync(a => a.Instance.InstanceId == root.AgentInstanceId, ct).ConfigureAwait(false);
         var agent = Owned(agentRow); var now = (clock ?? TimeProvider.System).GetUtcNow();
         var childRoot = TenantBackgroundAdmissionRules.Shape(frame, new(root.Domain(), SqliteMemoryStore.ToSnapshot(row, [])), parent, snapshot, child, agent, now);
+        await RequireSpaceExecutionSource(db, child, state, new IamAuthorizer(this), ct, admission: true).ConfigureAwait(false);
         var baseline = Guid.TryParse(agent.Instance.DefinitionId, out var definition)
             ? (await FindDefinitionPublicationAsync(tenant, definition, agent.Instance.ActiveVersion, ct).ConfigureAwait(false))?.Payload
             : builtIns is null ? null : await builtIns.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).ConfigureAwait(false);

@@ -81,7 +81,7 @@ public sealed partial class TenantSessionAccessTests
                 var working = action is "working-list" or "workspace-access";
                 var logical = working ? "/working" : "/home";
                 var physical = working ? AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(root, "workspaces"), instance, session)
-                    : AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(root, "workspaces"), instance);
+                    : AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(root, "workspaces"), tenant, (await factory.Services.GetRequiredService<ITenantSpaceStore>().FindPrivateSpaceAsync(tenant,instance))!.SpaceId);
                 var files = new CanonicalWorkspaceFilesystem(physical, logical); files.Ensure();
                 await files.WriteAsync(logical + "/Private file retirement sentinel.txt", "Private file body retirement sentinel"u8.ToArray(), 1024, 4096);
                 path = action == "composer" ? api + $"/agents/{instance}/composer?category=homeFile"

@@ -14,7 +14,7 @@ internal static class NativeInstanceConfigurationSeed
     {
         var source = (await services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync(sourceId, sourceVersion))!;
         var candidate = HarnessLegacyFixture.WithoutRetiredSandboxTool(AgentDefinitionCandidate.FromDefinition(source));
-        candidate = candidate with { Environment = candidate.Environment! with { KnowledgeSources = [] }, SelfManagement = policy };
+        candidate = candidate with { ExecutionPolicy = candidate.ExecutionPolicy! with { KnowledgeSources = [] }, SelfManagement = policy };
         var aliases = services.GetRequiredService<ProviderAliasSet>();
         AgentDefinitionCandidateValidator.ValidateForPersistence(candidate, aliases);
         var store = services.GetRequiredService<IAgentDefinitionAdminStore>(); var now = services.GetRequiredService<TimeProvider>().GetUtcNow();

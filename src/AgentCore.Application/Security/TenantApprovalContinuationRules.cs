@@ -35,7 +35,7 @@ public static class TenantApprovalContinuationRules
         return source.ForkApprovalContinuation(ids.RunId, admission, request.RequestId, at);
     }
 
-    private static string CompletionEvidence(AgentRun source) => TenantConfigurationContinuationRules.Target(source) is not null
+    private static string CompletionEvidence(AgentRun source) => TenantConfigurationContinuationRules.Target(source) is not null || TenantContextContinuationRules.InputBoundary(source) is not null
         ? source.Admission.Activation.EvidenceJson! : source.Admission.OutputContract == AgentRunOutputContract.CompletionReport
         ? source.Admission.Activation.EvidenceJson ?? throw new AccessDeniedException("completion_input_unavailable")
         : JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(source.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome || TenantTaskExecutionContract.IsIndependent(source) ? TriggerKind.ManualInvocation : TriggerKind.UserTurn,
@@ -56,6 +56,7 @@ public static class TenantApprovalContinuationRules
             || context.Origin != ExecutionOrigin.ApprovalContinuation || context.ParentRunId != source.AgentRunId || context.ParentActivationId != source.ActivationId
             || context.OriginalInitiatorPrincipalId != source.Admission.ExecutionContext?.OriginalInitiatorPrincipalId
             || TenantConfigurationContinuationRules.Target(run) != TenantConfigurationContinuationRules.Target(source)
+            || TenantContextContinuationRules.InputBoundary(run) != TenantContextContinuationRules.InputBoundary(source)
             || TenantConfigurationContinuationRules.InputBoundary(run) != TenantConfigurationContinuationRules.InputBoundary(source)
             || run.SessionId != source.SessionId || run.ResponseId != source.ResponseId || !resume.SourceInputEntryIds.SequenceEqual(Inputs(source)))
             throw new SecurityConflictException("approval_continuation_mismatch");

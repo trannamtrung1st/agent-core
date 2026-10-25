@@ -126,6 +126,7 @@ public sealed class TenantAutomationMutationService(ITenantAutomationMutationSto
         }
         if (decision.Decision != OperationDecisionKind.Allowed) return JsonSerializer.Serialize(new { decision = decision.Decision == OperationDecisionKind.Denied ? "denied" : "requiresApproval", reasonCode = decision.ReasonCode, applied = false });
         var reader = before.Source.Reader; var prepared = TenantApprovalRules.PrepareAutomationMutation(ids.NewId(), reader.Run.AgentInstanceId, before.Value, reader.Agent.Instance.Revision, reader.Agent.Instance.PersonaRevision);
+        prepared = TenantApprovalRules.ForRun(prepared, reader.Run);
         var prior = await approvals.FindRootApprovalAsync(reference.TenantId, reader.Run.Admission.Activation.RootActivationId, reader.Agent.PrincipalId, prepared, ct).ConfigureAwait(false);
         if (prior is not null) return JsonSerializer.Serialize(new { decision = prior.Status == TenantApprovalStatus.Pending ? "requiresApproval" : "denied", reasonCode = TenantApprovalRules.DuplicateReason(prior), applied = false });
         var state = reader.Security; var receipt = await store.TryCommitTenantAutomationMutationAsync(state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } }, state.Tenant.Revision,
@@ -139,7 +140,8 @@ public sealed class TenantAutomationMutationService(ITenantAutomationMutationSto
         occurrenceAdmitted = receipt.AutomationMutation?.ToolName == ToolCatalog.AutomationRun, executionCompleted = false,
         admittedSessionId = receipt.AutomationMutation?.InvocationSessionId, admittedRunId = receipt.AutomationMutation?.InvocationRunId });
     private async ValueTask<(TenantAgent Agent, AgentCore.Application.Execution.ResolvedAgentRunConfiguration Configuration)> ResolveInvocationAsync(TenantAutomationMutationObservation source, CancellationToken ct) =>
-        await (configurations ?? throw new AccessDeniedException("tenant_effect_unavailable")).ResolveAsync(source.Reader.Security.Tenant.TenantId, source.Reader.Run.AgentInstanceId, ct).ConfigureAwait(false);
+        await (configurations ?? throw new AccessDeniedException("tenant_effect_unavailable")).ResolveForAutomationAsync(
+            source.Current ?? throw new AccessDeniedException("automation_unavailable"), source.Conversation, TriggerScheduleCalculator.Truncate(time.GetUtcNow()), ct).ConfigureAwait(false);
     public async ValueTask<TenantAutomationAdmission?> InvocationAdmissionAsync(TenantAutomationMutationPreparation prepared, CancellationToken ct)
     {
         if (prepared.Value.Invocation is null) return null;

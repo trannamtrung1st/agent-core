@@ -327,7 +327,7 @@ Existing Organization approval detail and Session conversation-approval endpoint
 
 ## Tenant workspace read contract
 
-Human home reads use `/api/v2/tenants/{tenantId}/agents/{instanceId}/workspace`; scratch reads use `/api/v2/tenants/{tenantId}/sessions/{sessionId}/workspace`. Both expose GET collection (`prefix`, `cursor`, `limit`, maximum 256), `/search` (`q`, `cursor`, `limit`), `/metadata?path=...`, `/content?path=...` and `/office-preview?path=...&sheet=...&range=...`. Unknown/repeated query fields are rejected. Paths are exact absolute `/home` or `/working` paths for the bound owner; traversal aliases and the other root are rejected. Search cursors are lexical observations and may end in a directory slash.
+Human home reads use `/api/v2/tenants/{tenantId}/spaces/{spaceId}/workspace`; scratch reads use `/api/v2/tenants/{tenantId}/sessions/{sessionId}/workspace`. Both expose GET collection (`prefix`, `cursor`, `limit`, maximum 256), `/search` (`q`, `cursor`, `limit`), `/metadata?path=...`, `/content?path=...` and `/office-preview?path=...&sheet=...&range=...`. Unknown/repeated query fields are rejected. Paths are exact absolute `/home` or `/working` paths for the bound owner; traversal aliases and the other root are rejected. Search cursors are lexical observations and may end in a directory slash.
 
 Pages and metadata reuse the existing workspace wire records: logical path, type, bytes, modified time, directory/kind/link/mode observations and bounded paging/usage. Physical roots and hidden sibling namespaces are never projected. Missing uninitialized roots list/search empty without creating files. Content downloads are attachments with sanitized filenames and `nosniff`; reads use private/no-store caching. Office processing uses the shared limits/processor and post-processing authorization fence. Mutable metadata is not an immutable version or CAS token; changed source facts during content projection return conflict and current access loss withholds the result.
 
@@ -901,7 +901,7 @@ The existing model tool/result protocol carries `capabilities.load` with `{query
 
 The current capability catalog and structured findings are specified above. Historical workspace authoring used the former 32-grant bound; that count ceiling has been removed.
 
-Session workspace GET list/content and PUT content accept `/home` and `/working`, with trusted owner/effective policy and lifecycle checks. Relative HTTP paths resolve from `/home` independently of runtime cwd. PUT accepts raw bytes and replaces the present path without revision/hash fields. List accepts prefix/cursor/limit and returns entries, nextPath and truncated. Retired fields/aliases are rejected. Artifacts remain separate immutable Session deliverables.
+Space workspace GET list/content and PUT content accept `/home`; Session workspace routes accept `/working`, with trusted tenant/owner/effective policy and lifecycle checks. Model `/private` uses an explicit captured own-Private Space reference. Relative HTTP paths resolve from `/home` independently of runtime cwd. PUT accepts raw bytes and replaces the present path without revision/hash fields. List accepts prefix/cursor/limit and returns entries, nextPath and truncated. Retired fields/aliases are rejected. Artifacts remain separate immutable Session deliverables.
 
 The normal model tool/approval protocol carries cwd and current-file write/patch/structure operations. Approval resolves public paths against trusted cwd while hashing the exact original arguments. Individual copy can cross roots; move and batch stay in one scope. File revisions and tree tokens are absent. No public cwd-setting or structural HTTP endpoint is added.
 
@@ -1344,19 +1344,11 @@ Owner-protected learned-memory provenance adds optional `maintenanceAgentInstanc
 
 Use the Automation contract for recurring instructions that inspect completed work and record useful observations. Enable Experience and consolidation independently under Continuity. No cadence configuration endpoint remains.
 
-## Agent Instance workspace HTTP
+## Space and Session workspace HTTP
 
-All routes use the trusted-local owner capability. Archived home remains inspectable and read-only. Host paths and public download links are never returned.
+The tenant-qualified [workspace read contract](#tenant-workspace-read-contract) owns the routes and authorization. Space homes use `/api/v2/tenants/{tenantId}/spaces/{spaceId}/workspace`; working files use the existing Session workspace route. The former tenant Agent workspace route and global Agent Instance workspace routes return 404.
 
-| Method | Route | Contract |
-| --- | --- | --- |
-| GET | `/api/v2/agent-instances/{instanceId}/workspace?prefix=/home&cursor=…&limit=256` | Immediate current children, lexical nextPath, truncated and sampled/unknown usage |
-| GET | `/api/v2/agent-instances/{instanceId}/workspace/metadata?path=…` | Current bounded descriptive metadata |
-| GET | `/api/v2/agent-instances/{instanceId}/workspace/content?path=…` | Current bytes; safe attachment name, private no-store, nosniff; no file ETag |
-| DELETE | `/api/v2/agent-instances/{instanceId}/workspace/content?path=…` | Delete present file/link or empty folder; 204; nonempty folder/archived mutation conflicts |
-| GET | `/api/v2/agent-instances/{instanceId}/workspace/office-preview?path=…` | Current bounded Office projection; optional sheet/range |
-
-Metadata contains agentInstanceId, logicalPath, contentType, byteSize, updatedAt, directory, kind, linkTarget and mode. Pages add items, usedBytes/totalItems (nullable), nextPath, limits, usageEnforcement and truncated. No file ID, SHA, revision, provenance row or whole-tree token is exposed. Session nodes add writable, derived from the same Session/Instance lifecycle gate as mutations; archived or ended Sessions and archived Instances expose working nodes as read-only. Home authorization does not grant Artifact access. Existing item-ID routes and expected-revision queries are removed.
+Metadata contains a typed `workspaceOwner` with tenant and Space/Session identity, plus logicalPath, contentType, byteSize, updatedAt, directory, kind, linkTarget and mode. Pages add nullable sampled usage, nextPath, maxFileBytes, maxSpaceBytes, usageEnforcement and truncated. Access metadata contains ownerRevision and workspaceName. These values replace Instance revision/name claims for a Space home. Host paths, file IDs, file revisions, public links and blanket future read authority are absent. Private ownership lifecycle and Session lifecycle constrain writes; Shared Space access resolves its own owner directly.
 
 ### Workspace filesystem contracts
 
@@ -1685,7 +1677,7 @@ Invalid package errors remain distinct from `office_feature_unsupported` and `of
 
 ### OpenSandbox reliability observations
 
-POST profile `/verify` returns passed/message/profile with the same configuration revision. Verification contract 4 separately observes source epochs, automatic non-root preparation, authenticated daemon/image/mount provenance and filesystem/Git behavior in RW/RO/disabled home modes. The workspace API remains contract 3. Ordinary errors carry safe status/stage/diagnostic metadata, never host paths or identity setup requirements. GET execution and sandbox.process.status remain read-only. Session inspection includes safe setup guidance, homeAccess and storageEnforcement; it never exposes provider IDs or raw exceptions.
+POST profile `/verify` returns passed/message/profile with the same configuration revision. Verification contract 5 separately observes source epochs, automatic non-root preparation, authenticated daemon/image/mount provenance and filesystem/Git behavior in RW/RO/disabled home modes. The workspace API remains contract 3. Ordinary errors carry safe status/stage/diagnostic metadata, never host paths or identity setup requirements. GET execution and sandbox.process.status remain read-only. Session inspection includes safe setup guidance, homeAccess and storageEnforcement; it never exposes provider IDs or raw exceptions.
 
 ### Sandbox setup and verification owner routes
 
@@ -2064,3 +2056,44 @@ For terminal Run sources, current retained evidence determines privacy: Instance
 `GET /api/v2/tenants/{tenantId}/agents/{instanceId}/automations/{automationId}/unreviewed-sources?cursor=...&limit=8` returns `{ items, nextCursor, securityRevision }`. Each item is `{ bucketId, source, completionCode, triggerId }`, with the existing safe event-source metadata (`eventId`, key, received/occurred times, owned source identity, bounded `dataJson` and causation). No source Run body, private Profile, credential or saved permission snapshot is returned. Limit is 1–24; invalid bounds/cursors return 400. The cursor is the existing bucket-ID/source-ID pair. Empty items with continuation are not exhaustion.
 
 The original human must currently read the selected Agent/Automation. Independent Core/Webhook source and monitored Email-account reads filter members before return; another tenant/Instance cannot resolve the registration. The reader rechecks original login and tenant security revision after I/O. This is a read-only coverage projection, not a source-inspection acknowledgement or effect endpoint. Validated actual Run source evidence is acknowledged only when retained by the owning Runtime checkpoint transaction. There is no new realtime event.
+
+Space context switching and file cleanup safety: an idle Sandbox generation is retired through its existing owner before a human switch commits. `sandbox_execution_busy` means finish or explicitly stop the active command and retry with fresh revisions; `sandbox_context_retirement_required` means cleanup is unconfirmed and selection remains unchanged. A Run with an older captured context cannot reserve a new Sandbox generation after a pending selection (`sandbox_context_changed`). Deleted Shared Spaces release Environment variable references atomically; their physical homes are purged from retained tombstones only after current mount retirement permits it. No canceled-Run state alone proves physical mount removal.
+
+### Context navigation model contracts
+
+The closed model names are `spaces.list`, `spaces.get`, `spaces.activate`, `environments.list`, `environments.activate`, `environments.deactivate`, `variables.list` and `variables.resolve`. Offers require their own Definition capability and current IAM. An Off Space offers no Environment/variable tools; an enabled inactive profile offers only Environment list/activate. Variables require a valid Run-captured selection. Lists are bounded metadata, without Plain/protected values; resolve names exactly one active-profile variable. Credential results expose only an eligible contextual alias for an independently authorized consumer. Unsupported generic Secret use is explicit and never reveals a value.
+
+Activation arguments contain the destination IDs where applicable, `expectedSelectionRevision` and optional boolean `continueTask`. Space activation clears Environment unless a valid destination profile is explicitly named in that command. No owner, tenant, Session, Run, physical path, provider header or protected value is accepted as a model authority field. Results distinguish `pending_next_turn` from an applied selection; remaining effects retain the original capture. Replaying the same tool call cannot advance selection twice.
+
+An admitted context successor is a distinct Run in the same Session with the original root/requester and no new user input. Its typed activation/origin are `ContextContinuation`; it captures the new context and uses ordinary Run status, output, failure, cancellation and recovery contracts. The source remains Completed with its original capture. Unique root deduplication prevents a restart from creating a second successor. The new internal lineage fields do not change realtime message/audio ordering or permit stale responses to revive.
+
+
+### Human context and resource-access projections
+
+`GET /api/v2/tenants/{tenantId}/agents/{instanceId}/private-space` returns the actual Private Space after current original-human `agents.read` and `spaces.read` checks; it never constructs a guessed owner. `GET /agents/{instanceId}/context-options?spaceId=&page=0` supplies bounded Space choices restricted by current human/executor read and actual membership, plus profiles only when the requested Space gate and both principals' Environment read/activate allow it. An unavailable supplied pin returns no target metadata and `targetAvailable=false`; other authorized choices remain usable. The projection grants no admission or use authority.
+
+`GET /sessions/{sessionId}/context/options?spaceId=&page=0` supplies the same Session-specific choices, `canSwitch`, explicit stale-Environment clear recovery and exact security/Session/selection witnesses. Current Session lifecycle/selection and original human are fenced across the read. Existing context `GET` and `POST /switch` own saved selection; ordinary response progress cannot adopt a different selection.
+
+`GET /spaces/{spaceId}/access`, `/spaces/{spaceId}/memberships/{instanceId}/bindings` and `/secrets/{secretId}/access` supply independent current permissions and exact revisions for human management. Membership binding reads separate inherited/effective bindings; protected values are absent. `GET /spaces/{spaceId}/environments/{environmentId}/variables/{name}` returns metadata and a Plain value only with current `variables.resolve`; `canReadPlain=false` otherwise. Secret/Credential values are never returned by this route.
+
+`GET /access/resources/{space|secret|workspace}/{resourceId}/editor?page=0&principalPage=0&search=` is the human scoped-assignment projection. Workspace here uses the exact `home:{spaceId}` scope. It requires current original-human IAM read on that exact resource and parent metadata read; it returns bounded assignment/candidate pages, relevant existing roles and current assign/revoke hints. Inherited assignments retain their source scope and separate revoke check. Existing `POST /role-assignments` and `DELETE /role-assignments/{assignmentId}` remain the only mutation owners, with current CSRF/human identity, source-scope authority, CAS and audit. The projection creates no new grant mechanism.
+
+### Space immutable resource management
+
+Authenticated, CSRF-protected mutations use `/api/v2/tenants/{tenantId}/spaces/{spaceId}/resources/{resourceId}`. `PUT` registers or refreshes a native home snapshot with closed `sourcePath`, `logicalPath`, supported kind name (`Knowledge`, `Reference`, `Template`, `StaticAsset`), `expectedRevision` (tenant security), `expectedSpaceRevision` and `expectedResourceRevision` (zero for create). The stable caller-generated ID makes an identical lost create acknowledgement discoverable without another revision. `DELETE` requires the same three current revisions and refuses remaining membership bindings. Current Space management, resource management/delete and independent home reading are checked at their actual scopes; a Space grant alone does not grant snapshot reading.
+
+`GET .../resources?page=` returns bounded permission-filtered metadata, and `GET .../resources/{resourceId}/access` returns current source permissions and owner/security revisions. Metadata includes stable tenant/Space/resource IDs, logical path, kind, MIME, hash, size and revision; saved `sourcePath` is omitted without home-read permission. Source bytes are consumed through the incumbent protected resource/knowledge/Office/Artifact paths. Resource IAM uses resource type `resource` and canonical ID `space:{spaceId}:{resourceId}`; the same scoped IAM editor and assignment commands apply. No route reveals protected values or adopts an execution Instance as source owner.
+
+### Context creation recovery and variable source generation
+
+New Secret create requests require a nonempty caller-generated `secretId` alongside name, description, protected value and expected tenant security revision. The write response remains metadata-only. Space, Environment, Variable and Secret initial create retries reauthorize current scope/original human and may return the same unchanged initial identity without another revision; a different body or a newer saved resource is a `create_identity_conflict`. Secret recovery also requires the original audited creation actor; metadata/read/manage alone cannot use this route to compare another creator's protected value. Missing Secret identity is a validation failure. Uncertain UI outcomes remain blocked until explicit inspection; no mutation is replayed automatically.
+
+Saved variable tool observations bind the current owning Environment revision as `contextRead.environmentRevision`, in addition to the exact Space/profile/name/variable revision. Current model preparation and atomic final output repeat that generation check. Deleting and recreating a variable, even with the same name/value and revision 1, invalidates its old observation.
+
+### Space lifecycle refusal and recovery
+
+Removing a Shared membership returns 409 `space_membership_has_active_work` while that member has dependent captured work, unsettled publication or uncertain effects, or 409 `space_membership_live_sandbox` while an exact/unknown mount remains live. No membership or revision changes on refusal. Finish/cancel and settle work, retire the sandbox through its current owner, then refresh before another deliberate removal. Shared deletion still requires zero memberships. Physical cleanup retains tombstones until work/publication/mount references settle; an HTTP deletion acknowledgement does not certify physical purge.
+
+### Pinned occurrence review projection
+
+For an explicit pinned Automation, admission review adds exactly one `admissionSpace` and one `admissionEnvironment` row. Space/profile labels require the reviewing human’s current scoped metadata read; unavailable labels stay generic. Each selected identity retains its captured revision, and a null Environment is `No Environment`. These rows contain no variable values or protected references. They describe the saved exact action; approval still repeats current source, requester, executor and reviewer checks before admission. The frontend accepts the closed complete pair, retains the existing field allowlist and blocks malformed/duplicate/partial context previews.

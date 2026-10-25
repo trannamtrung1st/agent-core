@@ -25,6 +25,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var reader = new TenantModelCatalogReader((ITenantModelStore)f.Iam, f.Iam);
         var agents = (ITenantAgentStore)f.Iam; var sessions = (ITenantSessionStore)f.Iam; var runs = (ITenantRunStore)f.Iam;
         var agent = await f.Agents.CreateAsync(human.PrincipalId, tenant, "examiner", 1, await Revision());
+        await GrantModelFixtureSpaceRead(f, tenant, human.PrincipalId, agent.PrincipalId);
         var sessionService = new TenantSessionService(f.Iam, agents, sessions, runs, (ITenantDefinitionStore)f.Iam, f.BuiltIns,
             f.Identity, f.Authorizer, reader, new(), f.Ids, f.Clock);
         var before = await Revision();

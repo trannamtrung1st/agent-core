@@ -164,7 +164,7 @@ public static class InstanceSettingsResolver
                 break;
             case "initiativePolicy": CannotEnable("enabled", "Initiative", baseline.InitiativePolicy.Enabled); break;
             case "voice": CannotEnable("enabled", "Voice", baseline.Voice.Enabled); break;
-            case "capabilities": CannotEnable("allowUnreadUnsupportedTypes", "Unread unsupported attachments", RoleEnvironments.Of(baseline).AttachmentPolicy.AllowUnreadUnsupportedTypes); break;
+            case "capabilities": CannotEnable("allowUnreadUnsupportedTypes", "Unread unsupported attachments", DefinitionExecutionPolicies.Of(baseline).AttachmentPolicy.AllowUnreadUnsupportedTypes); break;
             case "memoryPolicy":
                 var memory = baseline.MemoryPolicy ?? MemoryPolicy.Disabled;
                 CannotEnable("sessionMemory", "Session memory", memory.SessionMemory);
@@ -202,7 +202,7 @@ public static class InstanceSettingsResolver
                 ? new("Instance", instanceRevision.ToString(System.Globalization.CultureInfo.InvariantCulture))
                 : new("Definition", definition.Id + ":" + definition.Version);
         }
-        foreach (var field in new[] { "goals", "environment.harness", "environment.knowledge", "environment.tools" })
+        foreach (var field in new[] { "goals", "executionPolicy.harness", "executionPolicy.knowledge", "executionPolicy.tools" })
             sources[field] = new("Definition", definition.Id + ":" + definition.Version);
         foreach (var field in new[] { "name", "role", "description", "tone" })
             sources["identity." + field] = new("Instance", personaRevision.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -288,13 +288,13 @@ public static class InstanceSettingsResolver
                 UserRetrieval = o.MemoryUserRetrieval is { } memoryUserRetrieval ? memoryUserRetrieval.Value : (baseline.MemoryPolicy ?? MemoryPolicy.Disabled).UserRetrieval,
             },
         };
-        var environment = RoleEnvironments.Of(baseline);
+        var environment = DefinitionExecutionPolicies.Of(baseline);
         if (o.SelectedCapabilities is { } selected)
         {
             if (selected.Value is null || selected.Value.Distinct(StringComparer.Ordinal).Count() != selected.Value.Length
                 || selected.Value.Any(c => !environment.ToolList.Contains(c, StringComparer.Ordinal)))
                 throw AgentCoreErrors.Validation("Instance capability selection must be a subset of Definition authorization.");
-            d = d with { Environment = environment with {
+            d = d with { ExecutionPolicy = environment with {
                 ToolAllowlist = environment.Capabilities is null ? selected.Value.ToArray() : environment.ToolAllowlist,
                 Capabilities = environment.Capabilities is null ? null : environment.Capabilities with { ResolvedCapabilities = selected.Value.ToArray() },
                 Projection = environment.Projection is null ? null : environment.Projection with { AlwaysCapabilities = environment.Projection.AlwaysCapabilities.Where(selected.Value.Contains).ToArray() }
@@ -302,16 +302,16 @@ public static class InstanceSettingsResolver
         }
         if (o.AlwaysCapabilities is { } always)
         {
-            var effectiveEnvironment = RoleEnvironments.Of(d);
+            var effectiveEnvironment = DefinitionExecutionPolicies.Of(d);
             if (always.Value is null || effectiveEnvironment.Capabilities is null
                 || always.Value.Distinct(StringComparer.Ordinal).Count() != always.Value.Length
                 || always.Value.Any(c => !effectiveEnvironment.ToolList.Contains(c, StringComparer.Ordinal)))
                 throw AgentCoreErrors.Validation("Always projection must use selected, authorized capabilities.");
-            d = d with { Environment = effectiveEnvironment with { Projection = new(always.Value.ToArray()) } };
+            d = d with { ExecutionPolicy = effectiveEnvironment with { Projection = new(always.Value.ToArray()) } };
         }
         if (o.AllowUnreadUnsupportedTypes is { } unread)
         {
-            d = d with { Environment = RoleEnvironments.Of(d) with { Attachments = new(unread.Value) } };
+            d = d with { ExecutionPolicy = DefinitionExecutionPolicies.Of(d) with { Attachments = new(unread.Value) } };
         }
         foreach (var section in Sections)
         {
@@ -384,9 +384,9 @@ public static class InstanceSettingsResolver
             ["userRetrieval"] = (d.MemoryPolicy ?? MemoryPolicy.Disabled).UserRetrieval,
         },
         "capabilities" => new Dictionary<string, object?> {
-            ["selected"] = RoleEnvironments.Of(d).ToolList,
-            ["always"] = d.Environment?.Projection?.AlwaysCapabilities ?? [],
-            ["allowUnreadUnsupportedTypes"] = RoleEnvironments.Of(d).AttachmentPolicy.AllowUnreadUnsupportedTypes,
+            ["selected"] = DefinitionExecutionPolicies.Of(d).ToolList,
+            ["always"] = d.ExecutionPolicy?.Projection?.AlwaysCapabilities ?? [],
+            ["allowUnreadUnsupportedTypes"] = DefinitionExecutionPolicies.Of(d).AttachmentPolicy.AllowUnreadUnsupportedTypes,
         },
         "triggerPolicy" => new Dictionary<string, object?> {
             ["enabled"] = TriggerOf(d).Enabled,

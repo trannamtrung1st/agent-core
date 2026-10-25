@@ -12,6 +12,7 @@ public sealed partial class InMemoryIamStore
         if (admission is null) return null;
         var state = _tenants[source.Owner.TenantId!.Value];
         if (state.Tenant.Revision != admission.ExpectedSecurityRevision) return null;
+        RequireSpaceExecutionSource(admission.Run, state, new IamAuthorizer(this), ct, admission: true).AsTask().GetAwaiter().GetResult();
         var root = TenantCoreRoot(source);
         var current = FindTenantAgentAsync(state.Tenant.TenantId, source.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("executor_unavailable");
         TenantConfigurationContinuationRules.RequireAdmission(source, root, snapshot, sessionBacking.AgentRuns.Runs.Values.Where(r => r.SessionId == source.SessionId),

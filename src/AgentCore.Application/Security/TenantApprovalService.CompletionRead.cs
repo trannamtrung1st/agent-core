@@ -15,6 +15,7 @@ public sealed partial class TenantApprovalService
                 throw new AccessDeniedException("tenant_runtime_unavailable");
             var prepared = await (completionReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareInspectionAsync(new(run.Owner, run.SessionId, run.AgentRunId, generation), arguments, ct).ConfigureAwait(false);
             var op = TenantApprovalRules.PrepareCompletionRead(ids.NewId(), run.AgentInstanceId, prepared.Read, prepared.Agent.Instance.Revision, prepared.Agent.Instance.PersonaRevision);
+            op = TenantApprovalRules.ForRun(op, run);
             var prior = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.ExecutionContext!.RootActivationId, prepared.Agent.PrincipalId, op, ct).ConfigureAwait(false);
             if (prior is not null) return await DuplicateOutcome(prepared.State, run, prior, ct).ConfigureAwait(false);
             if (!prepared.ReviewRequired) return await PreparationOutcome(prepared.State, run, op, OperationDecisionKind.Allowed, "allowed", null, ct).ConfigureAwait(false);

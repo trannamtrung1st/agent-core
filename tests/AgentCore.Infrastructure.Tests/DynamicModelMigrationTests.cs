@@ -14,7 +14,7 @@ public sealed partial class TenantCredentialIntegrationTests
     public async Task DynamicModels_legacy_pin_refusal_preserves_history_and_predecessor_schema()
     {
         await using var f = await Fixture.Create(true);
-        const string predecessor = "20261023190000_TenantPublicHttp";
+        const string predecessor = "20261025080000_SpaceResourceApprovals";
         var definition = (await f.BuiltIns.ListAsync()).First();
         var snapshot = AgentRunTestFixtures.Snapshot(new(Guid.NewGuid(), Guid.NewGuid()), definition, f.Clock.GetUtcNow());
         snapshot = snapshot with { ModelSelection = null, SummaryModel = null,

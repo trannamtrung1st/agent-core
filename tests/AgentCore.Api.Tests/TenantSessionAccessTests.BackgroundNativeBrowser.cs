@@ -167,8 +167,8 @@ public sealed partial class TenantSessionAccessTests
                 var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, parent.Owner.AgentInstanceId))!;
                 var definitions = factory.Services.GetRequiredService<TenantDefinitionService>();
                 var draft = await definitions.ForkAsync(human, tenant, Guid.Parse(agent.Instance.DefinitionId), 1, await Revision(owner, tenant));
-                var environment = draft.Candidate.Environment!;
-                draft = await definitions.UpdateAsync(human, tenant, draft.DraftId, draft.Candidate with { Environment = environment with {
+                var environment = draft.Candidate.ExecutionPolicy!;
+                draft = await definitions.UpdateAsync(human, tenant, draft.DraftId, draft.Candidate with { ExecutionPolicy = environment with {
                     Capabilities = environment.Capabilities! with { ResolvedCapabilities = environment.Capabilities.ResolvedCapabilities.Where(t => t != ToolCatalog.BackgroundStart).ToArray() },
                     Projection = new(environment.Projection!.AlwaysCapabilities.Where(t => t != ToolCatalog.BackgroundStart).ToArray()) } }, await Revision(owner, tenant), draft.Revision);
                 var publication = await definitions.PublishAsync(human, tenant, draft.DraftId, await Revision(owner, tenant), draft.Revision);

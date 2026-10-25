@@ -29,7 +29,7 @@ public sealed partial class InMemoryIamStore
                 else
                 {
                     var session = sessionBacking.ReadTenantSession(tenant, run.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
-                    var bindings = ReadTenantCredentialBindingsAsync(tenant, run.AgentInstanceId, ct).Result?.Bindings ?? throw new AccessDeniedException("resource_unavailable");
+                    var bindings = ContextCredentialBindings(run, ct);
                     var read = TenantCredentialReadReferences.Direct(run, source, bindings);
                     TenantCredentialReadOperationRules.Require(read, run, agent, session, TenantAgentDefinitionBaseline(agent), bindings);
                     TenantCredentialReadOperationRules.PermissionsAsync(state, read, agent.PrincipalId, iam, ct).GetAwaiter().GetResult();

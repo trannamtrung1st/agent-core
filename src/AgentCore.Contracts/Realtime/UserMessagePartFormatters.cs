@@ -46,7 +46,8 @@ public sealed class UserResourceReferenceFormatter : IMessagePackFormatter<UserR
     public void Serialize(ref MessagePackWriter w, UserResourceReferenceDto? value, MessagePackSerializerOptions options)
     {
         if (value is null) { w.WriteNil(); return; }
-        w.WriteMapHeader(8);
+        w.WriteMapHeader(9);
+        w.Write("spaceId"); w.Write(value.SpaceId);
         w.Write("kind"); w.Write(value.Kind); w.Write("agentInstanceId"); w.Write(value.AgentInstanceId);
         w.Write("sessionId"); w.Write(value.SessionId); w.Write("path"); w.Write(value.Path);
         w.Write("artifactId"); w.Write(value.ArtifactId); w.Write("agentRunId"); w.Write(value.AgentRunId);
@@ -67,6 +68,7 @@ public sealed class UserResourceReferenceFormatter : IMessagePackFormatter<UserR
                 switch(key)
                 {
                     case "kind": result.Kind = r.ReadString() ?? ""; break;
+                    case "spaceId": result.SpaceId = r.ReadString(); break;
                     case "agentInstanceId": result.AgentInstanceId = r.ReadString(); break;
                     case "sessionId": result.SessionId = r.ReadString(); break;
                     case "path": result.Path = r.ReadString(); break;

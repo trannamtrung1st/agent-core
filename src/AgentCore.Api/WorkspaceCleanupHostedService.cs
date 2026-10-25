@@ -26,6 +26,12 @@ public sealed class WorkspaceCleanupHostedService(
             catch (Exception ex) { HandledFailureLog.Warning(logger, ex, "browser.cleanup", "browser_retirement_scan_failed", diagnostics: diagnosticIds); }
             try
             {
+                await services.GetRequiredService<AgentCore.Application.Workspaces.TenantSpaceWorkspaceCleanupService>().RecoverAsync(stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+            catch (Exception ex) { HandledFailureLog.Warning(logger, ex, "space.cleanup", "space_workspace_cleanup_scan_failed", diagnostics: diagnosticIds); }
+            try
+            {
                 await services.GetRequiredService<AgentCore.Application.Workspaces.TenantWorkingCleanupService>().RecoverAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }

@@ -45,7 +45,7 @@ public sealed partial class TenantRunExecutionAuthority
                 if (await runs.FindTenantRunAsync(current.State.Tenant.TenantId, id, ct).ConfigureAwait(false) is { } run) sessionRuns.Add(run);
             var history = store is ITenantConversationStore conversations ? await conversations.ReadTenantConversationAsync(current.State.Tenant.TenantId, source.SessionId, null, null, 100, ct).ConfigureAwait(false) : null;
             if (history is null || !TenantConfigurationContinuationRules.SafeSession(source, root, snapshot, sessionRuns, history.History.Items)) return null;
-            var resolved = await configurations.ResolveAsync(current.State.Tenant.TenantId, source.AgentInstanceId, ct).ConfigureAwait(false);
+            var resolved = await configurations.ResolveInCapturedSpaceAsync(source, ct).ConfigureAwait(false);
             var definition = resolved.Configuration.Configuration.Definition;
             if (resolved.Agent.Instance.Revision != pending.Value.Task.InstanceRevision || definition.SelfManagement is not { } policy || !ManagementTools.Enabled(policy)
                 || !RolePermissions.AllowsTool(definition, pending.Value.Task.Target) || !configurationTools.IsConfigured(pending.Value.Task.Target)) return null;

@@ -74,7 +74,7 @@ public sealed class ConfigurationPendingTaskTests
     [Fact]
     public void Continuation_target_write_needs_new_approval_and_other_writes_management_are_denied()
     {
-        var definition=SampleDefinitions.Examiner with { Environment=new AgentCore.Domain.Definitions.RoleEnvironment(ToolAllowlist:[ToolCatalog.WorkspaceWrite,ToolCatalog.WorkspaceDelete]) };
+        var definition=SampleDefinitions.Examiner with { ExecutionPolicy =new AgentCore.Domain.Definitions.DefinitionExecutionPolicy(ToolAllowlist:[ToolCatalog.WorkspaceWrite,ToolCatalog.WorkspaceDelete]) };
         var admission=new ToolExecutionAdmission(false,TriggerKind.UserTurn,OwnedSessionId:Guid.NewGuid(),ConfigurationContinuationTarget:ToolCatalog.WorkspaceWrite);
         Assert.Equal(ToolPolicyDecision.RequireApproval,ToolPolicy.EvaluateExecution(definition,ToolCatalog.WorkspaceWrite,ToolConfigurationGates.AllowAll,admission:admission));
         Assert.Equal(ToolPolicyDecision.Deny,ToolPolicy.EvaluateExecution(definition,ToolCatalog.WorkspaceDelete,ToolConfigurationGates.AllowAll,admission:admission));

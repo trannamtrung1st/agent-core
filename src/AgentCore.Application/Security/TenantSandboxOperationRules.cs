@@ -11,12 +11,14 @@ public static class TenantSandboxOperationRules
 {
     public static SandboxProfile Profile(AgentRun run, string id) => run.Admission.Configuration?.Definition.ExecutionSandboxProfiles?.SingleOrDefault(p => p.Id == id)
         ?? throw new AccessDeniedException("sandbox_profile_not_admitted");
-    public static PreparedSandboxCommand Parameters(AgentRun run, SandboxProfile profile, SandboxLease? lease, SandboxCommandRequest command, HomeAccess home)
+    public static bool WithinPolicy(HomeAccess access, HomeAccess policy) => access == HomeAccess.Disabled
+        || policy == HomeAccess.ReadWrite || policy == HomeAccess.ReadOnly && access == HomeAccess.ReadOnly;
+    public static PreparedSandboxCommand Parameters(AgentRun run, SandboxProfile profile, SandboxLease? lease, SandboxCommandRequest command, SandboxWorkspaceAccess access)
     {
         if (command.ProfileId is not null && command.ProfileId != profile.Id) throw new ArgumentException("Conflicting exact Sandbox profile.");
         return new(run.SessionId, profile.Id, profile.Revision, TenantApprovalRules.CanonicalSandboxCommand(command with {
             TimeoutSeconds = command.TimeoutSeconds ?? profile.MaxCommandSeconds, ProfileId = profile.Id }), lease?.Revision ?? 0, lease?.Generation,
-            profile.RegistryCredentialId, profile.RegistryCredentialRevision, profile.RegistrySecretRevision, home);
+            profile.RegistryCredentialId, profile.RegistryCredentialRevision, profile.RegistrySecretRevision, access.HomeAccess, access);
     }
     public static TenantApprovalSnapshot Snapshot(TenantAgent agent, SandboxProfile profile, SandboxLease? lease, bool? initializes = null) =>
         new(agent.Instance.Persona.Name, Sandbox: new(profile.Name, profile.ImageReference, profile.InitializationScript,
@@ -36,7 +38,8 @@ public static class TenantSandboxOperationRules
             || profile.AdmittedForExecution != true || !RolePermissions.AllowsTool(run.Admission.Configuration.Definition, ToolCatalog.SandboxExec)
             || value.ProfileRevision != profile.Revision || command.TimeoutSeconds > profile.MaxCommandSeconds
             || value.RegistryCredentialId != profile.RegistryCredentialId || value.RegistryCredentialRevision != profile.RegistryCredentialRevision
-            || value.RegistrySecretRevision != profile.RegistrySecretRevision || value.HomeAccess != home
+            || value.RegistrySecretRevision != profile.RegistrySecretRevision || value.WorkspaceAccess is null || value.WorkspaceAccess.Context != TenantWorkspaceRules.Context(run)
+            || value.HomeAccess != value.WorkspaceAccess.HomeAccess || !WithinPolicy(value.HomeAccess, home) || !WithinPolicy(value.WorkspaceAccess.PrivateAccess, home)
             || reserved is null && ((lease?.Revision ?? 0) != value.ExpectedLeaseRevision || lease?.Generation != value.ExpectedGeneration))
             throw new SecurityConflictException("sandbox_operation_witness_changed");
         if (reserved is null && lease?.State == SandboxLeaseState.Terminated) TenantSandboxControlRules.RequireSelectedProfile(lease, profile);

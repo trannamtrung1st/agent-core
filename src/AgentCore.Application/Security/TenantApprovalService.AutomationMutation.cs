@@ -19,6 +19,7 @@ public sealed partial class TenantApprovalService
             var decision = await service.DecisionAsync(prepared, ct).ConfigureAwait(false);
             if (decision.Decision != OperationDecisionKind.Denied) prepared = await service.VerifyAsync(prepared, ct).ConfigureAwait(false);
             var op = TenantApprovalRules.PrepareAutomationMutation(ids.NewId(), reader.Run.AgentInstanceId, prepared.Value, reader.Agent.Instance.Revision, reader.Agent.Instance.PersonaRevision);
+            op = TenantApprovalRules.ForRun(op, reader.Run);
             var prior = await approvals.FindRootApprovalAsync(reference.TenantId, reader.Run.Admission.Activation.RootActivationId, reader.Agent.PrincipalId, op, ct).ConfigureAwait(false);
             if (prior is not null) return await DuplicateOutcome(reader.Security, reader.Run, prior, ct).ConfigureAwait(false);
             decision = await service.DecisionAsync(prepared, ct).ConfigureAwait(false);

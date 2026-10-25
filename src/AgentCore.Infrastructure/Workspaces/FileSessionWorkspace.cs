@@ -87,7 +87,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace, ITenantSan
             await OwnerAsync(sessionId, true, cancellationToken);
             files.Ensure();
             await ApplyTemplateAsync(files, definition, cancellationToken);
-            await File.WriteAllTextAsync(marker, RoleEnvironments.Of(definition).WorkspacePolicy.TemplateId ?? "", cancellationToken);
+            await File.WriteAllTextAsync(marker, DefinitionExecutionPolicies.Of(definition).WorkspacePolicy.TemplateId ?? "", cancellationToken);
         }
         finally { gate.Release(); }
     }
@@ -193,24 +193,6 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace, ITenantSan
             Working(owner.Instance.InstanceId, sessionId).Structure(operations, AgentWorkspaceLimits.MaxFileBytes, _maxWritableBytes, token)), cancellationToken);
     }
 
-    public async ValueTask CopyAcrossScopesAsync(Guid sessionId, string source, string destination, CancellationToken cancellationToken = default)
-    {
-        var owner = await OwnerAsync(sessionId, true, cancellationToken);
-        await EnsureAsync(sessionId, owner.Session.Definition, cancellationToken);
-        await WithIoAsync(sessionId, true, token =>
-        {
-            var home = new CanonicalWorkspaceFilesystem(AgentWorkspacePhysicalPaths.HomeDirectory(_root, owner.Instance.InstanceId), "/home");
-            home.Ensure();
-            var working = Working(owner.Instance.InstanceId, sessionId);
-            if (AgentHomePath.IsHome(source) == AgentHomePath.IsHome(destination)) throw AgentCoreErrors.Validation("Cross-scope copy requires distinct roots.");
-            var from = AgentHomePath.IsHome(source) ? home : working;
-            var to = AgentHomePath.IsHome(destination) ? home : working;
-            from.CopyTo(source, to, destination, token, AgentWorkspaceLimits.MaxFileBytes,
-                AgentHomePath.IsHome(destination) ? AgentWorkspaceLimits.MaxInstanceBytes : _maxWritableBytes);
-            return ValueTask.FromResult(true);
-        }, cancellationToken);
-    }
-
     public async ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         var snapshot = await _sessions.LoadMetadataAsync(sessionId, cancellationToken) ?? throw AgentCoreErrors.NotFound("Session was not found.");
@@ -232,7 +214,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace, ITenantSan
 
     private async ValueTask ApplyTemplateAsync(CanonicalWorkspaceFilesystem files, AgentDefinition definition, CancellationToken ct)
     {
-        var template = RoleEnvironments.Of(definition).WorkspacePolicy.TemplateId;
+        var template = DefinitionExecutionPolicies.Of(definition).WorkspacePolicy.TemplateId;
         if (string.IsNullOrEmpty(template)) return;
         var source = Path.GetFullPath(Path.Combine(_templateRoot, template));
         if (source.StartsWith(_templateRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal) && Directory.Exists(source))

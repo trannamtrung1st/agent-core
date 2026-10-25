@@ -19,7 +19,7 @@ public sealed class InheritedDefinitionResourceCatalog(IAgentDefinitionResourceA
         // Built-in identity/version pins the approved file source. Retained unowned
         // publications with the same key cannot add or shadow inherited resources.
         var items = new List<AgentDefinitionPublicationResource>();
-        foreach (var source in RoleEnvironments.Of(builtIn).KnowledgeList)
+        foreach (var source in DefinitionExecutionPolicies.Of(builtIn).KnowledgeList)
         {
             var path = KnowledgeSourcePaths.ResolveBackingPath(source);
             if (items.Any(r => r.LogicalPath == path)) continue;

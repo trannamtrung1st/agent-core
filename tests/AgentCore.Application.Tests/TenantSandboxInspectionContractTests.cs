@@ -29,7 +29,7 @@ public sealed class TenantSandboxInspectionContractTests
         var definition = await CapabilityProjectionTests.Definition();
         var names = new[] { ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus };
         definition = definition with { SandboxPolicy = new("p-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ["p-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]),
-            SelfManagement = HarnessManagementPolicy.Disabled, Environment = definition.Environment! with {
+            SelfManagement = HarnessManagementPolicy.Disabled, ExecutionPolicy = definition.ExecutionPolicy! with {
                 Capabilities = capabilities ? new("Selected", names) : null, ToolAllowlist = names } };
         var session = Guid.NewGuid(); var activation = Guid.NewGuid();
         var context = CapabilityProjectionTests.Context(definition) with { AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session,
@@ -55,7 +55,7 @@ public sealed class TenantSandboxInspectionContractTests
         Assert.Equal(3, ToolCatalog.For(withoutPolicy, context with { Definition = withoutPolicy }, offline).Count(t => TenantSandboxInspectionContract.IsInspection(t.Name)));
         var legacy = ToolCatalog.For(definition, context with { ExecutionContext = null, LoadedCapabilityIds = names }, ToolConfigurationGates.AllowAll);
         Assert.Equal(ToolRegistry.Get(ToolCatalog.SandboxStatus).ModelDefinition.Description, Assert.Single(legacy, t => t.Name == ToolCatalog.SandboxStatus).Description);
-        var restricted = definition with { Environment = definition.Environment with { Capabilities = capabilities ? new("Selected", []) : null, ToolAllowlist = [] } };
+        var restricted = definition with { ExecutionPolicy = definition.ExecutionPolicy with { Capabilities = capabilities ? new("Selected", []) : null, ToolAllowlist = [] } };
         Assert.DoesNotContain(ToolCatalog.For(restricted, context with { Definition = restricted }, offline), t => TenantSandboxInspectionContract.IsInspection(t.Name));
     }
 }

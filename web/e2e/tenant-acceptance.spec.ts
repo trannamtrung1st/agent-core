@@ -128,7 +128,7 @@ test('expired real approval cannot act, and a new independent message can reques
   const draft = await call<{ draftId: string; definitionId: string; candidate: Record<string, unknown> }>(owner, target.prefix + '/agent-definitions', { name: 'Expiry review assistant', expectedRevision: await target.revision() });
   const before = 'Original expiry verification instructions.', after = 'Fresh reviewed instructions after an expired exact request.';
   draft.candidate.agentInstructions = before;
-  draft.candidate.environment = { harness: [], knowledgeSources: [], toolAllowlist: [], capabilities: { mode: 'Selected', resolvedCapabilities: ['management.inspect', 'settings.inspect', 'settings.patch'] }, projection: { alwaysCapabilities: [] } };
+  draft.candidate.executionPolicy = { harness: [], knowledgeSources: [], toolAllowlist: [], capabilities: { mode: 'Selected', resolvedCapabilities: ['management.inspect', 'settings.inspect', 'settings.patch'] }, projection: { alwaysCapabilities: [] } };
   draft.candidate.selfManagement = { mode: 'Managed', scopes: ['Settings'], sources: [], eligibleTools: [] };
   const changed = await call<{ revision: number }>(owner, `${target.prefix}/definition-drafts/${draft.draftId}`, { candidate: draft.candidate, expectedRevision: await target.revision(), expectedDraftRevision: 1 }, 'PUT');
   await call(owner, `${target.prefix}/definition-drafts/${draft.draftId}/publish`, { expectedRevision: await target.revision(), expectedDraftRevision: changed.revision });

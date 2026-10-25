@@ -49,7 +49,7 @@
     "scenario": "compliance",
     "owner": "demo"
   },
-  "environment": {
+  "executionPolicy": {
     "harness": [
       "compliance-citation"
     ],

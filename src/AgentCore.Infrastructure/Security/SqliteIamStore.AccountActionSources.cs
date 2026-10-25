@@ -22,13 +22,13 @@ public sealed partial class SqliteIamStore
             var parent = await OwnedAgents(db, tenant).AsNoTracking().SingleOrDefaultAsync(a => a.Instance.InstanceId == run.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false);
             if (parent is null) throw new AccessDeniedException("executor_unavailable"); var agent = Owned(parent);
             var session = await ReadSandboxSession(db, tenant, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-            var bound = await CredentialOperationTarget(db, tenant, run.AgentInstanceId, request.Operation.AccountAction.Credential.BindingId, request.Operation.AccountAction.Credential.CredentialId, ct).ConfigureAwait(false);
+            var bound = await ContextCredentialTarget(db, run, request.Operation.AccountAction.Credential.BindingId, request.Operation.AccountAction.Credential.CredentialId, ct).ConfigureAwait(false);
             TenantAccountActionRules.Require(request.Operation.AccountAction, run, agent, session, await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false), bound, !TenantCredentialOAuthRules.IsOAuth(bound.Credential.Value));
             if (agent.Instance.Revision != request.Operation.ExpectedInstanceRevision || agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision) throw new AccessDeniedException("account_source_changed");
             var grant = await db.Set<TenantOperationGrant>().AsNoTracking().SingleOrDefaultAsync(g => g.TenantId == tenant && g.RequestId == reference.RequestId, ct).ConfigureAwait(false);
             TenantAccountActionReferences.Receipt(reference, request, receipt, decision, grant, run);
             var state = (await ReadTenantAsync(db, tenant, ct).ConfigureAwait(false))!;
-            await TenantAccountActionRules.PermissionsAsync(state, run.AgentInstanceId, request.Operation.AccountAction, agent.PrincipalId, new IamAuthorizer(this), request.Kind == ApprovalKind.Review, ct).ConfigureAwait(false);
+            await TenantAccountActionRules.PermissionsAsync(state, run.AgentInstanceId, request.Operation.AccountAction, TenantWorkspaceRules.Context(request.Operation), agent.PrincipalId, new IamAuthorizer(this), request.Kind == ApprovalKind.Review, ct).ConfigureAwait(false);
             await RequireTenantExecutionSourcesAsync(db, run, state, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
             await TenantAccountActionRules.ReviewerAsync(state, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
         }
@@ -39,10 +39,10 @@ public sealed partial class SqliteIamStore
         var action = request.Operation.AccountAction ?? throw new SecurityConflictException("operation_mismatch");
         TenantApprovalContinuationRules.Require(request, run, source);
         var session = await ReadSandboxSession(db, request.TenantId, action.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        var bound = await CredentialOperationTarget(db, request.TenantId, agent.Instance.InstanceId, action.Credential.BindingId, action.Credential.CredentialId, ct).ConfigureAwait(false);
+        var bound = await ContextCredentialTarget(db, run, action.Credential.BindingId, action.Credential.CredentialId, ct).ConfigureAwait(false);
         TenantAccountActionRules.Require(action, run, agent, session, await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false), bound, exactSecret);
         var state = (await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!;
-        await TenantAccountActionRules.PermissionsAsync(state, agent.Instance.InstanceId, action, agent.PrincipalId, new IamAuthorizer(this), request.Kind == ApprovalKind.Review, ct).ConfigureAwait(false);
+        await TenantAccountActionRules.PermissionsAsync(state, agent.Instance.InstanceId, action, TenantWorkspaceRules.Context(request.Operation), agent.PrincipalId, new IamAuthorizer(this), request.Kind == ApprovalKind.Review, ct).ConfigureAwait(false);
         if (request.Snapshot?.Credential != TenantAccountReadRules.Snapshot(agent, bound).Credential) throw new SecurityConflictException("account_source_changed");
         await RequireTenantExecutionSourcesAsync(db, run, state, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
         if (action.ToolName == AgentCore.Application.Tools.ToolCatalog.EmailSend)

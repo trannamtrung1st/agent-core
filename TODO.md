@@ -12,7 +12,7 @@ The IAM implementation and local Synthetic proposal acceptance are complete in t
 | --- | --- |
 | Context Architecture | Core/system, Runtime/developer and Evidence share one typed assembly path, schema-2 `agentInstructions`, frozen field/task provenance and interaction-only format-2 checkpoints. Locally verified; populated installations still require explicit backed-up offline conversion. [Evidence and operator actions](docs/reports/three-layer-context-cutover-verification-2026-10-15.md). |
 | Agent State Architecture | State awareness, resource isolation and editable Persistent, Session-isolated and Stateless configuration presets are locally complete and integrated with the context cutover. These are field presets, not competing runtimes. [AS-01–28 evidence](docs/reports/agent-state-isolation-verification-2026-10-15.md) and [strict-boundary/browser follow-up](docs/reports/agent-state-isolation-review-2026-10-15.md). Live OpenSandbox, hosted models, customer accounts, deployment and optional CI remain separate from this local scope. |
-| Workspace & Sandbox Foundation | Durable Instance `/home`, temporary Session `/working`, canonical filesystem integration and direct sandbox mounts are locally qualified in the [filesystem cutover ledger](docs/reports/canonical-workspace-cutover-verification-2026-10-16.md). Scoped P10 OpenSandbox is closed for trusted single-user local Docker development/demo on `4c8f2507`, with all eight [exact-source hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38518370016) passed; [OSB-01–18 verification](docs/reports/opensandbox-integration-verification.md) preserves historical failures and actual runtime evidence. Own execd loopback and absent writable-layer quota remain disclosed local-demo limits; production isolation/hardening is unfinished. |
+| Workspace & Sandbox Foundation | The earlier Instance-home filesystem implementation is historical; the Space initiative below replaces home ownership. Temporary Session `/working`, canonical filesystem integration and direct mounts retain the mechanisms locally qualified in the [filesystem cutover ledger](docs/reports/canonical-workspace-cutover-verification-2026-10-16.md). Scoped P10 OpenSandbox is closed for trusted single-user local Docker development/demo on `4c8f2507`, with all eight [exact-source hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38518370016) passed; [OSB-01–18 verification](docs/reports/opensandbox-integration-verification.md) preserves historical failures and actual runtime evidence. Own execd loopback and absent writable-layer quota remain disclosed local-demo limits; production isolation/hardening is unfinished. |
 | Multi-Tenant & IAM | Locally complete: canonical identity, scoped IAM, owned resources, trusted execution, exact approvals and tenant UI. [Final delivery](docs/reports/tenant-final-delivery-2026-10-24.md) owns proposal acceptance; [stabilization](docs/reports/iam-stabilization-2026-10-24.md) owns repository launch/test integration. Deployment and live UAT remain separate. |
 
 The MVP and phases through P9.10 have closed/frozen evidence. Later bounded enhancements have their own records; an earlier freeze does not accept a successor. P11 remains unopened and requirement-triggered. Reopen closed work for a reproducible regression or an explicit new requirement.
@@ -77,13 +77,13 @@ One canonical entry per initiative follows. Existing subsystem acceptance gaps a
 
 Canonical tenant/resource ownership, Agent Access, restricted agent principals, scoped RBAC, exact approval/grant continuation, isolation and obsolete-authority retirement have completed local proposal acceptance. The [final delivery](docs/reports/tenant-final-delivery-2026-10-24.md) and [stabilization follow-up](docs/reports/iam-stabilization-2026-10-24.md) preserve the evidence and operating limits. Continue with initiative 2 when requested; the [remaining external obligations](#open-work-and-acceptance-gaps) are deployment/UAT work.
 
-### 2. Environments
+### 2. Space + Membership + optional Environment + Secrets — locally implemented
 
-Introduce first-class Environment entities and active Session environment context: environment-scoped instructions/runtime context; Resource and Credential bindings supporting multiple environments and explicit unscoped resources; Workspace, Automation and Event integration; and explicit Session switching for subsequent interactions, within tenant/IAM boundaries. Environment is runtime configuration/context. Reuse the existing execution path; current Definition-owned `RoleEnvironment` is not an active Environment entity.
+Implement the approved coherent cutover: Space owns situational instructions and persistent `/home`; Membership owns contextual resource availability; optional Space Environments own typed variables and metadata only. Tenant Secrets reuse the existing protection/IAM/approval foundation. Each Instance has one protected Private Space; each Session selects its Space and optional Environment, captured immutably by each Run. Workspace/sandbox, protected consumers, automations/events/children and the complete UI must use these owners together. Definition execution policy is separately named `DefinitionExecutionPolicy` / `executionPolicy`. [Implementation evidence](docs/reports/space-environment-implementation-2026-10-25.md) records complete local qualification and main synchronization and PR handoff. Live matching Sandbox contract-5 reverification is a deployment gate; no installed state is reset or deployment/CI acceptance implied.
 
 ### 3. Dynamic Model & Provider Management
 
-**Local implementation complete (25 October 2026).** Tenant-owned protected connections, selectable offerings, explicit defaults, five adapter kinds, native/compatible capabilities and canonical runtime/authoring/UI selection replace static Real inference configuration. The [delivery audit](docs/reports/dynamic-model-management-delivery-2026-10-25.md#final-requirement-audit) records focused SQLite/InMemory/API/Runtime/Synthetic browser evidence and migration/reset safety. Live-provider calls, physical devices, deployment and optional CI remain unrun; no application milestone acceptance is implied. Routing/Decision Intelligence remains initiative 6.
+**Local implementation complete (25 October 2026).** Tenant-owned protected connections, selectable offerings, explicit defaults, five adapter kinds, native/compatible capabilities and canonical runtime/authoring/UI selection replace static Real inference configuration. The [delivery audit](docs/reports/dynamic-model-management-delivery-2026-10-25.md#final-requirement-audit) records focused SQLite/InMemory/API/Runtime/Synthetic browser evidence and migration/reset safety. Live-provider calls, physical devices, deployment and optional CI remain unrun; no application milestone acceptance is implied. Routing/Decision Intelligence remains initiative 6. The [main integration report](docs/reports/model-space-main-integration-2026-10-25.md) records the combined Space/Environment/model qualification; neither model configuration nor membership alone grants execution in a Space.
 
 ### 4. Self-Management & Admin Assistant
 
@@ -107,7 +107,7 @@ Consolidate lifecycle scripts/hooks, structured results/evidence, Script/Agent/M
 
 ### 8. Session Goals
 
-Introduce persistent explicit objectives associated with Sessions/environments, success criteria/checkpoints, agent-driven progress updates, verification-based completion and bounded continuation/recovery. Retain compatibility with Sessions, Activations and Agent Runs and their existing execution/conversation ownership.
+Introduce persistent explicit objectives associated with Sessions/Spaces (a future specification; Environments remain variable profiles), success criteria/checkpoints, agent-driven progress updates, verification-based completion and bounded continuation/recovery. Retain compatibility with Sessions, Activations and Agent Runs and their existing execution/conversation ownership.
 
 ### 9. Task Delegation & Communication
 
@@ -123,7 +123,7 @@ These four strategic groupings do not renumber or accept the Implementation Plan
 
 | Roadmap milestone | Intended sequence |
 | --- | --- |
-| Production Foundation | 1. IAM → 2. Environments → 3. Dynamic Model Management |
+| Production Foundation | 1. IAM → 2. Space/Membership, optional Environments and Secrets → 3. Dynamic Model Management |
 | Intelligent Runtime | 4. Self-Management → 5. Execution Simplification → 6. Decision Intelligence |
 | Autonomous Execution | 7. Scripts & Evaluation → 8. Session Goals → 9. Delegation & Communication |
 | Collaborative Platform | 10. Group Chat |
@@ -161,8 +161,8 @@ Always keep this section. These personal ideas are future direction, not approve
 | 5. End chat capability/tool | Initiative 5 |
 | 6. Long composer text as attachment | Initiative 5 |
 | 7. Legacy / compatibility / fallback / environment naming cleanup | Supporting: Architecture Cleanup |
-| 8. Run/turn verification, evaluation management, Session/environment goals | Initiatives 7: Scripts & Evaluation and 8: Session Goals |
-| 9. Environment instructions for shared context | Initiative 2: Environments |
+| 8. Run/turn verification, evaluation management, Session/Space goals | Initiatives 7: Scripts & Evaluation and 8: Session Goals |
+| 9. Shared situational context and bindings | Initiative 2: Space + Membership; Environments hold typed variables |
 | 10. KOL reviews, videos, forums/pages | Strategy: Marketing & Commercialization |
 | 11. Commercial video / apparent coworkers reveal | Strategy: Marketing & Commercialization |
 | 12. Admin assistant | Initiative 4: Self-Management & Admin Assistant |
@@ -183,7 +183,7 @@ Completed ideas remain covered by existing work: Skill/file mentions in the unif
 
 - **Sub-agents management**: parent session to keep track of sub-agents? [TBD].
 
-**Unresolved design decisions:** Environment binding/default/switching semantics; safe removal of any remaining Turn concept; Decision Intelligence model choice and measured value; retrieval infrastructure only if justified. Resolve these through the owning specifications before implementation; this consolidation chooses no new architecture.
+**Unresolved design decisions:** Space/Membership/Environment ownership and switching are specified by the approved initiative 2 cutover; remaining future decisions are safe removal of any remaining Turn concept; Decision Intelligence model choice and measured value; retrieval infrastructure only if justified. Resolve these through the owning specifications before implementation; this consolidation chooses no new architecture.
 
 ## Maintenance rules
 
@@ -191,7 +191,7 @@ Completed ideas remain covered by existing work: Skill/file mentions in the unif
 - Update the canonical document when behavior or a decision changes, then update only necessary summaries. Historical freezes remain evidence of their original versions.
 - Preserve the SessionRuntime mailbox as the single conversation-state writer, independently replaceable providers, stale-response fencing and active microphone capture during server audio output. See [AGENTS.md](AGENTS.md) and [Architecture](docs/03-system-architecture.md).
 - Keep authority separate from tool discovery, Skills and credentials. Background work uses the same owned Session/AgentRun path and execution-time checks.
-- Keep durable Instance `/home`, temporary Session `/working`, resources, attachments and Artifacts distinct. Do not restore retired WorkItem engines, Application Connections or keyword Skill activation from old plans.
+- The Space cutover replaces Instance-owned `/home` with Space-owned `/home`; keep temporary Session `/working`, resources, attachments and Artifacts distinct. Do not restore retired WorkItem engines, Application Connections or keyword Skill activation from old plans.
 - Use Synthetic/offline checks by default; exercise affected runtime behavior for code changes. Prefer deterministic race coverage, run applicable gates and record exact-source hosted evidence where required. Local passes and publication alone do not establish closure.
 
 ## Automation destinations and background report-back closure

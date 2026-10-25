@@ -25,13 +25,13 @@ public sealed class TenantAutomationOperationTarget(IIamStore security, ITenantA
         var occurrence = await store.FindTenantOccurrenceAsync(request.TenantId, p.Occurrence.OccurrenceId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("occurrence_unavailable");
         if (!TenantAutomationRules.Same(source, p.Next) || !TenantAutomationAdmissionApprovalRules.SameOccurrence(occurrence, TenantAutomationAdmissionApprovalRules.Pending(p)))
             throw new SecurityConflictException("operation_witness_changed");
-        var current = await configuration.ResolveAsync(request.TenantId, request.Operation.InstanceId, ct).ConfigureAwait(false);
+        var conversation = TenantAutomationConversationRules.Existing(p.Current)
+            ? TenantAutomationConversationRules.Require(p.Current, sessions is null ? null : await sessions.FindTenantSessionAsync(p.TenantId, p.SessionId, ct), p.Conversation) : null;
+        var current = await configuration.ResolveForAutomationAsync(p.Current, conversation, p.Occurrence.AdmittedAtUtc, ct).ConfigureAwait(false);
         TenantAutomationAdmissionApprovalRules.Shape(request, current.Agent);
         try { TenantAutomationRules.AdmissionSource(state, p.Current, current.Agent, current.Configuration.Configuration.Definition, p.ManualInitiatorPrincipalId, p.Occurrence.SourceKind); }
         catch (ArgumentException) { throw new AccessDeniedException("operation_configuration_changed"); }
         if (TenantAutomationRules.Hash(current.Configuration) != p.ConfigurationHash) throw new SecurityConflictException("operation_witness_changed");
-        var conversation = TenantAutomationConversationRules.Existing(p.Current)
-            ? TenantAutomationConversationRules.Require(p.Current, sessions is null ? null : await sessions.FindTenantSessionAsync(p.TenantId, p.SessionId, ct), p.Conversation) : null;
         var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         var model = conversation is null ? ExecutionModelPolicy.Resolve(models, current.Configuration.Configuration.Definition, current.Agent.Instance, p.Current)
             : new ExecutionModelDecision(TenantAutomationConversationRules.Model(p.Current, conversation, current.Configuration.Configuration.Definition, models), null);
