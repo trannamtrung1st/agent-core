@@ -72,7 +72,7 @@ public sealed partial class TenantDefinitionIntegrationTests
     {
         await using var f = await Fixture.Create(sqlite); var s = await MemoryOperationFixture(f); var services = MemoryServices(f); var call = Consolidate(s.Sources);
         Assert.True(TenantTaskExecutionContract.Allows(s.Turn.Run), JsonSerializer.Serialize(s.Turn.Run.Admission.ExecutionContext));
-        Assert.True(TenantMemoryToolContract.Allows(s.Turn.Run.Admission.Configuration!.Definition, call.Name), JsonSerializer.Serialize(new { s.Turn.Run.Admission.Configuration.Definition.MemoryPolicy, s.Turn.Run.Admission.Configuration.Definition.Environment, s.Turn.Run.Admission.Configuration.Definition.SelfManagement }));
+        Assert.True(TenantMemoryToolContract.Allows(s.Turn.Run.Admission.Configuration!.Definition, call.Name), JsonSerializer.Serialize(new { s.Turn.Run.Admission.Configuration.Definition.MemoryPolicy, s.Turn.Run.Admission.Configuration.Definition.ExecutionPolicy, s.Turn.Run.Admission.Configuration.Definition.SelfManagement }));
         var direct = await services.Memory.InspectAsync(s.Turn.Frame, call, 6000); Assert.Contains("requiresApproval", direct); Assert.DoesNotContain("Evidence practice", direct);
         var request = await PrepareMemoryReview(f, s.Turn.Frame, call, services.Approvals); Assert.Equal(ApprovalKind.Review, request.Kind);
         Assert.Equal(AgentRunStatus.WaitingForApproval, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Owner.Tenant, s.Turn.Run.AgentRunId))!.Status);

@@ -158,7 +158,7 @@ public static class TenantManagementReadRules
         var stable = value.StableConfigurationHash;
         for (var revision = value.InstanceRevision + 1; revision <= owner.Revision; revision++)
         {
-            var candidates = rows.Where(r => r.InstanceRevision == revision && (Preference(r, request) || Management(r, request, stable) is not null || Child(r, request, stable) is not null)).ToArray();
+            var candidates = rows.Where(r => r.InstanceRevision == revision && (Preference(r, request, reader.Run) || Management(r, request, stable) is not null || Child(r, request, stable) is not null)).ToArray();
             if (candidates.Length != 1) throw new AccessDeniedException("management_source_changed");
             if (Child(candidates[0], request, stable) is { } child) stable = child.AfterHash;
             else if (Management(candidates[0], request, stable) is { } mutation) stable = mutation.AfterStableHash;
@@ -219,7 +219,7 @@ public static class TenantManagementReadRules
         {
             var rows = receipts.Where(r => r.TenantId == reader.Security.Tenant.TenantId && r.InstanceId == reader.Agent.Instance.InstanceId && r.ExecutorPrincipalId == reader.Agent.PrincipalId
                 && r.SessionId == reader.Run.SessionId && r.RootActivationId == reader.Run.Admission.Activation.RootActivationId && r.Outcome == TenantOperationOutcome.Completed && r.InstanceRevision == revision).ToArray();
-            var row = rows.Single(r => Preference(r, request) || Management(r, request, stable) is not null || Child(r, request, stable) is not null);
+            var row = rows.Single(r => Preference(r, request, reader.Run) || Management(r, request, stable) is not null || Child(r, request, stable) is not null);
             if (Child(row, request, stable) is { } child)
             {
                 foreach (var old in child.Before)
@@ -257,7 +257,7 @@ public static class TenantManagementReadRules
         TenantManagementChildRead? witness = null; long? originalRevision = null; var deleted = false;
         for (var revision = pin.InstanceRevision + 1; revision <= owner.Revision; revision++)
         {
-            var candidates = rows.Where(r => r.InstanceRevision == revision && (Preference(r, request) || Child(r, request, stable) is not null || Management(r, request, stable) is not null)).ToArray();
+            var candidates = rows.Where(r => r.InstanceRevision == revision && (Preference(r, request, reader.Run) || Child(r, request, stable) is not null || Management(r, request, stable) is not null)).ToArray();
             if (candidates.Length != 1) throw new AccessDeniedException("resource_source_changed");
             var receipt = candidates[0];
             if (Child(receipt, request, stable) is { } child)
@@ -295,14 +295,14 @@ public static class TenantManagementReadRules
         TenantManagementMutationRules.Validate(value); return value;
     }
 
-    private static bool Preference(TenantOperationReceipt receipt, Func<Guid, TenantApprovalRequest?> request)
+    private static bool Preference(TenantOperationReceipt receipt, Func<Guid, TenantApprovalRequest?> request, AgentRun source)
     {
         if (receipt.RequestId is { } id)
             return request(id) is { Status: TenantApprovalStatus.Approved, Operation.Preferences: not null } approved
                 && receipt.ReasonCode == "operation_completed" && approved.Operation.ActionHash == receipt.ActionHash
                 && approved.Operation.ExpectedInstanceRevision == receipt.InstanceRevision - 1;
         return receipt.ReasonCode == "operation_completed" && receipt.SourceCallId is { Length: > 0 } && receipt.ParametersHash is { } parameters && TenantMemoryOperationRules.ValidHash(parameters)
-            && receipt.ActionHash == TenantPreferenceToolContract.ActionHash(receipt.InstanceId, receipt.InstanceRevision - 1, parameters);
+            && receipt.ActionHash == TenantPreferenceToolContract.ActionHash(source, receipt.InstanceRevision - 1, parameters);
     }
     public static void ValidateEffect(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant,
         AgentRun run, TenantOperationCommit commit, AgentRun? source)

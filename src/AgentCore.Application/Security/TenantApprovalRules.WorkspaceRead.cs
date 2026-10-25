@@ -1,9 +1,11 @@
+using AgentCore.Domain.Conversation;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Security;
+using AgentCore.Application.Sessions;
 
 namespace AgentCore.Application.Security;
 
@@ -20,20 +22,26 @@ public static partial class TenantApprovalRules
             args = args with { Path = source.Path };
         }
         else if (value.Knowledge is not null) throw new ArgumentException("Unexpected knowledge source.");
-        var owner = new TenantWorkspaceReference(Guid.Empty, instance, value.Working ? value.SessionId : null);
         if (value.AttachmentMembersJson is not null) _ = AttachmentReadMembers(value);
         else if (value.ResourceMembersJson is not null) _ = ResourceReadMembers(value);
         else if (value.ResourceKey is { } key)
         {
-            if (!TenantAgentChildScopes.TryParse(AccessScope.ForResource(instance, "resource", instance.ToString("D") + ":" + key), out _, out _)) throw new ArgumentException("Invalid resource key.");
+            if (!TenantResourceScopes.IsKey(key)) throw new ArgumentException("Invalid resource key.");
             if (value.Working || value.ResourceRevision is null or < 0 || !TenantWorkspaceReadContract.IsFile(value.ToolName) || !TenantWorkspaceReadContract.IsResourcePath(args.Path)) throw new ArgumentException("Invalid exact resource observation.");
         }
         else
         {
             if (value.ResourceRevision is not null) throw new ArgumentException("Unexpected resource revision.");
-            TenantWorkspaceRules.Path(owner, args.Path, TenantWorkspaceReadContract.IsFile(value.ToolName));
+            TenantWorkspaceRules.ValidatePath(args.Path, TenantWorkspaceReadContract.IsFile(value.ToolName));
+            if (value.Working != (TenantWorkspaceRules.LogicalRoot(args.Path) == "/working"))
+                throw AgentCoreErrors.Validation("Workspace observation must match its exact logical root.");
         }
-        if (value.AttachmentMembersJson is null && value.ResourceMembersJson is null && args.Cursor is not null && value.ToolName == ToolCatalog.WorkspaceList) TenantWorkspaceRules.Path(owner, args.Cursor);
+        if (value.AttachmentMembersJson is null && value.ResourceMembersJson is null && args.Cursor is not null && value.ToolName == ToolCatalog.WorkspaceList)
+        {
+            TenantWorkspaceRules.ValidatePath(args.Cursor);
+            if (TenantWorkspaceRules.LogicalRoot(args.Cursor) != TenantWorkspaceRules.LogicalRoot(args.Path))
+                throw AgentCoreErrors.Validation("Workspace cursor must match its exact logical root.");
+        }
         if (id == Guid.Empty || instance == Guid.Empty || value.SessionId == Guid.Empty || revision < 1 || personaRevision < 1
             || TenantWorkspaceReadContract.Canonical(value.ToolName, args) != value.ArgumentsJson || value.ObservationHash is not { Length: 64 }
             || value.ObservationHash.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f'))) throw new ArgumentException("Invalid exact workspace observation.");

@@ -61,6 +61,7 @@ public sealed partial class TenantAttachmentRuntimeContextService
             {
                 var exact = TenantApprovalRules.PrepareAttachmentRead(ids.NewId(), view.Run.AgentInstanceId,
                     WitnessRead(source, args, vision), view.Agent.Instance.Revision, view.Agent.Instance.PersonaRevision);
+                exact = TenantApprovalRules.ForRun(exact, view.Run);
                 var prior = await approvals.FindRootApprovalAsync(frame.Owner.TenantId!.Value, view.Run.Admission.ExecutionContext!.RootActivationId, view.Agent.PrincipalId, exact, ct).ConfigureAwait(false);
                 if (prior is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(prior));
             }

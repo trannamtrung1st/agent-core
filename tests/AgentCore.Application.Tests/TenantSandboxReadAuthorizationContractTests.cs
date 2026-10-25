@@ -38,7 +38,7 @@ public sealed class TenantSandboxReadAuthorizationContractTests
     {
         var definition = await CapabilityProjectionTests.Definition();
         definition = definition with { SelfManagement = HarnessManagementPolicy.Disabled, SandboxPolicy = null, ExecutionSandboxProfiles = [],
-            Environment = definition.Environment! with { Capabilities = new("Selected", [TenantSandboxReadOperationRules.Tool(kind)]) } };
+            ExecutionPolicy = definition.ExecutionPolicy! with { Capabilities = new("Selected", [TenantSandboxReadOperationRules.Tool(kind)]) } };
         var session = Guid.NewGuid(); var activation = Guid.NewGuid();
         var context = CapabilityProjectionTests.Context(definition) with { AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session,
             ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, ExecutionOrigin.UserMessage) };

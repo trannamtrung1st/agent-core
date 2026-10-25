@@ -18,7 +18,7 @@ public sealed class DefinitionBoundKnowledgeContentResolver(
         string identity,
         CancellationToken cancellationToken = default)
     {
-        var reference = RoleEnvironments.Of(definition).KnowledgeList.SingleOrDefault(s => s.Identity == identity);
+        var reference = DefinitionExecutionPolicies.Of(definition).KnowledgeList.SingleOrDefault(s => s.Identity == identity);
         var pinned = definition.ExecutionResources?.SingleOrDefault(r => r.Key == identity
             || r.Key.StartsWith("definition:", StringComparison.Ordinal) && reference is not null && r.LogicalPath == KnowledgeSourcePaths.ResolveBackingPath(reference));
         if (pinned is not null)
@@ -36,7 +36,7 @@ public sealed class DefinitionBoundKnowledgeContentResolver(
             return await fileCatalog.ReadContentAsync(identity, cancellationToken).ConfigureAwait(false);
         }
 
-        var source = RoleEnvironments.Of(definition).KnowledgeList
+        var source = DefinitionExecutionPolicies.Of(definition).KnowledgeList
             .FirstOrDefault(item => string.Equals(item.Identity, identity, StringComparison.Ordinal));
         var logicalPath = DefinitionPublicationResourceReader.NormalizeLogicalPath(
             KnowledgeSourcePaths.ResolveBackingPath(identity, source?.ResourcePath));

@@ -20,6 +20,10 @@ public sealed partial class InMemoryIamStore
     private void RequireAutomationConversationAdmission(TenantSecurityState state, TenantAutomationAdmission admission, Guid? human,
         PreparedAutomationAdmission? consent, bool preparing, CancellationToken ct)
     {
+        RequireSpaceExecutionSource(admission.Run, state, new IamAuthorizer(this), ct, admission: true).GetAwaiter().GetResult();
+        var context = admission.Run.Admission.Configuration!.SpaceContext!;
+        TenantAutomationContextRules.PermissionsAsync(state, admission.Run.Owner.ExecutorPrincipalId!.Value, context.SpaceId, context.EnvironmentId is not null,
+            human, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
         var target = RequireAutomationConversation(state, admission.Current, human, consent?.Conversation, ct);
         if (target is null) return;
         TenantRequestIsolationRules.AutomationRoot(target.Snapshot, admission.Run, sessionBacking.AgentRuns.Runs.Values

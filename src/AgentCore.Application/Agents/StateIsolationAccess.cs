@@ -20,11 +20,11 @@ public static class StateIsolationAccess
 
     public static void RequireHome(StateIsolationPolicy policy, string path, bool write)
     {
-        if (AgentHomePath.IsHome(path) && (policy.HomeAccess == HomeAccess.Disabled || write && policy.HomeAccess != HomeAccess.ReadWrite))
+        if ((AgentHomePath.IsHome(path) || path == "/private" || path.StartsWith("/private/", StringComparison.Ordinal)) && (policy.HomeAccess == HomeAccess.Disabled || write && policy.HomeAccess != HomeAccess.ReadWrite))
             throw AgentCoreErrors.Forbidden(write ? "Home writes are disabled by State & Isolation policy. Use this Session's /working."
                 : "Home access is disabled by State & Isolation policy. Use this Session's /working.");
     }
 
     public static string Cwd(StateIsolationPolicy policy, string? cwd) => policy.HomeAccess == HomeAccess.Disabled
-        && (cwd is null || AgentHomePath.IsHome(cwd)) ? "/working" : cwd ?? "/home";
+        && (cwd is null || AgentHomePath.IsHome(cwd) || cwd == "/private" || cwd.StartsWith("/private/", StringComparison.Ordinal)) ? "/working" : cwd ?? "/home";
 }

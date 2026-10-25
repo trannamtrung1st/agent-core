@@ -5,6 +5,8 @@ colors:
   primary: "#1668dc"
   primaryBg: "#15325b"
   focus: "#3c89e8"
+  linkText: "#3c89e8"
+  linkTextHover: "#69b1ff"
   error: "#dc4446"
   success: "#49aa19"
   successHover: "#6abe39"
@@ -856,3 +858,5 @@ The existing SystemAdministration collection now presents built-in platform-role
 The [surface brief](../../.impeccable/surfaces/web-src-features-access-systemadministration-tsx.md#operator-extension-finish-evidence--2026-10-21) records the evidence boundary. The fresh finish reviewer opened all seven valid 1000px-high captures under `.impeccable/review/system-operators/` and returned **ship**, with no material fixes: collection tops at 1440/1024/768/390/320px, details at 390px and confirmation at 320px. This documenter sampled the 1440/320px collection, 390px details and 320px confirmation, and checked all seven dimensions/SHA256 fingerprints. The verdict covers those visible tops, internal shell, details and confirmation only. Dedicated loading, empty, error, stale, permission, hover, keyboard and independently measured contrast remain outside visual acceptance. The single `/private/tmp/system-operators-detector.json` result is `[]`; no second scan is claimed.
 
 The [focused verification record](../../docs/reports/platform-operator-verification-2026-10-21.md) owns separate functional qualification: 52 focused UI cases passed in 93.68 seconds, and independent MCP exercised native exact assignment, external role drift, stale refusal and deliberate retained-draft readback without duplicate submission. MCP observed no document overflow or application exceptions; its sole console resource error was the expected 409. Lost reply and last-operator refusal belong to the separate CLI journey, not MCP. This documentation pass ran no application checks. Normative frontmatter and historical sidecar metadata remain unchanged; `.impeccable/design.json` retains SHA256 `8bdc3659a25b706454ac8cc0394323c5e0e60ea1ade616756b180efbaecef49b`. The theme fingerprint matches, while pre-existing app CSS, AccessApp and PRODUCT/DESIGN fingerprint drift is preserved without repair or canonization. This scoped merge does not establish broad design-system, full proposal or milestone acceptance; the full proposal remains active.
+
+Shared Ant Design link text and selected Tab text use `{colors.linkText}` on dark surfaces; the filled primary button retains its primary color. This keeps ordinary small action text above 4.5:1 against the container. The shared owner is `web/src/app/antdTheme.ts`.

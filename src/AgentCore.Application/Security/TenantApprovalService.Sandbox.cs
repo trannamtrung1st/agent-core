@@ -30,9 +30,11 @@ public sealed partial class TenantApprovalService
         var current = InstanceSettingsResolver.Resolve(target.Baseline, target.Agent.Instance.SettingsOverrides);
         var home = StateIsolationPolicy.Restrict(run.Admission.Configuration!.Definition.StateIsolationPolicy ?? StateIsolationPolicy.Default,
             current.StateIsolationPolicy ?? StateIsolationPolicy.Default).HomeAccess;
-        var parameters = TenantSandboxOperationRules.Parameters(run, pinned, target.Lease, command, home);
+        var access = await TenantSandboxWorkspaceRules.ResolveAsync(state, run, home, authorizer, ct).ConfigureAwait(false);
+        var parameters = TenantSandboxOperationRules.Parameters(run, pinned, target.Lease, command, access);
         TenantSandboxOperationRules.Require(parameters, run, target.Agent, target.Session, target.Baseline, target.Profile, target.Lease, time.GetUtcNow());
         var operation = TenantApprovalRules.PrepareSandbox(ids.NewId(), run.AgentInstanceId, parameters, target.Agent.Instance.Revision, target.Agent.Instance.PersonaRevision);
+        operation = TenantApprovalRules.ForRun(operation, run);
         return await PersistAsync(reference, run, state, target.Agent, operation, TenantSandboxOperationRules.Snapshot(target.Agent, pinned, target.Lease),
             false, expectedRunRevision, generation, ct).ConfigureAwait(false);
     }

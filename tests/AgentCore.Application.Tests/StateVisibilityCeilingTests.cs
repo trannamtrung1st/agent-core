@@ -45,14 +45,14 @@ public sealed class StateVisibilityCeilingTests
     public void A_maximum_never_enables_inspection_or_broadens_an_admitted_run()
     {
         var definition = SampleDefinitions.Examiner with { StateIsolationPolicy = new(MaxAgentStateVisibility: AgentStateVisibility.InstanceSummary),
-            Environment = new RoleEnvironment(Capabilities: new("Selected", [ToolCatalog.AgentStateInspect])) };
+            ExecutionPolicy = new DefinitionExecutionPolicy(Capabilities: new("Selected", [ToolCatalog.AgentStateInspect])) };
         var context = new AgentContext(definition, [], "", null, SessionMode.Text, null, false, null,
             new(Guid.NewGuid(), TriggerKind.UserTurn, "Hello"), AgentInstanceId: Guid.NewGuid(), OwnedSessionId: Guid.NewGuid());
         Assert.False(ToolPolicy.IsOffered(definition, context, ToolCatalog.AgentStateInspect, ToolConfigurationGates.AllowAll));
         var enabled = definition with { StateIsolationPolicy = definition.StateIsolationPolicy with { AgentStateVisibility = AgentStateVisibility.InstanceSummary } };
         Assert.True(ToolPolicy.IsOffered(enabled, context with { Definition = enabled }, ToolCatalog.AgentStateInspect, ToolConfigurationGates.AllowAll));
         Assert.Equal(AgentStateVisibility.Off, StateIsolationAccess.RestrictDefinition(definition, enabled).StateIsolationPolicy!.AgentStateVisibility);
-        enabled = enabled with { Environment = new RoleEnvironment(Capabilities: new("Selected", [])) };
+        enabled = enabled with { ExecutionPolicy = new DefinitionExecutionPolicy(Capabilities: new("Selected", [])) };
         Assert.False(ToolPolicy.IsOffered(enabled, context with { Definition = enabled }, ToolCatalog.AgentStateInspect, ToolConfigurationGates.AllowAll));
     }
 }

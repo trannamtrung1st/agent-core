@@ -61,9 +61,9 @@ public static class TenantAccountActionContract
         string Path()
         {
             var path = Required("path");
-            if (path.Length > 512 || !path.StartsWith("/home/", StringComparison.Ordinal) && !path.StartsWith("/working/", StringComparison.Ordinal)
-                || path.IndexOfAny(['*', '?', '[', ']']) >= 0) throw new ArgumentException("Use an exact owned /home or /working file path.");
-            try { TenantWorkspaceRules.Path(new(Guid.Empty, Guid.Empty, path.StartsWith("/working/", StringComparison.Ordinal) ? session : null), path, file: true); }
+            if (path.Length > 512 || !path.StartsWith("/home/", StringComparison.Ordinal) && !path.StartsWith("/private/", StringComparison.Ordinal) && !path.StartsWith("/working/", StringComparison.Ordinal)
+                || path.IndexOfAny(['*', '?', '[', ']']) >= 0) throw new ArgumentException("Use an exact owned /home, /private or /working file path.");
+            try { TenantWorkspaceRules.ValidatePath(path, file: true); }
             catch (Sessions.AgentCoreException) { throw new ArgumentException("Use an exact owned workspace child path."); }
             return path;
         }

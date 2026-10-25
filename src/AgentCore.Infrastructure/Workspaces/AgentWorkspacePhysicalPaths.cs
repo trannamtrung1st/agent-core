@@ -12,7 +12,11 @@ public static class AgentWorkspacePhysicalPaths
         return Path.Combine(Path.GetFullPath(root), "agent-" + owner.ToString("N"));
     }
 
-    public static string HomeDirectory(string root, Guid owner) => Path.Combine(AgentRoot(root, owner), "home");
+    public static string SpaceHomeDirectory(string root, Guid tenant, Guid space)
+    {
+        if (tenant == Guid.Empty || space == Guid.Empty) throw AgentCoreErrors.Persistence("Space workspace ownership is invalid.");
+        return Path.Combine(Path.GetFullPath(root), "tenant-" + tenant.ToString("N"), "spaces", "space-" + space.ToString("N"), "home");
+    }
     public static string SessionRoot(string root, Guid owner, Guid session) =>
         session == Guid.Empty ? throw AgentCoreErrors.Persistence("Session workspace ownership is invalid.")
             : Path.Combine(AgentRoot(root, owner), "sessions", "session-" + session.ToString("N"));

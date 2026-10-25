@@ -54,12 +54,13 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         // Browser compound visibility applies to protected Credential fills too, independently of the primary permission.
         var resourceJson = System.Text.Json.JsonSerializer.Serialize(workspaceReadVisibility?.Resources);
         var workspaceJson = System.Text.Json.JsonSerializer.Serialize(workspaceReadVisibility?.Workspaces);
-        var homeAgentsJson = System.Text.Json.JsonSerializer.Serialize(workspaceReadVisibility?.HomeAgents?.Select(id => id.ToString("D")).ToArray());
+        var homeSpacesJson = System.Text.Json.JsonSerializer.Serialize(workspaceReadVisibility?.HomeSpaces?.Select(id => id.ToString("D")).ToArray());
+        var resourceAgentsJson = System.Text.Json.JsonSerializer.Serialize(workspaceReadVisibility?.ResourceAgents?.Select(id => id.ToString("D")).ToArray());
         var workspaceSessionsJson = System.Text.Json.JsonSerializer.Serialize(workspaceReadVisibility?.Sessions?.Select(id => id.ToString("D")).ToArray());
         var mutationReadJson = System.Text.Json.JsonSerializer.Serialize(workspaceMutationVisibility?.Reads);
         var mutationWriteJson = System.Text.Json.JsonSerializer.Serialize(workspaceMutationVisibility?.Writes);
         var mutationDeleteJson = System.Text.Json.JsonSerializer.Serialize(workspaceMutationVisibility?.Deletes);
-        var mutationAgentsJson = System.Text.Json.JsonSerializer.Serialize(workspaceMutationVisibility?.HomeAgents?.Select(id => id.ToString("D")).ToArray());
+        var mutationSpacesJson = System.Text.Json.JsonSerializer.Serialize(workspaceMutationVisibility?.HomeSpaces?.Select(id => id.ToString("D")).ToArray());
         var mutationSessionsJson = System.Text.Json.JsonSerializer.Serialize(workspaceMutationVisibility?.Sessions?.Select(id => id.ToString("D")).ToArray());
         var resourceOwners = await db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE TenantId = {tenantId} AND
@@ -70,6 +71,9 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         foreach (var owner in resourceOwners)
             foreach (var scope in await ChildCatalogAsync(db, tenantId, Guid.Parse(owner), null, ct).ConfigureAwait(false))
                 if (scope.ResourceType == "resource") ownedResources.Add(scope.ResourceId!);
+        var spaceResources = await db.Set<AgentCore.Domain.Spaces.SpaceFileResource>().AsNoTracking().Where(r => r.TenantId == tenantId && r.DeletedAt == null
+            && db.Set<SpaceRecord>().Any(owner => owner.TenantId == r.TenantId && owner.SpaceId == r.SpaceId && owner.DeletedAt == null)).ToArrayAsync(ct).ConfigureAwait(false);
+        foreach (var spaceSource in spaceResources) ownedResources.Add(spaceSource.Key);
         var ownedResourceJson = System.Text.Json.JsonSerializer.Serialize(ownedResources);
         var reportCanCreate = reportVisibility?.CanCreate ?? true;
         var reportSessionsJson = System.Text.Json.JsonSerializer.Serialize(reportVisibility?.Sessions?.Select(id => id.ToString("D")).ToArray());
@@ -181,15 +185,15 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             AND
             (json_type(PayloadJson, '$.Operation.WorkspaceMutation') IS NOT 'object' OR (
                 ({mutationSessionsJson} = 'null' OR SessionId IN (SELECT value FROM json_each({mutationSessionsJson})))
-                AND (NOT EXISTS (SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.WorkspaceMutation.TargetsJson')) t WHERE json_extract(t.value, '$.Working') = 0)
-                    OR {mutationAgentsJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({mutationAgentsJson})))
+                AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.WorkspaceMutation.TargetsJson')) t WHERE json_extract(t.value, '$.Working') = 0
+                    AND {mutationSpacesJson} <> 'null' AND (CASE WHEN json_extract(t.value, '$.Root') = '/private' THEN json_extract(PayloadJson, '$.Operation.SpaceContext.PrivateSpaceId') ELSE json_extract(PayloadJson, '$.Operation.SpaceContext.SpaceId') END) NOT IN (SELECT value FROM json_each({mutationSpacesJson})))
                 AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.WorkspaceMutation.TargetsJson')) t WHERE
                     (json_extract(t.value, '$.Permission') = 'workspaces.read' AND {mutationReadJson} <> 'null' AND
-                        CASE WHEN json_extract(t.value, '$.Working') = 1 THEN 'working:' || SessionId ELSE 'home:' || InstanceId END NOT IN (SELECT value FROM json_each({mutationReadJson})))
+                        CASE WHEN json_extract(t.value, '$.Working') = 1 THEN 'working:' || SessionId ELSE 'home:' || (CASE WHEN json_extract(t.value, '$.Root') = '/private' THEN json_extract(PayloadJson, '$.Operation.SpaceContext.PrivateSpaceId') ELSE json_extract(PayloadJson, '$.Operation.SpaceContext.SpaceId') END) END NOT IN (SELECT value FROM json_each({mutationReadJson})))
                     OR (json_extract(t.value, '$.Permission') = 'workspaces.write' AND {mutationWriteJson} <> 'null' AND
-                        CASE WHEN json_extract(t.value, '$.Working') = 1 THEN 'working:' || SessionId ELSE 'home:' || InstanceId END NOT IN (SELECT value FROM json_each({mutationWriteJson})))
+                        CASE WHEN json_extract(t.value, '$.Working') = 1 THEN 'working:' || SessionId ELSE 'home:' || (CASE WHEN json_extract(t.value, '$.Root') = '/private' THEN json_extract(PayloadJson, '$.Operation.SpaceContext.PrivateSpaceId') ELSE json_extract(PayloadJson, '$.Operation.SpaceContext.SpaceId') END) END NOT IN (SELECT value FROM json_each({mutationWriteJson})))
                     OR (json_extract(t.value, '$.Permission') = 'workspaces.delete' AND {mutationDeleteJson} <> 'null' AND
-                        CASE WHEN json_extract(t.value, '$.Working') = 1 THEN 'working:' || SessionId ELSE 'home:' || InstanceId END NOT IN (SELECT value FROM json_each({mutationDeleteJson}))))
+                        CASE WHEN json_extract(t.value, '$.Working') = 1 THEN 'working:' || SessionId ELSE 'home:' || (CASE WHEN json_extract(t.value, '$.Root') = '/private' THEN json_extract(PayloadJson, '$.Operation.SpaceContext.PrivateSpaceId') ELSE json_extract(PayloadJson, '$.Operation.SpaceContext.SpaceId') END) END NOT IN (SELECT value FROM json_each({mutationDeleteJson}))))
                 AND EXISTS (SELECT 1 FROM TenantSessions root JOIN Sessions saved ON saved.SessionId = root.SessionId
                     JOIN SystemIdentities agent ON agent.TenantId = root.TenantId AND agent.AgentInstanceId = root.AgentInstanceId AND agent.PrincipalId = root.ExecutorPrincipalId
                     WHERE root.TenantId = TenantApprovalRequests.TenantId AND root.SessionId = TenantApprovalRequests.SessionId
@@ -207,10 +211,14 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                                     AND a.Sha256Hex = json_extract(member.value, '$.Sha256Hex') AND a.State = 'Bound' AND a.ContentDeletedAtUtc IS NULL)))
                     OR (json_type(PayloadJson, '$.Operation.WorkspaceRead.ResourceMembersJson') IS 'text' AND NOT EXISTS (
                         SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.WorkspaceRead.ResourceMembersJson')) member
-                        WHERE (InstanceId || ':' || json_extract(member.value, '$.Key')) NOT IN (SELECT value FROM json_each({ownedResourceJson}))
-                            OR ({resourceJson} <> 'null' AND (InstanceId || ':' || json_extract(member.value, '$.Key')) NOT IN (SELECT value FROM json_each({resourceJson}))))))
+                        WHERE (CASE WHEN substr(json_extract(member.value, '$.Key'),1,6)='space:' THEN json_extract(member.value, '$.Key') ELSE InstanceId || ':' || json_extract(member.value, '$.Key') END) NOT IN (SELECT value FROM json_each({ownedResourceJson}))
+                            OR ({resourceJson} <> 'null' AND (CASE WHEN substr(json_extract(member.value, '$.Key'),1,6)='space:' THEN json_extract(member.value, '$.Key') ELSE InstanceId || ':' || json_extract(member.value, '$.Key') END) NOT IN (SELECT value FROM json_each({resourceJson}))))))
                 AND ({workspaceSessionsJson} = 'null' OR SessionId IN (SELECT value FROM json_each({workspaceSessionsJson})))
-                AND (json_type(PayloadJson, '$.Operation.WorkspaceRead.AttachmentMembersJson') IS 'text' OR json_extract(PayloadJson, '$.Operation.WorkspaceRead.Working') = 1 OR {homeAgentsJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({homeAgentsJson})))
+                AND (json_type(PayloadJson, '$.Operation.WorkspaceRead.AttachmentMembersJson') IS 'text' OR json_extract(PayloadJson, '$.Operation.WorkspaceRead.Working') = 1
+                    OR ((json_type(PayloadJson, '$.Operation.WorkspaceRead.ResourceKey') IS 'text' OR json_type(PayloadJson, '$.Operation.WorkspaceRead.ResourceMembersJson') IS 'text')
+                        AND ({resourceAgentsJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({resourceAgentsJson}))))
+                    OR (json_extract(PayloadJson, '$.Operation.WorkspaceRead.ResourceKey') IS NULL AND json_extract(PayloadJson, '$.Operation.WorkspaceRead.ResourceMembersJson') IS NULL
+                        AND ({homeSpacesJson} = 'null' OR substr(ResourceId,6) IN (SELECT value FROM json_each({homeSpacesJson})))))
                 AND EXISTS (SELECT 1 FROM TenantSessions AS root JOIN Sessions AS saved ON saved.SessionId = root.SessionId
                     WHERE root.TenantId = TenantApprovalRequests.TenantId AND root.SessionId = TenantApprovalRequests.SessionId
                     AND root.AgentInstanceId = TenantApprovalRequests.InstanceId AND root.ExecutorPrincipalId = TenantApprovalRequests.ExecutorPrincipalId
@@ -249,12 +257,13 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                         AND ({workspaceSessionsJson} = 'null' OR SessionId IN (SELECT value FROM json_each({workspaceSessionsJson})))
                     AND ((json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey') IS NULL
                         AND ({workspaceJson} = 'null' OR CASE WHEN json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.Working') = 1
-                            THEN 'working:' || SessionId ELSE 'home:' || InstanceId END IN (SELECT value FROM json_each({workspaceJson}))))
+                            THEN 'working:' || SessionId ELSE 'home:' || (CASE WHEN substr(json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.Path'),1,9) = '/private/' THEN json_extract(PayloadJson, '$.Operation.SpaceContext.PrivateSpaceId') ELSE json_extract(PayloadJson, '$.Operation.SpaceContext.SpaceId') END) END IN (SELECT value FROM json_each({workspaceJson}))))
                         OR (json_type(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey') IS 'text'
-                            AND (InstanceId || ':' || json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey')) IN (SELECT value FROM json_each({ownedResourceJson}))
-                            AND ({resourceJson} = 'null' OR (InstanceId || ':' || json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey')) IN (SELECT value FROM json_each({resourceJson})))))
+                            AND (CASE WHEN substr(json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey'),1,6)='space:' THEN json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey') ELSE InstanceId || ':' || json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey') END) IN (SELECT value FROM json_each({ownedResourceJson}))
+                            AND ({resourceJson} = 'null' OR (CASE WHEN substr(json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey'),1,6)='space:' THEN json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey') ELSE InstanceId || ':' || json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey') END) IN (SELECT value FROM json_each({resourceJson})))))
                     AND (json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.Working') = 1
-                        OR {homeAgentsJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({homeAgentsJson})))))))
+                        OR (json_type(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey') IS 'text' AND ({resourceAgentsJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({resourceAgentsJson}))))
+                        OR (json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey') IS NULL AND ({homeSpacesJson} = 'null' OR (CASE WHEN substr(json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.Path'),1,9) = '/private/' THEN json_extract(PayloadJson, '$.Operation.SpaceContext.PrivateSpaceId') ELSE json_extract(PayloadJson, '$.Operation.SpaceContext.SpaceId') END) IN (SELECT value FROM json_each({homeSpacesJson})))))))))
                 AND EXISTS (SELECT 1 FROM TenantSessions AS root JOIN Sessions AS saved ON saved.SessionId = root.SessionId
                     WHERE root.TenantId = TenantApprovalRequests.TenantId AND root.SessionId = TenantApprovalRequests.SessionId
                     AND root.AgentInstanceId = TenantApprovalRequests.InstanceId AND root.ExecutorPrincipalId = TenantApprovalRequests.ExecutorPrincipalId AND saved.DurablyDeletedAtUtc IS NULL))) AND
@@ -402,10 +411,10 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                      OR (Permission = 'drive.delete' AND (json_type({actionDeletes}) = 'null' OR CredentialId IN (SELECT value FROM json_each({actionDeletes}))))
                      OR Permission = 'workspaces.write')
                    AND (json_extract(PayloadJson, '$.Operation.AccountAction.ToolName') NOT IN ('drive.upload','drive.download') OR
-                     ((substr(json_extract(json_extract(PayloadJson, '$.Operation.AccountAction.ArgumentsJson'),'$.path'),1,6) <> '/home/'
-                         OR json_type({mutationAgentsJson}) = 'null' OR InstanceId IN (SELECT value FROM json_each({mutationAgentsJson})))
+                     ((substr(json_extract(json_extract(PayloadJson, '$.Operation.AccountAction.ArgumentsJson'),'$.path'),1,9) = '/working/'
+                         OR json_type({mutationSpacesJson}) = 'null' OR (CASE WHEN substr(json_extract(json_extract(PayloadJson, '$.Operation.AccountAction.ArgumentsJson'),'$.path'),1,9) = '/private/' THEN json_extract(PayloadJson, '$.Operation.SpaceContext.PrivateSpaceId') ELSE json_extract(PayloadJson, '$.Operation.SpaceContext.SpaceId') END) IN (SELECT value FROM json_each({mutationSpacesJson})))
                       AND (json_extract(PayloadJson, '$.Operation.AccountAction.ToolName') <> 'drive.upload' OR json_type({mutationReadJson}) = 'null'
-                         OR (CASE WHEN substr(json_extract(json_extract(PayloadJson, '$.Operation.AccountAction.ArgumentsJson'),'$.path'),1,9) = '/working/' THEN 'working:' || SessionId ELSE 'home:' || InstanceId END) IN (SELECT value FROM json_each({mutationReadJson})))
+                         OR (CASE WHEN substr(json_extract(json_extract(PayloadJson, '$.Operation.AccountAction.ArgumentsJson'),'$.path'),1,9) = '/working/' THEN 'working:' || SessionId ELSE 'home:' || (CASE WHEN substr(json_extract(json_extract(PayloadJson, '$.Operation.AccountAction.ArgumentsJson'),'$.path'),1,9) = '/private/' THEN json_extract(PayloadJson, '$.Operation.SpaceContext.PrivateSpaceId') ELSE json_extract(PayloadJson, '$.Operation.SpaceContext.SpaceId') END) END) IN (SELECT value FROM json_each({mutationReadJson})))
                       AND (json_extract(PayloadJson, '$.Operation.AccountAction.ToolName') <> 'drive.download' OR json_type({mutationWriteJson}) = 'null'
                          OR ResourceId IN (SELECT value FROM json_each({mutationWriteJson}))))))
                 """);
@@ -674,7 +683,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (request.Operation.WorkspaceRead is not null)
             {
                 await RequireWorkspaceReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
-                await TenantWorkspaceReadOperationRules.ReviewerAsync(state, agent.Instance.InstanceId, request.Operation.WorkspaceRead, request.OriginalInitiatorPrincipalId,
+                await TenantWorkspaceReadOperationRules.ReviewerAsync(state, agent.Instance.InstanceId, request.Operation.WorkspaceRead, TenantWorkspaceRules.Context(request.Operation), request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
             }
             if (request.Operation.AttachmentRead is not null)

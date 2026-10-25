@@ -27,13 +27,14 @@ public sealed partial class TenantApprovalService
             var prepared = await (workspaceReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareInspectionAsync(new(run.Owner, run.SessionId, run.AgentRunId, generation), call, ct).ConfigureAwait(false);
             if (prepared.Run.Revision != expectedRunRevision) throw new SecurityConflictException("stale_revision");
             var op = TenantApprovalRules.PrepareWorkspaceRead(ids.NewId(), run.AgentInstanceId, prepared.Read, prepared.Agent.Instance.Revision, prepared.Agent.Instance.PersonaRevision);
+            op = TenantApprovalRules.ForRun(op, run);
             var prior = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.ExecutionContext!.RootActivationId, prepared.Agent.PrincipalId, op, ct).ConfigureAwait(false);
             if (prior is not null) return await DuplicateOutcome(prepared.State, run, prior, ct).ConfigureAwait(false);
             if (!prepared.ReviewRequired) return await PreparationOutcome(prepared.State, run, op, OperationDecisionKind.Allowed, "allowed", null, ct).ConfigureAwait(false);
             var qualified = false;
             foreach (var human in prepared.State.Users.Where(u => u.Status == IdentityStatus.Active))
             {
-                try { await TenantWorkspaceReadOperationRules.ReviewerAsync(prepared.State, prepared.Agent.Instance.InstanceId, prepared.Read, run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, human.PrincipalId, authorizer, ct).ConfigureAwait(false); qualified = true; break; }
+                try { await TenantWorkspaceReadOperationRules.ReviewerAsync(prepared.State, prepared.Agent.Instance.InstanceId, prepared.Read, TenantWorkspaceRules.Context(run), run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, human.PrincipalId, authorizer, ct).ConfigureAwait(false); qualified = true; break; }
                 catch (AccessDeniedException) { }
             }
             if (!qualified) return await PreparationOutcome(prepared.State, run, op, OperationDecisionKind.Denied, "no_eligible_approver", null, ct).ConfigureAwait(false);

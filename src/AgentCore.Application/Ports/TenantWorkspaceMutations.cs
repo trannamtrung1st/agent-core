@@ -1,12 +1,13 @@
+using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Ports;
 
-public sealed record TenantWorkspaceAccess(TenantWorkspaceReference Workspace, long SecurityRevision, long? InstanceRevision,
-    bool CanRead, bool CanWrite, bool CanDelete, bool ReadOnly, string? InstanceName, string? SessionTitle);
+public sealed record TenantWorkspaceAccess(TenantWorkspaceReference Workspace, long SecurityRevision, long OwnerRevision,
+    bool CanRead, bool CanWrite, bool CanDelete, bool ReadOnly, string WorkspaceName, string? SessionTitle);
 
 public sealed record TenantWorkspaceHumanAuthorization(TenantWorkspaceReference Workspace, HumanSessionReference Human,
-    long SecurityRevision, long InstanceRevision, string Permission, AuthorizationAudit Audit);
+    long SecurityRevision, long OwnerRevision, string Permission, AuthorizationAudit Audit);
 
 public interface ITenantWorkspaceMutationStore
 {

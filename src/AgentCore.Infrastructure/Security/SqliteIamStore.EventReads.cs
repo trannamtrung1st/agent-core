@@ -11,6 +11,7 @@ public sealed partial class SqliteIamStore
 {
     private async ValueTask RequireTenantExecutionSourcesAsync(AgentCoreDbContext db, AgentRun run, TenantSecurityState state, IamAuthorizer iam, ITenantRunStore runs, CancellationToken ct)
     {
+        await RequireSpaceExecutionSource(db, run, state, iam, ct).ConfigureAwait(false);
         await RequireTenantEventRead(db, run, ct).ConfigureAwait(false);
         await TenantExecutionLineage.RequireRequesterAsync(run, state, iam, runs, ct).ConfigureAwait(false);
     }

@@ -57,8 +57,8 @@ public sealed partial class TenantSessionAccessTests
             {
                 var draft=await Json(await owner.PostAsJsonAsync(api+"/agent-definitions/from-template",new { templateId="general-assistant",version=32,expectedRevision=await Revision(owner,tenant) }));
                 var draftId=draft.GetProperty("draftId").GetGuid();var definition=draft.GetProperty("definitionId").GetGuid();var candidate=JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
-                candidate["environment"]!["capabilities"]=JsonSerializer.SerializeToNode(new { mode="Selected",resolvedCapabilities=new[] { "configuration.inspect","settings.patch" } });
-                candidate["environment"]!["projection"]=JsonSerializer.SerializeToNode(new { alwaysCapabilities=Array.Empty<string>() });
+                candidate["executionPolicy"]!["capabilities"]=JsonSerializer.SerializeToNode(new { mode="Selected",resolvedCapabilities=new[] { "configuration.inspect","settings.patch" } });
+                candidate["executionPolicy"]!["projection"]=JsonSerializer.SerializeToNode(new { alwaysCapabilities=Array.Empty<string>() });
                 candidate["skills"]=JsonSerializer.SerializeToNode(Array.Empty<object>());
                 Assert.Equal(HttpStatusCode.OK,(await owner.PutAsJsonAsync(api+$"/definition-drafts/{draftId}",new { candidate,expectedRevision=await Revision(owner,tenant),expectedDraftRevision=1 })).StatusCode);
                 var published=await owner.PostAsJsonAsync(api+$"/definition-drafts/{draftId}/publish",new { expectedRevision=await Revision(owner,tenant),expectedDraftRevision=2 });

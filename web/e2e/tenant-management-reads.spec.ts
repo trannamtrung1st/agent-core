@@ -15,7 +15,7 @@ for (const width of [1440, 390]) for (const decision of ['approve', 'reject']) t
     const nonce = crypto.randomUUID().slice(0, 8); const tenant = (await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Management read ${nonce}`, slug: `management-read-${nonce}` })).tenantId;
     const prefix = `/api/v2/tenants/${tenant}`; const revision = async () => (await call<{ revision: number }>(api, prefix + '/access/me')).revision;
     const draft = await call<{ draftId: string; definitionId: string; candidate: Record<string, unknown> }>(api, prefix + '/agent-definitions', { name: 'Configuration reader', expectedRevision: await revision() });
-    draft.candidate.environment = { harness: [], knowledgeSources: [], toolAllowlist: [], capabilities: { mode: 'Selected', resolvedCapabilities: ['management.inspect', 'settings.list', 'settings.inspect', 'automation.preferences.inspect'] }, projection: { alwaysCapabilities: [] } };
+    draft.candidate.executionPolicy = { harness: [], knowledgeSources: [], toolAllowlist: [], capabilities: { mode: 'Selected', resolvedCapabilities: ['management.inspect', 'settings.list', 'settings.inspect', 'automation.preferences.inspect'] }, projection: { alwaysCapabilities: [] } };
     draft.candidate.selfManagement = { mode: 'Managed', scopes: ['Settings', 'AutomationPreferences'], sources: [], eligibleTools: [] };
     const instructionsText = 'Literal <script>saved setting</script> retained as evidence.'; draft.candidate.agentInstructions = instructionsText;
     const changed = await call<{ revision: number }>(api, prefix + `/definition-drafts/${draft.draftId}`, { candidate: draft.candidate, expectedRevision: await revision(), expectedDraftRevision: 1 }, 'PUT');

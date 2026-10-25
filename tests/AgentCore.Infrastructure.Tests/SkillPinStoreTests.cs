@@ -69,7 +69,7 @@ public sealed class SkillPinStoreTests
         Assert.Equal(["workspace.read", "email.search"], run.LoadedCapabilityIds);
         Assert.True(AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var messages));
         Assert.NotNull(new InvalidToolCallRecovery(messages!).Refuse(call));
-        var authorized = Definition with { Environment = new RoleEnvironment(Capabilities: new("Selected", [ToolCatalog.CapabilitiesLoad, "workspace.read", "email.search"]), Projection: new([])) };
+        var authorized = Definition with { ExecutionPolicy = new DefinitionExecutionPolicy(Capabilities: new("Selected", [ToolCatalog.CapabilitiesLoad, "workspace.read", "email.search"]), Projection: new([])) };
         var context = new AgentContext(authorized, [], "", null, SessionMode.Text, null, false, null,
             new(Guid.NewGuid(), TriggerKind.UserTurn, "continue"), AgentInstanceId: Owner.AgentInstanceId,
             AgentWorkspaceAvailable: true, LoadedCapabilityIds: run.LoadedCapabilityIds);

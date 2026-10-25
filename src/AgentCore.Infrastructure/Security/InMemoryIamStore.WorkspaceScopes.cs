@@ -9,6 +9,6 @@ public sealed partial class InMemoryIamStore
     {
         if (!TenantWorkspaceRules.TryParse(scope, out var working, out var id)) return false;
         return working ? sessionBacking.ReadTenantSession(scope.TenantId!.Value, id) is not null
-            : FindTenantAgentAsync(scope.TenantId!.Value, id, ct).Result is not null;
+            : _spaces.TryGetValue((scope.TenantId!.Value, id), out var space) && space.DeletedAt is null;
     }
 }

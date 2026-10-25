@@ -41,7 +41,30 @@ public sealed partial class TenantCredentialAccessTests
         Tenant_event_receipt_snapshots_match_and_admit_only_the_exact_current_authorized_owner(sqlite, core ? "conversation-core-review" : "conversation-review");
 
     [Theory] [MemberData(nameof(TenantEventCases))]
-    public async Task Tenant_event_receipt_snapshots_match_and_admit_only_the_exact_current_authorized_owner(bool sqlite, string mode)
+    public Task Tenant_event_receipt_snapshots_match_and_admit_only_the_exact_current_authorized_owner(bool sqlite, string mode) =>
+        EventPinWorkflow(sqlite, mode);
+
+    [Theory]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    public Task Event_receipts_freeze_context_pins_and_reject_retargeting_after_receipt(bool sqlite, bool core, bool changedPins) =>
+        EventPinWorkflow(sqlite, core ? "core" : "qualified", true, changedPins);
+
+    [Theory] [InlineData(false, "coalesce")] [InlineData(true, "coalesce")]
+    [InlineData(false, "review")] [InlineData(true, "review")]
+    public Task Pinned_event_coalescing_and_consent_keep_exact_context_without_duplicate_admission(bool sqlite, string mode) => EventPinWorkflow(sqlite, mode, pinned: true);
+
+    [Fact]
+    public Task Pinned_coalesced_event_recovers_exact_bucket_and_completes_once_after_SQLite_host_restart() =>
+        EventPinWorkflow(true, "coalesce", pinned: true, restartCoalesced: true);
+
+    private async Task EventPinWorkflow(bool sqlite, string mode, bool pinned = false, bool changedPins = false, bool restartCoalesced = false)
     {
         var conversation = mode.StartsWith("conversation-", StringComparison.Ordinal);
         if (conversation) mode = mode["conversation-".Length..];
@@ -52,7 +75,7 @@ public sealed partial class TenantCredentialAccessTests
         var completionModel = new OwnedAutomationModel();
         var diagnostics = new AccountReadDiagnostics();
         var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
-        await using var factory = new OAuthFactory(sqlite: sqlite, execute: execute, model: conversation ? new AutomationConversationModel() : configuredCompletion ? completionModel : null, servicesOverride: services =>
+        await using var factory = new OAuthFactory(sqlite: sqlite, preserve: restartCoalesced, execute: execute, model: conversation ? new AutomationConversationModel() : configuredCompletion ? completionModel : null, servicesOverride: services =>
         {
             services.RemoveAll<TimeProvider>(); services.AddSingleton<TimeProvider>(clock);
             if (conversation) services.AddSingleton<ILoggerProvider>(diagnostics);
@@ -66,6 +89,7 @@ public sealed partial class TenantCredentialAccessTests
         var instance = createdAgent.GetProperty("instance").GetProperty("instanceId").GetGuid();
         var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
         var access = factory.Services.GetRequiredService<TenantAccessService>();
+        await GrantAutomationPrivateContext(factory, owner, tenant, human, agent);
         var permissions = new[] { "automations.run", "sessions.create", "agent-runs.create", "webhooks.read", "core-events.read" }.Concat(execute ? new[] { "agents.chat", "sessions.read", "agent-runs.read" } : Array.Empty<string>()).Where(p => !conversation || p != "sessions.create").Where(p => mode != "missing-read" || p != "webhooks.read").Where(p => mode != "exception" || p != "agent-runs.create").ToArray();
         var role = await access.SaveRoleAsync(human, tenant, null, "Event executor", permissions, await Revision(owner, tenant));
         await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
@@ -78,6 +102,21 @@ public sealed partial class TenantCredentialAccessTests
         var source = webhook.GetProperty("source").GetProperty("resourceId").GetGuid(); var token = webhook.GetProperty("token").GetString()!;
         Guid? completionDestination = execute ? (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid() : null;
         var route = api + $"/agents/{instance}/automations";
+        Guid? pinnedSpace = null, pinnedEnvironment = null;
+        async Task PinContext()
+        {
+            var spaces = factory.Services.GetRequiredService<TenantSpaceService>();
+            var shared = await spaces.CreateAsync(human, tenant, Guid.NewGuid(), "Event context", "", "Frozen event context.", await Revision(owner, tenant));
+            await spaces.SetMemberAsync(human, tenant, shared.SpaceId, instance, "Event task", "", [], [], await Revision(owner, tenant), 1, 0);
+            shared = await spaces.ReadAsync(human, tenant, shared.SpaceId);
+            shared = await spaces.UpdateAsync(human, tenant, shared.SpaceId, shared.Name, shared.Description, shared.Instructions, true, await Revision(owner, tenant), shared.Revision);
+            var contextRole = await access.SaveRoleAsync(human, tenant, null, "Exact event context", ["spaces.read", "environments.read", "environments.activate"], await Revision(owner, tenant));
+            await access.AssignRoleAsync(human, tenant, agent.PrincipalId, contextRole.RoleId, TenantSpaceService.Scope(tenant, shared.SpaceId), await Revision(owner, tenant));
+            pinnedSpace = shared.SpaceId;
+            pinnedEnvironment = (await factory.Services.GetRequiredService<TenantEnvironmentService>().SaveAsync(human, tenant, shared.SpaceId, Guid.NewGuid(), "Event profile", "", await Revision(owner, tenant), shared.Revision, 0)).EnvironmentId;
+        }
+        if (pinned) await PinContext();
+        var originalPinnedSpace = pinnedSpace; var originalPinnedEnvironment = pinnedEnvironment;
         var registrations = factory.Services.GetRequiredService<ITenantAutomationStore>(); var events = factory.Services.GetRequiredService<ITenantEventStore>();
         var processor = factory.Services.GetRequiredService<TenantEventProcessor>(); var runs = factory.Services.GetRequiredService<ITenantRunStore>();
         var receipts = factory.Services.GetRequiredService<ITenantWebhookStore>();
@@ -87,7 +126,7 @@ public sealed partial class TenantCredentialAccessTests
         async Task<Guid> Save(Guid? id = null, string filter = "true", string instructions = "Process this observed source once.")
         {
             var prior = id is null ? null : await registrations.FindTenantAutomationAsync(tenant, id.Value);
-            var body = new { enabled = true, name = "Source-bound Automation", instructions, triggers = new[] { Trigger(filter, prior?.Triggers[0].TriggerId, prior?.Triggers[0].Revision ?? 1) },
+            var body = new { enabled = true, name = "Source-bound Automation", instructions, pinnedSpaceId = pinnedSpace, pinnedEnvironmentId = pinnedEnvironment, triggers = new[] { Trigger(filter, prior?.Triggers[0].TriggerId, prior?.Triggers[0].Revision ?? 1) },
                 expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision, expectedAutomationRevision = prior?.Revision ?? 0, requiresTools = false, reportToSessionId = configuredCompletion ? completionDestination : null, targetSessionId = conversation ? completionDestination : null };
             using var response = id is null ? await owner.PostAsJsonAsync(route, body) : await owner.PutAsJsonAsync(route + $"/{id}", body);
             Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync()); return (await Json(response)).GetProperty("automationId").GetGuid();
@@ -146,10 +185,40 @@ public sealed partial class TenantCredentialAccessTests
         else eventId = await Send("after-subscription");
         if (early is { } old) Assert.Null(await events.FindTenantEventDeliveryAsync(tenant, TriggerSourceKind.ApplicationEvent, old, child.TriggerId));
         if (mode == "frozen") await Save(automationId, "false", "Use the current parent intent with the receipt-time filter.");
+        if (changedPins)
+        {
+            await PinContext(); agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
+            await Save(automationId);
+        }
         await processor.RunOnceAsync();
         var kind = coreSource ? TriggerSourceKind.CoreEvent : TriggerSourceKind.ApplicationEvent;
         var delivery = (await events.FindTenantEventDeliveryAsync(tenant, kind, eventId, child.TriggerId))!;
         Assert.Null(await events.FindTenantEventDeliveryAsync(Guid.NewGuid(), kind, eventId, child.TriggerId));
+        if (pinned)
+        {
+            Assert.Equal(originalPinnedSpace, delivery.Subscription.PinnedSpaceId); Assert.Equal(originalPinnedEnvironment, delivery.Subscription.PinnedEnvironmentId);
+            if (changedPins)
+            {
+                Assert.Equal(EventMatchStatus.PolicySkipped, delivery.Status);
+                Assert.Empty((await runs.ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: instance)).Items);
+                Assert.Equal(pinnedSpace, (await registrations.FindTenantAutomationAsync(tenant, automationId))!.PinnedSpaceId);
+                clock.Advance(TimeSpan.FromMilliseconds(1));
+                if (coreSource)
+                {
+                    agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
+                    var fresh = await owner.PutAsJsonAsync(api + $"/agents/{instance}/persona", new { persona = agent.Instance.Persona with { Name = "Future context event" },
+                        expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision, expectedPersonaRevision = agent.Instance.PersonaRevision });
+                    Assert.True(fresh.IsSuccessStatusCode, await fresh.Content.ReadAsStringAsync());
+                }
+                else await Send("new-context-after-edit");
+                await processor.RunOnceAsync();
+                var future = Assert.Single((await runs.ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: instance)).Items);
+                Assert.Equal(pinnedSpace, future.Admission.Configuration!.SpaceContext!.SpaceId);
+                Assert.Equal(pinnedEnvironment, future.Admission.Configuration.SpaceContext.EnvironmentId);
+                Assert.Equal(JsonSerializer.Serialize(delivery), JsonSerializer.Serialize(await events.FindTenantEventDeliveryAsync(tenant, kind, eventId, child.TriggerId)));
+                return;
+            }
+        }
         var activityPath = route + $"/{automationId}/events?pageSize=1";
         var observedActivity = await Json(await owner.GetAsync(activityPath));
         Assert.True(observedActivity.GetProperty("total").GetInt32() >= 1);
@@ -164,6 +233,49 @@ public sealed partial class TenantCredentialAccessTests
         {
             Assert.Equal(EventMatchStatus.Coalesced, delivery.Status); clock.Advance(TimeSpan.FromSeconds(10)); if (!coreSource) await Send("same-window"); await processor.RunOnceAsync();
             clock.Advance(TimeSpan.FromSeconds(50)); var bucket = Assert.Single(await events.ListDueTenantEventBucketsAsync(clock.GetUtcNow(), 64)); Assert.Equal(2, bucket.Bucket.Sources.Count);
+            if (restartCoalesced)
+            {
+                var retainedBucket = bucket.Bucket; var retainedRoot = factory.Root;
+                await factory.DisposeAsync();
+                await using var recoveredHost = new OAuthFactory(retainedRoot, sqlite: true, execute: true, model: completionModel, servicesOverride: services =>
+                {
+                    services.RemoveAll<TimeProvider>(); services.AddSingleton<TimeProvider>(clock);
+                    foreach (var host in services.Where(d => d.ServiceType == typeof(IHostedService)
+                        && (d.ImplementationType == typeof(AgentCore.Api.AgentRunHostedService) || d.ImplementationType == typeof(AgentCore.Api.TriggerSchedulerHostedService))).ToArray()) services.Remove(host);
+                });
+                var recoveredEvents = recoveredHost.Services.GetRequiredService<ITenantEventStore>();
+                var recoveredBucket = Assert.Single(await recoveredEvents.ListDueTenantEventBucketsAsync(clock.GetUtcNow(), 64));
+                Assert.Equal(JsonSerializer.Serialize(retainedBucket), JsonSerializer.Serialize(recoveredBucket.Bucket));
+                Assert.Equal(originalPinnedSpace, recoveredBucket.Bucket.Subscription.PinnedSpaceId); Assert.Equal(originalPinnedEnvironment, recoveredBucket.Bucket.Subscription.PinnedEnvironmentId);
+                var recoveredProcessor = recoveredHost.Services.GetRequiredService<TenantEventProcessor>();
+                await recoveredProcessor.RunOnceAsync(); await recoveredProcessor.RunOnceAsync();
+                var recoveredRuns = recoveredHost.Services.GetRequiredService<ITenantRunStore>();
+                var recoveredRun = Assert.Single((await recoveredRuns.ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: instance)).Items);
+                Assert.Equal(originalPinnedSpace, recoveredRun.Admission.Configuration!.SpaceContext!.SpaceId); Assert.Equal(originalPinnedEnvironment, recoveredRun.Admission.Configuration.SpaceContext.EnvironmentId);
+                Assert.Equal(ExecutionOrigin.ApplicationEvent, recoveredRun.Admission.ExecutionContext!.Origin);
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                var runtimeHost = recoveredHost.Services.GetRequiredService<AgentCore.Api.Realtime.TenantSessionRuntimeHost>();
+                var releasing = new TaskCompletionSource<AgentRun>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var permitRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                runtimeHost.BeforeRuntimeRelease = active => { releasing.TrySetResult(active); return permitRelease.Task; };
+                try
+                {
+                    do
+                    {
+                        await recoveredHost.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8, deadline.Token);
+                        recoveredRun = (await recoveredRuns.FindTenantRunAsync(tenant, recoveredRun.AgentRunId, deadline.Token))!;
+                        if (!recoveredRun.IsTerminal) await Task.Delay(20, deadline.Token);
+                    } while (!recoveredRun.IsTerminal);
+                    Assert.True(recoveredRun.Status == AgentRunStatus.Completed, $"{recoveredRun.Status}: {recoveredRun.Failure}");
+                    var retiring = await releasing.Task.WaitAsync(deadline.Token);
+                    var released = runtimeHost.WaitForGenerationReleaseAsync(retiring.SessionId, retiring.AgentRunId, retiring.Claim!.Generation, deadline.Token);
+                    permitRelease.TrySetResult(); await released;
+                }
+                finally { permitRelease.TrySetResult(); runtimeHost.BeforeRuntimeRelease = null; }
+                Assert.Single(completionModel.Requests); await recoveredProcessor.RunOnceAsync();
+                Assert.Single((await recoveredRuns.ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: instance)).Items);
+                Assert.Equal(0, recoveredHost.Outbound); return;
+            }
             await processor.RunOnceAsync();
         }
         if (mode is "review" or "source-review" or "core-review" or "scoped-source-reader" or "core-scoped-reader" or "core-batch-reader" or "exception" or "rotate")
@@ -174,7 +286,7 @@ public sealed partial class TenantCredentialAccessTests
             Assert.Equal(mode == "source-review" ? "webhooks.read" : mode == "core-review" ? "core-events.read" : "agent-runs.create", request.Permission); Assert.Null(request.OriginalInitiatorPrincipalId);
             var detail = await Json(await owner.GetAsync(api + $"/approvals/{request.RequestId}"));
             var changes = detail.GetProperty("review").GetProperty("changes").EnumerateArray().ToDictionary(c => c.GetProperty("field").GetString()!, c => c.GetProperty("after"));
-            Assert.Equal(conversation ? 15 : 14, changes.Count); Assert.Contains(coreSource ? "Built-in event" : "Webhook event", changes["admissionSource"].GetString());
+            Assert.Equal((conversation ? 15 : 14) + (pinned ? 2 : 0), changes.Count); Assert.Contains(coreSource ? "Built-in event" : "Webhook event", changes["admissionSource"].GetString());
             if (conversation) Assert.Equal("Conversation revision 1 · input through entry sequence 0", changes["admissionConversation"].GetString());
             Assert.Contains(coreSource ? "core-events.read" : "webhooks.read", changes["admissionScope"].GetString());
             Assert.Equal("true", changes["admissionEventFilter"].GetString()); Assert.DoesNotContain(token, changes["admissionEventData"].GetString());
@@ -234,6 +346,13 @@ public sealed partial class TenantCredentialAccessTests
         var run = Assert.Single((await runs.ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: instance)).Items);
         Assert.Equal(coreSource ? ExecutionOrigin.CoreEvent : ExecutionOrigin.ApplicationEvent, run.Admission.ExecutionContext!.Origin); Assert.Equal(kind, run.Admission.TaskIntent!.EventSourceKind);
         Assert.Null(run.Owner.ProfileIdOrNull); Assert.Null(run.Admission.ExecutionContext.OriginalInitiatorPrincipalId);
+        if (pinned)
+        {
+            Assert.Equal(originalPinnedSpace, run.Admission.Configuration!.SpaceContext!.SpaceId);
+            Assert.Equal(originalPinnedEnvironment, run.Admission.Configuration.SpaceContext.EnvironmentId);
+            var occurrencePins = (await registrations.FindTenantOccurrenceAsync(tenant, run.Admission.Activation.TriggerOccurrenceId!.Value))!;
+            Assert.Equal(originalPinnedSpace, occurrencePins.PinnedSpaceId); Assert.Equal(originalPinnedEnvironment, occurrencePins.PinnedEnvironmentId);
+        }
         if (mode == "frozen") Assert.Equal("Use the current parent intent with the receipt-time filter.", run.Admission.TaskIntent.Text);
         var admittedActivity = Assert.Single((await Json(await owner.GetAsync(route + $"/{automationId}/events?pageSize=100"))).GetProperty("items").EnumerateArray(), row => row.GetProperty("eventId").GetGuid() == eventId);
         Assert.Equal(run.AgentRunId, admittedActivity.GetProperty("runId").GetGuid()); Assert.Equal("admitted", admittedActivity.GetProperty("status").GetString());

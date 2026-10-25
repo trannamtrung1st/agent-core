@@ -24,9 +24,10 @@ public sealed partial class InMemoryIamStore
             || visible?.Sessions is not null && !visible.Sessions.Contains(request.SessionId)) return false;
         foreach (var target in TenantApprovalRules.MutationScopes(TenantWorkspaceMutationOperationRules.Arguments(request.Operation.WorkspaceMutation!)))
         {
-            if (!target.Working && visible?.HomeAgents is not null && !visible.HomeAgents.Contains(agent.Instance.InstanceId)) return false;
+            var owner = TenantWorkspaceRules.ForCaptured(request.TenantId, request.SessionId, target.Root, TenantWorkspaceRules.Context(request.Operation));
+            if (!target.Working && visible?.HomeSpaces is not null && !visible.HomeSpaces.Contains(owner.OwnerId)) return false;
             var resources = target.Permission == "workspaces.read" ? visible?.Reads : target.Permission == "workspaces.write" ? visible?.Writes : visible?.Deletes;
-            var resource = target.Working ? "working:" + request.SessionId.ToString("D") : "home:" + agent.Instance.InstanceId.ToString("D");
+            var resource = TenantWorkspaceRules.Scope(owner).ResourceId!;
             if (resources is not null && !resources.Contains(resource)) return false;
         }
         return true;

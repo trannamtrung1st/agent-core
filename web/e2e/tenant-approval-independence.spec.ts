@@ -55,7 +55,7 @@ for (const exceptional of [false, true]) for (const decision of ['approve', 'rej
       const before = 'Original saved instructions.';
       const after = 'Reviewed literal <script>configuration</script> with a long exact target description.';
       draft.candidate.agentInstructions = before;
-      draft.candidate.environment = { harness: [], knowledgeSources: [], toolAllowlist: [], capabilities: { mode: 'Selected', resolvedCapabilities: ['management.inspect', 'settings.inspect', 'settings.patch'] }, projection: { alwaysCapabilities: [] } };
+      draft.candidate.executionPolicy = { harness: [], knowledgeSources: [], toolAllowlist: [], capabilities: { mode: 'Selected', resolvedCapabilities: ['management.inspect', 'settings.inspect', 'settings.patch'] }, projection: { alwaysCapabilities: [] } };
       draft.candidate.selfManagement = { mode: 'Managed', scopes: ['Settings'], sources: [], eligibleTools: [] };
       const changed = await call<{ revision: number }>(api, prefix + `/definition-drafts/${draft.draftId}`, { candidate: draft.candidate, expectedRevision: await revision(), expectedDraftRevision: 1 }, 'PUT');
       await call(api, prefix + `/definition-drafts/${draft.draftId}/publish`, { expectedRevision: await revision(), expectedDraftRevision: changed.revision });

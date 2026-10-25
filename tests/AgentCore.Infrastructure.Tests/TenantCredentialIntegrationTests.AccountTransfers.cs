@@ -151,7 +151,7 @@ public sealed partial class TenantCredentialIntegrationTests
             run = (await services.Continuations.ResumeAsync(run)).Run;
             Assert.Empty(writes);
         }
-        var owner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId, run.SessionId);
+        var owner = new TenantWorkspaceReference.SessionWorking(s.Tenant, run.SessionId);
         if (tool == ToolCatalog.DriveUpload) await ((ITenantWorkspaceMutationStore)services.Files).WriteTenantAsync(owner, "/working/Original.bin", bytes, _ => ValueTask.CompletedTask);
         var arguments = tool switch {
             ToolCatalog.DriveCreateFolder => """{"accountRef":"work-drive","authEpoch":1,"name":"New folder","parentId":"after"}""",

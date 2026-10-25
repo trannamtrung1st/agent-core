@@ -32,6 +32,8 @@ public sealed partial class InMemoryIamStore
         var agent = FindTenantAgentAsync(tenant, session.Owner.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("executor_unavailable");
         var state = _tenants[tenant]; TenantSessionRules.RequireExecutor(state, agent);
         TenantSandboxRuntimeRules.RequireReservation(write, session, run, agent, state.Tenant.Revision, at);
+        RequireSpaceExecutionSource(run, state, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+        TenantSandboxContextRules.RequireSelected(session, run);
         var savedSource = sandboxBacking.TenantProfile(tenant, source.Id, source.Revision);
         if (savedSource is null || sandboxBacking.TenantProfile(tenant, source.Id)?.Enabled != true)
             throw new AccessDeniedException("resource_unavailable");
@@ -41,6 +43,8 @@ public sealed partial class InMemoryIamStore
             : builtIns?.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).GetAwaiter().GetResult();
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
         TenantSandboxRuntimeRules.RequireCurrentPolicy(run, agent, baseline, source, savedSource, mounted);
+        if (mounted is not null)
+            TenantSandboxWorkspaceRules.RequireCurrentAsync(state, run, agent, baseline, mounted.WorkspaceAccess ?? throw new AccessDeniedException("sandbox_workspace_context_required"), new IamAuthorizer(this), ct).GetAwaiter().GetResult();
         if (source.RegistryCredentialId is { } credential)
             TenantSandboxProfileRules.RequireCredential(source, credentials?.ReadTenantCredential(tenant, credential)?.Value, at);
         TenantSandboxRuntimeRules.RequirePermissionsAsync(state, run, source, new IamAuthorizer(this), ct).GetAwaiter().GetResult();

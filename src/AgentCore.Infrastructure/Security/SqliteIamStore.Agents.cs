@@ -47,6 +47,7 @@ public sealed partial class SqliteIamStore
         await EnsureActiveAccountOwnerAsync(db, next, null, ct).ConfigureAwait(false);
         await EnsureResourceOwnershipAsync(db, next, ct, instance.InstanceId).ConfigureAwait(false);
         db.AgentInstances.Add(SqliteAgentInstanceStore.Map(instance));
+        ProvisionPrivateSpace(db, next.Tenant.TenantId, instance);
         await SqliteAgentInstanceStore.InitializeSkillsAsync(db, instance.InstanceId, skills, instance.UpdatedAt, ct).ConfigureAwait(false);
         db.Entry(current).CurrentValues.SetValues(next.Tenant);
         await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);

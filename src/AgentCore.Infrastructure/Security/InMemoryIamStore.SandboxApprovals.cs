@@ -23,6 +23,7 @@ public sealed partial class InMemoryIamStore
         if (pinned.RegistryCredentialId is { } credential)
             TenantSandboxProfileRules.RequireCredential(pinned, credentials?.ReadTenantCredential(tenant, credential)?.Value, ApprovalNow);
         TenantSandboxRuntimeRules.RequirePermissionsAsync(_tenants[tenant], run, pinned, new IamAuthorizer(this), CancellationToken.None).GetAwaiter().GetResult();
+        TenantSandboxWorkspaceRules.RequireCurrentAsync(_tenants[tenant], run, agent, baseline, value.WorkspaceAccess ?? throw new AccessDeniedException("sandbox_workspace_context_required"), new IamAuthorizer(this), CancellationToken.None).GetAwaiter().GetResult();
     }
     private (SandboxLease Lease, SandboxExecution? Execution) RequireSandboxControlOperation(TenantApprovalRequest request, AgentRun run, TenantAgent agent)
     {

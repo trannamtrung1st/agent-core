@@ -55,7 +55,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var resumed = await continuation.ResumeAsync(run); Assert.Equal(TenantOperationOutcome.Completed, resumed.Outcome!.Outcome); Assert.False(resumed.Run.Checkpoint!.AwaitingRuntimeAdmission);
         await continuation.PrepareExternalEffectAsync(resumed.Run);
         Assert.Equal(1, (await f.Iam.ReadAuditAsync(v.Setup.Tenant, 200)).Count(a => a.Action == TenantWorkspaceEffectRules.Dispatch));
-        var content = await WorkspaceReader(f).InspectTenantAsync(new(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId), "/working/private.txt", 1024);
+        var content = await WorkspaceReader(f).InspectTenantAsync(WorkspaceOwner(v.Setup, true), "/working/private.txt", 1024);
         Assert.Equal("Saved exact successor bytes", Encoding.UTF8.GetString(content.Bytes));
     }
 
@@ -81,7 +81,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(TenantOperationOutcome.Indeterminate, result.Outcome); Assert.Equal(TenantWorkspaceApprovedEffectRules.Uncertain, result.ReasonCode);
         Assert.Equal(OperationGrantStatus.Indeterminate, (await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(v.Setup.Tenant, v.Request.RequestId))!.Status);
         Assert.Equal(result, await ExecuteApprovedWorkspace(service, v.Frame, v.Request)); Assert.Equal(1, calls); Assert.Equal(0, await service.RecoverAsync());
-        Assert.Equal("Exact reviewed literal replacement", Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(new(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId), "/working/private.txt", 1024)).Bytes));
+        Assert.Equal("Exact reviewed literal replacement", Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(WorkspaceOwner(v.Setup, true), "/working/private.txt", 1024)).Bytes));
     }
 
     [Theory] [InlineData(false)] [InlineData(true)]

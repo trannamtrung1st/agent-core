@@ -57,7 +57,7 @@ public sealed partial class TenantCredentialIntegrationTests
             {
                 using var body = await JsonDocument.ParseAsync(http.Request.Body); var value = body.RootElement;
                 Assert.Equal(metadata["agent-core-image-verification"], value.GetProperty("ownerValue").GetString());
-                await http.Response.WriteAsJsonAsync(new { contractVersion = 4, runtimeUser = value.GetProperty("uid").GetInt32() + ":" + value.GetProperty("gid").GetInt32(), topology = "linux", imageId = "fixture", imageUser = "fixture" });
+                await http.Response.WriteAsJsonAsync(new { contractVersion = SandboxProfileVerification.CurrentContractVersion, runtimeUser = value.GetProperty("uid").GetInt32() + ":" + value.GetProperty("gid").GetInt32(), topology = "linux", imageId = "fixture", imageUser = "fixture" });
             }
             else if (path == "/command")
             {

@@ -40,7 +40,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(atGate ? TenantOperationOutcome.Indeterminate : TenantOperationOutcome.Denied, result.Outcome);
         if (!atGate) Assert.Equal("operation_authority_changed", result.ReasonCode);
         Assert.Null(await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(s.Tenant, v.Request.RequestId));
-        Assert.Equal("Private model bytes: thử nghiệm", Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(new(s.Tenant, s.Agent.Instance.InstanceId, v.Frame.SessionId), "/working/private.txt", 1024)).Bytes));
+        Assert.Equal("Private model bytes: thử nghiệm", Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(WorkspaceOwner(s, true), "/working/private.txt", 1024)).Bytes));
         Assert.Equal(result, await ExecuteApprovedWorkspace(service, v.Frame, v.Request)); Assert.Equal(atGate ? 1 : 0, calls);
     }
 
@@ -51,7 +51,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var calls = 0; var service = WorkspaceEffects(f, new WorkspaceMutationHook(WorkspaceReader(f), beforeEffect: () => { calls++; return Task.CompletedTask; },
             beforeCommit: () => SeedRuntimeWorkspace(f, v.Setup, true, bytes: "Concurrent private replacement"u8.ToArray())));
         var result = await ExecuteApprovedWorkspace(service, v.Frame, v.Request); Assert.Equal(TenantOperationOutcome.Indeterminate, result.Outcome);
-        Assert.Equal("Concurrent private replacement", Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(new(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId), "/working/private.txt", 1024)).Bytes));
+        Assert.Equal("Concurrent private replacement", Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(WorkspaceOwner(v.Setup, true), "/working/private.txt", 1024)).Bytes));
         Assert.Equal(result, await ExecuteApprovedWorkspace(service, v.Frame, v.Request)); Assert.Equal(1, calls);
     }
 
@@ -101,7 +101,7 @@ public sealed partial class TenantOperationAuthorizationTests
             new { op = "delete", path = "/working/private.txt" }, new { op = "mkdir", path = "/working/new" } } }, true);
         Assert.Equal("workspaces.delete", v.Request.Permission); Assert.Equal(ApprovalKind.ExceptionalGrant, v.Request.Kind);
         var service = WorkspaceEffects(f); var result = await ExecuteApprovedWorkspace(service, v.Frame, v.Request); Assert.Equal(TenantOperationOutcome.Completed, result.Outcome);
-        var listing = await WorkspaceReader(f).ListTenantAsync(new(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId), "/working", null, 100);
+        var listing = await WorkspaceReader(f).ListTenantAsync(WorkspaceOwner(v.Setup, true), "/working", null, 100);
         Assert.DoesNotContain(listing.Items, item => item.LogicalPath == "/working/private.txt"); Assert.Contains(listing.Items, item => item.LogicalPath == "/working/new" && item.Directory);
         Assert.Equal(OperationGrantStatus.Consumed, (await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(v.Setup.Tenant, v.Request.RequestId))!.Status);
         Assert.Equal(result, await ExecuteApprovedWorkspace(service, v.Frame, v.Request));

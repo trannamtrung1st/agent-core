@@ -27,7 +27,7 @@ public sealed class ResponsesCheckpointRecoveryTests
     {
         Voice = new(false, "default", 1), InitiativePolicy = SampleDefinitions.Examiner.InitiativePolicy with { Enabled = false },
         AgentInstructions = "This is a synthetic background counter fixture. Alpha and Beta must each be clicked exactly once. Existing successful tool receipts are authoritative; do not repeat them. Once both are done, call work.complete with summary 'Both counters verified once', attentionRequired false and outcome Response.",
-        Environment = new(ToolAllowlist: [ToolCatalog.BrowserClick])
+        ExecutionPolicy = new(ToolAllowlist: [ToolCatalog.BrowserClick])
     };
 
     // The unowned two-effect batch is retired. Current exact-consent SQLite

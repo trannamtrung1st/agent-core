@@ -31,6 +31,7 @@ public sealed class TenantArtifactOperationService(ITenantArtifactOperationStore
                 .CaptureAsync(new(run.Owner, run.SessionId, run.AgentRunId, generation), workspace, ct).ConfigureAwait(false);
             var publication = new PreparedArtifactPublication(run.SessionId, canonical, source is null ? null : TenantArtifactSourceRules.Witness(source.Observation));
             var operation = TenantApprovalRules.PrepareArtifact(ids.NewId(), run.AgentInstanceId, publication, current.Agent.Instance.Revision, current.Agent.Instance.PersonaRevision);
+            operation = TenantApprovalRules.ForRun(operation, run);
             var correlated = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.Activation.RootActivationId, current.Agent.PrincipalId, operation, ct).ConfigureAwait(false);
             if (correlated is not null) return new(correlated.Status == TenantApprovalStatus.Pending ? OperationDecisionKind.RequiresApproval : OperationDecisionKind.Denied, TenantApprovalRules.DuplicateReason(correlated));
             var scope = TenantSessionRules.Scope(reference.TenantId, run.SessionId);

@@ -33,6 +33,9 @@ public sealed partial class TenantPreferenceOperationTests
         agent = (await ((ITenantAgentStore)f.Iam).TryChangeTenantAgentConfigurationAsync(state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } }, state.Tenant.Revision,
             new(agent.Instance.InstanceId, 1, HarnessManagement: new(new(mode, [HarnessManagementScope.Settings], [], [], ManagedAutoApply: autoApply ? [ManagementAutoApply.ConversationPreferences] : []), 2)), at,
             new(f.Ids.NewId(), owner.TenantId, human.PrincipalId, "agents.self-management.update", agent.Instance.InstanceId.ToString("D"), "allowed", "configuration_updated", at)))!;
+        var ownSpace = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(owner.TenantId, agent.Instance.InstanceId))!;
+        var context = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Read own context", ["spaces.read"], await Revision());
+        await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, context.RoleId, TenantSpaceService.Scope(owner.TenantId, ownSpace.SpaceId), await Revision());
         if (permissions)
         {
             var role = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Own preferences", update ? ["agents.read", "agents.update"] : ["agents.read"], await Revision());

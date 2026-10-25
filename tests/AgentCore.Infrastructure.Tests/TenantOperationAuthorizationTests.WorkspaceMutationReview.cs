@@ -40,7 +40,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var grant = await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(s.Tenant, v.Request.RequestId);
         Assert.Equal(exceptional, grant is not null); if (grant is not null) { Assert.Equal(OperationGrantStatus.Available, grant.Status); Assert.Equal(v.Request.Operation.OperationId, grant.OperationId); }
         Assert.Single(await ((ITenantApprovalStore)f.Iam).PendingApprovalSignalsAsync(100));
-        var bytes = await WorkspaceReader(f).InspectTenantAsync(new(s.Tenant, s.Agent.Instance.InstanceId, working ? v.Frame.SessionId : null), (working ? "/working/" : "/home/") + "private.txt", 1024);
+        var bytes = await WorkspaceReader(f).InspectTenantAsync(WorkspaceOwner(s, working), (working ? "/working/" : "/home/") + "private.txt", 1024);
         Assert.Equal("Private model bytes: thử nghiệm", System.Text.Encoding.UTF8.GetString(bytes.Bytes));
         Assert.Null(await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(s.Tenant, v.Request.Operation.OperationId));
         Assert.DoesNotContain(await f.Iam.ReadAuditAsync(s.Tenant, 200), a => a.Action == TenantWorkspaceEffectRules.Dispatch);

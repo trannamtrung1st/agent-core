@@ -114,7 +114,7 @@ public sealed partial class TenantComposerReferenceService(IIamStore security, I
             : p.Kind == "invocation" ? p with { Label = labels[new UserResourceReference("skill", AgentInstanceId: instance, SkillKey: p.SkillKey).Locator] } : p).ToArray();
     }
     public async ValueTask<ComposerRunInput?> PinAsync(Guid instance, TrustedExecutionContext context, AgentDefinition pinned,
-        IReadOnlyList<EffectiveSkill> catalog, IReadOnlyList<UserMessagePart>? parts, CancellationToken ct)
+        IReadOnlyList<EffectiveSkill> catalog, IReadOnlyList<UserMessagePart>? parts, AgentCore.Domain.Spaces.RunSpaceWitness spaceContext, CancellationToken ct)
     {
         if (parts is null) return null;
         var tenant = context.TenantId;
@@ -137,7 +137,7 @@ public sealed partial class TenantComposerReferenceService(IIamStore security, I
             try
             {
                 Policy(pinned, current.Definition, reference, context.SessionId);
-                value = await Observe(tenant, instance, context.SessionId, reference, true, Allowed, ct).ConfigureAwait(false);
+                value = await Observe(tenant, instance, context.SessionId, reference, true, Allowed, ct, spaceContext).ConfigureAwait(false);
             }
             catch (AccessDeniedException e) { value = new(reference, "Referenced " + reference.Kind, e.ReasonCode == "composer_read_review_required" ? "requiresApproval" : "forbidden", ""); }
             if (value.Text.Length > remaining) value = value with { Text = value.Text[..remaining], Truncated = true };
@@ -175,15 +175,23 @@ public sealed partial class TenantComposerReferenceService(IIamStore security, I
         {
             Policy(run.Admission.Configuration!.Definition, current.Definition, source.Reference, run.SessionId);
             ComposerReferenceEvidence observed;
-            try { observed = await Observe(state.Tenant.TenantId, run.AgentInstanceId, run.SessionId, source.Reference, true, Allowed, ct).ConfigureAwait(false); }
+            try { observed = await Observe(state.Tenant.TenantId, run.AgentInstanceId, run.SessionId, source.Reference, true, Allowed, ct, TenantWorkspaceRules.Context(run)).ConfigureAwait(false); }
             catch (AgentCoreException) { throw new AccessDeniedException("composer_source_changed"); }
             if (observed.Sha256 != source.Sha256 || observed.Revision != source.Revision) throw new AccessDeniedException("composer_source_changed");
         }
         if ((await security.ReadTenantAsync(state.Tenant.TenantId, ct).ConfigureAwait(false))?.Tenant.Revision != state.Tenant.Revision)
             throw new SecurityConflictException("composer_source_changed");
     }
+    private async ValueTask<TenantWorkspaceReference.SpaceHome> HomeOwner(Guid tenant, Guid instance, Guid space, CancellationToken ct)
+    {
+        var store = (ITenantSpaceStore)security;
+        if (await store.FindSpaceAsync(tenant, space, ct).ConfigureAwait(false) is null
+            || !(await store.ReadMembershipsAsync(tenant, space, ct).ConfigureAwait(false)).Any(m => m.InstanceId == instance))
+            throw new AccessDeniedException("composer_source_unavailable");
+        return new(tenant, space);
+    }
     private async ValueTask<ComposerReferenceEvidence> Observe(Guid tenant, Guid instance, Guid currentSession, UserResourceReference reference,
-        bool content, Func<string, AccessScope, ValueTask> allowed, CancellationToken ct)
+        bool content, Func<string, AccessScope, ValueTask> allowed, CancellationToken ct, AgentCore.Domain.Spaces.RunSpaceWitness? spaceContext = null)
     {
         reference.Validate();
         if (reference.AgentInstanceId is { } selected && selected != instance) throw new AccessDeniedException("composer_source_unavailable");
@@ -200,7 +208,10 @@ public sealed partial class TenantComposerReferenceService(IIamStore security, I
         switch (reference.Kind)
         {
             case "homeFile":
-                var owner = new TenantWorkspaceReference(tenant, instance);
+                if (spaceContext is not null && reference.SpaceId != spaceContext.SpaceId && reference.SpaceId != spaceContext.PrivateSpaceId)
+                    throw new AccessDeniedException("composer_source_unavailable");
+                var owner = await HomeOwner(tenant, instance, reference.SpaceId!.Value, ct).ConfigureAwait(false);
+                await allowed("spaces.read", TenantSpaceService.Scope(tenant, owner.SpaceId)).ConfigureAwait(false);
                 await allowed("workspaces.read", TenantWorkspaceRules.Scope(owner)).ConfigureAwait(false);
                 var path = TenantWorkspaceRules.Path(owner, reference.Path!, file: true);
                 var file = await files.InspectTenantAsync(owner, path, 0, ct).ConfigureAwait(false);

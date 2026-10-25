@@ -8,7 +8,7 @@ public static class CapabilityAuthorizationResolver
 {
     public static AgentDefinitionCandidate ResolveCandidate(AgentDefinitionCandidate candidate)
     {
-        if (candidate.Environment?.Capabilities is not { } authority
+        if (candidate.ExecutionPolicy?.Capabilities is not { } authority
             || authority.ResolvedCapabilities is null) return candidate;
         var names = authority.Mode == "All"
             ? ToolRegistry.DefinitionAuthorizable.Select(d => d.Name).Order(StringComparer.Ordinal).ToArray()
@@ -16,12 +16,12 @@ public static class CapabilityAuthorizationResolver
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', names)))).ToLowerInvariant();
         return candidate with
         {
-            Environment = candidate.Environment with
+            ExecutionPolicy = candidate.ExecutionPolicy with
             {
                 Capabilities = authority with { ResolvedCapabilities = names, AuthorizationFingerprint = fingerprint },
                 // Bootstrap is projected by Core. Other invalid context projections remain
                 // visible to validation rather than being silently accepted.
-                Projection = candidate.Environment.Projection is { } projection
+                Projection = candidate.ExecutionPolicy.Projection is { } projection
                     ? projection with { AlwaysCapabilities = projection.AlwaysCapabilities.Where(n => n != ToolCatalog.CapabilitiesLoad).ToArray() }
                     : null
             }

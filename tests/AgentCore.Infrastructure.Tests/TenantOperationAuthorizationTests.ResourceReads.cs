@@ -43,7 +43,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var runtime = (ITenantRuntimeStore)f.Iam; var runs = (ITenantRunStore)f.Iam; var reads = WorkspaceRuntimeReads(f, office: processor);
         var path = v.Path;
         var tool = knowledge ? ToolCatalog.KnowledgeRetrieve : format == "docx" ? ToolCatalog.OfficeDocumentInspect : format == "xlsx" ? ToolCatalog.OfficeSpreadsheetInspect : ToolCatalog.WorkspaceRead;
-        var identity = inherited ? AgentCore.Domain.Definitions.RoleEnvironments.Of(s.Run.Admission.Configuration!.Definition).KnowledgeList.Single(k => AgentCore.Domain.Definitions.KnowledgeSourcePaths.ResolveBackingPath(k) == s.Run.Admission.Configuration.Resources.Single(r => r.Key == v.Key).LogicalPath).Identity : v.Key;
+        var identity = inherited ? AgentCore.Domain.Definitions.DefinitionExecutionPolicies.Of(s.Run.Admission.Configuration!.Definition).KnowledgeList.Single(k => AgentCore.Domain.Definitions.KnowledgeSourcePaths.ResolveBackingPath(k) == s.Run.Admission.Configuration.Resources.Single(r => r.Key == v.Key).LogicalPath).Identity : v.Key;
         var json = knowledge ? JsonSerializer.Serialize(new { identity }) : JsonSerializer.Serialize(new { path });
         var call = new ModelToolCall("inspect-exact-workspace", ToolCatalog.RequestAuthorization, JsonSerializer.Serialize(new { operation = "inspect_workspace", read = new { tool, arguments = JsonSerializer.Deserialize<JsonElement>(json) } }));
         var run = (await runs.FindTenantRunAsync(s.Tenant, frame.RunId))!;

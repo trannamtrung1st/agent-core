@@ -15,11 +15,11 @@ public sealed class TenantBrowserCredentialTarget(ITenantCredentialBindingStore 
     public async ValueTask<TenantCredentialBinding> ResolveAsync(AgentRun run, string reference, CancellationToken ct)
     {
         await TenantBrowserCredentialRules.RequireChatLineageAsync(run, (id, token) => runs.FindTenantRunAsync(run.Owner.TenantId!.Value, id, token), ct).ConfigureAwait(false);
-        var snapshot = await bindings.ReadTenantCredentialBindingsAsync(run.Owner.TenantId!.Value, run.AgentInstanceId, ct).ConfigureAwait(false)
+        var snapshot = await configuration.CurrentCredentialBindingsAsync(run, ct, bindings).ConfigureAwait(false)
             ?? throw new AccessDeniedException("credential_unavailable");
         var bound = snapshot.Bindings.SingleOrDefault(b => b.Binding.Reference == CredentialRules.Reference(reference))
             ?? throw new AccessDeniedException("credential_unavailable");
-        var (agent, baseline) = await configuration.BaselineAsync(run.Owner.TenantId.Value, run.AgentInstanceId, ct).ConfigureAwait(false);
+        var (agent, baseline) = await configuration.BaselineAsync(run.Owner.TenantId!.Value, run.AgentInstanceId, ct).ConfigureAwait(false);
         if (snapshot.Agent.Instance.Revision != agent.Instance.Revision) throw new SecurityConflictException("stale_revision");
         TenantBrowserCredentialRules.RequireBinding(run, agent, bound, baseline);
         return bound;

@@ -27,6 +27,7 @@ import { SessionFailureAlert } from "./SessionFailureAlert";
 import { terminalSessionNote } from "./sessionLifecycle";
 import { SessionRail } from "./SessionRail";
 import { TenantConversationApprovals } from './TenantConversationApprovals';
+import { TenantSessionContext } from './TenantSessionContext';
 import { TenantSessionFilesDrawer } from './TenantSessionFilesDrawer';
 import { TenantSessionSandboxDrawer } from './TenantSessionSandboxDrawer';
 import { useWorkReadState } from "./workReadState";
@@ -336,6 +337,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
             />
           </Header>
           <Content className="app-content">
+            {state.sessionId && <TenantSessionContext key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} session={state.sessionId} refreshKey={`${state.agentRunId ?? ''}:${state.liveResponseId ?? ''}`} />}
             {tenantError !== undefined && <div className="conversation-column conversation-banners"><AccessError error={tenantError} /></div>}
             {state.routeNotice || state.connection === "failed" ? (
               <div className="conversation-column conversation-banners">

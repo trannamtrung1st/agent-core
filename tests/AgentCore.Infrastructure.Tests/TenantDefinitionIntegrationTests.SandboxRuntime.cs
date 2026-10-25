@@ -45,7 +45,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         }
         var draft = await f.Service.CreateAsync(human.PrincipalId, owner.TenantId, "Tenant runtime", await Revision());
         draft = await f.Service.UpdateAsync(human.PrincipalId, owner.TenantId, draft.DraftId, draft.Candidate with {
-            SandboxPolicy = new(profile.Id, other is null ? [profile.Id] : [profile.Id, other.Id]), Environment = new(Capabilities: new("Selected", controls ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProcessStop, ToolCatalog.SandboxReset] : inspection ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus] : [ToolCatalog.SandboxExec]), Workspace: template ? new("notes") : null),
+            SandboxPolicy = new(profile.Id, other is null ? [profile.Id] : [profile.Id, other.Id]), ExecutionPolicy = new(Capabilities: new("Selected", controls ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProcessStop, ToolCatalog.SandboxReset] : inspection ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus] : [ToolCatalog.SandboxExec]), Workspace: template ? new("notes") : null),
             StateIsolationPolicy = home is { } access ? new(HomeAccess: access) : draft.Candidate.StateIsolationPolicy
         }, await Revision(), draft.Revision);
         if (template)
@@ -65,6 +65,10 @@ public sealed partial class TenantDefinitionIntegrationTests
                 Fields(new { initializationScript = instanceInitialization }), [], initiator: human);
             agent = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(owner.TenantId, agent.Instance.InstanceId))!;
         }
+        var privateSpace = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(owner.TenantId, agent.Instance.InstanceId))!;
+        var spaceRole = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Read own context", ["spaces.read"], await Revision());
+        await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, spaceRole.RoleId,
+            TenantSpaceService.Scope(owner.TenantId, privateSpace.SpaceId), await Revision());
         var role = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Execute Sandbox", ["sandbox.execute"], await Revision());
         var grant = await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, role.RoleId,
             AccessScope.ForResource(owner.TenantId, "agent", agent.Instance.InstanceId.ToString("D")), await Revision());
@@ -80,6 +84,14 @@ public sealed partial class TenantDefinitionIntegrationTests
         var sessions = new TenantSessionService(f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam,
             f.Definitions, builtIns, f.Identity, f.Authorizer, ModelCatalogFactory.Synthetic(), new(), f.Ids, TimeProvider.System);
         var session = await sessions.CreateAsync(owner.TenantId, agent.Instance.InstanceId, new(human.AccountId, human.AuthenticationSessionId, human.PrincipalId), SessionMode.Text, await Revision(), agent.Instance.Revision);
+        var fileRole = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Own sandbox files", ["workspaces.read", "workspaces.write", "workspaces.delete"], await Revision());
+        await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, fileRole.RoleId,
+            TenantWorkspaceRules.Home(owner.TenantId, privateSpace.SpaceId), await Revision());
+        await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, fileRole.RoleId,
+            TenantWorkspaceRules.Working(owner.TenantId, session.Owner.SessionId), await Revision());
+        var sessionReadRole = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Own sandbox Session", ["sessions.read"], await Revision());
+        await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, sessionReadRole.RoleId,
+            TenantSessionRules.Scope(owner.TenantId, session.Owner.SessionId), await Revision());
         var resolver = new TenantRunConfigurationResolver((ITenantAgentStore)f.Iam, f.Definitions, builtIns,
             new(f.Resources, builtIns, new NoBuiltinKnowledge(), f.Content), (ITenantCredentialBindingStore)f.Iam,
             (ITenantSandboxProfileStore)f.Iam, p.Images, p.Ready, f.Authorizer);
@@ -97,6 +109,10 @@ public sealed partial class TenantDefinitionIntegrationTests
         return new(owner.TenantId, human, session.Owner, run, lease,
             new(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), await Revision(), run.Revision), grant.AssignmentId, resolver, other);
     }
+    private static async ValueTask<SandboxWorkspaceAccess> RuntimeWorkspaceAccess(Fixture f, RuntimeSandboxSetup s) =>
+        await TenantSandboxWorkspaceRules.ResolveAsync((await f.Iam.ReadTenantAsync(s.Tenant))!, s.Run,
+            s.Run.Admission.Configuration!.Definition.StateIsolationPolicy?.HomeAccess ?? StateIsolationPolicy.Default.HomeAccess, f.Authorizer, default);
+
     private static SandboxExecution RuntimeExecution(Fixture f, RuntimeSandboxSetup s, string call = "sandbox-1") => new(f.Ids.NewId(), s.Session.SessionId,
         s.Session.AgentInstanceId, s.Lease.Generation, s.Run.AgentRunId, s.Run.Claim!.Generation, call, new string('a', 64), SandboxExecutionState.Dispatching,
         s.Lease.CreatedAt, CommandText: "printf tenant-output", DeadlineAt: s.Lease.CreatedAt.AddSeconds(30), ProfileId: s.Lease.Profile.Id,

@@ -17,11 +17,11 @@ public static class TenantPublicDownloadRules
     {
         if (value.RequestedUrl is null || value.FinalUrl is null || value.Path is null || value.ContentType is null || value.Sha256 is null
             || TenantPublicDownloadContract.Url(value.RequestedUrl) != value.RequestedUrl || TenantPublicDownloadContract.Url(value.FinalUrl) != value.FinalUrl
-            || value.Path.Length > 1024 || !value.Path.StartsWith("/home/", StringComparison.Ordinal) && !value.Path.StartsWith("/working/", StringComparison.Ordinal)
+            || value.Path.Length > 1024 || !value.Path.StartsWith("/home/", StringComparison.Ordinal) && !value.Path.StartsWith("/private/", StringComparison.Ordinal) && !value.Path.StartsWith("/working/", StringComparison.Ordinal)
             || value.ContentType.Length is < 1 or > 200 || value.ByteCount is < 0 or > int.MaxValue || value.Sha256.Length != 64
             || value.Sha256.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')) || value.SuggestedFileName?.Length > 120)
             throw new ArgumentException("Invalid download receipt.");
-        try { TenantWorkspaceRules.Path(new(Guid.Empty, Guid.Empty, value.Path.StartsWith("/working/", StringComparison.Ordinal) ? Guid.Empty : null), value.Path, file: true); }
+        try { TenantWorkspaceRules.ValidatePath(value.Path, file: true); }
         catch (AgentCore.Application.Sessions.AgentCoreException e) { throw new ArgumentException("Invalid download receipt path.", e); }
     }
     public static TenantOperationReceipt Attach(TenantOperationReceipt receipt, TenantWorkspaceMutationArguments args, TenantPublicDownloadReceipt? value, bool recovery)

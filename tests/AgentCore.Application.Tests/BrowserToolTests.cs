@@ -218,7 +218,7 @@ public sealed class BrowserToolTests
     {
         var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Support) with
         {
-            Environment = RoleEnvironment.Empty with
+            ExecutionPolicy = DefinitionExecutionPolicy.Empty with
             {
                 ToolAllowlist = [ToolCatalog.KnowledgeRetrieve]
             },
@@ -246,7 +246,7 @@ public sealed class BrowserToolTests
         var definition = candidate.ToPublished(1);
         var plan = SkillLoadAdmission.Plan(Catalog(definition), [], 0, ["definition:browser.record.lookup"]);
         Assert.Contains("definition:browser.record.lookup", plan.Admitted);
-        Assert.DoesNotContain(ToolCatalog.BrowserNavigate, RoleEnvironments.Of(definition).ToolList);
+        Assert.DoesNotContain(ToolCatalog.BrowserNavigate, DefinitionExecutionPolicies.Of(definition).ToolList);
 
         var fake = new FakeBrowser();
         var result = await Executor(fake).ExecuteAsync(
@@ -492,8 +492,8 @@ public sealed class BrowserToolTests
             """{"type":"object","additionalProperties":false,"properties":{"operation":{"type":"string","enum":["close"]}},"required":[]}""",
             offeredV12.Single(tool => tool.Name == ToolCatalog.BrowserClose).ParametersJson,
             StringComparison.Ordinal);
-        Assert.Contains(ToolCatalog.BrowserClose, RoleEnvironments.Of(v12).ToolList);
-        Assert.DoesNotContain(ToolCatalog.BrowserClose, RoleEnvironments.Of(v11).ToolList);
+        Assert.Contains(ToolCatalog.BrowserClose, DefinitionExecutionPolicies.Of(v12).ToolList);
+        Assert.DoesNotContain(ToolCatalog.BrowserClose, DefinitionExecutionPolicies.Of(v11).ToolList);
     }
 
     [Theory]
@@ -552,7 +552,7 @@ public sealed class BrowserToolTests
     {
         var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Support) with
         {
-            Environment = RoleEnvironment.Empty with
+            ExecutionPolicy = DefinitionExecutionPolicy.Empty with
             {
                 ToolAllowlist = [ToolCatalog.BrowserNavigate]
             }
@@ -585,7 +585,7 @@ public sealed class BrowserToolTests
             new VoiceConfiguration(false, "default", 1.0),
             new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
             new Dictionary<string, string>(StringComparer.Ordinal),
-            new RoleEnvironment(ToolAllowlist:
+            new DefinitionExecutionPolicy(ToolAllowlist:
             [
                 ToolCatalog.BrowserNavigate,
                 ToolCatalog.BrowserSnapshot,
@@ -599,7 +599,7 @@ public sealed class BrowserToolTests
         BrowserDefinition() with
         {
             Version = 12,
-            Environment = new RoleEnvironment(ToolAllowlist:
+            ExecutionPolicy = new DefinitionExecutionPolicy(ToolAllowlist:
             [
                 ToolCatalog.BrowserNavigate,
                 ToolCatalog.BrowserSnapshot,

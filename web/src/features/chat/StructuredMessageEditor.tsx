@@ -82,6 +82,7 @@ type Props = {
   draft: string;
   parts?: MessagePart[] | null;
   instanceId?: string | null;
+  sessionId?: string | null;
   ready: boolean;
   placeholder: string;
   canSend: boolean;
@@ -385,7 +386,7 @@ function Controller(props: Props) {
     setPicker(null);
     setItems([]);
     requestEpoch.current++;
-  }, [props.instanceId, props.ready]);
+  }, [props.instanceId, props.sessionId, props.ready]);
   useEffect(() => {
     if (!picker) return;
     const reposition = () => setPicker((p) => (p ? { ...p, ...anchor() } : p));
@@ -442,6 +443,7 @@ function Controller(props: Props) {
   async function load(next?: ChoiceCursors) {
     const p = pickerRef.current;
     const instance = propsRef.current.instanceId;
+    const session = propsRef.current.sessionId;
     if (!p || !instance) {
       setError("Choose an active Agent Instance to select Skills and resources.");
       setLoading(false);
@@ -452,8 +454,8 @@ function Controller(props: Props) {
     pendingRequest.current = epoch;
     setLoading(true);
     setError(null);
-    const page = await loadComposerChoices(instance, p.mode, p.query, next);
-    if (requestEpoch.current !== epoch || propsRef.current.instanceId !== instance) return;
+    const page = await loadComposerChoices(instance, p.mode, p.query, next, propsRef.current.sessionId);
+    if (requestEpoch.current !== epoch || propsRef.current.instanceId !== instance || propsRef.current.sessionId !== session) return;
     setItems((old) => {
       const merged = next ? [...old, ...page.items] : page.items;
       return [...new Map(merged.map((item) => [`${item.category}:${item.id}`, item])).values()];
@@ -484,7 +486,7 @@ function Controller(props: Props) {
     setLoading(true);
     const timer = window.setTimeout(() => void load(), 150);
     return () => { window.clearTimeout(timer); requestEpoch.current++; };
-  }, [picker?.mode, picker?.query, props.instanceId]);
+  }, [picker?.mode, picker?.query, props.instanceId, props.sessionId]);
   useEffect(() => {
     const list = listRef.current;
     if (!picker || !list || loading || error || !Object.keys(cursors).length) return;

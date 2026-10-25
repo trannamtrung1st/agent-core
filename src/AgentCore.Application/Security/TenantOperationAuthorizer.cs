@@ -10,7 +10,7 @@ public sealed record OperationAuthorizationDecision(OperationDecisionKind Decisi
     AccessScope Resource, ApprovalKind? ApprovalKind = null);
 
 // Decisions are current inspection results, not capabilities or operation grants. Effects must revalidate at commit.
-public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore runs, ITenantAgentStore agents, IamAuthorizer authorizer, TenantOperationAudit audit, TenantEventReadAuthority? eventReads = null)
+public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore runs, ITenantAgentStore agents, IamAuthorizer authorizer, TenantOperationAudit audit, TenantEventReadAuthority? eventReads = null, TenantSpaceContextResolver? spaceContexts = null)
 {
     internal ValueTask<AgentRun?> FindRunAsync(TenantRunReference reference, CancellationToken ct) =>
         runs.FindTenantRunAsync(reference.TenantId, reference.RunId, ct);
@@ -81,6 +81,7 @@ public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore r
             ?? throw new AccessDeniedException("executor_unavailable");
         if (agent.PrincipalId != context.AgentPrincipalId || agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("executor_unavailable");
         TenantSessionRules.RequireExecutor(state, agent);
+        await (spaceContexts ?? new TenantSpaceContextResolver((ITenantSpaceStore)agents, (ITenantEnvironmentStore)agents, agents, authorizer)).RequireCurrentAsync(run, ct).ConfigureAwait(false);
         await TenantExecutionLineage.RequireRequesterAsync(run, state, authorizer, runs, ct).ConfigureAwait(false);
         if (eventReads is not null) await eventReads.RequireAsync(run, ct).ConfigureAwait(false);
         else if (TenantEventReadRules.IsEventRoot(await TenantExecutionLineage.RootAsync(run, runs, ct).ConfigureAwait(false)) || TenantAutomationConversationRules.IsConversationRoot(await TenantExecutionLineage.RootAsync(run, runs, ct).ConfigureAwait(false)))

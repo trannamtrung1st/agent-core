@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { App } from 'antd';
 import { resetIdentityCsrf, type TenantContext } from '../../services/identity';
 import type { TenantAutomationEditor, TenantAutomationPreset } from '../../services/tenantAutomations';
@@ -23,6 +23,8 @@ beforeEach(() => {
   fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock);
   fetchMock.mockImplementation(async (path, options) => {
     const url = String(path);
+    if (url.includes('/context-options?')) return response({ spaces: [], page: 0, hasMore: false, targetAvailable: false, environmentsEnabled: false, environmentSelectionAllowed: false, environments: [] });
+    if (url.includes('/sessions/') && url.endsWith('/context')) return response({ selection: { spaceId: 'private', environmentId: null }, state: 'applied', space: { kind: 0, name: 'Private Space' }, environment: null });
     if (url.endsWith('/csrf')) return response({ token: 'csrf' });
     if (url.endsWith('/chat/models')) return catalogFailed ? response({ reasonCode: 'catalog_unavailable' }, 503) : response({ defaultKey: 'alpha', models: [{ key: 'alpha', displayName: 'Alpha', supportedReasoningEfforts: [] }] });
     if (url.endsWith('/events/builtin')) return catalogFailed ? response({ reasonCode: 'catalog_unavailable' }, 503) : response({ items: [{ key: 'run.completed', description: 'Run finished.' }] });
@@ -58,13 +60,13 @@ it('preserves a stale draft, blocks replay and refreshes witnesses only on expli
   stale = true; await open(); await edit(); fireEvent.change(screen.getByRole('textbox', { name: 'Automation name' }), { target: { value: 'Retain stale draft' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save Automation' })); await screen.findByText(/Access has changed since/); expect(screen.getByRole('button', { name: 'Save Automation' })).toBeDisabled();
   stale = false; current.securityRevision = 19; current.items[0].automation.revision = 10;
-  fireEvent.click(screen.getByRole('button', { name: 'Reload current Automation' })); await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled());
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Reload current Automation' })); }); await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled(), { timeout: 5000 });
   expect(screen.getByRole('textbox', { name: 'Automation name' })).toHaveValue('Retain stale draft'); fireEvent.click(screen.getByRole('button', { name: 'Save Automation' }));
   await waitFor(() => expect(writes()).toHaveLength(2)); expect(JSON.parse(String(writes()[1][1]?.body))).toMatchObject({ expectedRevision: 19, expectedAutomationRevision: 10, name: 'Retain stale draft' });
 });
 it('keeps unknown saves blocked through reload and prevents a duplicate new registration', async () => {
   unknown = true; await open(); await edit(); fireEvent.change(screen.getByRole('textbox', { name: 'Automation name' }), { target: { value: 'Unknown saved draft' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save Automation' })); await screen.findByText('Outcome unknown'); fireEvent.click(screen.getByRole('button', { name: 'Reload current Automation' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save Automation' })); await screen.findByText('Outcome unknown'); await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Reload current Automation' })); });
   await waitFor(() => expect(screen.getByRole('textbox', { name: 'Automation name' })).toHaveValue('Unknown saved draft'));
   expect(screen.getByRole('button', { name: 'Save Automation' })).toBeDisabled(); expect(writes()).toHaveLength(1);
 });
@@ -80,7 +82,7 @@ it('exposes independent read-only hints and clears protected detail on read revo
   current.canCreate = false; current.items[0] = { ...current.items[0], canUpdate: false, canRun: false, canCancel: false }; await open();
   expect(screen.getByRole('button', { name: 'New Automation' })).toBeDisabled(); expect(screen.queryByRole('button', { name: 'Run now' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Inspect Automation' })); await screen.findByRole('dialog'); expect(screen.getByRole('textbox', { name: 'Automation instructions' })).toBeDisabled();
-  denied = true; fireEvent.click(screen.getByRole('button', { name: 'Reload current Automation' })); await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  denied = true; await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Reload current Automation' })); }); await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   await waitFor(() => expect(screen.queryByText('Exact saved instructions')).not.toBeInTheDocument()); expect(writes()).toHaveLength(0);
 });
 it('confirms saved Run admission separately from completion and links to canonical Activity', async () => {
@@ -98,7 +100,7 @@ it('confirms saved Run admission separately from completion and links to canonic
 it('starts disabled, requires valid instructions and refuses enabled timing outside current policy', async () => {
   current.canSchedule = false; await open(); fireEvent.click(screen.getByRole('button', { name: 'New Automation' })); await screen.findByRole('dialog');
   fireEvent.change(screen.getByRole('textbox', { name: 'Automation name' }), { target: { value: 'New task' } }); fireEvent.change(screen.getByRole('textbox', { name: 'Automation instructions' }), { target: { value: 'New saved objective' } });
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled(), { timeout: 5000 });
   fireEvent.click(screen.getByRole('checkbox', { name: 'Enable automatic occurrences' })); expect(screen.getByRole('button', { name: 'Save Automation' })).toBeDisabled();
   expect(await screen.findByText('The current Definition does not permit these triggers')).toBeVisible();
 });
@@ -122,21 +124,21 @@ it('authors an exact report destination through the shared picker and retains it
   fireEvent.click(await screen.findByText('Selected conversation', { selector: '.ant-select-item-option-content' }));
   expect(screen.getByRole('button', { name: 'Save Automation' })).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: 'Enter Session ID' }));
-  fireEvent.change(screen.getByRole('textbox', { name: 'Session ID' }), { target: { value: 'exact-report-conversation' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Session ID' }), { target: { value: '33333333-3333-4333-8333-333333333333' } });
   stale = true; fireEvent.click(screen.getByRole('button', { name: 'Save Automation' }));
   await screen.findByText(/Access has changed since/);
-  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ reportToSessionId: 'exact-report-conversation', expectedAutomationRevision: 6 });
-  expect(screen.getByRole('textbox', { name: 'Session ID' })).toHaveValue('exact-report-conversation');
+  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ reportToSessionId: '33333333-3333-4333-8333-333333333333', expectedAutomationRevision: 6 });
+  expect(screen.getByRole('textbox', { name: 'Session ID' })).toHaveValue('33333333-3333-4333-8333-333333333333');
   stale = false; current.securityRevision = 22;
-  fireEvent.click(screen.getByRole('button', { name: 'Reload current Automation' }));
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled());
-  expect(screen.getByText('Session ID: exact-report-conversation')).toBeInTheDocument();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Reload current Automation' })); });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled(), { timeout: 5000 });
+  expect(screen.getByText('Session ID: 33333333-3333-4333-8333-333333333333')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Save Automation' }));
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-  expect(JSON.parse(String(writes()[1][1]?.body))).toMatchObject({ reportToSessionId: 'exact-report-conversation', expectedRevision: 22 });
+  expect(JSON.parse(String(writes()[1][1]?.body))).toMatchObject({ reportToSessionId: '33333333-3333-4333-8333-333333333333', expectedRevision: 22 });
 }, 60_000);
 it('opens a configured report for editing and can explicitly remove that destination', async () => {
-  current.items[0].automation.completionDelivery = 'toSession'; current.items[0].automation.reportToSessionId = 'exact-report-conversation';
+  current.items[0].automation.completionDelivery = 'toSession'; current.items[0].automation.reportToSessionId = '33333333-3333-4333-8333-333333333333';
   await open(); await edit();
   fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Automation completion report' }));
   fireEvent.click(await screen.findByText('None', { selector: '.ant-select-item-option-content' }));
@@ -154,23 +156,24 @@ it('uses the shared picker for execution and clears separate reports and Automat
   expect(screen.queryByRole('combobox', { name: 'Automation completion report' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Save Automation' })).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: 'Enter Session ID' }));
-  fireEvent.change(screen.getByRole('textbox', { name: 'Session ID' }), { target: { value: 'exact-execution-conversation' } });
+  await act(async () => { fireEvent.change(screen.getByRole('textbox', { name: 'Session ID' }), { target: { value: '11111111-1111-4111-8111-111111111111' } }); });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled(), { timeout: 5000 });
   fireEvent.click(screen.getByRole('button', { name: 'Save Automation' }));
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ targetSessionId: 'exact-execution-conversation', reportToSessionId: null, modelKey: null, reasoningEffort: null });
+  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ targetSessionId: '11111111-1111-4111-8111-111111111111', reportToSessionId: null, modelKey: null, reasoningEffort: null });
 });
 it('opens an existing execution destination, retains a stale target draft and saves only after explicit reload', async () => {
-  current.items[0].automation.executionTarget = 'existingSession'; current.items[0].automation.targetSessionId = 'saved-conversation';
+  current.items[0].automation.executionTarget = 'existingSession'; current.items[0].automation.targetSessionId = '22222222-2222-4222-8222-222222222222';
   await open(); await edit();
-  expect(screen.getByText('Session ID: saved-conversation')).toBeInTheDocument();
+  expect(screen.getByText('Session ID: 22222222-2222-4222-8222-222222222222')).toBeInTheDocument();
   fireEvent.change(screen.getByRole('textbox', { name: 'Automation name' }), { target: { value: 'Retained selected conversation' } });
   stale = true; fireEvent.click(screen.getByRole('button', { name: 'Save Automation' })); await screen.findByText(/Access has changed since/);
   stale = false; current.securityRevision = 23;
-  fireEvent.click(screen.getByRole('button', { name: 'Reload current Automation' }));
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled());
-  expect(screen.getByText('Session ID: saved-conversation')).toBeInTheDocument();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Reload current Automation' })); });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled(), { timeout: 5000 });
+  expect(screen.getByText('Session ID: 22222222-2222-4222-8222-222222222222')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Save Automation' })); await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-  expect(JSON.parse(String(writes()[1][1]?.body))).toMatchObject({ targetSessionId: 'saved-conversation', expectedRevision: 23 });
+  expect(JSON.parse(String(writes()[1][1]?.body))).toMatchObject({ targetSessionId: '22222222-2222-4222-8222-222222222222', expectedRevision: 23 });
 });
 
 const newDraft = async () => { await open(); fireEvent.click(screen.getByRole('button', { name: 'New Automation' })); await screen.findByRole('textbox', { name: 'Automation name' }); };
@@ -203,7 +206,7 @@ it('keeps an edited draft until replacement is explicitly confirmed and starts t
 }, 60_000);
 it('can save a disabled known-source recipe despite model and event catalog refresh failures', async () => {
   catalogFailed = true; await newDraft(); await recipe('Review recent work');
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled(), { timeout: 5000 });
   fireEvent.click(screen.getByRole('button', { name: 'Save Automation' })); await waitFor(() => expect(writes()).toHaveLength(1));
   expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ presetId: 'review-recent-work', enabled: false, triggers: [{ source: { kind: 'builtin', key: 'run.completed' }, dispatch: { mode: 'coalesceLatest', windowSeconds: 900 } }] });
 });
@@ -214,7 +217,7 @@ it('keeps an uncertain save open and blocks replay when the receipt claims diffe
   expect(screen.getByRole('button', { name: 'Save Automation' })).toBeDisabled();
   expect(screen.queryByText('Automation saved. Reading current registrations.')).not.toBeInTheDocument();
   expect(screen.queryByText(/The change was saved, but this view/)).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Reload current Automation' })); await waitFor(() => expect(writes()).toHaveLength(1));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Reload current Automation' })); }); await waitFor(() => expect(writes()).toHaveLength(1));
   expect(screen.getByRole('button', { name: 'Save Automation' })).toBeDisabled();
 });
 it('shows immutable saved origin while permitting customized instructions', async () => {

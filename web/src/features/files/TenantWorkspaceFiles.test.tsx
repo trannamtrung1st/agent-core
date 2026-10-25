@@ -8,11 +8,11 @@ import { downloadFile } from '../filePreview/fileSource';
 vi.mock('../../services/tenantWorkspace', async original => ({ ...await original<typeof import('../../services/tenantWorkspace')>(), readWorkspaceAccess: vi.fn(), listTenantWorkspace: vi.fn(), mutateTenantWorkspace: vi.fn() }));
 vi.mock('../filePreview/fileSource', async original => ({ ...await original<typeof import('../filePreview/fileSource')>(), downloadFile: vi.fn() }));
 vi.mock('../filePreview/FilePreview', () => ({ FilePreviewButton: () => <button>Preview current file</button> }));
-const owner: TenantWorkspaceOwner = { tenantId: 'alpha', kind: 'home', instanceId: 'agent' };
-const access: TenantWorkspaceAccess = { workspace: { tenantId: 'alpha', instanceId: 'agent', sessionId: null, logicalRoot: '/home' }, securityRevision: 7, instanceRevision: 1,
-  canRead: true, canWrite: true, canDelete: true, readOnly: false, instanceName: 'Riley', sessionTitle: null };
-const item = { agentInstanceId: 'agent', logicalPath: '/home/private.txt', directory: false, kind: 'file' as const, contentType: 'text/plain', byteSize: 7, updatedAt: '2026-10-19T00:00:00Z', mode: null, linkTarget: null };
-const page = { items: [item], usedBytes: 7, totalItems: 1, maxFileBytes: 52428800, maxInstanceBytes: 262144000, nextPath: null, usageEnforcement: 'sampled' as const, truncated: false };
+const owner: TenantWorkspaceOwner = { tenantId: 'alpha', kind: 'home', spaceId: 'space' };
+const access: TenantWorkspaceAccess = { workspace: { tenantId: 'alpha', kind: 'spaceHome', spaceId: 'space', privateAlias: false }, securityRevision: 7, ownerRevision: 1,
+  canRead: true, canWrite: true, canDelete: true, readOnly: false, workspaceName: 'Riley', sessionTitle: null };
+const item = { workspaceOwner: access.workspace, logicalPath: '/home/private.txt', directory: false, kind: 'file' as const, contentType: 'text/plain', byteSize: 7, updatedAt: '2026-10-19T00:00:00Z', mode: null, linkTarget: null };
+const page = { items: [item], usedBytes: 7, totalItems: 1, maxFileBytes: 52428800, maxSpaceBytes: 262144000, nextPath: null, usageEnforcement: 'sampled' as const, truncated: false };
 const view = (source: TenantWorkspaceOwner = owner) => <ConfigProvider><App><TenantWorkspaceFiles key={JSON.stringify(source)} owner={source} organization="Alpha" /></App></ConfigProvider>;
 async function selectFile(path = '/home/supplied.txt') {
   fireEvent.click(await screen.findByRole('button', { name: 'Upload file' }));
@@ -78,7 +78,7 @@ it('keeps read-only downloads tenant bound and clears files after observed read 
   render(view()); await screen.findByText('Workspace is read-only'); await screen.findByText(item.logicalPath);
   expect(screen.queryByRole('button', { name: 'Upload file' })).not.toBeInTheDocument(); expect(screen.queryByRole('button', { name: /^Delete/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: `Download ${item.logicalPath}` }));
-  await waitFor(() => expect(downloadFile).toHaveBeenCalledWith(expect.objectContaining({ kind: 'tenantWorkspace', owner, instanceId: 'agent', path: item.logicalPath }), expect.any(AbortSignal)));
+  await waitFor(() => expect(downloadFile).toHaveBeenCalledWith(expect.objectContaining({ kind: 'tenantWorkspace', owner, path: item.logicalPath }), expect.any(AbortSignal)));
   vi.mocked(readWorkspaceAccess).mockResolvedValue({ ...access, canRead: false, canWrite: false, canDelete: false });
   fireEvent.click(screen.getByRole('button', { name: 'Reload workspace' })); await screen.findByText('File reading is restricted');
   expect(screen.queryByText(item.logicalPath)).not.toBeInTheDocument(); expect(screen.queryByText('Preview current file')).not.toBeInTheDocument(); expect(mutateTenantWorkspace).not.toHaveBeenCalled();
@@ -107,7 +107,7 @@ it('lets delete-only users name an exact path without loading names or content',
 
 it('keeps Session file actions visible in the bounded inspector even on a desktop viewport', async () => {
   const source: TenantWorkspaceOwner = { tenantId: 'alpha', kind: 'working', sessionId: 'session' };
-  vi.mocked(readWorkspaceAccess).mockResolvedValue({ ...access, instanceName: null, instanceRevision: null, workspace: { ...access.workspace, logicalRoot: '/working', sessionId: 'session' } });
+  vi.mocked(readWorkspaceAccess).mockResolvedValue({ ...access, workspaceName: 'Session files', workspace: { tenantId: 'alpha', kind: 'sessionWorking', sessionId: 'session' } });
   vi.mocked(listTenantWorkspace).mockResolvedValue({ ...page, items: [{ ...item, logicalPath: '/working/private.txt' }] });
   render(view(source)); await screen.findByText('/working/private.txt');
   expect(screen.getByRole('columnheader', { name: 'File' })).toBeInTheDocument();

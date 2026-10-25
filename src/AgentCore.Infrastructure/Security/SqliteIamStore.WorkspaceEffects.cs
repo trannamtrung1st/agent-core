@@ -29,7 +29,7 @@ public sealed partial class SqliteIamStore : ITenantWorkspaceOperationStore
         TenantWorkspaceEffectRules.Session(run, agent, await ReadSandboxSession(db, tenant.TenantId, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable"));
         var definition = AgentCore.Application.Agents.InstanceSettingsResolver.Resolve(await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false), agent.Instance.SettingsOverrides);
         var at = ApprovalNow; var args = TenantWorkspaceEffectRules.Validate(run, agent, definition, commit.Operation, commit.Generation, at);
-        if (commit.ActionHash != TenantWorkspaceMutationContract.ActionHash(run.SessionId, args.ParametersHash)) throw new SecurityConflictException("operation_mismatch");
+        if (commit.ActionHash != TenantWorkspaceMutationContract.ActionHash(run, args.ParametersHash)) throw new SecurityConflictException("operation_mismatch");
         var correlated = await RootApprovalAsync(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), agent.PrincipalId,
             TenantWorkspaceMutationOperationRules.Correlation(run, args), ct).ConfigureAwait(false);
         if (correlated is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(correlated.Domain()));

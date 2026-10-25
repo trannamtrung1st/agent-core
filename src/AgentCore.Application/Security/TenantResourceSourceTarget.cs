@@ -99,12 +99,12 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
             throw new AccessDeniedException("capability_unavailable");
         var admitted = run.Admission.Configuration.Resources.Where(r => r.VirtualPath == path).Take(2).ToArray();
         var resource = admitted.Length == 1 ? admitted[0] : throw new AccessDeniedException("resource_unavailable");
-        var current = await configurations.CurrentResourcesAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
-        var retained = management is null ? null : await management.ReadRetainedResourcePinAsync(new(tenant, run.AgentRunId), resource, ct).ConfigureAwait(false);
+        var current = await configurations.CurrentResourcesForRunAsync(run, ct).ConfigureAwait(false);
+        var retained = resource.SpaceSource is not null || management is null ? null : await management.ReadRetainedResourcePinAsync(new(tenant, run.AgentRunId), resource, ct).ConfigureAwait(false);
         if (retained is not null && retained.InstanceRevision != current.Snapshot.Agent.Instance.Revision) throw new SecurityConflictException("resource_source_changed");
         var targets = new[] { ("sessions.read", TenantSessionRules.Scope(tenant, run.SessionId)),
             ("agents.read", AccessScope.ForResource(tenant, "agent", run.AgentInstanceId.ToString("D"))),
-            ("resources.read", retained?.Deleted == true ? AccessScope.ForTenant(tenant) : TenantAgentChildScopes.Scope(tenant, run.AgentInstanceId, "resource", resource.Key)) };
+            ("resources.read", retained?.Deleted == true ? AccessScope.ForTenant(tenant) : TenantResourceScopes.Source(tenant, run.AgentInstanceId, resource.Key)) };
         foreach (var (permission, scope) in targets)
         {
             if (!(await iam.CheckOwnedTenantAsync(state, run.Owner.ExecutorPrincipalId!.Value, PermissionCatalog.Get(permission), scope, ct).ConfigureAwait(false)).Allowed)
@@ -127,7 +127,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         if (retained is null && actual != resource || resource.Key.StartsWith("definition:", StringComparison.Ordinal)
             && (current.Snapshot.Agent.Instance.DefinitionId != run.DefinitionId || current.Snapshot.Agent.Instance.ActiveVersion != run.DefinitionVersion))
             throw new SecurityConflictException("resource_source_changed");
-        var revision = retained?.ResourceRevision ?? (resource.Key.StartsWith("instance:", StringComparison.Ordinal)
+        var revision = resource.SpaceSource?.Revision ?? retained?.ResourceRevision ?? (resource.Key.StartsWith("instance:", StringComparison.Ordinal)
             ? current.Snapshot.Resources.InstanceResources.Single(r => "instance:" + r.ResourceId.ToString("D") == resource.Key).Revision
             : current.Snapshot.Resources.DefinitionStates.SingleOrDefault(r => "definition:" + r.ResourceId.ToString("D") == resource.Key)?.Revision ?? 0);
         return new(run, state, session, current.Snapshot.Agent,
@@ -138,7 +138,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         // Virtual paths match manifest entries literally; only their verified digest reaches the filesystem.
         if (string.IsNullOrWhiteSpace(path) || Encoding.UTF8.GetByteCount(path) > 4095 || path.Contains('\\') || path.Any(char.IsControl)
             || path.Split('/').Skip(1).Any(p => p.Length == 0 || p is "." or "..")
-            || !(collection && path is "/agent/resources" or "/agent/instance/resources") && !path.StartsWith("/agent/resources/", StringComparison.Ordinal) && !path.StartsWith("/agent/instance/resources/", StringComparison.Ordinal))
+            || !(collection && path is "/agent/resources" or "/agent/instance/resources" or "/space/resources") && !path.StartsWith("/agent/resources/", StringComparison.Ordinal) && !path.StartsWith("/agent/instance/resources/", StringComparison.Ordinal) && !path.StartsWith("/space/resources/", StringComparison.Ordinal))
             throw new ArgumentException("Use an exact admitted resource file path.");
     }
 }

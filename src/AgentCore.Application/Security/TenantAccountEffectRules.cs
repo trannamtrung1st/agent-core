@@ -103,7 +103,7 @@ public static class TenantAccountEffectRules
         RequireGrant(request, grant, status);
         if (request.ExpiresAt <= at) throw new AccessDeniedException("approval_expired");
         if (grant?.ExpiresAt <= at) throw new AccessDeniedException("grant_expired");
-        await TenantAccountActionRules.PermissionsAsync(state, request.Operation.InstanceId, request.Operation.AccountAction!, request.ExecutorPrincipalId, iam, request.Kind == ApprovalKind.Review, ct).ConfigureAwait(false);
+        await TenantAccountActionRules.PermissionsAsync(state, request.Operation.InstanceId, request.Operation.AccountAction!, TenantWorkspaceRules.Context(request.Operation), request.ExecutorPrincipalId, iam, request.Kind == ApprovalKind.Review, ct).ConfigureAwait(false);
         try { await TenantAccountActionRules.ReviewerAsync(state, request, decision.HumanPrincipalId, iam, ct).ConfigureAwait(false); }
         catch (AccessDeniedException) when (request.Kind == ApprovalKind.ExceptionalGrant) { throw new AccessDeniedException("grantor_authority_lost"); }
     }

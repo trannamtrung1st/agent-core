@@ -78,7 +78,7 @@ describe('Tenant protected bounded reads', () => {
 
 it('enforces metadata and streamed threshold boundaries for every protected source independently of downloads', async () => {
   const metadata = { displayName: 'x.csv', contentType: 'text/csv', byteSize: 4 };
-  const sources = [ref, {kind:'artifact',tenantId:'tenant',sessionId:'s',artifactId:'a'}, {kind:'tenantWorkspace',owner:{kind:'home',tenantId:'tenant',instanceId:'i'},instanceId:'i',path:'/home/test.csv',metadata}, {kind:'tenantWorkspace',owner:{kind:'working',tenantId:'tenant',sessionId:'s'},instanceId:'i',path:'/working/test.csv',metadata}, {kind:'tenantResource',tenantId:'tenant',instanceId:'i',resourceKey:'r',metadata}] as Parameters<typeof readFile>[0][];
+  const sources = [ref, {kind:'artifact',tenantId:'tenant',sessionId:'s',artifactId:'a'}, {kind:'tenantWorkspace',owner:{kind:'home',tenantId:'tenant',spaceId:'space'},path:'/home/test.csv',metadata}, {kind:'tenantWorkspace',owner:{kind:'working',tenantId:'tenant',sessionId:'s'},path:'/working/test.csv',metadata}, {kind:'tenantResource',tenantId:'tenant',instanceId:'i',resourceKey:'r',metadata}] as Parameters<typeof readFile>[0][];
   for (const source of sources) {
     for (const size of [3,4,5]) {
       vi.mocked(identityReadResponse).mockClear().mockResolvedValue(new Response('x'.repeat(size)));

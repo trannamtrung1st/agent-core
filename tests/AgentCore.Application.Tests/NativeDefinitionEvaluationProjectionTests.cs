@@ -15,7 +15,7 @@ public sealed class NativeDefinitionEvaluationProjectionTests
     [Fact]
     public async Task New_capability_evaluation_checks_projection_and_keeps_execution_authority_separate()
     {
-        var candidate = PublishableExaminerCandidate() with { Environment = new(Capabilities: new("Selected", [ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceWrite]), Projection: new([])) };
+        var candidate = PublishableExaminerCandidate() with { ExecutionPolicy = new(Capabilities: new("Selected", [ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceWrite]), Projection: new([])) };
         var runner = AdminEvaluationTestSupport.CreateRunner();
         var scenario = new DefinitionEvaluationScenario(Guid.NewGuid(), "capability-offered", 1, "Capability projection", "Check the projected capability",
             DefinitionEvaluationRequirementLevel.Required, DefinitionEvaluationCheckType.ToolOffered, ToolCatalog.CapabilitiesLoad, DateTimeOffset.UtcNow);
@@ -27,7 +27,7 @@ public sealed class NativeDefinitionEvaluationProjectionTests
     private static AgentDefinitionCandidate PublishableExaminerCandidate() =>
         AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Examiner) with
         {
-            Environment = RoleEnvironment.Empty with
+            ExecutionPolicy = DefinitionExecutionPolicy.Empty with
             {
                 ToolAllowlist = [ToolCatalog.KnowledgeRetrieve]
             }

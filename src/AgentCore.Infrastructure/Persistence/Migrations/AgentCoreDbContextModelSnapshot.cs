@@ -440,6 +440,108 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("TenantUsers", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Domain.Spaces.Secret", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SecretId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProtectedPayload")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProtectionVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("UpdatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("TenantId", "SecretId");
+
+                    b.ToTable("TenantSecrets", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TenantSecrets_Values", "Status IN (0,1,2) AND Revision>=1 AND ProtectionVersion>=1 AND length(Name) BETWEEN 1 AND 120 AND length(Description)<=2048 AND ((Status=2 AND ProtectedPayload='') OR (Status<>2 AND length(ProtectedPayload) BETWEEN 1 AND 131072))");
+                        });
+                });
+
+            modelBuilder.Entity("AgentCore.Domain.Spaces.SpaceFileResource", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SpaceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ByteLength")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ContentSha256")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("DeletedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LogicalPath")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MediaType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourcePath")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("UpdatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("TenantId", "SpaceId", "ResourceId");
+
+                    b.HasIndex("TenantId", "SpaceId", "LogicalPath")
+                        .IsUnique()
+                        .HasFilter("DeletedAt IS NULL");
+
+                    b.ToTable("SpaceFileResources", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SpaceFileResources_Values", "Revision >= 1 AND Kind BETWEEN 1 AND 4 AND ByteLength BETWEEN 1 AND 8388608 AND length(LogicalPath) BETWEEN 1 AND 240 AND substr(LogicalPath,1,1) <> '/' AND instr(LogicalPath,char(92))=0 AND instr(LogicalPath,':')=0 AND instr('/'||LogicalPath||'/','/../')=0 AND instr('/'||LogicalPath||'/','/./')=0 AND instr(LogicalPath,'//')=0 AND substr(LogicalPath,-1)<>'/' AND length(LogicalPath)=length(trim(LogicalPath)) AND length(MediaType) BETWEEN 1 AND 256 AND length(ContentSha256)=64 AND ContentSha256 NOT GLOB '*[^0-9a-f]*' AND substr(SourcePath,1,6)='/home/' AND length(SourcePath) BETWEEN 7 AND 4095 AND instr(SourcePath,char(92))=0 AND instr(SourcePath,'/../')=0 AND instr(SourcePath,'/./')=0 AND instr(SourcePath,'//')=0 AND substr(SourcePath,-1)<>'/' AND UpdatedAt >= CreatedAt AND (DeletedAt IS NULL OR DeletedAt >= CreatedAt)");
+                        });
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ActivationRecord", b =>
                 {
                     b.Property<string>("ActivationId")
@@ -1197,13 +1299,13 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.ToTable("AgentRuns", null, t =>
                         {
-                            t.HasTrigger("TR_AgentRuns_NoEmbeddedApproval_INSERT");
-
-                            t.HasTrigger("TR_AgentRuns_NoEmbeddedApproval_UPDATE");
-
                             t.HasTrigger("TR_AgentRuns_DirectWorkspace_Insert");
 
                             t.HasTrigger("TR_AgentRuns_DirectWorkspace_Update");
+
+                            t.HasTrigger("TR_AgentRuns_NoEmbeddedApproval_INSERT");
+
+                            t.HasTrigger("TR_AgentRuns_NoEmbeddedApproval_UPDATE");
 
                             t.HasCheckConstraint("CK_AgentRuns_ExecutionOwner", "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND OriginalInitiatorPrincipalId IS NULL AND ProfileId IS NOT NULL) OR (TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND ProfileId IS NULL)");
                         });
@@ -1419,6 +1521,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("OccurrenceCount")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid?>("PinnedEnvironmentId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("PinnedSpaceId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("PresetId")
                         .HasColumnType("TEXT");
 
@@ -1479,6 +1587,8 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "AgentInstanceId", "Status");
 
+                    b.HasIndex("TenantId", "PinnedSpaceId", "PinnedEnvironmentId");
+
                     b.ToTable("Automations", null, t =>
                         {
                             t.HasCheckConstraint("CK_Automations_Destination", "(ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)");
@@ -1486,6 +1596,8 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_Automations_Mode", "TriggerMode IN (0,1)");
 
                             t.HasCheckConstraint("CK_Automations_Preset", "(PresetId IS NULL AND PresetVersion IS NULL) OR (PresetId IS NOT NULL AND PresetVersion >= 1)");
+
+                            t.HasCheckConstraint("CK_Automations_SpacePins", "(PinnedSpaceId IS NULL AND PinnedEnvironmentId IS NULL) OR (TenantId IS NOT NULL AND PinnedSpaceId IS NOT NULL AND lower(PinnedSpaceId) <> '00000000-0000-0000-0000-000000000000' AND (PinnedEnvironmentId IS NULL OR lower(PinnedEnvironmentId) <> '00000000-0000-0000-0000-000000000000'))");
 
                             t.HasCheckConstraint("CK_Automations_TenantOwner", "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND ProfileId IS NOT NULL) OR (TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND ProfileId IS NULL)");
                         });
@@ -2670,6 +2782,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<long?>("ArchivedAtUtc")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("ContextSelectionJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("CreatedAtUtc")
                         .HasColumnType("INTEGER");
 
@@ -3074,6 +3189,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<long>("ObservedAtUtc")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid?>("PinnedEnvironmentId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("PinnedSpaceId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ProfileId")
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
@@ -3135,11 +3256,15 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "AgentInstanceId", "ExecutorPrincipalId");
 
+                    b.HasIndex("TenantId", "PinnedSpaceId", "PinnedEnvironmentId");
+
                     b.ToTable("TriggerOccurrences", null, t =>
                         {
                             t.HasCheckConstraint("CK_TriggerOccurrences_Destination", "(ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)");
 
                             t.HasCheckConstraint("CK_TriggerOccurrences_ExecutionLink", "(ExecutionSessionId IS NULL AND AcceptedAgentRunId IS NULL) OR (ExecutionSessionId IS NOT NULL AND LiveSessionId IS NULL AND AcceptedAgentRunId IS NOT NULL) OR (ExecutionSessionId IS NULL AND LiveSessionId IS NOT NULL AND AcceptedAgentRunId IS NOT NULL AND LiveEvaluationCompletedAtUtc IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_TriggerOccurrences_SpacePins", "(PinnedSpaceId IS NULL AND PinnedEnvironmentId IS NULL) OR (TenantId IS NOT NULL AND PinnedSpaceId IS NOT NULL AND lower(PinnedSpaceId) <> '00000000-0000-0000-0000-000000000000' AND (PinnedEnvironmentId IS NULL OR lower(PinnedEnvironmentId) <> '00000000-0000-0000-0000-000000000000'))");
 
                             t.HasCheckConstraint("CK_TriggerOccurrences_TenantOwner", "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND ProfileId IS NOT NULL) OR (TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND ProfileId IS NULL)");
                         });
@@ -3293,6 +3418,60 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("CredentialOAuthAttempts", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.EnvironmentVariableRecord", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("EnvironmentId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CredentialId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PlainValue")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("SecretId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SpaceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("UpdatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("TenantId", "EnvironmentId", "Name");
+
+                    b.HasIndex("TenantId", "CredentialId");
+
+                    b.HasIndex("TenantId", "SecretId");
+
+                    b.HasIndex("TenantId", "SpaceId", "EnvironmentId");
+
+                    b.ToTable("EnvironmentVariables", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_EnvironmentVariables_Values", "Revision>=1 AND length(Name) BETWEEN 1 AND 64 AND Name=upper(Name) AND Name NOT GLOB '*[^A-Z0-9_]*' AND substr(Name,1,1) GLOB '[A-Z_]' AND length(Description)<=1024 AND ((Kind=0 AND PlainValue IS NOT NULL AND length(CAST(PlainValue AS BLOB))<=4096 AND SecretId IS NULL AND CredentialId IS NULL) OR (Kind=1 AND PlainValue IS NULL AND SecretId IS NOT NULL AND CredentialId IS NULL) OR (Kind=2 AND PlainValue IS NULL AND SecretId IS NULL AND CredentialId IS NOT NULL))");
+                        });
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Security.IamAssignmentRow", b =>
                 {
                     b.Property<Guid>("AssignmentId")
@@ -3434,6 +3613,201 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("SystemIdentities", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.SpaceAddedBindingRecord", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SpaceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("InstanceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ResourceKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AccountRef")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("TenantId", "SpaceId", "InstanceId", "Kind", "ResourceKey");
+
+                    b.HasIndex("TenantId", "SpaceId", "InstanceId", "AccountRef")
+                        .IsUnique()
+                        .HasFilter("AccountRef IS NOT NULL");
+
+                    b.ToTable("SpaceMembershipAddedBindings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SpaceBindings_Kind", "Kind BETWEEN 0 AND 4 AND length(ResourceKey) BETWEEN 1 AND 256 AND ((Kind = 3 AND AccountRef IS NOT NULL) OR (Kind <> 3 AND AccountRef IS NULL))");
+                        });
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.SpaceDisabledBindingRecord", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SpaceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("InstanceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BindingKey")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("TenantId", "SpaceId", "InstanceId", "BindingKey");
+
+                    b.ToTable("SpaceMembershipDisabledBindings", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.SpaceEnvironmentRecord", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SpaceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("EnvironmentId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("DeletedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("UpdatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("TenantId", "SpaceId", "EnvironmentId");
+
+                    b.HasIndex("TenantId", "SpaceId", "NormalizedName")
+                        .IsUnique()
+                        .HasFilter("DeletedAt IS NULL");
+
+                    b.ToTable("SpaceEnvironments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SpaceEnvironments_Values", "Revision>=1 AND length(Name) BETWEEN 1 AND 120 AND length(Description)<=2048 AND length(NormalizedName) BETWEEN 1 AND 240");
+                        });
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.SpaceMembershipRecord", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SpaceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("InstanceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Instructions")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Responsibility")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("UpdatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("TenantId", "SpaceId", "InstanceId");
+
+                    b.HasIndex("TenantId", "InstanceId");
+
+                    b.ToTable("SpaceMemberships", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SpaceMemberships_Values", "Revision >= 1 AND length(Instructions) <= 16384 AND length(Responsibility) <= 160");
+                        });
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.SpaceRecord", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SpaceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("DeletedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("EnvironmentSelectionEpoch")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("EnvironmentsEnabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Instructions")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerInstanceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("UpdatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("TenantId", "SpaceId");
+
+                    b.HasIndex("TenantId", "OwnerInstanceId")
+                        .IsUnique()
+                        .HasFilter("OwnerInstanceId IS NOT NULL");
+
+                    b.ToTable("Spaces", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Spaces_Owner", "Revision >= 1 AND ((Kind = 0 AND OwnerInstanceId IS NOT NULL) OR (Kind = 1 AND OwnerInstanceId IS NULL)) AND length(Name) BETWEEN 1 AND 160 AND length(Instructions) <= 16384 AND EnvironmentsEnabled IN (0,1)");
+                        });
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantApprovalRecord", b =>
                 {
                     b.Property<Guid>("RequestId")
@@ -3546,7 +3920,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.ToTable("TenantApprovalRequests", null, t =>
                         {
-                            t.HasCheckConstraint("CK_TenantApprovalRequest_Values", TenantPublicHttp.ValuesConstraint);
+                            t.HasCheckConstraint("CK_TenantApprovalRequest_Values", AgentCore.Infrastructure.Security.SpaceResourceApprovalPersistence.ValuesConstraint);
                         });
                 });
 
@@ -3906,17 +4280,15 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ExecutorPrincipalId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("HttpJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("InstanceId")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<long>("InstanceRevision")
                         .HasColumnType("INTEGER");
-
-                    b.Property<string>("HttpJson").HasColumnType("TEXT");
-
-                    b.Property<string>("PublicDownloadJson")
-                        .HasColumnType("TEXT");
 
                     b.Property<string>("ManagementResourceJson")
                         .HasColumnType("TEXT");
@@ -3932,6 +4304,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.Property<long>("PersonaRevision")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("PublicDownloadJson")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ReasonCode")
                         .IsRequired()
@@ -3986,13 +4361,15 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_TenantOperationReceipt_AutomationMutation", "AutomationMutationJson IS NULL OR COALESCE((Outcome=0 AND ReasonCode='automation_mutation_completed' AND length(CAST(AutomationMutationJson AS BLOB)) BETWEEN 2 AND 1024 AND json_valid(AutomationMutationJson) AND json_type(AutomationMutationJson)='object' AND json_type(AutomationMutationJson,'$.AutomationId')='text' AND length(json_extract(AutomationMutationJson,'$.AutomationId'))=36 AND json_type(AutomationMutationJson,'$.ExpectedRevision')='integer' AND json_type(AutomationMutationJson,'$.Revision')='integer' AND json_extract(AutomationMutationJson,'$.ExpectedRevision')>=0 AND json_extract(AutomationMutationJson,'$.Revision')=json_extract(AutomationMutationJson,'$.ExpectedRevision')+1 AND json_extract(AutomationMutationJson,'$.ToolName') IN ('automation.create','automation.update','automation.enable','automation.disable','automation.delete','automation.run') AND json_type(AutomationMutationJson,'$.AfterHash')='text' AND length(json_extract(AutomationMutationJson,'$.AfterHash'))=64 AND json_extract(AutomationMutationJson,'$.AfterHash') NOT GLOB '*[^0-9a-f]*' AND (json_extract(AutomationMutationJson,'$.ExpectedRevision')=0 AND json_extract(AutomationMutationJson,'$.BeforeHash') IS NULL OR json_extract(AutomationMutationJson,'$.ExpectedRevision')>0 AND length(json_extract(AutomationMutationJson,'$.BeforeHash'))=64) AND (json_extract(AutomationMutationJson,'$.ToolName')='automation.run' AND json_type(AutomationMutationJson,'$.InvocationOccurrenceId')='text' AND length(json_extract(AutomationMutationJson,'$.InvocationOccurrenceId'))=36 AND json_type(AutomationMutationJson,'$.InvocationSessionId')='text' AND length(json_extract(AutomationMutationJson,'$.InvocationSessionId'))=36 AND json_type(AutomationMutationJson,'$.InvocationRunId')='text' AND length(json_extract(AutomationMutationJson,'$.InvocationRunId'))=36 OR json_extract(AutomationMutationJson,'$.ToolName')<>'automation.run' AND json_extract(AutomationMutationJson,'$.InvocationOccurrenceId') IS NULL AND json_extract(AutomationMutationJson,'$.InvocationSessionId') IS NULL AND json_extract(AutomationMutationJson,'$.InvocationRunId') IS NULL)),0)");
 
-                            t.HasCheckConstraint("CK_TenantOperationReceipt_Http",TenantPublicHttp.ReceiptConstraint);
-                        t.HasCheckConstraint("CK_TenantOperationReceipt_PublicDownload", TenantPublicDownloads.ReceiptConstraint);
+                            t.HasCheckConstraint("CK_TenantOperationReceipt_Http", "HttpJson IS NULL OR COALESCE(Outcome=0 AND ReasonCode='http_request_completed' AND RequestId IS NOT NULL AND length(CAST(HttpJson AS BLOB)) BETWEEN 2 AND 16384 AND json_valid(HttpJson) AND json_type(HttpJson)='object' AND json_type(HttpJson,'$.StatusCode')='integer' AND json_extract(HttpJson,'$.StatusCode') BETWEEN 100 AND 599 AND json_type(HttpJson,'$.FinalUrl')='text' AND length(json_extract(HttpJson,'$.FinalUrl')) BETWEEN 1 AND 4096 AND (json_extract(HttpJson,'$.FinalUrl') LIKE 'https://%' OR json_extract(HttpJson,'$.FinalUrl') LIKE 'http://%') AND (json_type(HttpJson,'$.ContentType')='null' OR json_type(HttpJson,'$.ContentType')='text' AND length(json_extract(HttpJson,'$.ContentType'))<=200) AND json_type(HttpJson,'$.ProjectedBodyBytes')='integer' AND json_extract(HttpJson,'$.ProjectedBodyBytes') BETWEEN 0 AND 65536 AND json_type(HttpJson,'$.BodySha256')='text' AND length(json_extract(HttpJson,'$.BodySha256'))=64 AND json_extract(HttpJson,'$.BodySha256') NOT GLOB '*[^0-9a-f]*' AND json_type(HttpJson,'$.Truncated') IN ('true','false'),0)");
+
+                            t.HasCheckConstraint("CK_TenantOperationReceipt_ManagementResource", "ManagementResourceJson IS NULL OR COALESCE((Outcome=0 AND ReasonCode='management_mutation_completed' AND (RequestId IS NOT NULL AND SourceCallId IS NULL AND ParametersHash IS NULL\n OR RequestId IS NULL AND SourceCallId IS NOT NULL AND ParametersHash IS NOT NULL AND length(SourceCallId) BETWEEN 1 AND 200\n AND length(ParametersHash)=64 AND ParametersHash NOT GLOB '*[^0-9a-f]*' AND json_extract(ManagementResourceJson,'$.ToolName')='resources.upsert'\n AND json_array_length(ManagementResourceJson,'$.BeforeSources')=0 AND json_array_length(ManagementResourceJson,'$.AfterSources')=1\n AND json_extract(ManagementResourceJson,'$.Result.Revision')=1 AND json_extract(ManagementResourceJson,'$.Result.Key') GLOB 'instance:*'\n AND json_extract(ManagementResourceJson,'$.Result.MediaType') IN ('text/plain','text/markdown','application/json') AND json_extract(ManagementResourceJson,'$.Result.ByteLength')<=128000\n OR RequestId IS NULL AND SourceCallId IS NOT NULL AND ParametersHash IS NOT NULL AND length(SourceCallId) BETWEEN 1 AND 200\n AND length(ParametersHash)=64 AND ParametersHash NOT GLOB '*[^0-9a-f]*'\n AND json_type(ManagementResourceJson,'$.HarnessChangeId')='text' AND length(json_extract(ManagementResourceJson,'$.HarnessChangeId'))=36\n AND json_extract(ManagementResourceJson,'$.Result.Kind')=1\n AND json_extract(ManagementResourceJson,'$.ToolName') IN ('resources.upsert','resources.set_enabled','resources.delete'))\nAND ManagementSkillJson IS NULL AND AutomationMutationJson IS NULL AND BrowserArtifactsJson IS NULL\nAND length(CAST(ManagementResourceJson AS BLOB)) BETWEEN 2 AND 12000 AND json_valid(ManagementResourceJson) AND json_type(ManagementResourceJson)='object'\nAND json_extract(ManagementResourceJson,'$.ToolName') IN ('resources.upsert','resources.copy','resources.set_enabled','resources.delete')\nAND json_type(ManagementResourceJson,'$.BeforeInstanceRevision')='integer' AND json_extract(ManagementResourceJson,'$.BeforeInstanceRevision')>=1 AND InstanceRevision=json_extract(ManagementResourceJson,'$.BeforeInstanceRevision')+1\nAND json_type(ManagementResourceJson,'$.BeforeStableHash')='text' AND length(json_extract(ManagementResourceJson,'$.BeforeStableHash'))=64 AND json_extract(ManagementResourceJson,'$.BeforeStableHash') NOT GLOB '*[^0-9a-f]*'\nAND json_type(ManagementResourceJson,'$.AfterStableHash')='text' AND length(json_extract(ManagementResourceJson,'$.AfterStableHash'))=64 AND json_extract(ManagementResourceJson,'$.AfterStableHash') NOT GLOB '*[^0-9a-f]*'\nAND json_type(ManagementResourceJson,'$.BeforeSources')='array' AND json_array_length(ManagementResourceJson,'$.BeforeSources')<=2\nAND json_type(ManagementResourceJson,'$.AfterSources')='array' AND json_array_length(ManagementResourceJson,'$.AfterSources')<=2\nAND json_type(ManagementResourceJson,'$.Result')='object' AND json_type(ManagementResourceJson,'$.Result.Key')='text'\nAND ((json_extract(ManagementResourceJson,'$.Result.Key') GLOB 'instance:*' AND length(json_extract(ManagementResourceJson,'$.Result.Key'))=45 AND json_extract(ManagementResourceJson,'$.Result.Revision')>=1)\n OR (json_extract(ManagementResourceJson,'$.Result.Key') GLOB 'definition:*' AND length(json_extract(ManagementResourceJson,'$.Result.Key'))=47 AND json_extract(ManagementResourceJson,'$.Result.Revision')>=0))\nAND json_type(ManagementResourceJson,'$.Result.Revision')='integer' AND json_type(ManagementResourceJson,'$.Result.Enabled') IN ('true','false')\nAND json_type(ManagementResourceJson,'$.Result.EnabledOverride') IN ('true','false','null') AND json_extract(ManagementResourceJson,'$.Result.Kind') IN (1,2,3,4)\nAND json_type(ManagementResourceJson,'$.Result.LogicalPath')='text' AND length(json_extract(ManagementResourceJson,'$.Result.LogicalPath')) BETWEEN 1 AND 240\nAND json_type(ManagementResourceJson,'$.Result.MediaType')='text' AND json_type(ManagementResourceJson,'$.Result.ContentSha256')='text'\nAND length(json_extract(ManagementResourceJson,'$.Result.ContentSha256'))=64 AND json_extract(ManagementResourceJson,'$.Result.ContentSha256') NOT GLOB '*[^0-9a-f]*'\nAND json_type(ManagementResourceJson,'$.Result.ByteLength')='integer' AND json_extract(ManagementResourceJson,'$.Result.ByteLength') BETWEEN 0 AND 8388608\nAND (json_extract(ManagementResourceJson,'$.ToolName')='resources.delete' AND json_extract(ManagementResourceJson,'$.Result.Deleted')=1 AND json_extract(ManagementResourceJson,'$.Result.Key') GLOB 'instance:*'\n OR json_extract(ManagementResourceJson,'$.ToolName')<>'resources.delete' AND json_extract(ManagementResourceJson,'$.Result.Deleted')=0)),0) AND (ManagementResourceJson IS NULL OR json_extract(ManagementResourceJson,'$.HarnessChangeId') IS NOT NULL OR json_extract(ManagementResourceJson,'$.Before') IS NULL)");
+
+                            t.HasCheckConstraint("CK_TenantOperationReceipt_ManagementSkill", "(ManagementSkillJson IS NULL OR COALESCE((Outcome=0 AND ReasonCode='management_mutation_completed'\nAND AutomationMutationJson IS NULL AND BrowserArtifactsJson IS NULL AND length(CAST(ManagementSkillJson AS BLOB)) BETWEEN 2 AND 12000\nAND json_valid(ManagementSkillJson) AND json_type(ManagementSkillJson)='object'\nAND json_extract(ManagementSkillJson,'$.ToolName') IN ('skills.create','skills.update','skills.set_enabled','skills.reset_enabled','skills.delete','skills.customize')\nAND json_type(ManagementSkillJson,'$.BeforeInstanceRevision')='integer' AND json_extract(ManagementSkillJson,'$.BeforeInstanceRevision')=InstanceRevision-1\nAND json_type(ManagementSkillJson,'$.BeforeStableHash')='text' AND length(json_extract(ManagementSkillJson,'$.BeforeStableHash'))=64 AND json_extract(ManagementSkillJson,'$.BeforeStableHash') NOT GLOB '*[^0-9a-f]*'\nAND json_type(ManagementSkillJson,'$.AfterStableHash')='text' AND length(json_extract(ManagementSkillJson,'$.AfterStableHash'))=64 AND json_extract(ManagementSkillJson,'$.AfterStableHash') NOT GLOB '*[^0-9a-f]*'\nAND json_type(ManagementSkillJson,'$.BeforeSources')='array' AND json_array_length(ManagementSkillJson,'$.BeforeSources')<=4\nAND json_type(ManagementSkillJson,'$.AfterSources')='array' AND json_array_length(ManagementSkillJson,'$.AfterSources')<=4),0)) AND (ManagementSkillJson IS NULL OR COALESCE((json_type(ManagementSkillJson,'$.Result')='object' AND json_type(ManagementSkillJson,'$.Result.Key')='text' AND length(json_extract(ManagementSkillJson,'$.Result.Key')) BETWEEN 10 AND 75\nAND json_type(ManagementSkillJson,'$.Result.Revision')='integer' AND json_extract(ManagementSkillJson,'$.Result.Revision')>=1 AND json_type(ManagementSkillJson,'$.Result.Enabled') IN ('true','false')\nAND json_type(ManagementSkillJson,'$.Result.Deleted') IN ('true','false') AND json_extract(ManagementSkillJson,'$.Result.Deleted')=CASE WHEN json_extract(ManagementSkillJson,'$.ToolName')='skills.delete' THEN 1 ELSE 0 END\nAND ((json_extract(ManagementSkillJson,'$.ToolName')='skills.customize' AND json_type(ManagementSkillJson,'$.Result.SourceKey')='text' AND json_extract(ManagementSkillJson,'$.Result.SourceKey') LIKE 'definition:%'\n AND json_type(ManagementSkillJson,'$.Result.SourceRevision')='integer' AND json_extract(ManagementSkillJson,'$.Result.SourceRevision')>=1 AND json_type(ManagementSkillJson,'$.Result.SourceEnabled')='false')\n OR (json_extract(ManagementSkillJson,'$.ToolName')<>'skills.customize' AND json_extract(ManagementSkillJson,'$.Result.SourceKey') IS NULL AND json_extract(ManagementSkillJson,'$.Result.SourceRevision') IS NULL AND json_extract(ManagementSkillJson,'$.Result.SourceEnabled') IS NULL))),0))");
+
+                            t.HasCheckConstraint("CK_TenantOperationReceipt_PublicDownload", "PublicDownloadJson IS NULL OR COALESCE(length(PublicDownloadJson)<=32768 AND json_valid(PublicDownloadJson) AND Outcome=0 AND json_type(PublicDownloadJson,'$.RequestedUrl')='text' AND length(json_extract(PublicDownloadJson,'$.RequestedUrl')) BETWEEN 1 AND 4096 AND json_type(PublicDownloadJson,'$.FinalUrl')='text' AND length(json_extract(PublicDownloadJson,'$.FinalUrl')) BETWEEN 1 AND 4096 AND json_type(PublicDownloadJson,'$.Path')='text' AND (json_extract(PublicDownloadJson,'$.Path') LIKE '/home/%' OR json_extract(PublicDownloadJson,'$.Path') LIKE '/working/%') AND json_type(PublicDownloadJson,'$.ContentType')='text' AND length(json_extract(PublicDownloadJson,'$.ContentType')) BETWEEN 1 AND 200 AND json_type(PublicDownloadJson,'$.ByteCount')='integer' AND json_extract(PublicDownloadJson,'$.ByteCount') BETWEEN 0 AND 2147483647 AND json_type(PublicDownloadJson,'$.Sha256')='text' AND length(json_extract(PublicDownloadJson,'$.Sha256'))=64 AND json_extract(PublicDownloadJson,'$.Sha256') NOT GLOB '*[^0-9a-f]*',0)");
+
                             t.HasCheckConstraint("CK_TenantOperationReceipt_Source", "(RequestId IS NOT NULL AND SourceCallId IS NULL AND ParametersHash IS NULL) OR (RequestId IS NULL AND SourceCallId IS NOT NULL AND length(SourceCallId) BETWEEN 1 AND 200 AND ParametersHash IS NOT NULL AND length(ParametersHash) = 64)");
-
-                            t.HasCheckConstraint("CK_TenantOperationReceipt_ManagementResource", TenantHarnessCommandAuthoring.ReceiptConstraint);
-
-                            t.HasCheckConstraint("CK_TenantOperationReceipt_ManagementSkill", FrozenMigrationMetadata.Read("94192fc9a38177213655bd729b57d1f1ad53e9206893cb0b77352672caee773d"));
 
                             t.HasCheckConstraint("CK_TenantOperationReceipt_Values", "Outcome IN (0,1,2) AND InstanceRevision >= 1 AND PersonaRevision >= 1 AND length(ActionHash) = 64 AND length(ReasonCode) BETWEEN 1 AND 128");
                         });
@@ -4275,6 +4652,24 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("AgentCore.Domain.Spaces.Secret", b =>
+                {
+                    b.HasOne("AgentCore.Domain.Security.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Domain.Spaces.SpaceFileResource", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Security.SpaceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SpaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ActivationRecord", b =>
                 {
                     b.HasOne("AgentCore.Infrastructure.Persistence.ActivationRecord", null)
@@ -4445,10 +4840,20 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AutomationRecord", b =>
                 {
+                    b.HasOne("AgentCore.Infrastructure.Security.SpaceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PinnedSpaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgentCore.Infrastructure.Security.IamSystemIdentityRow", null)
                         .WithMany()
                         .HasForeignKey("TenantId", "AgentInstanceId", "ExecutorPrincipalId")
                         .HasPrincipalKey("TenantId", "AgentInstanceId", "PrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Security.SpaceEnvironmentRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PinnedSpaceId", "PinnedEnvironmentId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
@@ -4747,10 +5152,20 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasForeignKey("LiveSessionId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("AgentCore.Infrastructure.Security.SpaceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PinnedSpaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgentCore.Infrastructure.Security.IamSystemIdentityRow", null)
                         .WithMany()
                         .HasForeignKey("TenantId", "AgentInstanceId", "ExecutorPrincipalId")
                         .HasPrincipalKey("TenantId", "AgentInstanceId", "PrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Security.SpaceEnvironmentRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PinnedSpaceId", "PinnedEnvironmentId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
@@ -4788,6 +5203,26 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId", "PrincipalId", "AccountId")
                         .HasPrincipalKey("TenantId", "PrincipalId", "AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.EnvironmentVariableRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantCredentialRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "CredentialId")
+                        .HasPrincipalKey("TenantId", "CredentialId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Domain.Spaces.Secret", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SecretId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Security.SpaceEnvironmentRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SpaceId", "EnvironmentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -4848,6 +5283,64 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.SpaceAddedBindingRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Security.SpaceMembershipRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SpaceId", "InstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.SpaceDisabledBindingRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Security.SpaceMembershipRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SpaceId", "InstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.SpaceEnvironmentRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Security.SpaceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SpaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.SpaceMembershipRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Security.IamSystemIdentityRow", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "InstanceId")
+                        .HasPrincipalKey("TenantId", "AgentInstanceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Security.SpaceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SpaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.SpaceRecord", b =>
+                {
+                    b.HasOne("AgentCore.Domain.Security.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Security.IamSystemIdentityRow", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "OwnerInstanceId")
+                        .HasPrincipalKey("TenantId", "AgentInstanceId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantApprovalRecord", b =>

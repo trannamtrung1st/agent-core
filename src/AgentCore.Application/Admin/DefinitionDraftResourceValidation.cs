@@ -38,7 +38,7 @@ internal static class DefinitionDraftResourceValidation
             }
         }
 
-        var environment = candidate.Environment;
+        var environment = candidate.ExecutionPolicy;
         if (environment is null)
         {
             yield break;
@@ -50,8 +50,8 @@ internal static class DefinitionDraftResourceValidation
             var expectedPath = DefinitionPublicationResourceReader.NormalizeLogicalPath(
                 KnowledgeSourcePaths.ResolveBackingPath(source));
             var field = string.IsNullOrWhiteSpace(source.ResourcePath)
-                ? $"environment.knowledgeSources[{index}].identity"
-                : $"environment.knowledgeSources[{index}].resourcePath";
+                ? $"executionPolicy.knowledgeSources[{index}].identity"
+                : $"executionPolicy.knowledgeSources[{index}].resourcePath";
             if (!resourcesByPath.TryGetValue(expectedPath, out var resource))
             {
                 yield return new DefinitionValidationFinding(
@@ -95,7 +95,7 @@ internal static class DefinitionDraftResourceValidation
                     .StartsWith(templatePrefix, StringComparison.Ordinal)))
         {
             yield return new DefinitionValidationFinding(
-                "environment.workspace.templateId",
+                "executionPolicy.workspace.templateId",
                 "missing_workspace_template",
                 $"Draft is missing Template resources under '{templateId}/'.",
                 DefinitionValidationSeverity.Blocking);

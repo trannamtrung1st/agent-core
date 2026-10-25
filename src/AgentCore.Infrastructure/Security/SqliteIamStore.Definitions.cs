@@ -11,6 +11,8 @@ public sealed partial class SqliteIamStore
 {
     public async ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
+        if (TenantSecretService.TryId(scope, out var secret)) return await FindSecretAsync(scope.TenantId!.Value, secret, ct).ConfigureAwait(false) is not null;
+        if (TenantSpaceService.TryId(scope, out var space)) return await FindSpaceAsync(scope.TenantId!.Value, space, ct).ConfigureAwait(false) is not null;
         if (TenantEventAdmissionRules.TryId(scope, out var coreEvent))
         {
             await using var db = await contexts.CreateDbContextAsync(ct);
@@ -64,6 +66,8 @@ public sealed partial class SqliteIamStore
             await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
             return await OwnedCredentials(db, scope.TenantId!.Value).AnyAsync(c => c.CredentialId == credential.ToString("D"), ct).ConfigureAwait(false);
         }
+        if (TenantResourceScopes.TrySpace(scope, out var sourceSpace, out var sourceResource))
+            return await FindSpaceResourceAsync(scope.TenantId!.Value, sourceSpace, sourceResource, ct).ConfigureAwait(false) is not null;
         if (TenantDefinitionResourceScopes.TryParse(scope, out var resource))
         {
             await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);

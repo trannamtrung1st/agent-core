@@ -25,8 +25,10 @@ public sealed partial class TenantApprovalService
         var p = new PreparedBackgroundReport(context.TenantId, run.SessionId, run.AgentRunId, run.Revision, source.Parent!.Owner.SessionId,
             source.Parent.Snapshot.Revision, source.Parent.Snapshot.DurableLastEntrySequence, ids.NewId(), ids.NewId(), ids.NewId(),
             BackgroundCompletionProjection.Build(run, run.Admission.TaskIntent?.Text ?? source.ChildSession.Snapshot.Title, [], source.Parent.Snapshot.DurableLastEntrySequence),
-            TenantBackgroundCreationRules.Hash(current.Configuration), new(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort));
+            TenantBackgroundCreationRules.Hash(current.Configuration), new(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort),
+            source.Parent.Snapshot.ContextSelection ?? throw new AccessDeniedException("space_context_required"));
         var op = TenantApprovalRules.PrepareBackgroundReport(ids.NewId(), run.AgentInstanceId, p, current.Agent.Instance.Revision, current.Agent.Instance.PersonaRevision);
+        op = TenantApprovalRules.ForRun(op, run);
         var prior = await approvals.FindRootApprovalAsync(context.TenantId, context.RootActivationId, context.AgentPrincipalId, op, ct).ConfigureAwait(false);
         if (prior is not null) return new(OperationDecisionKind.RequiresApproval, TenantApprovalRules.DuplicateReason(prior), prior.Operation, prior);
         var eligibility = await operations.Evaluate(current.State, context, "agent-runs.create", AccessScope.ForTenant(context.TenantId), ct).ConfigureAwait(false);

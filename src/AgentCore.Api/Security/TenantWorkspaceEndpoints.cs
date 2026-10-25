@@ -13,7 +13,7 @@ public static class TenantWorkspaceEndpoints
 {
     public static void Map(WebApplication app)
     {
-        MapWorkspace(app.MapGroup("/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace").RequireAuthorization(), false);
+        MapWorkspace(app.MapGroup("/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/workspace").RequireAuthorization(), false);
         MapWorkspace(app.MapGroup("/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/workspace").RequireAuthorization(), true);
     }
     private static void MapWorkspace(RouteGroupBuilder group, bool working)
@@ -87,7 +87,7 @@ public static class TenantWorkspaceEndpoints
             { return Results.Problem(statusCode: 400, title: "invalid_office_package", detail: "This Office package could not be interpreted safely. Download the original."); }
         }));
     }
-    private static Guid Id(HttpContext http, bool working) => Guid.Parse((string)http.Request.RouteValues[working ? "sessionId" : "instanceId"]!);
+    private static Guid Id(HttpContext http, bool working) => Guid.Parse((string)http.Request.RouteValues[working ? "sessionId" : "spaceId"]!);
     private static async ValueTask<IResult> MutationResult(Func<ValueTask> execute)
     {
         try { await execute().ConfigureAwait(false); return Results.NoContent(); }
@@ -97,8 +97,12 @@ public static class TenantWorkspaceEndpoints
     private static HumanSessionReference Human(HttpContext http, AuthenticatedTenant actor) => new(actor.AccountId,
         IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
     private static void Headers(HttpContext http) { http.Response.Headers.CacheControl = "private, no-store"; http.Response.Headers.XContentTypeOptions = "nosniff"; }
-    private static AgentWorkspaceItemResponse Item(AgentWorkspaceItem item) => new(item.AgentInstanceId, item.LogicalPath, item.ContentType,
-        item.ByteSize, item.UpdatedAt, item.Directory, item.Kind, item.LinkTarget, item.Mode);
+    private static WorkspaceOwnerResponse? Owner(TenantWorkspaceReference? owner) => owner switch {
+        TenantWorkspaceReference.SpaceHome home => new("spaceHome", home.TenantId, SpaceId: home.SpaceId),
+        TenantWorkspaceReference.SessionWorking working => new("sessionWorking", working.TenantId, SessionId: working.SessionId),
+        _ => null };
+    private static AgentWorkspaceItemResponse Item(AgentWorkspaceItem item) => new(Owner(item.WorkspaceOwner), item.LogicalPath, item.ContentType,
+        item.ByteSize, item.UpdatedAt, item.Directory, item.Kind, item.LinkTarget, item.Mode, item.ResourceInstanceId, item.ResourceSpaceSource is { } source ? new(source.TenantId, source.SpaceId, source.ResourceId, source.Revision) : null);
     private static AgentWorkspacePageResponse Page(AgentWorkspacePage page) => new(page.Items.Select(Item).ToArray(), page.UsedBytes, page.TotalItems,
-        page.NextPath, AgentWorkspaceLimits.MaxFileBytes, AgentWorkspaceLimits.MaxInstanceBytes, page.UsageEnforcement, page.Truncated);
+        page.NextPath, AgentWorkspaceLimits.MaxFileBytes, AgentWorkspaceLimits.MaxSpaceBytes, page.UsageEnforcement, page.Truncated);
 }

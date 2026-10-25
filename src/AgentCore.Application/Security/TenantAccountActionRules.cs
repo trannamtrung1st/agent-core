@@ -1,4 +1,5 @@
 using AgentCore.Application.Agents;
+using AgentCore.Domain.Spaces;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
@@ -26,7 +27,7 @@ public static class TenantAccountActionRules
             throw new AccessDeniedException("account_draft_unavailable");
     }
     public static TenantAccountActionArguments Arguments(PreparedAccountAction action) => TenantAccountActionContract.Parse(action.SessionId, action.ToolName, action.ArgumentsJson);
-    public static IEnumerable<(string Permission, AccessScope Scope)> Targets(Guid tenant, Guid instance, PreparedAccountAction action)
+    public static IEnumerable<(string Permission, AccessScope Scope)> Targets(Guid tenant, Guid instance, PreparedAccountAction action, RunSpaceWitness context)
     {
         yield return ("sessions.read", TenantSessionRules.Scope(tenant, action.SessionId));
         var account = TenantCredentialRules.Scope(tenant, action.Credential.CredentialId);
@@ -35,21 +36,20 @@ public static class TenantAccountActionRules
         var args = Arguments(action);
         if (args.Path is { } path)
         {
-            if (path.StartsWith("/home/", StringComparison.Ordinal)) yield return ("agents.read", AccessScope.ForResource(tenant, "agent", instance.ToString("D")));
-            yield return (args.Upload ? "workspaces.read" : "workspaces.write", TenantWorkspaceRules.Scope(new(tenant, instance,
-                path.StartsWith("/working/", StringComparison.Ordinal) ? action.SessionId : null)));
+            var owner = TenantWorkspaceRules.ForCaptured(tenant, action.SessionId, path, context);
+            yield return TenantWorkspaceMutationRules.Parent(owner);
+            yield return (args.Upload ? "workspaces.read" : "workspaces.write", TenantWorkspaceRules.Scope(owner));
         }
         if (!args.Download) yield return (action.Permission, account);
     }
     public static bool Primary(TenantApprovalRequest request, string permission, AccessScope scope) => permission == request.Permission
         && scope == TenantApprovalRules.Scope(request.TenantId, request.Operation);
-    public static async ValueTask PermissionsAsync(TenantSecurityState state, Guid instance, PreparedAccountAction action, Guid principal,
+    public static async ValueTask PermissionsAsync(TenantSecurityState state, Guid instance, PreparedAccountAction action, RunSpaceWitness context, Guid principal,
         IamAuthorizer iam, bool primary, CancellationToken ct)
     {
         var args = Arguments(action);
-        var primaryScope = args.Download ? TenantWorkspaceRules.Scope(new(state.Tenant.TenantId, instance,
-            args.Path!.StartsWith("/working/", StringComparison.Ordinal) ? action.SessionId : null)) : TenantCredentialRules.Scope(state.Tenant.TenantId, action.Credential.CredentialId);
-        foreach (var (permission, scope) in Targets(state.Tenant.TenantId, instance, action).Distinct())
+        var primaryScope = args.Download ? TenantWorkspaceRules.Scope(TenantWorkspaceRules.ForCaptured(state.Tenant.TenantId, action.SessionId, args.Path!, context)) : TenantCredentialRules.Scope(state.Tenant.TenantId, action.Credential.CredentialId);
+        foreach (var (permission, scope) in Targets(state.Tenant.TenantId, instance, action, context).Distinct())
         {
             if (!primary && permission == action.Permission && scope == primaryScope) continue;
             if (!(await iam.CheckOwnedTenantAsync(state, principal, PermissionCatalog.Get(permission), scope, ct).ConfigureAwait(false)).Allowed)
@@ -58,7 +58,7 @@ public static class TenantAccountActionRules
     }
     public static async ValueTask<bool> IndependentAsync(TenantSecurityState state, TenantApprovalRequest request, IamAuthorizer iam, CancellationToken ct)
     {
-        foreach (var (permission, scope) in Targets(request.TenantId, request.Operation.InstanceId, request.Operation.AccountAction!).Distinct())
+        foreach (var (permission, scope) in Targets(request.TenantId, request.Operation.InstanceId, request.Operation.AccountAction!, TenantWorkspaceRules.Context(request.Operation)).Distinct())
             if (TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(permission)).IndependentReview
                 && (Primary(request, permission, scope) || await TenantSandboxReadOperationRules.NeedsReviewAsync(state, request.OriginalInitiatorPrincipalId, permission, scope, iam, ct).ConfigureAwait(false))) return true;
         return false;
@@ -66,8 +66,8 @@ public static class TenantAccountActionRules
     public static async ValueTask ReviewerAsync(TenantSecurityState state, TenantApprovalRequest request, Guid human, IamAuthorizer iam, CancellationToken ct)
     {
         if (!state.Users.Any(u => u.PrincipalId == human && u.Status == IdentityStatus.Active)) throw new AccessDeniedException("approver_unqualified");
-        await PermissionsAsync(state, request.Operation.InstanceId, request.Operation.AccountAction!, human, iam, true, ct).ConfigureAwait(false);
-        foreach (var (permission, scope) in Targets(request.TenantId, request.Operation.InstanceId, request.Operation.AccountAction!).Distinct())
+        await PermissionsAsync(state, request.Operation.InstanceId, request.Operation.AccountAction!, TenantWorkspaceRules.Context(request.Operation), human, iam, true, ct).ConfigureAwait(false);
+        foreach (var (permission, scope) in Targets(request.TenantId, request.Operation.InstanceId, request.Operation.AccountAction!, TenantWorkspaceRules.Context(request.Operation)).Distinct())
         {
             if (!Primary(request, permission, scope) && !await TenantSandboxReadOperationRules.NeedsReviewAsync(state, request.OriginalInitiatorPrincipalId, permission, scope, iam, ct).ConfigureAwait(false)) continue;
             if (TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(permission)).IndependentReview && request.OriginalInitiatorPrincipalId == human)

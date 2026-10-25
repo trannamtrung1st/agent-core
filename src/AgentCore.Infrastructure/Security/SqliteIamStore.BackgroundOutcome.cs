@@ -32,7 +32,7 @@ public sealed partial class SqliteIamStore
         }
     }
     public async ValueTask<AgentRun> CommitTenantOutcomeAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision,
-        AgentRunCommand.Complete completion, Guid? draftEntryId, Guid diagnosticId, CancellationToken ct = default, TenantConfigurationContinuationAdmission? configurationContinuation = null)
+        AgentRunCommand.Complete completion, Guid? draftEntryId, Guid diagnosticId, CancellationToken ct = default, TenantConfigurationContinuationAdmission? configurationContinuation = null, TenantContextContinuationAdmission? contextContinuation = null)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
@@ -44,6 +44,8 @@ public sealed partial class SqliteIamStore
         AgentRunStoreMapping.ValidateOutcome(snapshot, run, completion, draft is null ? null : SqliteMemoryStore.ToEntry(draft));
         AgentRun next; try { next = completion.Apply(run, () => diagnosticId); }
         catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }
+        if (configurationContinuation is not null && contextContinuation is not null) throw new SecurityConflictException("continuation_conflict");
+        var admitContext = await RequireContextContinuation(db, next, snapshot, contextContinuation, ct).ConfigureAwait(false);
         var admitConfiguration = await RequireConfigurationContinuation(db, next, snapshot, configurationContinuation, ct).ConfigureAwait(false);
         await new SqliteMemoryStore(contexts, clock ?? TimeProvider.System).StageTenantRuntimeSaveAsync(db, frame, snapshot, expectedRevision, ct).ConfigureAwait(false);
         await StageLearningCommit(db, frame, snapshot, completion.Learning, ct).ConfigureAwait(false);
@@ -54,6 +56,11 @@ public sealed partial class SqliteIamStore
             // The child insertion guards see the actual completed source and saved response inside this same transaction.
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
             await StageConfigurationContinuation(db, snapshot, configurationContinuation!, ct).ConfigureAwait(false);
+        }
+        if (admitContext)
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            await StageContextContinuation(db, snapshot, contextContinuation!, ct).ConfigureAwait(false);
         }
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return next; }
         catch (DbUpdateConcurrencyException) { throw AgentCoreErrors.Conflict("Stale Run or Session revision."); }

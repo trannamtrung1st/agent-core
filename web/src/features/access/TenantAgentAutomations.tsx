@@ -12,6 +12,7 @@ import { AutomationScheduleFields, defaultAutomationTiming, validAutomationTimin
 import { ExecutionModelFields } from '../admin/ExecutionModelFields';
 import { scheduleTimingLabel } from '../admin/AutomationScheduleFields';
 import { AccessError, AccessLoading } from './AccessFeedback';
+import { TenantAutomationContextFields } from './TenantAutomationContextFields';
 import { TenantAutomationEventFields } from './TenantAutomationEventFields';
 import { TenantAutomationEventActivity } from './TenantAutomationEventActivity';
 import { TenantAgentHeading } from './TenantAgentHeading';
@@ -87,7 +88,8 @@ export function TenantAgentAutomations({ context, id }: { context: TenantContext
             const a = item.automation; return <Flex vertical gap="var(--ac-space-compact)"><Typography.Text strong className="admin-instance-id">{a.name}</Typography.Text><Typography.Paragraph className="admin-instance-id" style={{ margin: 0 }}>{a.instructions}</Typography.Paragraph>
               <Flex wrap gap="var(--ac-space-compact)"><Tag>{a.status}</Tag><Typography.Text type="secondary">{a.triggers[0]?.schedule ? scheduleTimingLabel(a.triggers[0].schedule) : `${a.triggers.length} event subscriptions`}</Typography.Text></Flex>
               <Typography.Text type="secondary">Next: {nextOccurrence(a)} · Occurrences: {a.occurrenceCount}</Typography.Text>
-              {a.suspensionReason && <Typography.Text type="warning" className="admin-instance-id">{a.suspensionReason}</Typography.Text>}
+              {a.suspensionReason && <Typography.Text type="warning" className="admin-instance-id">{a.suspensionReason.startsWith('context:') ? 'Execution context is unavailable. Edit its saved Space and Environment pins before enabling future work.' : a.suspensionReason}</Typography.Text>}
+              <Typography.Text type="secondary">{a.pinnedSpaceId ? `Pinned Space ${a.pinnedSpaceId}${a.pinnedEnvironmentId ? ` · Environment ${a.pinnedEnvironmentId}` : ' · No Environment'}` : 'Agent Private Space · no Environment'}</Typography.Text>
               <Flex data-feedback-actions wrap gap="var(--ac-space-compact)"><Button data-automation-id={a.automationId} disabled={busy || !!selection} onClick={event => setSelection({ id: a.automationId, opener: event.currentTarget })}>{item.canUpdate ? 'Edit Automation' : 'Inspect Automation'}</Button>
                 {item.canRun && <Button disabled={blocked} onClick={() => act(item, true)}>Run now</Button>}{item.canCancel && <Button danger disabled={blocked} onClick={() => act(item, false)}>Cancel Automation</Button>}</Flex>
             </Flex>;
@@ -102,6 +104,7 @@ export function TenantAgentAutomations({ context, id }: { context: TenantContext
 function TenantAutomationDrawer({ context, instance, selection, onClose, onReadLost, onSaved, onUncertain }: { context: TenantContext; instance: string; selection: Selection; onClose: () => void; onReadLost: () => void; onSaved: (savedId?: string) => void; onUncertain: () => void }) {
   const tenant = context.tenant.tenantId; const { token } = theme.useToken(); const { message, modal } = App.useApp(); const command = useTenantCommand();
   const compact = !Grid.useBreakpoint().md; const [draft, setDraft] = useState<TenantAutomationDraft>(); const [baseline, setBaseline] = useState<TenantAutomationDraft>();
+  const [contextReady, setContextReady] = useState(false);
   const [sourcesReady, setSourcesReady] = useState(false); const [tab, setTab] = useState('configuration');
   const [attempted, setAttempted] = useState(false); const [unknown, setUnknown] = useState(false); const initialized = useRef(false);
   const [replacing, setReplacing] = useState(false); const replacement = useRef<ReturnType<typeof confirmAction> | null>(null); const retired = useRef(false);
@@ -132,7 +135,7 @@ function TenantAutomationDrawer({ context, instance, selection, onClose, onReadL
   const eventsMode = draft?.mode === 'events';
   const enabledAllowed = eventsMode ? !!draft?.events?.some(event => event.enabled) && !!draft.events.filter(event => event.enabled).every(event => event.source?.kind === 'builtin' ? view?.canCoreEvents : event.source?.kind === 'webhook' && view?.canWebhookEvents) : scheduleAllowed;
   const triggerValid = eventsMode ? validTenantAutomationEvents(draft?.events) && (!draft?.enabled || sourcesReady) : !!draft && validAutomationTiming(draft.schedule);
-  const valid = !!draft && !!draft.name.trim() && draft.name.trim().length <= 120 && !!draft.instructions.trim() && draft.instructions.trim().length <= 2000 && triggerValid && modelValid && draft.targetSessionId !== '' && draft.reportToSessionId !== '' && (!draft.enabled || enabledAllowed);
+  const valid = contextReady && !!draft && !!draft.name.trim() && draft.name.trim().length <= 120 && !!draft.instructions.trim() && draft.instructions.trim().length <= 2000 && triggerValid && modelValid && draft.targetSessionId !== '' && draft.reportToSessionId !== '' && (!draft.enabled || enabledAllowed);
   const update = (part: Partial<TenantAutomationDraft>) => setDraft(current => current ? { ...current, ...part } : current);
   const preset = view?.presets?.find(p => p.presetId === draft?.presetId && p.presetVersion === draft?.presetVersion);
   function startFrom(id: string) {
@@ -177,6 +180,7 @@ function TenantAutomationDrawer({ context, instance, selection, onClose, onReadL
             <Form.Item label="Run in"><Select aria-label="Automation execution destination" disabled={disabled} value={existingMode ? 'existingSession' : 'backgroundSession'}
               options={[{ value: 'backgroundSession', label: 'Separate Background work' }, { value: 'existingSession', label: 'Selected conversation' }]}
               onChange={kind => update({ targetSessionId: kind === 'existingSession' ? '' : null, ...(kind === 'existingSession' ? { reportToSessionId: null, modelKey: null, reasoningEffort: null } : {}) })} /></Form.Item>
+            <TenantAutomationContextFields tenant={tenant} instance={instance} draft={draft} disabled={disabled} reloadKey={String(view?.securityRevision ?? 0)} onChange={update} onReady={setContextReady} />
             {existingMode && <>
               <Typography.Text type="secondary">Replies in this conversation using its model. Each occurrence keeps its own Run and may need admission approval.</Typography.Text>
               <Form.Item label="Execution conversation" extra="Choose an active conversation for this instance. Current read and Chat access are checked again before work starts.">

@@ -2,6 +2,7 @@ using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
 
 namespace AgentCore.Infrastructure.Security;
@@ -42,9 +43,20 @@ public sealed partial class InMemoryIamStore : ITenantAgentDecommissionStore
             if (snapshot.Agent.Instance.Lifecycle != AgentInstanceLifecycle.Archived) throw new SecurityConflictException("archive_required");
             if (snapshot.References.HasReferences) throw new SecurityConflictException("agent_in_use");
             if (snapshot.Agent.Instance.BrowserProfileReset?.Status == "pending") throw new SecurityConflictException("browser_profile_busy");
-            var next = TenantAgentDecommissionRules.Retire(state, instance, snapshot.Agent.PrincipalId);
+            var privateHome = _spaces.Values.Single(s => s.TenantId == tenant && s.OwnerInstanceId == instance && s.DeletedAt is null);
+            var changedSpaces = _spaceMemberships.Keys.Where(k => k.Tenant == tenant && k.Instance == instance).Select(k => _spaces[(k.Tenant, k.Space)]).Select(s =>
+                s with { Revision = checked(s.Revision + 1), UpdatedAt = audit.At, DeletedAt = s.SpaceId == privateHome.SpaceId ? audit.At : s.DeletedAt,
+                    EnvironmentsEnabled = s.SpaceId == privateHome.SpaceId ? false : s.EnvironmentsEnabled,
+                    EnvironmentSelectionEpoch = s.SpaceId == privateHome.SpaceId && s.EnvironmentsEnabled ? checked(s.EnvironmentSelectionEpoch + 1) : s.EnvironmentSelectionEpoch }).ToArray();
+            var changedEnvironments = _environments.Values.Where(e => e.TenantId == tenant && e.SpaceId == privateHome.SpaceId && e.DeletedAt is null)
+                .Select(e => e with { Revision = checked(e.Revision + 1), UpdatedAt = audit.At, DeletedAt = audit.At }).ToArray();
+            var next = TenantAgentDecommissionRules.Retire(state, instance, snapshot.Agent.PrincipalId, privateHome.SpaceId);
             _ = instances.SetTenantLifecycleAsync(instance, expectedInstanceRevision, AgentInstanceLifecycle.Archived, audit.At, ct).Result;
             instances.PurgeSkills(instance); credentials?.RetireTenantBindings(tenant, instance);
+            foreach (var space in changedSpaces) _spaces[(tenant, space.SpaceId)] = space;
+            foreach (var member in _spaceMemberships.Keys.Where(k => k.Tenant == tenant && k.Instance == instance).ToArray()) _spaceMemberships.Remove(member);
+            foreach (var profile in changedEnvironments) _environments[(tenant, profile.SpaceId, profile.EnvironmentId)] = profile;
+            foreach (var variable in _variables.Where(v => v.Value.TenantId == tenant && v.Value.SpaceId == privateHome.SpaceId).Select(v => v.Key).ToArray()) _variables.Remove(variable);
             _tenants[tenant] = next; _audit.Add(audit);
             return ValueTask.FromResult(true);
         }
@@ -72,6 +84,14 @@ public sealed partial class InMemoryIamStore : ITenantAgentDecommissionStore
     {
         owner.Validate(); ct.ThrowIfCancellationRequested(); lock (_gate) lock (instances.CredentialGate)
             return ValueTask.FromResult(IsDecommissioned(owner));
+    }
+    public ValueTask<TenantWorkspaceReference.SpaceHome?> ReadDecommissionedPrivateWorkspaceAsync(TenantBrowserAgentOwner owner, CancellationToken ct = default)
+    {
+        owner.Validate(); ct.ThrowIfCancellationRequested(); lock (_gate) lock (instances.CredentialGate)
+        {
+            var space = IsDecommissioned(owner) ? _spaces.Values.SingleOrDefault(s => s.TenantId == owner.TenantId && s.OwnerInstanceId == owner.AgentInstanceId && s.DeletedAt is not null) : null;
+            return ValueTask.FromResult(space is null ? null : new TenantWorkspaceReference.SpaceHome(owner.TenantId, space.SpaceId));
+        }
     }
     public ValueTask<bool> CanPurgeDecommissionedAgentWorkspaceAsync(TenantBrowserAgentOwner owner, CancellationToken ct = default)
     {

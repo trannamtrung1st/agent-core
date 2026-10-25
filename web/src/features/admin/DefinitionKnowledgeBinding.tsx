@@ -1,5 +1,5 @@
 import { Select, Typography } from "antd";
-import type { DraftKnowledgeSource } from "./draftEnvironment";
+import type { DraftKnowledgeSource } from "./draftExecutionPolicy";
 
 function knowledgeBackingLabel(identity: string, resourcePath: string) {
   const selected = resourcePath.trim();

@@ -12,7 +12,7 @@ public sealed class AdminDefinitionCandidateValidatorTests
     {
         var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Support) with
         {
-            Environment = RoleEnvironment.Empty with
+            ExecutionPolicy = DefinitionExecutionPolicy.Empty with
             {
                 ToolAllowlist = [ToolCatalog.AttachmentsRead, ToolCatalog.WorkspaceRead]
             }
@@ -36,7 +36,7 @@ public sealed class AdminDefinitionCandidateValidatorTests
     {
         var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Support) with
         {
-            Environment = RoleEnvironment.Empty with
+            ExecutionPolicy = DefinitionExecutionPolicy.Empty with
             {
                 ToolAllowlist = [ToolCatalog.WebSearch]
             }
@@ -51,7 +51,7 @@ public sealed class AdminDefinitionCandidateValidatorTests
         Assert.Contains(
             findings,
             finding => finding.Code == "unconfigured_tool"
-                && finding.Field == "environment.toolAllowlist"
+                && finding.Field == "executionPolicy.toolAllowlist"
                 && finding.Message.Contains(ToolCatalog.WebSearch, StringComparison.Ordinal));
     }
 
@@ -96,7 +96,7 @@ public sealed class AdminDefinitionCandidateValidatorTests
             findings,
             finding => finding.Code == "capability_not_allowed" && finding.Field == "skills[0].requiredCapabilities[2]");
         Assert.DoesNotContain(findings, finding => finding.Message.Contains(SkillCapabilities.ChatRespond, StringComparison.Ordinal));
-        Assert.Equal(allowlist, candidate.Environment!.ToolList);
+        Assert.Equal(allowlist, candidate.ExecutionPolicy!.ToolList);
         Assert.False(ToolRegistry.TryGet(SkillCapabilities.ChatRespond, out _));
     }
 
@@ -113,28 +113,28 @@ public sealed class AdminDefinitionCandidateValidatorTests
             _ => ["unknown.tool"]
         };
         var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Support) with
-        { Environment = new RoleEnvironment(ToolAllowlist: tools) };
-        Assert.Contains(Publish(candidate), f => f.Field == "environment.toolAllowlist" && f.Code == code);
+        { ExecutionPolicy = new DefinitionExecutionPolicy(ToolAllowlist: tools) };
+        Assert.Contains(Publish(candidate), f => f.Field == "executionPolicy.toolAllowlist" && f.Code == code);
     }
 
     [Fact]
     public void Capability_authoring_separates_authorization_configuration_and_projection_errors()
     {
         var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Support) with
-        { Environment = new(Capabilities: new("Selected", [ToolCatalog.EmailSearch]), Projection: new([])) };
+        { ExecutionPolicy = new(Capabilities: new("Selected", [ToolCatalog.EmailSearch]), Projection: new([])) };
         Assert.Empty(AgentDefinitionCandidateValidator.CollectPublicationFindings(candidate, SyntheticProviderAliases.Default,
             TestModelCatalogs.Synthetic(), ToolConfigurationGates.Unconfigured));
-        Assert.Contains(Publish(candidate with { Environment = candidate.Environment with { Projection = new([ToolCatalog.WorkspaceRead]) } }),
-            f => f.Field == "environment.projection.alwaysCapabilities" && f.Code == "unauthorized_projection");
-        Assert.Contains(Publish(candidate with { Environment = new(Capabilities: new("Selected", [ToolCatalog.WorkComplete]), Projection: new([ToolCatalog.WorkComplete])) }),
+        Assert.Contains(Publish(candidate with { ExecutionPolicy = candidate.ExecutionPolicy with { Projection = new([ToolCatalog.WorkspaceRead]) } }),
+            f => f.Field == "executionPolicy.projection.alwaysCapabilities" && f.Code == "unauthorized_projection");
+        Assert.Contains(Publish(candidate with { ExecutionPolicy = new(Capabilities: new("Selected", [ToolCatalog.WorkComplete]), Projection: new([ToolCatalog.WorkComplete])) }),
             f => f.Code == "context_only_capability");
-        Assert.Contains(Publish(candidate with { Environment = new(Capabilities: new("Selected", ["unregistered.name"])) }), f => f.Code == "unregistered_capability");
-        Assert.Contains(Publish(candidate with { Environment = new(Capabilities: new("Selected", [ToolCatalog.EmailSearch, ToolCatalog.EmailSearch])) }), f => f.Code == "duplicate_tool");
-        Assert.Contains(Publish(candidate with { Environment = new(Capabilities: new("Selected", null!)) }), f => f.Code == "domain_shape");
+        Assert.Contains(Publish(candidate with { ExecutionPolicy = new(Capabilities: new("Selected", ["unregistered.name"])) }), f => f.Code == "unregistered_capability");
+        Assert.Contains(Publish(candidate with { ExecutionPolicy = new(Capabilities: new("Selected", [ToolCatalog.EmailSearch, ToolCatalog.EmailSearch])) }), f => f.Code == "duplicate_tool");
+        Assert.Contains(Publish(candidate with { ExecutionPolicy = new(Capabilities: new("Selected", null!)) }), f => f.Code == "domain_shape");
         Assert.Contains(Publish(candidate with { AgentInstructions = new string('x', AgentDefinitionCandidateValidator.MaxCandidateBytes + 1) }), f => f.Code == "document_too_large");
         foreach (var names in new IReadOnlyList<string>[] { [], [ToolCatalog.WorkspaceRead], ToolRegistry.AllKnownNames().Where(n => n != ToolCatalog.WorkspaceCwd).ToArray() })
         {
-            var findings = Publish(candidate with { Environment = new(Capabilities: new("Selected", names)) });
+            var findings = Publish(candidate with { ExecutionPolicy = new(Capabilities: new("Selected", names)) });
             Assert.Empty(findings);
         }
     }
@@ -142,7 +142,7 @@ public sealed class AdminDefinitionCandidateValidatorTests
     private static AgentDefinitionCandidate Candidate(SkillSpec skill, IReadOnlyList<string>? tools = null) =>
         AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Support) with
         {
-            Environment = RoleEnvironment.Empty with { ToolAllowlist = tools ?? [ToolCatalog.WorkspaceRead] },
+            ExecutionPolicy = DefinitionExecutionPolicy.Empty with { ToolAllowlist = tools ?? [ToolCatalog.WorkspaceRead] },
             Skills = [skill]
         };
 

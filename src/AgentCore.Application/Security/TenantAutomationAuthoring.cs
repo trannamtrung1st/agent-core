@@ -25,7 +25,7 @@ public static class TenantAutomationAuthoring
             NextOccurrence(current, children, change.Enabled, at), current?.ExpiresAtUtc, current?.OccurrenceCount ?? 0,
             (current?.Revision ?? 0) + 1, children.Max(t => t.Revision),
             provenance, null, change.ModelKey, change.ReasoningEffort,
-            change.RequiresVision, change.Name, change.TargetSessionId is { } targetId ? AutomationExecutionTarget.Existing(targetId) : AutomationExecutionTarget.Background, change.ReportToSessionId is { } destination ? AutomationCompletionDelivery.ToSession(destination) : AutomationCompletionDelivery.None, change.RequiresTools);
+            change.RequiresVision, change.Name, change.TargetSessionId is { } targetId ? AutomationExecutionTarget.Existing(targetId) : AutomationExecutionTarget.Background, change.ReportToSessionId is { } destination ? AutomationCompletionDelivery.ToSession(destination) : AutomationCompletionDelivery.None, change.RequiresTools, change.PinnedSpaceId, change.PinnedEnvironmentId);
         ValidateTransition(current, proposed, current?.Revision ?? 0, current is null ? "automations.create" : "automations.update", at);
         TenantAutomationRules.Configuration(proposed, policy, at, current: current);
         return proposed;

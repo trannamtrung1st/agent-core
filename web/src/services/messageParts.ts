@@ -7,6 +7,7 @@ export type ResourceReference = {
     | "agentRun"
     | "skill";
   agentInstanceId?: string;
+  spaceId?: string;
   sessionId?: string;
   path?: string;
   artifactId?: string;
@@ -26,7 +27,7 @@ export type MessagePart =
 export function locator(r: ResourceReference): string {
   switch (r.kind) {
     case "homeFile":
-      return `homeFile:${r.agentInstanceId}${r.path}`;
+      return `homeFile:${r.spaceId}${r.path}`;
     case "session":
     case "backgroundSession":
       return `${r.kind}:${r.sessionId}`;
@@ -123,6 +124,7 @@ export function normalizeParts(raw: unknown): MessagePart[] {
             ![
               "kind",
               "agentInstanceId",
+              "spaceId",
               "sessionId",
               "path",
               "artifactId",
@@ -137,7 +139,7 @@ export function normalizeParts(raw: unknown): MessagePart[] {
         Object.entries(p.reference).filter(([, v]) => v != null),
       ) as ResourceReference;
       const fields: Record<string, string[]> = {
-        homeFile: ["agentInstanceId", "path"],
+        homeFile: ["spaceId", "path"],
         session: ["sessionId"],
         backgroundSession: ["sessionId"],
         artifact: ["sessionId", "artifactId"],

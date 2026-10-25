@@ -16,9 +16,10 @@ public static class TenantRuntimeRules
             || run.CancellationRequested || run.Claim.LeaseExpiresAtUtc <= at)
             throw new AccessDeniedException("tenant_runtime_unavailable");
     }
-    public static void ValidateSnapshot(TenantRuntimeFrame frame, SessionSnapshot before, SessionSnapshot next, bool foreground = false)
+    public static void ValidateSnapshot(TenantRuntimeFrame frame, SessionSnapshot before, SessionSnapshot next, bool foreground = false, bool contextSwitch = false)
     {
-        if (next.SessionId != frame.SessionId || next.AgentInstanceId != frame.Owner.AgentInstanceId || next.ProfileId is not null
+        if (!contextSwitch && next.ContextSelection != before.ContextSelection || next.ContextSelection?.TenantId != frame.Owner.TenantId
+            || next.SessionId != frame.SessionId || next.AgentInstanceId != frame.Owner.AgentInstanceId || next.ProfileId is not null
             || before.Origin != next.Origin || before.Definition.Id != next.Definition.Id || before.Definition.Version != next.Definition.Version
             || next.Surfaces != (foreground ? SessionOrigin.ContinueInChat(before.Surfaces) : before.Surfaces)
             || next.DurablyDeletedAt is not null || next.ArchivedAt != before.ArchivedAt || before.DurablyDeletedAt is not null)

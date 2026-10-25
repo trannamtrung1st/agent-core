@@ -1,3 +1,4 @@
+using AgentCore.Domain.Conversation;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Ports;
@@ -43,7 +44,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var service = WorkspaceEffects(f, hooked, office: processor);
         var result = await service.ExecuteAsync(frame, call); Assert.NotNull(result.Receipt); Assert.Equal(TenantOperationOutcome.Indeterminate, result.Receipt.Outcome);
         Assert.Equal(result, await service.ExecuteAsync(frame, call)); Assert.Equal(1, hooked.Processed);
-        Assert.Equal(expected, (await WorkspaceReader(f).InspectTenantAsync(new(s.Tenant, s.Agent.Instance.InstanceId, frame.SessionId), path, OfficeLimits.MaxPackageBytes)).Bytes);
+        Assert.Equal(expected, (await WorkspaceReader(f).InspectTenantAsync(WorkspaceOwner(s, true), path, OfficeLimits.MaxPackageBytes)).Bytes);
         var audit = await f.Iam.ReadAuditAsync(s.Tenant, 200); Assert.Single(audit, a => a.Action == TenantWorkspaceEffectRules.Dispatch); Assert.Single(audit, a => a.Action == TenantWorkspaceEffectRules.Result);
         Assert.Equal(0, await service.RecoverAsync());
     }
@@ -107,7 +108,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(1, await service.RecoverAsync()); Assert.Equal(0, await service.RecoverAsync()); Assert.Equal(0, hook.Processed);
         var receipt = await ((ITenantDirectOperationStore)f.Iam).FindDirectOperationReceiptAsync(s.Tenant, frame.RunId, call.Id);
         Assert.Equal(TenantOperationOutcome.Indeterminate, receipt!.Outcome); Assert.Equal(fence.Origin.DirectOperation!.OperationId, receipt.OperationId);
-        Assert.Empty((await WorkspaceReader(f).ListTenantAsync(new(s.Tenant, s.Agent.Instance.InstanceId, frame.SessionId), "/working", null, 100)).Items);
+        Assert.Empty((await WorkspaceReader(f).ListTenantAsync(WorkspaceOwner(s, true), "/working", null, 100)).Items);
     }
     private sealed class OfficeCommitHook(ITenantWorkspaceMutationStore inner, Func<Task> afterProcessing) : ITenantWorkspaceMutationStore
     {

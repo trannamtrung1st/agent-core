@@ -49,6 +49,7 @@ public sealed partial class InMemoryIamStore
             if (instances.FindTenantBackingAsync(instance.InstanceId, ct).Result is not null) return ValueTask.FromResult(false);
             RequireAgentHuman(next.Tenant.TenantId, audit.ActorPrincipalId, initiator);
             instances.InsertAsync(instance, ct, skills).GetAwaiter().GetResult();
+            ProvisionPrivateSpace(next.Tenant.TenantId, instance);
             _tenants[next.Tenant.TenantId] = next; MarkOwnedAgents(next); _audit.Add(audit);
             return ValueTask.FromResult(true);
         }

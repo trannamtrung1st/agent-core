@@ -43,7 +43,12 @@ public sealed partial class TenantSessionAccessTests
     [TenantBrowserChromiumTheory] [InlineData(false, false, false, false)] [InlineData(true, false, false, false)] [InlineData(false, true, false, false)] [InlineData(true, true, false, false)]
     [InlineData(false, false, true, false)] [InlineData(true, false, true, false)] [InlineData(false, true, true, false)] [InlineData(true, true, true, false)]
     [InlineData(false, false, true, true)] [InlineData(true, false, true, true)]
-    public async Task Tenant_Browser_model_protected_fill_requires_exact_Credential_consent_and_returns_only_redacted_facts(bool sqlite, bool revokeAfterResolution, bool exceptional, bool metadataReview)
+    public Task Tenant_Browser_model_protected_fill_requires_exact_Credential_consent_and_returns_only_redacted_facts(bool sqlite, bool revokeAfterResolution, bool exceptional, bool metadataReview) =>
+        ModelBrowserPasswordFlow(sqlite,revokeAfterResolution,exceptional,metadataReview);
+    [TenantBrowserChromiumTheory] [InlineData(false,false)] [InlineData(true,false)] [InlineData(false,true)] [InlineData(true,true)]
+    public Task Credential_variable_alias_drives_actual_native_Browser_sink_with_current_context_and_consent(bool sqlite,bool revokeAfterResolution) =>
+        ModelBrowserPasswordFlow(sqlite,revokeAfterResolution,false,false,variableReference:true);
+    private async Task ModelBrowserPasswordFlow(bool sqlite,bool revokeAfterResolution,bool exceptional,bool metadataReview,bool variableReference=false)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-browser-password-model-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         const string password = "model-owned-private-password-7625";
@@ -66,14 +71,29 @@ public sealed partial class TenantSessionAccessTests
             await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
             var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
-            var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
+            var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = variableReference ? 33 : 32, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
             var native = Assert.IsType<NativePlaywrightBrowser>(factory.Services.GetRequiredService<IBrowser>());
             var credential = await factory.Services.GetRequiredService<TenantCredentialService>().CreateAsync(human, tenant,
                 new("Local login", CredentialKind.Password, CredentialPurpose.General, null, [native.Fixture.Origin!], password), await Revision(owner, tenant));
+            AgentCore.Domain.Spaces.Space? selectedSpace=null;Guid? environmentId=null;
+            if(variableReference)
+            {
+                var spaces=factory.Services.GetRequiredService<TenantSpaceService>();var environments=factory.Services.GetRequiredService<TenantEnvironmentService>();
+                selectedSpace=await spaces.CreateAsync(human,tenant,Guid.NewGuid(),"Browser account Space","","",await Revision(owner,tenant));
+                selectedSpace=await spaces.UpdateAsync(human,tenant,selectedSpace.SpaceId,selectedSpace.Name,"","",true,await Revision(owner,tenant),selectedSpace.Revision);
+                await spaces.SetMemberAsync(human,tenant,selectedSpace.SpaceId,instance,"Local sign-in","",[],[new(AgentCore.Domain.Spaces.SpaceBindingKind.Credential,credential.Credential.CredentialId.ToString("D"),"context-browser-account")],await Revision(owner,tenant),selectedSpace.Revision,0);
+                selectedSpace=await spaces.ReadAsync(human,tenant,selectedSpace.SpaceId);
+                var profile=await environments.SaveAsync(human,tenant,selectedSpace.SpaceId,Guid.NewGuid(),"Local login profile","No plaintext variables",await Revision(owner,tenant),selectedSpace.Revision,0);
+                await environments.SaveVariableAsync(human,tenant,selectedSpace.SpaceId,profile.EnvironmentId,"ACCOUNT",AgentCore.Domain.Spaces.EnvironmentVariableKind.CredentialReference,"Native Browser credential",null,null,credential.Credential.CredentialId,await Revision(owner,tenant),selectedSpace.Revision,profile.Revision,0);
+                environmentId=profile.EnvironmentId;
+            }
+            else
+            {
             await factory.Services.GetRequiredService<TenantCredentialBindingService>().BindAsync(human, tenant, instance, credential.Credential.CredentialId,
                 "account", await Revision(owner, tenant), 1, 1);
-            var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }));
+            }
+            var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = variableReference ? 1 : 2 }));
             var sessionId = session.GetProperty("sessionId").GetGuid(); var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, tenant, null, "Reviewed Browser", ["browser.read", "browser.use"], await Revision(owner, tenant));
             var browserRole = role;
@@ -82,6 +102,15 @@ public sealed partial class TenantSessionAccessTests
             await access.AssignRoleAsync(human, tenant, executor, role.RoleId, TenantSessionRules.Scope(tenant, sessionId), await Revision(owner, tenant));
             role = await access.SaveRoleAsync(human, tenant, null, "Use exact login", exceptional ? ["credentials.read"] : ["credentials.read", "credentials.use"], await Revision(owner, tenant));
             await access.AssignRoleAsync(human, tenant, executor, role.RoleId, TenantCredentialRules.Scope(tenant, credential.Credential.CredentialId), await Revision(owner, tenant));
+            long sourceSessionRevision=1;
+            if(variableReference)
+            {
+                var contextRole=await access.SaveRoleAsync(human,tenant,null,"Read Browser variable context",["spaces.read","environments.read","environments.activate","variables.resolve"],await Revision(owner,tenant));
+                await access.AssignRoleAsync(human,tenant,executor,contextRole.RoleId,AccessScope.ForTenant(tenant),await Revision(owner,tenant));
+                var selected=await owner.PostAsJsonAsync(api+$"/sessions/{sessionId}/context/switch",new{transitionId=Guid.NewGuid(),spaceId=selectedSpace!.SpaceId,environmentId,expectedRevision=await Revision(owner,tenant),expectedSessionRevision=1,expectedSelectionRevision=1});
+                Assert.True(selected.IsSuccessStatusCode,await selected.Content.ReadAsStringAsync());
+                sourceSessionRevision=(await Json(await owner.GetAsync(api+$"/sessions/{sessionId}/context"))).GetProperty("sessionRevision").GetInt64();
+            }
             if (revokeAfterResolution) race.AfterResolution = async () => {
                 var state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!;
                 var changed = exceptional ? browserRole : role;
@@ -94,6 +123,22 @@ public sealed partial class TenantSessionAccessTests
             var page = native.ContextFor(sessionId)!.Pages.Single(); Assert.Equal("", await page.GetByLabel("Password", new() { Exact = true }).InputValueAsync());
             model.ProposedBrowserCommand = """{"operation":"run_browser_command","command":{"tool":"browser.fill_credential","arguments":{"credentialRef":"account","target":{"by":"label","value":"Password"}}}}""";
             model.ProposedBrowserRead = new("discover-credential", ToolCatalog.CredentialsList, "{}");
+            if(variableReference)
+            {
+                model.ProposedBrowserCommand=null;
+                model.ProposedBrowserRead=new("resolve-context-account","variables.resolve","{\"name\":\"ACCOUNT\"}");
+                model.BeforeGenerate=(request,_)=>{
+                    var resolved=request.Messages.LastOrDefault(m=>m.Role==ModelRole.Tool&&m.Name=="variables.resolve");
+                    if(resolved is not null)
+                    {
+                        using var descriptor=JsonDocument.Parse(resolved.Text);var reference=descriptor.RootElement.GetProperty("result").GetProperty("accountRef").GetString();
+                        Assert.Equal("context-browser-account",reference);Assert.True(descriptor.RootElement.GetProperty("result").GetProperty("authorizationRequiredAtConsumer").GetBoolean());
+                        model.ProposedBrowserCommand=JsonSerializer.Serialize(new{operation="run_browser_command",command=new{tool=ToolCatalog.BrowserFillCredential,arguments=new{credentialRef=reference,target=new{by="label",value="Password"}}}});
+                    }
+                    return Task.CompletedTask;
+                };
+            }
+
             if (metadataReview)
             {
                 var state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!;
@@ -104,7 +149,7 @@ public sealed partial class TenantSessionAccessTests
                     "sessions.read", new(OperationApprovalMode.Always, false), state.Tenant.Revision, 0);
             }
             var source = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{sessionId}/messages", new { messageId = Guid.NewGuid(), text = "Fill the existing Password using the bound account Credential; do not submit.",
-                expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
+                expectedRevision = await Revision(owner, tenant), expectedSessionRevision = sourceSessionRevision }))).GetProperty("runId").GetGuid();
             if (baseFactory is ApprovalExecutionFactory enabled) Volatile.Write(ref enabled.Enabled, true);
             var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var waiting = await AwaitBrowserRestartRun(runs, tenant, source, true);
             Assert.True(waiting.Status == AgentRunStatus.WaitingForApproval, $"{waiting.Status}: {waiting.Failure?.Code}: {waiting.Failure?.Summary}");
@@ -117,6 +162,15 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/approvals/{request.RequestId}/decision", new { decision = "approve", actionHash = request.Operation.ActionHash,
                 expectedRevision = view.GetProperty("securityRevision").GetInt64(), expectedRequestRevision = request.Revision })).StatusCode);
             var completed = await AwaitBrowserRestartRun(runs, tenant, source, false);
+            if(variableReference&&revokeAfterResolution)
+            {
+                Assert.Equal(AgentRunStatus.Failed,completed.Status);Assert.Equal("authority-unavailable",completed.Failure?.Code);
+                Assert.Equal("",await page.GetByLabel("Password",new(){Exact=true}).InputValueAsync());Assert.Equal(1,race.Resolutions);
+                var refused=(await factory.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant,request.Operation.OperationId))!;
+                Assert.Equal(TenantOperationOutcome.Denied,refused.Outcome);Assert.DoesNotContain(password,JsonSerializer.Serialize(model.Requests));
+                Assert.DoesNotContain(password,JsonSerializer.Serialize(new{completed.Admission,completed.Checkpoint,completed.SideEffect}));
+                return;
+            }
             Assert.True(completed.Status == AgentRunStatus.Completed, $"{completed.Status}: {completed.Failure?.Code}: {completed.Failure?.Summary}");
             Assert.Equal(revokeAfterResolution ? "" : password, await page.GetByLabel("Password", new() { Exact = true }).InputValueAsync()); Assert.Equal(1, race.Resolutions);
             Assert.True(AgentRunToolCallCheckpoint.TryRead(completed.Checkpoint, out var messages));
@@ -124,13 +178,13 @@ public sealed partial class TenantSessionAccessTests
             using var output = JsonDocument.Parse(result); Assert.Equal(!revokeAfterResolution, output.RootElement.GetProperty("commandCompleted").GetBoolean());
             Assert.False(output.RootElement.GetProperty("applicationOutcomeVerified").GetBoolean()); Assert.False(output.RootElement.GetProperty("replayAllowed").GetBoolean());
             Assert.Contains(model.Requests, r => r.Messages.Any(m => m.Role == ModelRole.Tool && m.Text == result));
-            var discoveries = model.Requests.SelectMany(r => r.Messages).Where(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.CredentialsList).ToArray();
+            var discoveries = model.Requests.SelectMany(r => r.Messages).Where(m => m.Role == ModelRole.Tool && m.Name == (variableReference ? "variables.resolve" : ToolCatalog.CredentialsList)).ToArray();
             Assert.NotEmpty(discoveries);
             if (metadataReview)
             {
                 Assert.All(discoveries, m => { Assert.Contains("credential_read_review_required", m.Text); Assert.DoesNotContain("Local login", m.Text); Assert.DoesNotContain("tenantCredentialRead", m.Text); });
             }
-            else Assert.Contains(discoveries, m => m.Text.Contains("tenantCredentialRead", StringComparison.Ordinal));
+            else Assert.Contains(discoveries, m => m.Text.Contains(variableReference ? "authorizationRequiredAtConsumer" : "tenantCredentialRead", StringComparison.Ordinal));
             Assert.Contains(model.Requests.SelectMany(r => r.Tools ?? []), t => t.Name == ToolCatalog.RequestAuthorization
                 && t.ParametersJson.Contains("browser.fill_credential", StringComparison.Ordinal)
                 && t.Description.Contains("filling does not confirm sign-in", StringComparison.Ordinal));

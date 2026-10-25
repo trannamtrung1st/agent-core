@@ -147,7 +147,7 @@ public sealed class SkillActivationTests
         await NativeInstanceSeed.LifecycleAsync(store, clock, owner.InstanceId, AgentInstanceLifecycle.Archived, owner.Revision);
         await Assert.ThrowsAsync<AgentCoreException>(() => NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "create", input: new("Local", "Local", "Local", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent).AsTask());
     }
-    internal static AgentDefinition Definition(int version, params SkillSpec[] skills) => SampleDefinitions.Examiner with { Version = version, Skills = skills, Environment = RoleEnvironment.Empty, SelfManagement = new(HarnessManagementMode.Assisted, [HarnessManagementScope.Skills], [], [], BuiltInSkills: new(false, false)) };
+    internal static AgentDefinition Definition(int version, params SkillSpec[] skills) => SampleDefinitions.Examiner with { Version = version, Skills = skills, ExecutionPolicy = DefinitionExecutionPolicy.Empty, SelfManagement = new(HarnessManagementMode.Assisted, [HarnessManagementScope.Skills], [], [], BuiltInSkills: new(false, false)) };
     internal sealed class Definitions(params AgentDefinition[] versions) : IAgentDefinitionStore
     {
         public ValueTask<AgentDefinition?> GetAsync(string id, int? version = null, CancellationToken cancellationToken = default) => ValueTask.FromResult(versions.Where(d => d.Id == id && (version is null || d.Version == version)).OrderByDescending(d => d.Version).FirstOrDefault());

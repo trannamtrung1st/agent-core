@@ -6,7 +6,7 @@ import { DefinitionStateIsolationPolicy } from './DefinitionStateIsolationPolicy
 import { applyDefinitionIsolationPreset, definitionIsolationChanges, definitionIsolationPreset } from './definitionIsolationPresets';
 import type { DefinitionCandidate } from './definitionCandidate';
 
-const saved: DefinitionCandidate = { identity: { name: 'Keep identity' }, agentInstructions: 'Keep instructions', environment: { toolAllowlist: ['workspace.read'] },
+const saved: DefinitionCandidate = { identity: { name: 'Keep identity' }, agentInstructions: 'Keep instructions', executionPolicy: { toolAllowlist: ['workspace.read'] },
   memoryPolicy: { sessionMemory: true, identityUserPromotion: true, identityUserRetrieval: true, userPromotion: false, userRetrieval: false },
   voice: { enabled: true, voiceId: 'saved-voice', speakingRate: 1.2 }, providerPreferences: { languageModel: 'keep-llm', speechRecognizer: 'saved-stt', speechSynthesizer: 'saved-tts' } };
 
@@ -16,7 +16,7 @@ test('Definition recipes coordinate all owned settings and preserve unrelated au
   expect(stateless.memoryPolicy).toEqual({ sessionMemory: false, identityUserPromotion: false, identityUserRetrieval: false, userPromotion: false, userRetrieval: false });
   expect(stateless.voice).toEqual({ enabled: false, voiceId: 'saved-voice', speakingRate: 1.2 });
   expect(stateless.providerPreferences).toEqual({ languageModel: 'keep-llm', speechRecognizer: null, speechSynthesizer: null });
-  expect(stateless.identity).toEqual(saved.identity); expect(stateless.agentInstructions).toBe(saved.agentInstructions); expect(stateless.environment).toEqual(saved.environment);
+  expect(stateless.identity).toEqual(saved.identity); expect(stateless.agentInstructions).toBe(saved.agentInstructions); expect(stateless.executionPolicy).toEqual(saved.executionPolicy);
   expect(definitionIsolationChanges(stateless, saved).map(change => change.owner)).toEqual(expect.arrayContaining(['stateIsolationPolicy', 'memoryPolicy', 'voice', 'providerPreferences']));
   const session = applyDefinitionIsolationPreset(stateless, saved, 'SessionIsolated');
   expect(definitionIsolationPreset(session, saved)).toBe('SessionIsolated');

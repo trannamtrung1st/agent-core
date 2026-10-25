@@ -26,25 +26,48 @@ public sealed partial class TenantCredentialIntegrationTests
             iam, f.Identity, f.Ids, f.Clock, f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default,
             (ITenantApprovedOperationStore)current, new((ITenantCredentialBindingStore)current, f.RunConfiguration()));
     }
-    private static async Task<RuntimeCredentialSetup> RuntimeCredential(Fixture f, bool use, CredentialPurpose purpose = CredentialPurpose.GoogleDriveAccount, bool password = false)
+    private static async Task<RuntimeCredentialSetup> RuntimeCredential(Fixture f, bool use, CredentialPurpose purpose = CredentialPurpose.GoogleDriveAccount, bool password = false, bool contextual = false, bool variableReference = false)
     {
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var login = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;
         var human = new TenantSessionInitiator(owner.AccountId, login.SessionId, owner.OwnerPrincipalId);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision;
-        var agent = await f.Agents.CreateAsync(human.PrincipalId, owner.TenantId, "general-assistant", 32, await Revision());
+        var agent = await f.Agents.CreateAsync(human.PrincipalId, owner.TenantId, "general-assistant", variableReference ? 33 : 32, await Revision());
         var credential = password
             ? (await f.Service.CreateAsync(human.PrincipalId, owner.TenantId, new("Custom mail", CredentialKind.Password, CredentialPurpose.EmailAccount,
                 null, null, "private-mail-password", EmailAccountProfile.Custom("fixture@example.test")), await Revision())).Credential.CredentialId
             : await ConnectForCheck(f, owner.TenantId, new(human.AccountId, human.AuthenticationSessionId, human.PrincipalId), purpose);
         var value = (await f.Credentials.FindTenantCredentialAsync(owner.TenantId, credential))!.Value;
-        await f.BindingService.BindAsync(human.PrincipalId, owner.TenantId, agent.Instance.InstanceId, credential, "work-drive", await Revision(), agent.Instance.Revision, value.Revision);
+        if (!contextual) await f.BindingService.BindAsync(human.PrincipalId, owner.TenantId, agent.Instance.InstanceId, credential, "work-drive", await Revision(), agent.Instance.Revision, value.Revision);
         agent = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(owner.TenantId, agent.Instance.InstanceId))!;
         var role = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Bound credential check", use ? ["credentials.read", "credentials.use"] : ["credentials.read"], await Revision());
         await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, role.RoleId,
             AccessScope.ForResource(owner.TenantId, "credential", credential.ToString("D")), await Revision());
+        var contextRole = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Read selected context", variableReference ? ["spaces.read", "environments.read", "environments.activate", "variables.resolve"] : ["spaces.read"], await Revision());
+        await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, contextRole.RoleId, AccessScope.ForTenant(owner.TenantId), await Revision());
         var session = await f.Sessions.CreateAsync(owner.TenantId, agent.Instance.InstanceId, human, SessionMode.Text, await Revision(), agent.Instance.Revision);
-        var admission = await f.RunService().SubmitTextAsync(owner.TenantId, session.Owner.SessionId, human, f.Ids.NewId(), "Check my bound Drive connection", await Revision(), 1);
+        if (contextual)
+        {
+            var spaces = new TenantSpaceService(f.Iam, (ITenantSpaceStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer, f.RunConfiguration(),
+                (ITenantCredentialBindingStore)f.Iam, f.Credentials, f.Ids, f.Clock);
+            var shared = await spaces.CreateAsync(human.PrincipalId, owner.TenantId, f.Ids.NewId(), "Team account", "", "", await Revision());
+            if (variableReference) shared=await spaces.UpdateAsync(human.PrincipalId,owner.TenantId,shared.SpaceId,shared.Name,"","",true,await Revision(),shared.Revision);
+            await spaces.SetMemberAsync(human.PrincipalId, owner.TenantId, shared.SpaceId, agent.Instance.InstanceId, "", "", [],
+                [new(AgentCore.Domain.Spaces.SpaceBindingKind.Credential, credential.ToString("D"), "work-drive")], await Revision(), shared.Revision, 0);
+            shared=await spaces.ReadAsync(human.PrincipalId,owner.TenantId,shared.SpaceId);
+            Guid? environmentId=null;
+            if(variableReference)
+            {
+                var environments=new TenantEnvironmentService(f.Iam,(ITenantSpaceStore)f.Iam,(ITenantEnvironmentStore)f.Iam,(ITenantSecretStore)f.Iam,f.Credentials,f.Authorizer,f.Identity,f.Ids,f.Clock);
+                var profile=await environments.SaveAsync(human.PrincipalId,owner.TenantId,shared.SpaceId,f.Ids.NewId(),"Protected account profile","Reference only",await Revision(),shared.Revision,0);
+                await environments.SaveVariableAsync(human.PrincipalId,owner.TenantId,shared.SpaceId,profile.EnvironmentId,"ACCOUNT",AgentCore.Domain.Spaces.EnvironmentVariableKind.CredentialReference,"Existing protected consumer",null,null,credential,await Revision(),shared.Revision,profile.Revision,0);
+                environmentId=profile.EnvironmentId;
+            }
+            var request = new TenantContextSwitch(session.Owner, human, f.Ids.NewId(), shared.SpaceId, environmentId, shared.EnvironmentSelectionEpoch, await Revision(), 1, 1, agent.Instance.Revision);
+            await ((ITenantSessionContextStore)f.Iam).SwitchTenantQuiescentContextAsync(request, f.Ids.NewId());
+        }
+        var saved = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(owner.TenantId, session.Owner.SessionId))!;
+        var admission = await f.RunService().SubmitTextAsync(owner.TenantId, session.Owner.SessionId, human, f.Ids.NewId(), "Check my bound Drive connection", await Revision(), saved.Snapshot.Revision);
         var queued = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(owner.TenantId, admission.RunId))!; var at = f.Clock.GetUtcNow();
         var run = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(queued.Owner, queued.AgentRunId,
             new AgentRunCommand.Claim(queued.Revision, at, f.Ids.NewId(), at.AddMinutes(5)), f.Ids.NewId());

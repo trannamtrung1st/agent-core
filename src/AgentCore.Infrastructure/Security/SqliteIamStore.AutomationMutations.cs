@@ -42,6 +42,8 @@ public sealed partial class SqliteIamStore : ITenantAutomationMutationStore
                 .OrderByDescending(e => e.EntrySequence).Take(8).ToArrayAsync(ct).ConfigureAwait(false)).OrderBy(e => e.EntrySequence).Select(SqliteMemoryStore.ToEntry).ToArray();
             source = source with { ConversationEvidenceJson = TenantAutomationMutationRules.ConversationEvidence(reader, history, before) };
         }
+        if (expected is not null) await RequireAutomationContextAuthoring(db, reader.Security, reader.Agent, current, expected.Proposed,
+            reader.Run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId, iam, ct).ConfigureAwait(false);
         return source;
     }
 }

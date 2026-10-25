@@ -54,7 +54,7 @@ public sealed partial class TenantOperationAuthorizationTests
             var page = await v.Approvals.ListAsync(s.Tenant, reader, new(0, 1)); Assert.Equal(0, page.Total); Assert.Empty(page.Items);
             await Assert.ThrowsAsync<AccessDeniedException>(() => v.Approvals.ReadViewAsync(s.Tenant, v.Request.RequestId, reader).AsTask());
         }
-        await Hidden(); var workspace = TenantWorkspaceRules.Home(s.Tenant, s.Agent.Instance.InstanceId); await Allow("workspaces.read", workspace); await Hidden();
+        await Hidden(); var workspace = TenantWorkspaceRules.Home(s.Tenant, SpaceId(s)); await Allow("workspaces.read", workspace); await Hidden();
         await Allow("agents.read", AccessScope.ForResource(s.Tenant, "agent", s.Agent.Instance.InstanceId.ToString("D")));
         var visible = await v.Approvals.ListAsync(s.Tenant, reader, new(0, 1)); Assert.Equal(1, visible.Total); Assert.Single(visible.Items); Assert.False(visible.Items[0].Review!.CanDecide);
         await Allow("approvals.approve", TenantSessionRules.Scope(s.Tenant, v.Frame.SessionId));

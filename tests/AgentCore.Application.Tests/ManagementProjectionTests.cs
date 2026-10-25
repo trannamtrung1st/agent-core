@@ -13,7 +13,7 @@ public sealed class ManagementProjectionTests
     {
         var policy = new HarnessManagementPolicy(HarnessManagementMode.Managed, [HarnessManagementScope.Settings, HarnessManagementScope.KnowledgeResources], [], [],
             ManagedAutoApply: [ManagementAutoApply.ConversationPreferences]);
-        var definition = SampleDefinitions.Examiner with { SelfManagement = policy, Environment = new(ToolAllowlist: ["configuration.inspect"]) };
+        var definition = SampleDefinitions.Examiner with { SelfManagement = policy, ExecutionPolicy = new(ToolAllowlist: ["configuration.inspect"]) };
         var session = Guid.NewGuid(); var activation = Guid.NewGuid();
         return new(definition, [], "", null, SessionMode.Text, null, false, null, new(Guid.NewGuid(), TriggerKind.UserTurn, "Load a delegated procedure"),
             AgentInstanceId: Guid.NewGuid(), OwnedSessionId: session, Harness: new(policy, 1, 1), PinnedSkillCatalog: ManagementBuiltInSkills.Catalog)

@@ -8,12 +8,12 @@ namespace AgentCore.Domain.Conversation;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record UserResourceReference(string Kind, Guid? AgentInstanceId = null, Guid? SessionId = null,
     string? Path = null, Guid? ArtifactId = null, Guid? AgentRunId = null, string? SkillKey = null,
-    long? SelectedRevision = null)
+    long? SelectedRevision = null, Guid? SpaceId = null)
 {
     [JsonIgnore]
     public string Locator => Kind switch
     {
-        "homeFile" => $"homeFile:{AgentInstanceId:D}{Path}",
+        "homeFile" => $"homeFile:{SpaceId:D}{Path}",
         "session" or "backgroundSession" => $"{Kind}:{SessionId:D}",
         "artifact" => $"artifact:{SessionId:D}/{ArtifactId:D}",
         "agentRun" => $"agentRun:{SessionId:D}/{AgentRunId:D}",
@@ -26,14 +26,14 @@ public sealed record UserResourceReference(string Kind, Guid? AgentInstanceId = 
         static bool Id(Guid? id) => id is { } value && value != Guid.Empty;
         var valid = Kind switch
         {
-            "homeFile" => Id(AgentInstanceId) && Path is { Length: > 6 } && Path.StartsWith("/home/", StringComparison.Ordinal) && !Path.Contains("/../", StringComparison.Ordinal) && SelectedRevision is null && SessionId is null && ArtifactId is null && AgentRunId is null && SkillKey is null,
+            "homeFile" => Id(SpaceId) && AgentInstanceId is null && Path is { Length: > 6 } && Path.StartsWith("/home/", StringComparison.Ordinal) && !Path.Contains("/../", StringComparison.Ordinal) && SelectedRevision is null && SessionId is null && ArtifactId is null && AgentRunId is null && SkillKey is null,
             "session" or "backgroundSession" => Id(SessionId) && AgentInstanceId is null && Path is null && ArtifactId is null && AgentRunId is null && SkillKey is null,
             "artifact" => Id(SessionId) && Id(ArtifactId) && AgentInstanceId is null && Path is null && AgentRunId is null && SkillKey is null && SelectedRevision is null,
             "agentRun" => Id(SessionId) && Id(AgentRunId) && AgentInstanceId is null && Path is null && ArtifactId is null && SkillKey is null,
             "skill" => Id(AgentInstanceId) && SkillKeys.IsValid(SkillKey) && SessionId is null && Path is null && ArtifactId is null && AgentRunId is null && SelectedRevision is null,
             _ => false
         };
-        if (!valid || SelectedRevision is <= 0) throw new ArgumentException("Reference requires its exact typed locator fields and a positive optional revision.");
+        if (!valid || Kind != "homeFile" && SpaceId is not null || SelectedRevision is <= 0) throw new ArgumentException("Reference requires its exact typed locator fields and a positive optional revision.");
     }
 }
 

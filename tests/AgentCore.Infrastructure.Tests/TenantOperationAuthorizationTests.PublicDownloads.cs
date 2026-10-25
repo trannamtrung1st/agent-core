@@ -30,7 +30,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.NotNull(receipt); Assert.Equal(fence.Origin.DirectOperation!.OperationId, receipt.OperationId);
         Assert.Equal(TenantOperationOutcome.Indeterminate, receipt.Outcome); Assert.Equal(TenantWorkspaceEffectRules.Uncertain, receipt.ReasonCode);
         Assert.Null(receipt.PublicDownload);
-        Assert.Empty((await WorkspaceReader(f).ListTenantAsync(new(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId), "/working", null, 100)).Items);
+        Assert.Empty((await WorkspaceReader(f).ListTenantAsync(WorkspaceOwner(v.Setup, true), "/working", null, 100)).Items);
     }
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_public_download_effect_reuses_exact_receipt_without_a_second_transfer(bool sqlite)
@@ -41,7 +41,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await WorkspaceEffectCheckpoint(f, v.Frame, call);
         var first = await service.ExecuteAsync(v.Frame, call); Assert.Equal(TenantOperationOutcome.Completed, first.Receipt!.Outcome);
         Assert.Equal(first, await service.ExecuteAsync(v.Frame, call)); Assert.Equal(1, native.Count);
-        Assert.Equal(new byte[] {0, 255, 42}, (await WorkspaceReader(f).InspectTenantAsync(new(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId), "/working/download.bin", 100)).Bytes);
+        Assert.Equal(new byte[] {0, 255, 42}, (await WorkspaceReader(f).InspectTenantAsync(WorkspaceOwner(v.Setup, true), "/working/download.bin", 100)).Bytes);
         Assert.NotNull(first.Receipt.PublicDownload); Assert.DoesNotContain(Convert.ToBase64String(new byte[] {0,255,42}), JsonSerializer.Serialize(first.Receipt));
     }
     [Theory] [InlineData(false)] [InlineData(true)]
@@ -57,7 +57,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var result = await pending.WaitAsync(TimeSpan.FromSeconds(15)); Assert.Equal(TenantOperationOutcome.Indeterminate, result.Receipt!.Outcome); Assert.Null(result.Receipt.PublicDownload);
         native.Release.TrySetResult(); await native.Returned.Task.WaitAsync(TimeSpan.FromSeconds(15));
         Assert.Equal(result, await service.ExecuteAsync(v.Frame, call)); Assert.Equal(1, native.Count);
-        Assert.DoesNotContain((await WorkspaceReader(f).ListTenantAsync(new(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId), "/working", null, 100)).Items, i => i.LogicalPath == "/working/late.bin");
+        Assert.DoesNotContain((await WorkspaceReader(f).ListTenantAsync(WorkspaceOwner(v.Setup, true), "/working", null, 100)).Items, i => i.LogicalPath == "/working/late.bin");
     }
     private sealed class DelayedTenantDownload(bool delayed) : IPublicWebFetcher
     {

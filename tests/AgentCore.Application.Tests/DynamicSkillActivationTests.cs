@@ -28,7 +28,7 @@ public sealed class DynamicSkillActivationTests
     [Fact]
     public void Active_instance_requirements_project_only_authorized_tools()
     {
-        var d = SampleDefinitions.Examiner with { Environment = RoleEnvironment.Empty with { ToolAllowlist = null,
+        var d = SampleDefinitions.Examiner with { ExecutionPolicy = DefinitionExecutionPolicy.Empty with { ToolAllowlist = null,
             Capabilities = new("Selected", [ToolCatalog.WorkspaceRead]), Projection = new([]) } };
         var skill = Skill("instance:" + Guid.NewGuid().ToString("D"), "Read context") with { RequiredCapabilities = [ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite] };
         var context = new AgentContext(d, [], "", null, SessionMode.Text, null, false, null, new(Guid.NewGuid(), TriggerKind.UserTurn, "hello"),

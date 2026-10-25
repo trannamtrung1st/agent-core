@@ -197,7 +197,7 @@ public sealed class ApplicationMessageTests
             Voice = new VoiceConfiguration(false, "default", 1),
             ProviderPreferences = new ProviderPreferences("primary-llm", null, null),
             Skills = [],
-            Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceRead])
+            ExecutionPolicy = new DefinitionExecutionPolicy(ToolAllowlist: [ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceRead])
         };
 
 }

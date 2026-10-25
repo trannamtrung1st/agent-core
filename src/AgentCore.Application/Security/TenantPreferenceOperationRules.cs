@@ -18,7 +18,7 @@ public static class TenantPreferenceOperationRules
             || commit.OperationId == Guid.Empty || string.IsNullOrWhiteSpace(commit.SourceCallId) || commit.SourceCallId.Length > 200
             || commit.ExpectedInstanceRevision != target.Instance.Revision) throw new SecurityConflictException("operation_mismatch");
         var patch = TenantPreferenceToolContract.Parse(commit.ArgumentsJson);
-        if (patch.ParametersHash != commit.ParametersHash || commit.ActionHash != TenantPreferenceToolContract.ActionHash(run.AgentInstanceId, target.Instance.Revision, patch.ParametersHash))
+        if (patch.ParametersHash != commit.ParametersHash || commit.ActionHash != TenantPreferenceToolContract.ActionHash(run, target.Instance.Revision, patch.ParametersHash))
             throw new SecurityConflictException("operation_mismatch");
         var pinned = run.Admission.Configuration!.Definition;
         if (!TenantPreferenceToolContract.Allows(pinned) || !ManagementPolicyResolver.Resolve(pinned, target.Instance).AutoApplies(ManagementAutoApply.ConversationPreferences)

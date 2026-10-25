@@ -31,7 +31,13 @@ public static class TenantWorkspaceMutationContract
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault,
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     public static string Hash(string value) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
-    public static string ActionHash(Guid session, string parameters) => Hash("workspace.mutation\n" + session.ToString("D") + "\n" + parameters);
+    public static string ActionHash(AgentCore.Domain.Conversation.AgentRun run, string parameters) => ActionHash(run.SessionId, parameters,
+        (run.Admission.Configuration?.SpaceContext ?? throw new AgentCore.Application.Security.AccessDeniedException("space_context_required")).Witness());
+    public static string ActionHash(Guid session, string parameters, AgentCore.Domain.Spaces.RunSpaceWitness context)
+    {
+        context.Validate();
+        return Hash("workspace.mutation\n" + session.ToString("D") + "\n" + parameters + "\n" + JsonSerializer.Serialize(context));
+    }
     public static TenantWorkspaceMutationArguments Parse(Guid session, string tool, string json)
     {
         try { return ParseCore(session, tool, json); }
@@ -45,17 +51,16 @@ public static class TenantWorkspaceMutationContract
         if (TenantOfficeMutationContract.IsMutation(tool))
         {
             var office = TenantOfficeMutationContract.Parse(tool, root);
-            TenantWorkspaceRules.Path(new(Guid.Empty, Guid.Empty, office.Path!.StartsWith("/working/", StringComparison.Ordinal) ? session : null), office.Path, file: true);
+            TenantWorkspaceRules.ValidatePath(office.Path!, file: true);
             if (Encoding.UTF8.GetByteCount(office.CanonicalArguments) > 65536) throw new ArgumentException("Use bounded canonical Office arguments.");
             return office;
         }
         string Read(string key) => root.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString()! : throw new ArgumentException("Use exact workspace fields.");
         string Path(string value, bool concrete = false)
         {
-            if (string.IsNullOrEmpty(value) || Encoding.UTF8.GetByteCount(value) > 4095 || value != "/home" && !value.StartsWith("/home/", StringComparison.Ordinal)
+            if (string.IsNullOrEmpty(value) || Encoding.UTF8.GetByteCount(value) > 4095 || value != "/home" && !value.StartsWith("/home/", StringComparison.Ordinal) && value != "/private" && !value.StartsWith("/private/", StringComparison.Ordinal)
                 && value != "/working" && !value.StartsWith("/working/", StringComparison.Ordinal)) throw new ArgumentException("Use an exact absolute workspace child path.");
-            var owner = new TenantWorkspaceReference(Guid.Empty, Guid.Empty, value.StartsWith("/working/", StringComparison.Ordinal) || value == "/working" ? session : null);
-            TenantWorkspaceRules.Path(owner, value, file: true);
+            TenantWorkspaceRules.ValidatePath(value, file: true);
             if (concrete && value.IndexOfAny(['*', '?', '[', ']']) >= 0) throw new ArgumentException("Use concrete structural paths.");
             return value;
         }
@@ -85,8 +90,8 @@ public static class TenantWorkspaceMutationContract
                 Source = o.Source is null ? null : Path(o.Source, true), Destination = o.Destination is null ? null : Path(o.Destination, true) }).ToArray();
             if (JsonSerializer.SerializeToUtf8Bytes(operations).Length > WorkspaceStructureLimits.MaxRequestBytes) throw new ArgumentException("Use a bounded structural batch.");
             var paths = operations.SelectMany(o => new[] { o.Path, o.Source, o.Destination }).OfType<string>().ToArray();
-            if (tool != ToolCatalog.WorkspaceCopy && paths.Select(p => p.StartsWith("/home/", StringComparison.Ordinal)).Distinct().Count() > 1)
-                throw new ArgumentException("Only an individual copy may cross home/working roots.");
+            if (tool != ToolCatalog.WorkspaceCopy && paths.Select(TenantWorkspaceRules.LogicalRoot).Distinct().Count() > 1)
+                throw new ArgumentException("Only an individual copy may cross workspace roots.");
             var o = operations[0];
             canonical = tool == ToolCatalog.WorkspaceBatch ? new { operations } : o.Op switch {
                 "mkdir" => (object)new { path = o.Path }, "delete" => new { path = o.Path, recursive = o.Recursive },
@@ -105,7 +110,7 @@ public static class TenantWorkspaceMutationContract
             ToolCatalog.WorkspaceMove => "Move a file or tree within one owned root. Never overwrite; cross-root moves are forbidden.",
             ToolCatalog.WorkspaceDelete => "Delete one concrete file or empty directory; a nonempty directory requires recursive:true. Roots are protected.",
             _ => "Execute 1–16 ordered mkdir/copy/move/delete operations (16 KiB canonical structural payload) in one root. Syntax/scopes are validated before mutation. Stop on failure; earlier or partial effects remain. No atomic rollback."
-        }) + " Tenant execution requires exact absolute /home or /working child paths, current independent Agent IAM and policy. Use as the sole call in a batch. Core persists dispatch and a body-free receipt; an uncertain result must never be replayed. Policy-required or missing mutation authority returns no dispatch. If authorization is required and offered, request mutate_workspace through approvals.request_authorization with mutation.tool and these exact mutation.arguments. Keep literal content and every ordered step unchanged. A refused action must not be requested again in this task. This call supplies no approval authority. Writes accept at most 32 KiB UTF-8 content and 64 KiB arguments. A receipt grants no read or recipient download authority.",
+        }) + " Tenant execution requires exact absolute /home, /private or /working child paths, current independent Agent IAM and policy. Use as the sole call in a batch. Core persists dispatch and a body-free receipt; an uncertain result must never be replayed. Policy-required or missing mutation authority returns no dispatch. If authorization is required and offered, request mutate_workspace through approvals.request_authorization with mutation.tool and these exact mutation.arguments. Keep literal content and every ordered step unchanged. A refused action must not be requested again in this task. This call supplies no approval authority. Writes accept at most 32 KiB UTF-8 content and 64 KiB arguments. A receipt grants no read or recipient download authority.",
         ParametersJson = ClosedSchema(tool)
     };
     private static string ClosedSchema(ModelToolDefinition tool)

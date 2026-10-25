@@ -348,7 +348,8 @@ public sealed record SessionSnapshot(
     long? PinnedPersonaRevision = null,
     SessionOrigin? Origin = null,
     SessionSurface Surfaces = SessionSurface.ChatList,
-    IReadOnlyList<Guid>? PendingAgentInputIds = null)
+    IReadOnlyList<Guid>? PendingAgentInputIds = null,
+    AgentCore.Domain.Spaces.SessionContextSelection? ContextSelection = null)
 {
     private IReadOnlyList<Guid> _pendingAgentInputIds = ValidatePendingInputs(PendingAgentInputIds ?? []);
     public IReadOnlyList<Guid> PendingAgentInputIds

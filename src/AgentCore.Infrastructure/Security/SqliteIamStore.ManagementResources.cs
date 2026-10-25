@@ -28,6 +28,15 @@ public sealed partial class SqliteIamStore
         && r.RootActivationId == run.Admission.Activation.RootActivationId.ToString("D") && r.InstanceRevision > run.Admission.Configuration!.InstanceRevision, ct);
     private async ValueTask RequireResourcePin(AgentCoreDbContext db, string key, long? revision, AgentRun run, TenantAgent agent, CancellationToken ct)
     {
+        if (AgentCore.Domain.Spaces.SpaceResourceKeys.TryParse(key, out var sourceSpace, out var sourceId))
+        {
+            var tenant = run.Owner.TenantId!.Value;
+            var source = await db.Set<AgentCore.Domain.Spaces.SpaceFileResource>().AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == tenant && r.SpaceId == sourceSpace && r.ResourceId == sourceId && r.DeletedAt == null
+                && db.Set<SpaceRecord>().Any(s => s.TenantId == tenant && s.SpaceId == sourceSpace && s.DeletedAt == null)
+                && db.Set<SpaceAddedBindingRecord>().Any(b => b.TenantId == tenant && b.SpaceId == sourceSpace && b.InstanceId == agent.Instance.InstanceId.ToString("D") && b.Kind == AgentCore.Domain.Spaces.SpaceBindingKind.SpaceFile && b.ResourceKey == key), ct).ConfigureAwait(false);
+            TenantResourceRevisionRules.Require(key, revision, run, agent, await SqliteAgentInstanceStore.ReadResourcesAsync(db, agent.Instance.InstanceId, ct).ConfigureAwait(false), spaceSource: source);
+            return;
+        }
         var inputs = await HasResourcePinChanges(db, run, ct).ConfigureAwait(false) ? await ResourcePinInputs(db, await ManagementReader(db, run, null, ct).ConfigureAwait(false), ct).ConfigureAwait(false) : null;
         var pinned = run.Admission.Configuration!.Resources.SingleOrDefault(r => r.Key == key);
         TenantResourceRevisionRules.Require(key, revision, run, agent, inputs?.Snapshot.Resources ?? await SqliteAgentInstanceStore.ReadResourcesAsync(db, agent.Instance.InstanceId, ct).ConfigureAwait(false),

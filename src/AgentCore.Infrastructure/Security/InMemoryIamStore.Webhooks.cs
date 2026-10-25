@@ -64,7 +64,7 @@ public sealed partial class InMemoryIamStore : ITenantWebhookStore
                     .Where(t => t.Enabled && t.Configuration is AgentCore.Domain.Triggers.EventTrigger e && e.EventId == source)
                     .Select(t => new AgentCore.Domain.Events.EventSubscriptionSnapshot(a.AutomationId, a.Owner, t.Revision,
                         ((AgentCore.Domain.Triggers.EventTrigger)t.Configuration).FilterExpression, ((AgentCore.Domain.Triggers.EventTrigger)t.Configuration).Dispatch,
-                        AgentCore.Domain.Triggers.TriggerSourceKind.ApplicationEvent, source) { TriggerId = t.TriggerId })).Take(AgentCore.Domain.Triggers.TriggerLimits.MaxWebhookFanoutTargets + 1).ToArray();
+                        AgentCore.Domain.Triggers.TriggerSourceKind.ApplicationEvent, source) { TriggerId = t.TriggerId, PinnedSpaceId = a.PinnedSpaceId, PinnedEnvironmentId = a.PinnedEnvironmentId })).Take(AgentCore.Domain.Triggers.TriggerLimits.MaxWebhookFanoutTargets + 1).ToArray();
             if (targets.Length > AgentCore.Domain.Triggers.TriggerLimits.MaxWebhookFanoutTargets) throw new SecurityConflictException("webhook_fanout_limit");
             if (targets.Select(t => t.TriggerId).Distinct().Count() != targets.Length) throw new SecurityConflictException("event_subscription_changed");
             ct.ThrowIfCancellationRequested(); webhookBacking.PutTenantReceipt(TenantWebhookRules.Record(receipt, ApprovalNow));

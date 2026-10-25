@@ -15,7 +15,7 @@ public sealed class TenantToolExecutorBoundaryTests
     [MemberData(nameof(RegisteredToolBoundaries))]
     public async Task Every_registered_effect_requires_actual_tenant_authority_before_arguments_or_provider_dispatch(string name, string shape)
     {
-        var definition = SampleDefinitions.Examiner with { Environment = new(ToolAllowlist: ToolRegistry.All.Select(d => d.Name).ToArray()) };
+        var definition = SampleDefinitions.Examiner with { ExecutionPolicy = new(ToolAllowlist: ToolRegistry.All.Select(d => d.Name).ToArray()) };
         var session = Guid.NewGuid(); var agent = Guid.NewGuid();
         var admission = shape == "absent" ? null : new ToolExecutionAdmission(false, TriggerKind.UserTurn,
             AgentInstanceId: agent, AgentRunId: Guid.NewGuid(), OwnedSessionId: session, AgentRunGeneration: Guid.NewGuid(),
@@ -34,7 +34,7 @@ public sealed class TenantToolExecutorBoundaryTests
     [Fact]
     public void Caller_built_context_does_not_offer_runtime_effects()
     {
-        var definition = SampleDefinitions.Examiner with { Environment = new(ToolAllowlist: ToolRegistry.All.Select(d => d.Name).ToArray()) };
+        var definition = SampleDefinitions.Examiner with { ExecutionPolicy = new(ToolAllowlist: ToolRegistry.All.Select(d => d.Name).ToArray()) };
         var context = new AgentContext(definition, [], "", null, SessionMode.Text, null, false, null,
             new(Guid.NewGuid(), TriggerKind.UserTurn, "Inspect private resources"), ModelSupportsTools: true,
             AgentInstanceId: Guid.NewGuid(), OwnedSessionId: Guid.NewGuid(), CredentialMetadataAvailable: true, AgentWorkspaceAvailable: true,

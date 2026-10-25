@@ -85,7 +85,7 @@ public sealed class FileSessionWorkspaceTests
         var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: metadata, instances: metadata.Instances, sandboxes: metadata.Sandboxes);
         var definition = Examiner() with
         {
-            Environment = new RoleEnvironment(Workspace: new WorkspaceTemplatePolicy("notes"))
+            ExecutionPolicy = new DefinitionExecutionPolicy(Workspace: new WorkspaceTemplatePolicy("notes"))
         };
         await workspace.EnsureAsync(session, definition);
         var welcome = await workspace.ReadAsync(session, definition, "/working/welcome.txt");

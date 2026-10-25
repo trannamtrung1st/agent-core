@@ -15,7 +15,7 @@ public sealed partial class SessionRuntime
             throw AgentCoreErrors.Forbidden("Tenant projection authority is unavailable.");
         var current = await context.CurrentProjectionDefinitionAsync(run, ct).ConfigureAwait(false)
             ?? throw AgentCoreErrors.Forbidden("Tenant execution authority is unavailable.");
-        var environment = admitted.Environment;
+        var environment = admitted.ExecutionPolicy;
         if (environment is not null)
         {
             var selected = environment.ToolList.Where(tool => RolePermissions.AllowsTool(current, tool)).ToArray();
@@ -23,7 +23,7 @@ public sealed partial class SessionRuntime
                 : environment with { ToolAllowlist = selected };
         }
         return StateIsolationAccess.RestrictDefinition(admitted, current) with {
-            Environment = environment, SelfManagement = ManagementPolicyResolver.Restrict(admitted.SelfManagement, current.SelfManagement)
+            ExecutionPolicy = environment, SelfManagement = ManagementPolicyResolver.Restrict(admitted.SelfManagement, current.SelfManagement)
         };
     }
 }

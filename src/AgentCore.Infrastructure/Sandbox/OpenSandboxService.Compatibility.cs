@@ -22,7 +22,10 @@ public sealed partial class OpenSandboxService
             ownerLabel, ownerValue, image, uid = mounts.Authority.Uid, gid = mounts.Authority.Gid,
             working = mounts.Volumes.Single(v => v.MountPath == "/working").Host!.Path,
             home = mounts.Volumes.SingleOrDefault(v => v.MountPath == "/home")?.Host?.Path,
-            homeReadOnly = mounts.Authority.HomeAccess == HomeAccess.ReadOnly
+            homeReadOnly = mounts.Authority.HomeAccess == HomeAccess.ReadOnly,
+            workingReadOnly = mounts.Authority.WorkingReadOnly,
+            privateHome = mounts.Volumes.SingleOrDefault(v => v.MountPath == "/private")?.Host?.Path,
+            privateReadOnly = mounts.Authority.PrivateAccess == HomeAccess.ReadOnly
         });
         try
         {
@@ -54,7 +57,8 @@ public sealed partial class OpenSandboxService
         if (!authority.TranslatedOwnership) return env;
         // Command-local exact directories, never persisted to shared HOME or a
         // global Git configuration. No wildcard or sibling Session can be trusted.
-        var roots = new[] { "/working" }.Concat(authority.HomeAccess == HomeAccess.Disabled ? [] : new[] { "/home" });
+        var roots = new[] { "/working" }.Concat(authority.HomeAccess == HomeAccess.Disabled ? [] : new[] { "/home" })
+            .Concat(authority.PrivateIdentity is null ? [] : new[] { "/private" });
         var trusted = roots.Concat(repositories ?? []).Distinct(StringComparer.Ordinal).ToArray();
         env["GIT_CONFIG_COUNT"] = (trusted.Length + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
         // Clear inherited safe.directory values before adding exact validated roots.
@@ -101,6 +105,7 @@ public sealed partial class OpenSandboxService
         }
         Walk(mounted.Working, "/working", 0);
         if (mounted.Home is not null) Walk(mounted.Home, "/home", 0);
+        if (mounted.Private is not null) Walk(mounted.Private, "/private", 0);
         return result;
     }
 }

@@ -14,6 +14,7 @@ public static class TenantExperienceCommitRules
         TenantConfigurationContinuationRules.RequireDirectWrite(run);
         TenantLocalEffectRules.RequireDirectRun(run, commit.Generation, at);
         var prepared = TenantApprovalRules.PrepareExperience(commit.OperationId, run.AgentInstanceId, observed.Value, target.Instance.Revision, target.Instance.PersonaRevision);
+        prepared = TenantApprovalRules.ForRun(prepared, run);
         if (observed.Arguments.Tool != TenantExperienceToolContract.Record || commit.RunId != run.AgentRunId || commit.ExpectedRunRevision != run.Revision
             || commit.ExpectedInstanceRevision != target.Instance.Revision || commit.Prepared != observed.Value || commit.OperationId == Guid.Empty
             || string.IsNullOrWhiteSpace(commit.SourceCallId) || commit.SourceCallId.Length > 200

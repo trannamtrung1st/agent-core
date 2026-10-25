@@ -23,12 +23,14 @@ public sealed partial class SqliteIamStore : ITenantPreferenceOperationStore
         var before = (await ReadTenantAsync(db, tenant.TenantId, ct).ConfigureAwait(false))!;
         var owned = await OwnedAgents(db, tenant.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == row.AgentInstanceId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("executor_unavailable");
         var target = Owned(owned); TenantSessionRules.RequireExecutor(before, target);
+        await RequireSpaceExecutionSource(db, run, before, new IamAuthorizer(this), ct).ConfigureAwait(false);
         await ValidateTenantActorAsync(db, before, target.PrincipalId, ct).ConfigureAwait(false);
         if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } requester) await ValidateTenantActorAsync(db, before, requester, ct).ConfigureAwait(false);
         var at = (clock ?? TimeProvider.System).GetUtcNow();
         var prepared = TenantApprovalRules.PreparePreferences(commit.OperationId, run.AgentInstanceId,
                 AgentCore.Application.Tools.TenantPreferenceToolContract.Parameters(AgentCore.Application.Tools.TenantPreferenceToolContract.Parse(commit.ArgumentsJson)),
                 target.Instance.Revision, target.Instance.PersonaRevision);
+        prepared = TenantApprovalRules.ForRun(prepared, run);
         var previous = await RootApprovalAsync(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), target.PrincipalId, prepared, ct).ConfigureAwait(false);
         if (previous is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(previous.Domain()));
         var candidate = TenantPreferenceOperationRules.Apply(run, target, commit, at);

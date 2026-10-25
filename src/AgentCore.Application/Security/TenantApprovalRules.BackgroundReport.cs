@@ -14,7 +14,9 @@ public static partial class TenantApprovalRules
             || value.InputBoundarySequence < 0 || ids.Any(id => id == Guid.Empty) || ids.Distinct().Count() != ids.Length
             || value.ConfigurationHash is not { Length: 64 } || value.ConfigurationHash.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f'))
             || value.EvidenceJson is not { Length: > 0 } || System.Text.Encoding.UTF8.GetByteCount(value.EvidenceJson) > AgentRunLimits.MaxEvidenceBytes
-            || value.Model is null) throw new ArgumentException("Invalid exact completion report creation.");
+            || value.Model is null || value.DestinationContext is null || value.DestinationContext.TenantId != value.TenantId)
+            throw new ArgumentException("Invalid exact completion report creation.");
+        value.DestinationContext.Validate();
         _ = value.Model.ToPin();
         try
         {

@@ -7,10 +7,10 @@ import os
 import re
 from pathlib import PurePosixPath
 
-CONTRACT = "4"
+CONTRACT = "5"
 MARKER = "agent-core-filesystem-contract"
 OWNER_LABELS = ("agent-core-generation", "agent-core-image-verification")
-SCOPE = re.compile(r"(?:[0-9a-f]{32}/)?(?:agent-[0-9a-f]{32}/(?:home|sessions/session-[0-9a-f]{32}/working)|\.verification/[0-9a-f]{32}/(?:working|home))\Z")
+SCOPE = re.compile(r"(?:[0-9a-f]{32}/)?(?:agent-[0-9a-f]{32}/(?:sessions/session-[0-9a-f]{32}/working)|tenant-[0-9a-f]{32}/spaces/space-[0-9a-f]{32}/home|\.verification/[0-9a-f]{32}/(?:working|home|private))\Z")
 
 
 def managed(labels):
@@ -33,28 +33,41 @@ def validate_source(source, roots):
     raise ValueError("mount_scope")
 
 
-def validate_binds(binds, roots):
+def validate_binds(binds, roots, tenant=None):
     mounts = {}
     scopes = {}
     for bind in binds:
         source, target, mode = bind.rsplit(":", 2)
-        if target in ("/working", "/home"):
-            if target in mounts or mode not in ("rw", "ro") or target == "/working" and mode != "rw":
+        if target in ("/working", "/home", "/private"):
+            if target in mounts or mode not in ("rw", "ro"):
                 raise ValueError("mount_policy")
             scopes[target] = validate_source(source, roots)
+            scope = re.sub(r"^[0-9a-f]{32}/", "", scopes[target])
+            if target == "/working" and not (re.fullmatch(r"agent-[0-9a-f]{32}/sessions/session-[0-9a-f]{32}/working", scope)
+                    or re.fullmatch(r"\.verification/[0-9a-f]{32}/working", scope)):
+                raise ValueError("working_owner")
             mounts[target] = (source, mode)
         elif target != "/opt/opensandbox" or source.startswith("/"):
             raise ValueError("extra_mount")
     if "/working" not in mounts:
         raise ValueError("working_mount")
-    if "/home" in scopes:
-        working = scopes["/working"]
-        namespace = working.split("/", 1)[0] + "/" if re.match(r"^[0-9a-f]{32}/", working) else ""
-        working = working[len(namespace):]
-        expected = (working.split("/sessions/", 1)[0] + "/home" if working.startswith("agent-")
-                    else working.rsplit("/", 1)[0] + "/home")
-        if scopes["/home"] != namespace + expected:
-            raise ValueError("home_owner")
+    working = scopes["/working"]
+    namespace = working.split("/", 1)[0] + "/" if re.match(r"^[0-9a-f]{32}/", working) else ""
+    working = working[len(namespace):]
+    for target in ("/home", "/private"):
+        if target not in scopes:
+            continue
+        candidate = scopes[target]
+        if working.startswith(".verification/"):
+            if candidate != namespace + working.rsplit("/", 1)[0] + target:
+                raise ValueError("verification_owner")
+        else:
+            if not tenant or not re.fullmatch(r"[0-9a-f]{32}", tenant):
+                raise ValueError("tenant_owner")
+            if not candidate.startswith(namespace + "tenant-" + tenant + "/spaces/space-"):
+                raise ValueError("space_owner")
+    if "/home" in mounts and "/private" in mounts and mounts["/home"][0] == mounts["/private"][0] and mounts["/home"][1] != mounts["/private"][1]:
+        raise ValueError("alias_authority")
     return mounts
 
 
@@ -67,7 +80,7 @@ def prepare_create(kwargs, uid, gid, roots, inspect_image):
         raise ValueError("execution_security")
     if "no-new-privileges=true" not in config.get("SecurityOpt", []):
         raise ValueError("execution_security")
-    validate_binds(config.get("Binds", []), roots)
+    validate_binds(config.get("Binds", []), roots, labels.get("agent-core-tenant"))
     image = inspect_image(kwargs["image"])
     if image.get("Os") != "linux":
         raise ValueError("image_platform")
@@ -90,10 +103,12 @@ def attest(attrs, expected, info, uid, gid, roots):
     selected = expected["image"]
     if attrs["Config"].get("Image") != selected or labels.get("agent-core-source-image") != attrs["Image"]:
         raise ValueError("image_identity")
-    binds = validate_binds(config.get("Binds", []), roots)
-    wanted = {"/working": (expected["working"], "rw")}
+    binds = validate_binds(config.get("Binds", []), roots, labels.get("agent-core-tenant"))
+    wanted = {"/working": (expected["working"], "ro" if expected.get("workingReadOnly", False) else "rw")}
     if expected.get("home") is not None:
         wanted["/home"] = (expected["home"], "ro" if expected["homeReadOnly"] else "rw")
+    if expected.get("privateHome") is not None:
+        wanted["/private"] = (expected["privateHome"], "ro" if expected["privateReadOnly"] else "rw")
     if binds != wanted:
         raise ValueError("backing_path")
     actual = {m["Destination"]: (m["Source"], "rw" if m["RW"] else "ro")
@@ -103,7 +118,7 @@ def attest(attrs, expected, info, uid, gid, roots):
     desktop = info.get("OperatingSystem") == "Docker Desktop" and info.get("OSType") == "linux" and info.get("Name") == "docker-desktop"
     if not desktop and (info.get("OSType") != "linux" or "desktop" in info.get("OperatingSystem", "").lower()):
         raise ValueError("unsupported_topology")
-    return {"contractVersion": 4, "topology": "docker-desktop" if desktop else "linux",
+    return {"contractVersion": 5, "topology": "docker-desktop" if desktop else "linux",
             "imageId": attrs["Image"], "imageUser": labels.get("agent-core-source-user", ""), "runtimeUser": attrs["Config"]["User"]}
 
 
@@ -139,6 +154,9 @@ def install(app, config):
         working: str = Field(max_length=4096)
         home: str | None = Field(default=None, max_length=4096)
         homeReadOnly: bool
+        workingReadOnly: bool
+        privateHome: str | None = Field(default=None, max_length=4096)
+        privateReadOnly: bool
 
     # Inherits the existing server authentication middleware. Workloads have no
     # server key or Docker socket. Never return daemon errors or host paths.

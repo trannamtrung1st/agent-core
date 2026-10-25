@@ -29,13 +29,15 @@ public sealed class TenantAgentDecommissionTests
     }
     private static ValueTask<TenantSecurityState?> State(Fixture f, Setup s) => f.Iam.ReadTenantAsync(s.Tenant);
     private static NativePlaywrightBrowser Browser(Fixture f) => new(new() { Enabled = false, ProfileRoot = Path.Combine(f.Root, "profiles") }, null);
-    private static FileAgentInstanceWorkspaceStore Workspace(Fixture f) => new(Path.Combine(f.Root, "workspaces"), f.Instances, f.Sandboxes, tenantAgents: (ITenantAgentStore)f.Iam, tenantSessions: (ITenantSessionStore)f.Iam);
-    private static TenantAgentDecommissionCleanup Cleanup(Fixture f, IBrowser browser, IAgentInstanceWorkspaceStore workspace, ITenantAgentDecommissionStore? store = null) =>
+    private static FileSpaceWorkspaceStore Workspace(Fixture f) => new(Path.Combine(f.Root, "workspaces"), (ITenantSpaceStore)f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantAgentDecommissionStore)f.Iam, f.Sandboxes);
+    private static TenantAgentDecommissionCleanup Cleanup(Fixture f, IBrowser browser, ITenantAgentWorkspaceCleanup workspace, ITenantAgentDecommissionStore? store = null) =>
         new(store ?? (ITenantAgentDecommissionStore)f.Iam, browser, workspace, f.Ids, f.Clock);
-    private static TenantAgentDecommissionService Service(Fixture f, IBrowser browser, IAgentInstanceWorkspaceStore workspace, ITenantAgentDecommissionStore? store = null) =>
+    private static TenantAgentDecommissionService Service(Fixture f, IBrowser browser, ITenantAgentWorkspaceCleanup workspace, ITenantAgentDecommissionStore? store = null) =>
         new(f.Iam, store ?? (ITenantAgentDecommissionStore)f.Iam, f.Identity, f.Authorizer, f.Clock, new(), Cleanup(f, browser, workspace));
     private static Task<TenantAgent> Archive(Fixture f, Setup s) => f.Agents.SetLifecycleAsync(s.Human.PrincipalId, s.Tenant, s.Agent.Instance.InstanceId,
         AgentInstanceLifecycle.Archived, State(f,s).Result!.Tenant.Revision, ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(s.Tenant,s.Agent.Instance.InstanceId).Result!.Instance.Revision, initiator: s.Human).AsTask();
+    private static string PrivateHome(Fixture f, Guid tenant, Guid instance) => AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), tenant,
+        ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(tenant, instance).GetAwaiter().GetResult()!.SpaceId);
     private static string Profile(Fixture f, Setup s) => Path.Combine(f.Root,"profiles","tenants",s.Tenant.ToString("D"),"agents",s.Agent.Instance.InstanceId.ToString("D"));
     private static string Seed(string directory, string content = "private retained state") { Directory.CreateDirectory(directory); var file=Path.Combine(directory,"sentinel"); File.WriteAllText(file,content);return file; }
 
@@ -45,19 +47,20 @@ public sealed class TenantAgentDecommissionTests
         await using var f=await Fixture.Create(sqlite,builtInAuthority:true);var s=await Prepare(f);var browser=Browser(f);var workspace=Workspace(f);var service=Service(f,browser,workspace);
         try {
             var view=await service.ReadAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human);Assert.False(view.CanDecommission);Assert.Equal("archive_required",view.Blocker);
+            var privateSpaceId=(await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(s.Tenant,s.Agent.Instance.InstanceId))!.SpaceId;
             var role=await f.Access.SaveRoleAsync(s.Human.PrincipalId,s.Tenant,null,"Retirement scoped role",["agents.read","agents.chat","workspaces.read"],(await State(f,s))!.Tenant.Revision);
             await f.Access.AssignRoleAsync(s.Human.PrincipalId,s.Tenant,s.Agent.PrincipalId,role.RoleId,AccessScope.ForTenant(s.Tenant),(await State(f,s))!.Tenant.Revision);
-            await f.Access.AssignRoleAsync(s.Human.PrincipalId,s.Tenant,s.Human.PrincipalId,role.RoleId,TenantWorkspaceRules.Home(s.Tenant,s.Agent.Instance.InstanceId),(await State(f,s))!.Tenant.Revision);
+            await f.Access.AssignRoleAsync(s.Human.PrincipalId,s.Tenant,s.Human.PrincipalId,role.RoleId,TenantWorkspaceRules.Home(s.Tenant,privateSpaceId),(await State(f,s))!.Tenant.Revision);
             var credential=await f.Service.CreateAsync(s.Human.PrincipalId,s.Tenant,new("Retired binding",AgentCore.Domain.Credentials.CredentialKind.Password,AgentCore.Domain.Credentials.CredentialPurpose.General,null,[],"private-password"),(await State(f,s))!.Tenant.Revision);
             await f.BindingService.BindAsync(s.Human.PrincipalId,s.Tenant,s.Agent.Instance.InstanceId,credential.Credential.CredentialId,"retirement",(await State(f,s))!.Tenant.Revision,1,credential.Credential.Revision);
-            var profile=Seed(Profile(f,s));var home=Seed(AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root,"workspaces"),s.Agent.Instance.InstanceId));
+            var profile=Seed(Profile(f,s));var home=Seed(PrivateHome(f, s.Tenant, s.Agent.Instance.InstanceId));
             var sibling=Seed(Path.Combine(f.Root,"profiles","tenants",Guid.NewGuid().ToString("D"),"agents",Guid.NewGuid().ToString("D")),"preserve sibling");
             var outside=Seed(Path.Combine(f.Root,"outside"),"preserve link target");Directory.CreateSymbolicLink(Path.Combine(Path.GetDirectoryName(home)!,"linked-child"),Path.GetDirectoryName(outside)!);
             await Archive(f,s);view=await service.ReadAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human);Assert.True(view.CanDecommission);var operation=f.Ids.NewId();
             var result=await service.DecommissionAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human,view.SecurityRevision,view.InstanceRevision,operation);
             Assert.Equal("decommissioned",result.Status);Assert.Equal("completed",result.CleanupStatus);Assert.False(File.Exists(profile));Assert.False(File.Exists(home));Assert.Equal("preserve sibling",File.ReadAllText(sibling));Assert.Equal("preserve link target",File.ReadAllText(outside));
             var state=(await State(f,s))!;Assert.Equal(IdentityStatus.Removed,state.SystemIdentities.Single(i=>i.PrincipalId==s.Agent.PrincipalId).Status);Assert.Equal(IdentityStatus.Removed,state.Principals.Single(p=>p.PrincipalId==s.Agent.PrincipalId).Status);
-            Assert.DoesNotContain(state.Assignments,a=>a.PrincipalId==s.Agent.PrincipalId||a.Scope==TenantWorkspaceRules.Home(s.Tenant,s.Agent.Instance.InstanceId));
+            Assert.DoesNotContain(state.Assignments,a=>a.PrincipalId==s.Agent.PrincipalId||a.Scope==TenantWorkspaceRules.Home(s.Tenant,privateSpaceId));
             Assert.Null(await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(s.Tenant,s.Agent.Instance.InstanceId));Assert.Empty((await ((ITenantAgentStore)f.Iam).ListTenantAgentsAsync(s.Tenant,null,0,30)).Items);Assert.True(await f.Instances.HasBackingInstanceAsync(s.Agent.Instance.InstanceId));
             Assert.False((await f.Authorizer.CheckAsync(s.Human.PrincipalId,"agents.read",TenantAgentDecommissionRules.Scope(s.Tenant,s.Agent.Instance.InstanceId))).Allowed);
             var snapshot=(await ((ITenantAgentDecommissionStore)f.Iam).ReadAgentDecommissionAsync(s.Tenant,s.Agent.Instance.InstanceId))!;Assert.Equal(operation,snapshot.Receipt!.AuditId);Assert.Equal(s.Human.PrincipalId,snapshot.Receipt.ActorPrincipalId);
@@ -74,7 +77,7 @@ public sealed class TenantAgentDecommissionTests
     {
         await using var f=await Fixture.Create(sqlite,builtInAuthority:true);var s=await Prepare(f);var browser=Browser(f);var workspace=Workspace(f);var service=Service(f,browser,workspace);
         try {
-            var profile=Seed(Profile(f,s));var home=Seed(AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root,"workspaces"),s.Agent.Instance.InstanceId));await Archive(f,s);
+            var profile=Seed(Profile(f,s));var home=Seed(PrivateHome(f, s.Tenant, s.Agent.Instance.InstanceId));await Archive(f,s);
             browser.TenantProfileDeleteProbe=_=>throw new IOException("controlled private deletion failure");browser.TenantProfileBeforeDeleteProbe=async()=>await f.Identity.SignOutAsync(s.Human.AuthenticationSessionId);
             var view=await service.ReadAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human);var operation=f.Ids.NewId();var result=await service.DecommissionAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human,view.SecurityRevision,view.InstanceRevision,operation);
             Assert.Equal("pending",result.CleanupStatus);Assert.True(File.Exists(profile));Assert.True(File.Exists(home));await Assert.ThrowsAsync<AccessDeniedException>(()=>service.ReadAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human).AsTask());
@@ -104,21 +107,50 @@ public sealed class TenantAgentDecommissionTests
         } finally {await browser.StopAsync(CancellationToken.None);}
     }
 
-    private sealed class FailingWorkspaceCleanup(IAgentInstanceWorkspaceStore inner) : IAgentInstanceWorkspaceStore, ITenantAgentWorkspaceCleanup
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Decommission_retires_Private_context_and_protected_refs_while_Shared_files_and_other_members_survive(bool sqlite)
+    {
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Prepare(f); var browser = Browser(f); var workspace = Workspace(f);
+        try
+        {
+            async Task<long> Revision() => (await State(f, s))!.Tenant.Revision;
+            var spaceStore = (ITenantSpaceStore)f.Iam;
+            var spaces = new TenantSpaceService(f.Iam, spaceStore, (ITenantAgentStore)f.Iam, f.Authorizer, f.RunConfiguration(),
+                (ITenantCredentialBindingStore)f.Iam, (ITenantCredentialStore)f.Iam, f.Ids, f.Clock);
+            var own = (await spaceStore.FindPrivateSpaceAsync(s.Tenant, s.Agent.Instance.InstanceId))!;
+            var sibling = await f.Agents.CreateAsync(s.Human.PrincipalId, s.Tenant, "examiner", 1, await Revision(), initiator: s.Human);
+            var shared = await spaces.CreateAsync(s.Human.PrincipalId, s.Tenant, f.Ids.NewId(), "Shared room", "", "", await Revision());
+            await spaces.SetMemberAsync(s.Human.PrincipalId, s.Tenant, shared.SpaceId, s.Agent.Instance.InstanceId, "", "", [], [], await Revision(), 1, 0);
+            await spaces.SetMemberAsync(s.Human.PrincipalId, s.Tenant, shared.SpaceId, sibling.Instance.InstanceId, "", "", [], [], await Revision(), 2, 0);
+            var environments = new TenantEnvironmentService(f.Iam, spaceStore, (ITenantEnvironmentStore)f.Iam, (ITenantSecretStore)f.Iam,
+                (ITenantCredentialStore)f.Iam, f.Authorizer, f.Identity, f.Ids, f.Clock);
+            var secrets = new TenantSecretService(f.Iam, (ITenantSecretStore)f.Iam, f.Authorizer, new AgentCore.Infrastructure.Credentials.LocalCredentialProtector(Path.Combine(f.Root, "secret-keys")), f.Ids, f.Clock, f.Identity);
+            var secret = await secrets.CreateAsync(s.Human.PrincipalId, s.Tenant, "Private test token", "", "protected-retirement-test-value", await Revision(), s.Human);
+            var profile = await environments.SaveAsync(s.Human.PrincipalId, s.Tenant, own.SpaceId, f.Ids.NewId(), "Test", "", await Revision(), own.Revision, 0, s.Human);
+            await environments.SaveVariableAsync(s.Human.PrincipalId, s.Tenant, own.SpaceId, profile.EnvironmentId, "TOKEN", AgentCore.Domain.Spaces.EnvironmentVariableKind.SecretReference,
+                "", null, secret.SecretId, null, await Revision(), own.Revision, 1, 0, s.Human);
+            await spaces.UpdateAsync(s.Human.PrincipalId, s.Tenant, own.SpaceId, own.Name, own.Description, own.Instructions, true, await Revision(), own.Revision);
+            var privateFile = Seed(PrivateHome(f, s.Tenant, s.Agent.Instance.InstanceId));
+            var sharedFile = Seed(AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), s.Tenant, shared.SpaceId), "preserve Shared bytes");
+            await Archive(f, s); var service = Service(f, browser, workspace); var view = await service.ReadAsync(s.Tenant, s.Agent.Instance.InstanceId, s.Human);
+            Assert.Equal("completed", (await service.DecommissionAsync(s.Tenant, s.Agent.Instance.InstanceId, s.Human, view.SecurityRevision, view.InstanceRevision, f.Ids.NewId())).CleanupStatus);
+            Assert.False(File.Exists(privateFile)); Assert.Equal("preserve Shared bytes", File.ReadAllText(sharedFile));
+            Assert.Null(await spaceStore.FindSpaceAsync(s.Tenant, own.SpaceId)); Assert.Empty(await spaceStore.ReadMembershipsAsync(s.Tenant, own.SpaceId));
+            Assert.Equal(sibling.Instance.InstanceId, Assert.Single(await spaceStore.ReadMembershipsAsync(s.Tenant, shared.SpaceId)).InstanceId);
+            Assert.Equal(4, (await spaceStore.FindSpaceAsync(s.Tenant, shared.SpaceId))!.Revision);
+            Assert.Empty(await ((ITenantEnvironmentStore)f.Iam).ListEnvironmentsAsync(s.Tenant, own.SpaceId));
+            await secrets.DeleteAsync(s.Human.PrincipalId, s.Tenant, secret.SecretId, await Revision(), secret.Revision, s.Human);
+            Assert.Null(await ((ITenantSecretStore)f.Iam).FindSecretAsync(s.Tenant, secret.SecretId));
+        }
+        finally { await browser.StopAsync(CancellationToken.None); }
+    }
+
+    private sealed class FailingWorkspaceCleanup(ITenantAgentWorkspaceCleanup inner) : ITenantAgentWorkspaceCleanup
     {
         internal bool Fail = true;
         public ValueTask PurgeDecommissionedAgentAsync(TenantBrowserAgentOwner owner, Func<CancellationToken, ValueTask<bool>> still, CancellationToken ct = default) =>
             Fail ? ValueTask.FromException(new IOException("Controlled owned workspace purge failure")) : ((ITenantAgentWorkspaceCleanup)inner).PurgeDecommissionedAgentAsync(owner, still, ct);
-        public ValueTask DeleteInstanceAsync(Guid id, CancellationToken ct = default) => inner.DeleteInstanceAsync(id, ct);
-        public ValueTask DeleteInstanceContentAsync(Guid id, CancellationToken ct = default) => inner.DeleteInstanceContentAsync(id, ct);
-        public ValueTask<AgentWorkspacePage> ListAsync(Guid id, string prefix, string? after, int limit, CancellationToken ct = default) => inner.ListAsync(id, prefix, after, limit, ct);
-        public ValueTask RequireDirectoryAsync(Guid id, string path, CancellationToken ct = default) => inner.RequireDirectoryAsync(id, path, ct);
-        public ValueTask<AgentWorkspacePage> FindFilesAsync(Guid id, string query, string? after, int limit, CancellationToken ct = default) => inner.FindFilesAsync(id, query, after, limit, ct);
-        public ValueTask<AgentWorkspaceContent> ReadAsync(Guid id, string path, CancellationToken ct = default) => inner.ReadAsync(id, path, ct);
-        public ValueTask<AgentWorkspaceContent> InspectAsync(Guid id, string path, int maxBytes, CancellationToken ct = default) => inner.InspectAsync(id, path, maxBytes, ct);
-        public ValueTask<AgentWorkspaceItem> WriteFileAsync(Guid id, string path, ReadOnlyMemory<byte> bytes, CancellationToken ct = default) => inner.WriteFileAsync(id, path, bytes, ct);
-        public ValueTask DeleteAsync(Guid id, string path, CancellationToken ct = default) => inner.DeleteAsync(id, path, ct);
-        public ValueTask<WorkspaceStructureResult> StructureAsync(Guid id, IReadOnlyList<WorkspaceStructuralOperation> operations, CancellationToken ct = default) => inner.StructureAsync(id, operations, ct);
+
     }
 
     [Theory]
@@ -131,8 +163,8 @@ public sealed class TenantAgentDecommissionTests
         {
             var workspace = new FailingWorkspaceCleanup(Workspace(f)); var service = Service(f, browser, workspace);
             var sibling = await f.Agents.CreateAsync(s.Human.PrincipalId, s.Tenant, "examiner", 1, (await State(f,s))!.Tenant.Revision, initiator:s.Human);
-            var home = Seed(AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root,"workspaces"),s.Agent.Instance.InstanceId));
-            var siblingFile = Seed(AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root,"workspaces"),sibling.Instance.InstanceId), "preserve active owner");
+            var home = Seed(PrivateHome(f, s.Tenant, s.Agent.Instance.InstanceId));
+            var siblingFile = Seed(PrivateHome(f, s.Tenant, sibling.Instance.InstanceId), "preserve active owner");
             await Archive(f,s); var view = await service.ReadAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human); var operation = f.Ids.NewId();
             var result = await service.DecommissionAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human,view.SecurityRevision,view.InstanceRevision,operation);
             Assert.Equal("pending",result.CleanupStatus); Assert.Equal("private retained state",File.ReadAllText(home));
@@ -168,6 +200,7 @@ public sealed class TenantAgentDecommissionTests
         public async ValueTask<bool> TryDecommissionAgentAsync(Guid tenant,Guid instance,HumanSessionReference human,long security,long revision,AuthorizationAudit audit,CancellationToken ct=default)
         {await before();return await inner.TryDecommissionAgentAsync(tenant,instance,human,security,revision,audit,ct);}
         public ValueTask<TenantAgentDecommissionPage> ListAgentDecommissionCleanupAsync(Guid? after,int limit,CancellationToken ct=default)=>inner.ListAgentDecommissionCleanupAsync(after,limit,ct);
+        public ValueTask<TenantWorkspaceReference.SpaceHome?> ReadDecommissionedPrivateWorkspaceAsync(TenantBrowserAgentOwner owner, CancellationToken ct = default) => inner.ReadDecommissionedPrivateWorkspaceAsync(owner, ct);
         public ValueTask<bool> CanPurgeDecommissionedAgentWorkspaceAsync(TenantBrowserAgentOwner owner,CancellationToken ct=default)=>inner.CanPurgeDecommissionedAgentWorkspaceAsync(owner,ct);
         public ValueTask<bool> IsAgentDecommissionedAsync(TenantBrowserAgentOwner owner,CancellationToken ct=default)=>inner.IsAgentDecommissionedAsync(owner,ct);
     }
@@ -185,7 +218,7 @@ public sealed class TenantAgentDecommissionTests
     {
         await using var f=await Fixture.Create(sqlite,builtInAuthority:true);var s=await Prepare(f);var browser=Browser(f);var workspace=Workspace(f);
         try {
-            await Archive(f,s);var home=Seed(AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root,"workspaces"),s.Agent.Instance.InstanceId));
+            await Archive(f,s);var home=Seed(PrivateHome(f, s.Tenant, s.Agent.Instance.InstanceId));
             var store=new CommitBoundary((ITenantAgentDecommissionStore)f.Iam,async()=>{
                 if(boundary=="logout")await f.Identity.SignOutAsync(s.Human.AuthenticationSessionId);
                 else if(boundary=="password")await f.Identity.ChangePasswordAsync(s.Human.AccountId,"strong-retirement-password","new-strong-retirement-password");
@@ -217,7 +250,7 @@ public sealed class TenantAgentDecommissionTests
     {
         await using var f=await Fixture.Create(sqlite,builtInAuthority:true);var s=await Prepare(f);var browser=Browser(f);var workspace=Workspace(f);var service=Service(f,browser,workspace);
         try {
-            Seed(Profile(f,s));var home=Seed(AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root,"workspaces"),s.Agent.Instance.InstanceId));await Archive(f,s);
+            Seed(Profile(f,s));var home=Seed(PrivateHome(f, s.Tenant, s.Agent.Instance.InstanceId));await Archive(f,s);
             browser.TenantProfileDeleteProbe=_=>throw new IOException("controlled first cleanup failure");var view=await service.ReadAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human);
             Assert.Equal("pending",(await service.DecommissionAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human,view.SecurityRevision,view.InstanceRevision,f.Ids.NewId())).CleanupStatus);
             // Controlled durable orphan from a pre-cutover lease: legacy enumeration hides this

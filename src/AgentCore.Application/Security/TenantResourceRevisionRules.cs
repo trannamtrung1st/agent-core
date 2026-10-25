@@ -1,13 +1,23 @@
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
+using AgentCore.Domain.Spaces;
 
 namespace AgentCore.Application.Security;
 
 public static class TenantResourceRevisionRules
 {
-    public static void Require(string key, long? revision, AgentRun run, TenantAgent agent, InstanceResourceSnapshot resources, TenantResourcePinRetention? retained = null)
+    public static void Require(string key, long? revision, AgentRun run, TenantAgent agent, InstanceResourceSnapshot resources, TenantResourcePinRetention? retained = null, SpaceFileResource? spaceSource = null)
     {
+        if (SpaceResourceKeys.TryParse(key, out var sourceSpace, out var sourceId))
+        {
+            var pin = run.Admission.Configuration!;
+            if (spaceSource is null || spaceSource.DeletedAt is not null || spaceSource.TenantId != run.Owner.TenantId
+                || spaceSource.SpaceId != sourceSpace || spaceSource.ResourceId != sourceId || sourceSpace != pin.SpaceContext?.SpaceId
+                || spaceSource.Revision != revision || spaceSource.Effective() != pin.Resources.SingleOrDefault(r => r.Key == key))
+                throw new SecurityConflictException("resource_source_changed");
+            return;
+        }
         if (retained is not null)
         {
             if (retained.InstanceRevision != agent.Instance.Revision || retained.ResourceRevision != revision

@@ -18,7 +18,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
     ILogger<OpenSandboxService>? logger = null, SandboxImageAuthority? imageAuthority = null, ITenantSandboxVerificationStore? tenantVerifications = null,
     AgentCore.Application.Security.TenantSandboxImageAuthorization? verificationAuthority = null,
     ITenantSandboxRuntimeStore? tenantRuntime = null, AgentCore.Application.Security.TenantSandboxApprovedOperationService? approvedSandbox = null,
-    AgentCore.Application.Security.TenantSandboxExecutionAuthority? tenantExecutionAuthority = null, ITenantRunStore? tenantRuns = null, AgentCore.Application.Security.TenantSandboxGenerationAuthority? tenantGenerationAuthority = null) : ISandboxService, ITenantSandboxVerifier, ITenantSandboxCommandExecutor
+    AgentCore.Application.Security.TenantSandboxExecutionAuthority? tenantExecutionAuthority = null, ITenantRunStore? tenantRuns = null, AgentCore.Application.Security.TenantSandboxGenerationAuthority? tenantGenerationAuthority = null) : ISandboxService, ITenantSandboxVerifier, ITenantSandboxCommandExecutor, ITenantSandboxContextIsolation
 {
     private SandboxImageAuthority Images => imageAuthority ?? new(options, store, time);
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _gates = new();

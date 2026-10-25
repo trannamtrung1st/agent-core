@@ -50,7 +50,7 @@ public sealed partial class TenantAccountRuntimeReadService(IIamStore security, 
         if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
         if (run.SessionId != frame.SessionId || run.Owner != frame.Owner) throw new AccessDeniedException("tenant_context_mismatch");
         var (agent, baseline) = await configuration.BaselineAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
-        var snapshot = await bindings.ReadTenantCredentialBindingsAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("account_unavailable");
+        var snapshot = await configuration.CurrentCredentialBindingsAsync(run, ct, bindings).ConfigureAwait(false) ?? throw new AccessDeniedException("account_unavailable");
         var bound = snapshot.Bindings.SingleOrDefault(b => b.Binding.Reference == reference) ?? throw new AccessDeniedException("account_unavailable");
         if (snapshot.Agent.Instance.Revision != agent.Instance.Revision || snapshot.Agent.PrincipalId != run.Owner.ExecutorPrincipalId)
             throw new SecurityConflictException("account_source_changed");

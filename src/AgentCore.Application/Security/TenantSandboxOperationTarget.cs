@@ -12,6 +12,7 @@ public sealed class TenantSandboxOperationTarget(ITenantSessionStore sessions, I
     {
         var tenant = run.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
         var (agent, baseline) = await configuration.BaselineAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
+        await configuration.RequireCurrentSpaceAsync(run, ct).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(tenant, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         var profile = TenantSandboxOperationRules.Profile(run, profileId);
         var source = await profiles.FindTenantSandboxProfileAsync(tenant, profileId, profile.Revision, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
@@ -45,6 +46,12 @@ public sealed class TenantSandboxOperationTarget(ITenantSessionStore sessions, I
             || target.Agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision)
             throw new SecurityConflictException("sandbox_operation_witness_changed");
         TenantSandboxOperationRules.Require(value, run, target.Agent, target.Session, target.Baseline, target.Profile, target.Lease, time.GetUtcNow(), reserved);
+        var state = await security.ReadTenantAsync(request.TenantId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
+        var baseline = AgentCore.Application.Agents.InstanceSettingsResolver.Resolve(target.Baseline, target.Agent.Instance.SettingsOverrides);
+        var policy = AgentCore.Domain.Definitions.StateIsolationPolicy.Restrict(run.Admission.Configuration!.Definition.StateIsolationPolicy ?? AgentCore.Domain.Definitions.StateIsolationPolicy.Default,
+            baseline.StateIsolationPolicy ?? AgentCore.Domain.Definitions.StateIsolationPolicy.Default).HomeAccess;
+        TenantSandboxWorkspaceRules.Require(value.WorkspaceAccess ?? throw new AccessDeniedException("sandbox_workspace_context_required"),
+            await TenantSandboxWorkspaceRules.ResolveAsync(state, run, policy, authorizer, ct).ConfigureAwait(false));
         if (request.Snapshot != TenantSandboxOperationRules.Snapshot(target.Agent, TenantSandboxOperationRules.Profile(run, value.ProfileId), target.Lease, reserved?.InitializesGeneration))
             throw new SecurityConflictException("sandbox_operation_witness_changed");
     }

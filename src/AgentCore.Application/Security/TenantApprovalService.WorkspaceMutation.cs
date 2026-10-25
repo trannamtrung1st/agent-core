@@ -17,10 +17,11 @@ public sealed partial class TenantApprovalService
             if (target.Run.Revision != expectedRunRevision) throw new SecurityConflictException("stale_revision");
             var value = TenantApprovalRules.MutationParameters(run.SessionId, target.Arguments, target.ObservationHash);
             var op = TenantApprovalRules.PrepareWorkspaceMutation(ids.NewId(), run.AgentInstanceId, value, target.Agent.Instance.Revision, target.Agent.Instance.PersonaRevision);
+            op = TenantApprovalRules.ForRun(op, run);
             var prior = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.ExecutionContext!.RootActivationId, target.Agent.PrincipalId, op, ct).ConfigureAwait(false);
             if (prior is not null) return await DuplicateOutcome(target.State, run, prior, ct).ConfigureAwait(false);
             var compoundReview = false;
-            foreach (var (key, scope) in TenantWorkspaceMutationOperationRules.Targets(reference.TenantId, run.AgentInstanceId, value))
+            foreach (var (key, scope) in TenantWorkspaceMutationOperationRules.Targets(reference.TenantId, run.AgentInstanceId, value, TenantWorkspaceRules.Context(run)))
                 if (key != op.Permission || scope != target.Scope)
                     compoundReview |= await TenantSandboxReadOperationRules.NeedsReviewAsync(target.State, run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, key, scope, authorizer, ct).ConfigureAwait(false);
             var decision = await operations.Evaluate(target.State, run.Admission.ExecutionContext!, op.Permission, target.Scope, ct, compoundReview).ConfigureAwait(false);

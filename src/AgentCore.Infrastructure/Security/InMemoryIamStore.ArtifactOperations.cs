@@ -25,6 +25,7 @@ public sealed partial class InMemoryIamStore : ITenantArtifactOperationStore
             var args = TenantArtifactOperationRules.Validate(run, target, commit, at);
             var publication = new PreparedArtifactPublication(run.SessionId, args.CanonicalArguments, commit.Source);
             var prepared = TenantApprovalRules.PrepareArtifact(commit.OperationId, run.AgentInstanceId, publication, target.Instance.Revision, target.Instance.PersonaRevision);
+            prepared = TenantApprovalRules.ForRun(prepared, run);
             var correlated = RootApproval(before.Tenant.TenantId, run.Admission.Activation.RootActivationId, target.PrincipalId, prepared.OperationFingerprint);
             if (correlated is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(correlated));
             var definition = TenantAgentDefinitionBaseline(target);

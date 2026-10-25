@@ -78,7 +78,7 @@ public sealed partial class SqliteIamStore : ITenantWebhookStore
             .Where(t => t.Enabled && t.Configuration is AgentCore.Domain.Triggers.EventTrigger e && e.EventId == source)
             .Select(t => new AgentCore.Domain.Events.EventSubscriptionSnapshot(a.AutomationId, a.Owner, t.Revision,
                 ((AgentCore.Domain.Triggers.EventTrigger)t.Configuration).FilterExpression, ((AgentCore.Domain.Triggers.EventTrigger)t.Configuration).Dispatch,
-                AgentCore.Domain.Triggers.TriggerSourceKind.ApplicationEvent, source) { TriggerId = t.TriggerId })).ToArray();
+                AgentCore.Domain.Triggers.TriggerSourceKind.ApplicationEvent, source) { TriggerId = t.TriggerId, PinnedSpaceId = a.PinnedSpaceId, PinnedEnvironmentId = a.PinnedEnvironmentId })).ToArray();
         var stored = SqliteExternalEventStore.ToRecord(TenantWebhookRules.Record(receipt, now));
         stored.SubscriptionsJson = System.Text.Json.JsonSerializer.Serialize(targets, CoreEventPersistence.Json);
         db.ExternalEvents.Add(stored);

@@ -300,7 +300,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             if (request.Operation.WorkspaceRead is not null && request.Status != TenantApprovalStatus.Cancelled)
             {
                 RequireWorkspaceReadOperation(request, run, agent);
-                TenantWorkspaceReadOperationRules.ReviewerAsync(before, agent.Instance.InstanceId, request.Operation.WorkspaceRead, request.OriginalInitiatorPrincipalId,
+                TenantWorkspaceReadOperationRules.ReviewerAsync(before, agent.Instance.InstanceId, request.Operation.WorkspaceRead, TenantWorkspaceRules.Context(request.Operation), request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             }
             if (request.Operation.AttachmentRead is not null && request.Status != TenantApprovalStatus.Cancelled)
@@ -357,8 +357,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
     }
     private void RequireCredentialOperation(TenantApprovalRequest request, AgentCore.Domain.Conversation.AgentRun run, TenantAgent agent)
     {
-        var snapshot = ReadTenantCredentialBindingsAsync(request.TenantId, request.Operation.InstanceId).Result;
-        var bound = snapshot?.Bindings.SingleOrDefault(b => b.Binding.BindingId == request.Operation.CredentialCheck!.BindingId)
+        var bound = ContextCredentialBindings(run).SingleOrDefault(b => b.Binding.BindingId == request.Operation.CredentialCheck!.BindingId)
             ?? throw new AccessDeniedException("credential_binding_changed");
         TenantCredentialOperationRules.RequireRequest(request, run, agent, bound);
     }

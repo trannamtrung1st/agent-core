@@ -11,8 +11,8 @@ public static class ToolProjectionService
     public static IReadOnlyList<ModelToolDefinition> Project(AgentDefinition definition, AgentContext? context, IToolConfigurationGate gate)
     {
         var eligible = ToolCatalog.Eligible(definition, context, gate);
-        if (definition.Environment?.Capabilities is null) return eligible.Where(t => !ManagementTools.IsManagement(t.Name) || ToolRegistry.Get(t.Name).OfferRule == ToolOfferRule.TenantExecutionAuthority || (context?.LoadedCapabilityIds ?? []).Contains(t.Name) || (context?.PinnedSkillCatalog ?? []).Where(s => (context?.ActiveSkillKeys ?? []).Contains(s.Key)).SelectMany(s => s.RequiredCapabilities).Contains(t.Name)).Select(t => ForContext(t, context)).ToArray();
-        var always = definition.Environment.Projection?.AlwaysCapabilities ?? [];
+        if (definition.ExecutionPolicy?.Capabilities is null) return eligible.Where(t => !ManagementTools.IsManagement(t.Name) || ToolRegistry.Get(t.Name).OfferRule == ToolOfferRule.TenantExecutionAuthority || (context?.LoadedCapabilityIds ?? []).Contains(t.Name) || (context?.PinnedSkillCatalog ?? []).Where(s => (context?.ActiveSkillKeys ?? []).Contains(s.Key)).SelectMany(s => s.RequiredCapabilities).Contains(t.Name)).Select(t => ForContext(t, context)).ToArray();
+        var always = definition.ExecutionPolicy.Projection?.AlwaysCapabilities ?? [];
         var skill = (context?.PinnedSkillCatalog ?? []).Where(s => context?.ActiveSkillKeys?.Contains(s.Key, StringComparer.Ordinal) == true)
             .SelectMany(s => s.RequiredCapabilities ?? []).ToHashSet(StringComparer.Ordinal);
         var loaded = context?.LoadedCapabilityIds ?? [];
@@ -21,7 +21,7 @@ public static class ToolProjectionService
             || BrowserBootstrap.Contains(t.Name)
             || always.Contains(t.Name, StringComparer.Ordinal) || skill.Contains(t.Name)
             || loaded.Contains(t.Name, StringComparer.Ordinal)
-            || !ToolRegistry.Get(t.Name).Discoverable || context?.ExecutionContext is not null && (TenantExperienceToolContract.IsTool(t.Name) || TenantMemoryToolContract.IsTool(t.Name) || TenantCredentialDiscoveryContract.IsFamilyTool(t.Name) || TenantPublicWebReadContract.IsRead(t.Name) || TenantWorkspaceMutationContract.IsMutation(t.Name) || TenantWorkspaceReadContract.IsRead(t.Name) || t.Name is ToolCatalog.ArtifactsVerify or ToolCatalog.ArtifactsCreateFromWorkspace || TenantSandboxInspectionContract.IsInspection(t.Name) || TenantBrowserInspectionContract.IsInspection(t.Name) || t.Name == ToolCatalog.AgentStateInspect)))
+            || !ToolRegistry.Get(t.Name).Discoverable || context?.ExecutionContext is not null && (TenantContextToolContract.IsTool(t.Name) || TenantExperienceToolContract.IsTool(t.Name) || TenantMemoryToolContract.IsTool(t.Name) || TenantCredentialDiscoveryContract.IsFamilyTool(t.Name) || TenantPublicWebReadContract.IsRead(t.Name) || TenantWorkspaceMutationContract.IsMutation(t.Name) || TenantWorkspaceReadContract.IsRead(t.Name) || t.Name is ToolCatalog.ArtifactsVerify or ToolCatalog.ArtifactsCreateFromWorkspace || TenantSandboxInspectionContract.IsInspection(t.Name) || TenantBrowserInspectionContract.IsInspection(t.Name) || t.Name == ToolCatalog.AgentStateInspect)))
             .Select(t => ForContext(t, context))
             .DistinctBy(t => t.Name).OrderBy(t => t.Name, StringComparer.Ordinal).ToArray();
     }

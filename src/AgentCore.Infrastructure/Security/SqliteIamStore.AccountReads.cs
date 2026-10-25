@@ -34,7 +34,7 @@ public sealed partial class SqliteIamStore
     {
         var read = request.Operation.AccountRead!;
         var session = await ReadSandboxSession(db, request.TenantId, read.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        var bound = await CredentialOperationTarget(db, request.TenantId, agent.Instance.InstanceId, read.Credential.BindingId, read.Credential.CredentialId, ct).ConfigureAwait(false);
+        var bound = await ContextCredentialTarget(db, run, read.Credential.BindingId, read.Credential.CredentialId, ct).ConfigureAwait(false);
         TenantAccountReadRules.Require(read, run, agent, session, await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false), bound, exactSecret);
         if (read.Source is { } original)
         {

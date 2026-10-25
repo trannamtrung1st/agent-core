@@ -31,12 +31,12 @@ public sealed class StateIsolationPolicyTests
     public void State_visibility_never_implicitly_grants_a_tool_to_an_old_all_publication()
     {
         var definition = SampleDefinitions.Examiner with { StateIsolationPolicy = new(AgentStateVisibility: AgentStateVisibility.InstanceSummary),
-            Environment = new RoleEnvironment(Capabilities: new("All", [ToolCatalog.WebSearch])) };
+            ExecutionPolicy = new DefinitionExecutionPolicy(Capabilities: new("All", [ToolCatalog.WebSearch])) };
         var context = new AgentContext(definition, [], "", null, SessionMode.Text, null, false, null,
             new(Guid.NewGuid(), TriggerKind.UserTurn, "Hello"), AgentInstanceId: Guid.NewGuid(), OwnedSessionId: Guid.NewGuid());
         Assert.True(ToolRegistry.Get(ToolCatalog.AgentStateInspect).DefinitionAuthorizable);
         Assert.False(ToolPolicy.IsOffered(definition, context, ToolCatalog.AgentStateInspect, ToolConfigurationGates.AllowAll));
-        definition = definition with { Environment = new RoleEnvironment(Capabilities: new("Selected", [ToolCatalog.AgentStateInspect])) };
+        definition = definition with { ExecutionPolicy = new DefinitionExecutionPolicy(Capabilities: new("Selected", [ToolCatalog.AgentStateInspect])) };
         Assert.True(ToolPolicy.IsOffered(definition, context, ToolCatalog.AgentStateInspect, ToolConfigurationGates.AllowAll));
         definition = definition with { StateIsolationPolicy = new(AgentStateVisibility: AgentStateVisibility.Off) };
         Assert.False(ToolPolicy.IsOffered(definition, context, ToolCatalog.AgentStateInspect, ToolConfigurationGates.AllowAll));

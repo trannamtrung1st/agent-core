@@ -52,7 +52,7 @@ public sealed class TenantSandboxAuthorizationContractTests
         var profile = new SandboxProfile("p-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 1, "Owned profile", "Information", true, "sha256:" + new string('a', 64), AdmittedForExecution: true);
         definition = definition with { SelfManagement = HarnessManagementPolicy.Disabled, SandboxPolicy = new(profile.Id, [profile.Id, "unverified"]),
             ExecutionSandboxProfiles = [profile, profile with { Id = "unverified", AdmittedForExecution = false }],
-            Environment = definition.Environment! with { Capabilities = new("Selected", [ToolCatalog.SandboxExec]) } };
+            ExecutionPolicy = definition.ExecutionPolicy! with { Capabilities = new("Selected", [ToolCatalog.SandboxExec]) } };
         var session = Guid.NewGuid(); var activation = Guid.NewGuid();
         var context = CapabilityProjectionTests.Context(definition) with { AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session,
             ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, ExecutionOrigin.UserMessage) };
@@ -63,7 +63,7 @@ public sealed class TenantSandboxAuthorizationContractTests
         Assert.DoesNotContain(offered, t => t.Name == ToolCatalog.SandboxExec);
         Assert.DoesNotContain(ToolCatalog.For(definition, context with { ExecutionContext = null }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
         foreach (var blocked in new[] { definition with { ExecutionSandboxProfiles = [] }, definition with { ExecutionSandboxProfiles = [profile with { AdmittedForExecution = false }] },
-            definition with { Environment = definition.Environment with { Capabilities = new("Selected", []) } } })
+            definition with { ExecutionPolicy = definition.ExecutionPolicy with { Capabilities = new("Selected", []) } } })
         {
             var blockedTools = ToolCatalog.For(blocked, context with { Definition = blocked }, ToolConfigurationGates.AllowAll);
             Assert.DoesNotContain(blockedTools, t => t.Name == ToolCatalog.SandboxExec);

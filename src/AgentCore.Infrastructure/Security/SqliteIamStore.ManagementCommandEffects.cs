@@ -49,6 +49,7 @@ public sealed partial class SqliteIamStore
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
         var owned = await OwnedAgents(db, tenant.TenantId).SingleAsync(a => a.Instance.InstanceId == row.AgentInstanceId, ct).ConfigureAwait(false);
         db.Attach(owned.Instance);
+        await ReconcileResourceSpaceBindings(db, next.Tenant.TenantId, change, audit, ct).ConfigureAwait(false);
         if (change.Resource is { } resourceChange) await SqliteAgentInstanceStore.StageResourcesAsync(db, resourceChange, null, ct).ConfigureAwait(false);
         if (change.Skill is { } skill) await SqliteAgentInstanceStore.StageSkillsAsync(db, skill, null, ct).ConfigureAwait(false);
         owned.Instance.HarnessManagementJson = candidate.HarnessManagement is null ? null : JsonSerializer.Serialize(candidate.HarnessManagement, new JsonSerializerOptions(JsonSerializerDefaults.Web));

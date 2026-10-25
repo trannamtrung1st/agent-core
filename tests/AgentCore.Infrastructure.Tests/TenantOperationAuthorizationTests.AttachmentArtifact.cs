@@ -37,7 +37,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(result, await service.ExecuteWorkspaceAsync(new(s.Tenant, frame.RunId), frame.Generation, "attachment-export", args));
         Assert.Single((await ((ITenantArtifactStore)f.Artifacts).ListTenantAsync(s.Tenant, frame.SessionId, null, null, 20)).Items);
         Assert.False((await f.Authorizer.CheckAsync(s.Agent.PrincipalId, "artifacts.read", TenantArtifactRules.Scope(s.Tenant, artifact.ArtifactId))).Allowed);
-        Assert.False((await f.Authorizer.CheckAsync(s.Agent.PrincipalId, "workspaces.read", TenantWorkspaceRules.Scope(new(s.Tenant, s.Agent.Instance.InstanceId, frame.SessionId)))).Allowed);
+        Assert.False((await f.Authorizer.CheckAsync(s.Agent.PrincipalId, "workspaces.read", TenantWorkspaceRules.Scope(WorkspaceOwner(s, true)))).Allowed);
         Assert.Equal(AttachmentState.Bound, (await ((ITenantAttachmentStore)f.Attachments).FindTenantAsync(s.Tenant, frame.SessionId, v.Id))!.State);
     }
 }

@@ -28,7 +28,7 @@ internal static class EffectiveConfigurationComposer
         string definitionStatus)
     {
         definition = Agents.InstanceSettingsResolver.Resolve(definition, instance.SettingsOverrides);
-        var environment = RoleEnvironments.Of(definition);
+        var environment = DefinitionExecutionPolicies.Of(definition);
         var trigger = definition.TriggerPolicy;
         var instanceActive = instance.Lifecycle == AgentInstanceLifecycle.Active;
         var scheduleAllowed = OccurrenceCompatibility.Allows(definition, TriggerSourceKind.Schedule);
@@ -49,7 +49,7 @@ internal static class EffectiveConfigurationComposer
             ModelSupportsTools: descriptor.Tools,
             ModelSupportsVision: descriptor.Vision,
             AgentWorkspaceAvailable: instanceActive);
-        var offeredTools = (definition.Environment?.Capabilities is null ? ToolCatalog.For(definition, adminContext, configurationGate) : ToolCatalog.Eligible(definition, adminContext, configurationGate))
+        var offeredTools = (definition.ExecutionPolicy?.Capabilities is null ? ToolCatalog.For(definition, adminContext, configurationGate) : ToolCatalog.Eligible(definition, adminContext, configurationGate))
             .Select(item => item.Name)
             .OrderBy(item => item, StringComparer.Ordinal)
             .ToArray();

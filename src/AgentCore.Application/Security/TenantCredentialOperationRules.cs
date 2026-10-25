@@ -13,12 +13,12 @@ public sealed class TenantCredentialOperationTarget(ITenantCredentialBindingStor
     public async ValueTask<(TenantAgent Agent, TenantCredentialBinding Bound)> ResolveAsync(AgentRun run, string reference, CancellationToken ct)
     {
         var alias = CredentialRules.Reference(reference);
-        var snapshot = await bindings.ReadTenantCredentialBindingsAsync(run.Owner.TenantId!.Value, run.AgentInstanceId, ct).ConfigureAwait(false)
+        var snapshot = await configuration.CurrentCredentialBindingsAsync(run, ct, bindings).ConfigureAwait(false)
             ?? throw new AccessDeniedException("executor_unavailable");
         var bound = snapshot.Bindings.SingleOrDefault(b => b.Binding.Reference == alias) ?? throw new AccessDeniedException("credential_unavailable");
-        var current = await configuration.ResolveAsync(run.Owner.TenantId.Value, run.AgentInstanceId, ct).ConfigureAwait(false);
+        var current = await configuration.CurrentPolicyAsync(run.Owner.TenantId!.Value, run.AgentInstanceId, ct).ConfigureAwait(false);
         if (current.Agent.Instance.Revision != snapshot.Agent.Instance.Revision) throw new SecurityConflictException("stale_revision");
-        TenantCredentialOperationRules.RequireBinding(run, snapshot.Agent, bound, current.Configuration.Configuration.Definition);
+        TenantCredentialOperationRules.RequireBinding(run, snapshot.Agent, bound, current.Definition);
         return (snapshot.Agent, bound);
     }
 }

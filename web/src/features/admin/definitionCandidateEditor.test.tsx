@@ -105,7 +105,7 @@ const storedCandidate = {
     minFixedIntervalSeconds: 60
   },
   metadata: { owner: "kept" },
-  environment: {
+  executionPolicy: {
     harness: ["examiner-turn-taking"],
     toolAllowlist: [],
     knowledgeSources: [],

@@ -28,13 +28,16 @@ public sealed class UnifiedWorkspacePhysicalLayoutTests
         Assert.Equal("A", await File.ReadAllTextAsync(Path.Combine(physical, "a.txt")));
         Assert.False(File.Exists(Path.Combine(await f.Scratch.PhysicalWorkingDirectoryAsync(b), "a.txt")));
         Assert.Equal("other", await File.ReadAllTextAsync(Path.Combine(await f.Scratch.PhysicalWorkingDirectoryAsync(c), "copied.txt")));
-        var home = new FileAgentInstanceWorkspaceStore(f.Root, f.Instances, f.Sandboxes);
-        var item = await home.WriteFileAsync(owner, "/home/csharp/CsvTool/Program.cs", "canonical"u8.ToArray());
-        var file = Path.Combine(AgentWorkspacePhysicalPaths.HomeDirectory(f.Root, owner), "csharp", "CsvTool", "Program.cs");
+        var tenant = Guid.NewGuid(); var space = Guid.NewGuid();
+        var home = new CanonicalWorkspaceFilesystem(AgentWorkspacePhysicalPaths.SpaceHomeDirectory(f.Root, tenant, space), "/home");
+        home.Ensure();
+        const string path = "/home/csharp/CsvTool/Program.cs";
+        await home.WriteAsync(path, "canonical"u8.ToArray(), AgentWorkspaceLimits.MaxFileBytes, AgentWorkspaceLimits.MaxSpaceBytes);
+        var file = Path.Combine(AgentWorkspacePhysicalPaths.SpaceHomeDirectory(f.Root, tenant, space), "csharp", "CsvTool", "Program.cs");
         Assert.Equal("canonical", await File.ReadAllTextAsync(file));
-        Assert.Equal("canonical"u8.ToArray(), (await home.ReadAsync(owner, item.LogicalPath)).Bytes);
-        Assert.Empty((await home.ListAsync(other, "/home", null, 100)).Items);
-        Assert.True(Directory.Exists(Path.Combine(AgentWorkspacePhysicalPaths.AgentRoot(f.Root, owner), "home", "csharp")));
+        Assert.Equal("canonical"u8.ToArray(), (await home.ReadAsync(path, AgentWorkspaceLimits.MaxFileBytes)));
+        Assert.False(Directory.Exists(AgentWorkspacePhysicalPaths.SpaceHomeDirectory(f.Root, tenant, Guid.NewGuid())));
+        Assert.True(Directory.Exists(Path.Combine(AgentWorkspacePhysicalPaths.SpaceHomeDirectory(f.Root, tenant, space), "csharp")));
         Assert.False(Directory.Exists(Path.Combine(f.Root, a.ToString("N"))));
         Assert.False(Directory.Exists(Path.Combine(f.Root, "agent-workspaces")));
         var sessionRoot = Path.GetDirectoryName(physical)!;
@@ -44,7 +47,6 @@ public sealed class UnifiedWorkspacePhysicalLayoutTests
         Assert.True(File.Exists(file));
         Assert.True(Directory.Exists(await f.Scratch.PhysicalWorkingDirectoryAsync(b)));
         await f.Scratch.DeleteSessionAsync(b);
-        await Assert.ThrowsAsync<AgentCoreException>(() => home.DeleteInstanceContentAsync(owner).AsTask());
         Assert.True(File.Exists(file));
         Assert.True(Directory.Exists(AgentWorkspacePhysicalPaths.AgentRoot(f.Root, other)));
     }
@@ -56,7 +58,6 @@ public sealed class UnifiedWorkspacePhysicalLayoutTests
         Func<Task>[] operations = [
             () => f.Scratch.WriteAsync(missing, "/working/a", new byte[] { 1 }).AsTask(),
             () => f.Scratch.StructureAsync(missing, [new("mkdir", Path: "/working/a")]).AsTask(),
-            () => f.Scratch.CopyAcrossScopesAsync(missing, "/working/a", "/home/a").AsTask(),
             () => f.Scratch.PhysicalWorkingDirectoryAsync(missing).AsTask(),
             () => f.Scratch.EnsureAsync(missing, Definition).AsTask()];
         foreach (var operation in operations)

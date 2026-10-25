@@ -19,7 +19,7 @@ public sealed class TenantCompletionContractTests
                 context.ExecutionContext.AgentPrincipalId, context.ExecutionContext.OriginalInitiatorPrincipalId, session, Guid.NewGuid(), activation,
                 Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), ExecutionOrigin.CompletionReport) } })
             Assert.DoesNotContain(ToolProjectionService.Project(definition, invalid, ToolConfigurationGates.AllowAll), t => t.Name == tool);
-        var disabled = definition with { Environment = definition.Environment! with { Capabilities = definition.Environment.Capabilities! with { ResolvedCapabilities = [] } } };
+        var disabled = definition with { ExecutionPolicy = definition.ExecutionPolicy! with { Capabilities = definition.ExecutionPolicy.Capabilities! with { ResolvedCapabilities = [] } } };
         Assert.DoesNotContain(ToolProjectionService.Project(disabled, context, ToolConfigurationGates.AllowAll), t => t.Name == tool);
         Assert.Equal(tool != ToolCatalog.BackgroundAcknowledge, ToolProjectionService.Project(definition, context with { HasBackgroundClaim = false }, ToolConfigurationGates.AllowAll).Any(t => t.Name == tool));
     }

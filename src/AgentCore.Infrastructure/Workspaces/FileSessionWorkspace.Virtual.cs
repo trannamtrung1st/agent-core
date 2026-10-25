@@ -22,7 +22,7 @@ public sealed partial class FileSessionWorkspace
             return await ListAgentPublicationResourcesAsync(definition, path, cancellationToken).ConfigureAwait(false);
         }
 
-        var env = RoleEnvironments.Of(definition);
+        var env = DefinitionExecutionPolicies.Of(definition);
         if (path is "/agent")
         {
             var nodes = new List<WorkspaceNode> { new("/agent/definition.json", false, 0, false) };
@@ -93,7 +93,7 @@ public sealed partial class FileSessionWorkspace
             return await ReadAgentPublicationResourceAsync(definition, path, cancellationToken).ConfigureAwait(false);
         }
 
-        var env = RoleEnvironments.Of(definition);
+        var env = DefinitionExecutionPolicies.Of(definition);
         if (path == "/agent/definition.json")
         {
             var bytes = JsonSerializer.SerializeToUtf8Bytes(

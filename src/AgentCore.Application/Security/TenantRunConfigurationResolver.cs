@@ -13,7 +13,7 @@ public sealed record TenantRunResourceConfiguration(TenantAgentConfigurationSnap
 
 public sealed partial class TenantRunConfigurationResolver(ITenantAgentStore agents, ITenantDefinitionStore definitions,
     IBuiltInAgentDefinitionStore builtIns, InheritedDefinitionResourceCatalog inheritedResources, ITenantCredentialBindingStore bindings,
-    ITenantSandboxProfileStore? sandboxProfiles = null, ISandboxImageAuthority? sandboxImages = null, ISandboxReadiness? sandboxReadiness = null, IamAuthorizer? authorizer = null)
+    ITenantSandboxProfileStore? sandboxProfiles = null, ISandboxImageAuthority? sandboxImages = null, ISandboxReadiness? sandboxReadiness = null, IamAuthorizer? authorizer = null, TenantSpaceContextResolver? spaceContexts = null)
 {
     public async ValueTask<AgentRunContinuitySettings?> CurrentContinuitySettingsAsync(AgentRun run, CancellationToken ct)
     {
@@ -61,12 +61,12 @@ public sealed partial class TenantRunConfigurationResolver(ITenantAgentStore age
         }
         var effective = InstanceSettingsResolver.Resolve(baseline, owner.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, owner) };
         var manifest = InstanceResourceRules.Resolve(effective, published, state.Resources, state.Skills);
-        var environment = RoleEnvironments.Of(effective);
+        var environment = DefinitionExecutionPolicies.Of(effective);
         var disabled = published.Where(p => !manifest.Any(r => r.Key == "definition:" + p.ResourceId.ToString("D"))).Select(p => p.LogicalPath).ToHashSet(StringComparer.Ordinal);
         var knowledge = environment.KnowledgeList.Where(k => !disabled.Contains(KnowledgeSourcePaths.ResolveBackingPath(k)))
             .Concat(manifest.Where(r => r.Key.StartsWith("instance:", StringComparison.Ordinal) && r.Kind == AgentDefinitionResourceKind.Knowledge)
                 .Select(r => new KnowledgeSourceRef(r.Key, r.LogicalPath, r.VirtualPath, r.LogicalPath))).ToArray();
-        effective = effective with { Environment = environment with { KnowledgeSources = knowledge } };
+        effective = effective with { ExecutionPolicy = environment with { KnowledgeSources = knowledge } };
         return new(state, baseline, effective, manifest);
     }
     public async ValueTask<(TenantAgent Agent, ResolvedAgentRunConfiguration Configuration)> ResolveAsync(Guid tenant, Guid instance, CancellationToken ct)

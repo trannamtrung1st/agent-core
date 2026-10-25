@@ -37,7 +37,7 @@ public sealed partial class TenantOperationAuthorizationTests
         public async ValueTask<AgentCore.Domain.Definitions.AgentDefinition?> GetAsync(string id, int? version = null, CancellationToken ct = default)
         {
             var value = await inner.GetAsync(id, version, ct);
-            return value is null ? null : value with { Environment = value.Environment! with { Capabilities = new("Selected", [ToolCatalog.ArtifactsCreateFromWorkspace]) } };
+            return value is null ? null : value with { ExecutionPolicy = value.ExecutionPolicy! with { Capabilities = new("Selected", [ToolCatalog.ArtifactsCreateFromWorkspace]) } };
         }
     }
     [Theory] [InlineData(false)] [InlineData(true)]

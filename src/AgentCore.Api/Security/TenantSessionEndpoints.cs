@@ -15,11 +15,11 @@ public static class TenantSessionEndpoints
     public sealed record RunWitness(long ExpectedRevision, long ExpectedRunRevision);
     public static void Map(WebApplication app)
     {
-        app.MapGet("/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/composer", (Guid instanceId, string category, string? search, string? cursor, HttpContext http,
+        app.MapGet("/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/composer", (Guid instanceId, string category, string? search, string? cursor, Guid? spaceId, HttpContext http,
             TenantComposerReferenceService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
-            return Results.Json(await service.DiscoverAsync(actor.TenantId, instanceId, Initiator(http, actor), category, search, cursor, ct).ConfigureAwait(false));
+            return Results.Json(await service.DiscoverAsync(actor.TenantId, instanceId, Initiator(http, actor), category, search, cursor, ct, spaceId).ConfigureAwait(false));
         })).RequireAuthorization();
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/sessions").RequireAuthorization();
         group.MapGet("/{sessionId:guid}/approvals", (Guid sessionId, int? page, int? pageSize, HttpContext http,
@@ -138,11 +138,11 @@ public static class TenantSessionEndpoints
         var c = result.Context;
         return new { context = new { c.TenantId, c.AgentPrincipalId, c.OriginalInitiatorPrincipalId, c.SessionId, c.RunId,
             c.ActivationId, c.RootActivationId, c.ParentRunId, c.ParentActivationId, origin = System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(c.Origin.ToString()) },
-            result.AgentInstanceId, status = result.Status.ToString().ToLowerInvariant(), result.Revision, result.CreatedAt, result.UpdatedAt, result.ContinuationRunId, result.CanCancel,
+            result.AgentInstanceId, result.SpaceContext, status = result.Status.ToString().ToLowerInvariant(), result.Revision, result.CreatedAt, result.UpdatedAt, result.ContinuationRunId, result.CanCancel,
             outcomeKind = result.OutcomeKind is { } outcome ? System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(outcome.ToString()) : null };
     }
     private static object Safe(TenantSessionMetadata item) => new { item.Owner.TenantId, item.Owner.SessionId, item.Owner.AgentInstanceId,
         item.Owner.ExecutorPrincipalId, item.Owner.CreatedByPrincipalId, item.Title, mode = item.Mode.ToString().ToLowerInvariant(),
         status = item.Status.ToString().ToLowerInvariant(), item.Revision, item.CreatedAt, item.UpdatedAt,
-        lifecycleStatus = LifecycleTransition.ToWire(item.LifecycleStatus), item.ArchivedAt, item.AgentId, item.AgentVersion, item.AgentName, item.AgentRole, item.CanManage, item.PauseReason };
+        lifecycleStatus = LifecycleTransition.ToWire(item.LifecycleStatus), item.ArchivedAt, item.AgentId, item.AgentVersion, item.AgentName, item.AgentRole, item.CanManage, item.PauseReason, item.ContextSelection };
 }

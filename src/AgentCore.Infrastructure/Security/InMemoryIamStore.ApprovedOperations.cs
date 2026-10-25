@@ -73,7 +73,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.WorkspaceRead is not null)
             {
                 RequireWorkspaceReadOperation(request, run, target);
-                TenantWorkspaceReadOperationRules.ReviewerAsync(before, target.Instance.InstanceId, request.Operation.WorkspaceRead, request.OriginalInitiatorPrincipalId,
+                TenantWorkspaceReadOperationRules.ReviewerAsync(before, target.Instance.InstanceId, request.Operation.WorkspaceRead, TenantWorkspaceRules.Context(request.Operation), request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             }
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.AttachmentRead is not null)
@@ -215,9 +215,15 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             var preparedConfiguration = configure ? TenantAgentConfigurationRules.Apply(target.Instance, change!, at) : target.Instance;
             Action? applyBinding = null;
             if (configure && change!.Binding is { } bindingPlan)
+            {
+                if (!bindingPlan.Remove) RequireSpaceCredentialAlias(request.TenantId, bindingPlan.Value);
                 applyBinding = bindingPlan.Remove ? CredentialBacking().PrepareTenantUnbind(request.TenantId, run.AgentInstanceId, bindingPlan.Value.BindingId, bindingPlan.Value.Revision)
                     : CredentialBacking().PrepareTenantBind(request.TenantId, bindingPlan.Value, bindingPlan.CredentialRevision);
+            }
             if (configure && change!.Binding is not null && applyBinding is null) throw new SecurityConflictException("management_source_changed");
+            var reconcileBinding = configure && change!.Binding is { Remove: true } removed
+                ? PrepareSpaceExclusionPrune(request.TenantId, run.AgentInstanceId, new HashSet<string>(StringComparer.Ordinal) { "Credential:" + removed.Value.CredentialId.ToString("D") }, audit) : null;
+            var reconcileSpaces = configure ? PrepareResourceSpaceReconciliation(request.TenantId, change!, audit, ct) : null;
             ct.ThrowIfCancellationRequested();
             AgentInstance updated;
             if (configure && change!.Skill is { } skillChange)
@@ -239,7 +245,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 SetSettingsOverrides: change.SetSettingsOverrides, SettingsOverrides: change.SettingsOverrides, AutomationPolicyChanges: change.AutomationPolicyChanges,
                 HarnessManagement: preparedConfiguration.HarnessManagement, SetUnattendedModel: change.SetUnattendedModel, UnattendedModelCatalogKey: change.UnattendedModelCatalogKey, UnattendedReasoningEffort: change.UnattendedReasoningEffort), at, ct).Result : target.Instance;
             }
-            applyBinding?.Invoke();
+            applyBinding?.Invoke(); reconcileBinding?.Invoke(); reconcileSpaces?.Invoke();
             if (complete && automationMutation is not null)
             {
                 if (commit.AutomationInvocationAdmission is { } admitted) { StageTenantAutomationGraph(admitted); automationBacking.CommitTenantOccurrence(admitted.Next, admitted.Occurrence); }

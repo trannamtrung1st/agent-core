@@ -37,7 +37,7 @@ public sealed partial class TenantDefinitionAccessTests
         var definitions = factory.Services.GetRequiredService<TenantDefinitionService>();
         var draft = await definitions.CreateAsync(actor, tenant, "Exact Sandbox", await Revision(owner, tenant));
         draft = await definitions.UpdateAsync(actor, tenant, draft.DraftId, draft.Candidate with { SandboxPolicy = new(profileId, alternateId is null ? [profileId] : [profileId, alternateId]),
-            Environment = new(Capabilities: new("Selected", [ToolCatalog.SandboxExec])) }, await Revision(owner, tenant), draft.Revision);
+            ExecutionPolicy = new(Capabilities: new("Selected", [ToolCatalog.SandboxExec])) }, await Revision(owner, tenant), draft.Revision);
         await definitions.PublishAsync(actor, tenant, draft.DraftId, await Revision(owner, tenant), draft.Revision);
         var created = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = Guid.Parse(draft.DefinitionId), version = 1, expectedRevision = await Revision(owner, tenant) }));
         var instance = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = created.GetProperty("principalId").GetGuid();

@@ -1,0 +1,20 @@
+import { identityRequest, tenantApi } from './identity';
+export type TenantSpace = { tenantId: string; spaceId: string; kind: 0 | 1; ownerInstanceId: string | null; name: string; description: string; instructions: string; environmentsEnabled: boolean; revision: number };
+export type SpaceAccess = { permissions: string[]; securityRevision: number; spaceRevision: number };
+export const bindingKinds = ['DefinitionResource', 'InstanceResource', 'SpaceFile', 'Credential', 'Secret'] as const;
+export type SpaceBinding = { kind: number; resourceKey: string; accountRef: string | null; stableKey: string };
+export type SpaceMember = { instanceId: string; responsibility: string; instructions: string; disabledInheritedBindingKeys: string[]; addedBindings: SpaceBinding[]; revision: number };
+export type MembershipBindings = { membership: SpaceMember | null; inherited: SpaceBinding[]; effective: SpaceBinding[]; securityRevision: number; spaceRevision: number };
+export type SpaceEnvironment = { environmentId: string; spaceId: string; name: string; description: string; revision: number };
+export type EnvironmentVariable = { name: string; kind: 'Plain' | 'SecretReference' | 'CredentialReference'; description: string; secretId: string | null; credentialId: string | null; revision: number };
+export type VariableDetail = { variable: EnvironmentVariable; plainValue: string | null; canReadPlain: boolean; securityRevision: number; spaceRevision: number; environmentRevision: number };
+export type TenantSecret = { secretId: string; name: string; description: string; status: 'Active' | 'Disabled'; revision: number };
+export const spaceApi = (tenant: string, id?: string, suffix = '') => tenantApi(tenant, `/spaces${id ? '/' + encodeURIComponent(id) : ''}${suffix}`);
+export const environmentApi = (tenant: string, space: string, id?: string, suffix = '') => spaceApi(tenant, space, `/environments${id ? '/' + encodeURIComponent(id) : ''}${suffix}`);
+export const secretApi = (tenant: string, id?: string, suffix = '') => tenantApi(tenant, `/secrets${id ? '/' + encodeURIComponent(id) : ''}${suffix}`);
+export const currentSpaceAccess = (tenant: string, id: string, signal: AbortSignal) => identityRequest<SpaceAccess>(spaceApi(tenant, id, '/access'), { signal });
+export const isPrivateSpace = (space: TenantSpace) => space.kind === 0;
+
+export type SpaceFileResource = { tenantId: string; spaceId: string; resourceId: string; logicalPath: string; kind: number; mediaType: string; contentSha256: string; byteLength: number; sourcePath?: string | null; revision: number };
+export type SpaceFileResourceAccess = { resource: SpaceFileResource; permissions: string[]; securityRevision: number; spaceRevision: number };
+export const spaceResourceKey = (resource: SpaceFileResource) => `space:${resource.spaceId}:${resource.resourceId}`;
