@@ -2,7 +2,8 @@ using System.Text.Json.Serialization;
 namespace AgentCore.Domain.Definitions;
 
 /// <summary>A missing wrapper inherits; a present wrapper can carry an explicit null.</summary>
-public sealed record InstanceField<T>(T Value);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record InstanceField<T>([property: JsonRequired] T Value);
 
 /// <summary>Allowlisted sparse values. Persona, budgets and unattended selection retain their dedicated owners.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

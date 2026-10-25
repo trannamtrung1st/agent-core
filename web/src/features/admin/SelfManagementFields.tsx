@@ -28,9 +28,7 @@ export function managementDraftOf(view: SelfManagementView): SelfManagementDraft
   const o = view.overrides;
   return o ? { mode: o.mode?.value ?? null, scopes: o.scopes?.value ?? null, managedAutoApply: o.autoApply?.value ?? null,
     configurationAssistance: o.configurationAssistance?.value ?? null, harnessAuthoring: o.harnessAuthoring?.value ?? null }
-    : view.source === 'definition' ? inheritedManagement : { mode: view.effective.mode, scopes: view.effective.scopes,
-      managedAutoApply: view.effective.managedAutoApply ?? [], configurationAssistance: view.effective.builtInSkills?.configurationAssistance ?? true,
-      harnessAuthoring: view.effective.builtInSkills?.harnessAuthoring ?? true };
+    : inheritedManagement;
 }
 export function managementOverridesOf(draft: SelfManagementDraft): ManagementOverrides {
   const field = <T,>(value: T | null) => value === null ? null : { value };
@@ -49,7 +47,6 @@ export function SelfManagementFields({ value, defaults, disabled, definition = f
     '--self-management-checkbox-offset': `${(token.fontSize * token.lineHeight - token.controlInteractiveSize) / 2}px`
   } as CSSProperties;
   const update = (change: Partial<SelfManagementDraft>) => onChange({ ...value, ...change });
-  const mode = value.mode ?? defaults.mode;
   const modeLabel = definition ? 'Default self-management mode' : 'Self-management mode';
   const areasLabel = definition ? 'Default allowed areas' : 'Allowed management areas';
   const automaticLabel = definition ? 'Default automatic changes' : 'Managed automatic changes';
@@ -60,7 +57,7 @@ export function SelfManagementFields({ value, defaults, disabled, definition = f
         options={[...(!definition ? [{ value: 'inherit', label: `Inherit (${defaults.mode === 'Disabled' ? 'Off' : defaults.mode})` }] : []),
           { value: 'Disabled', label: 'Off' }, { value: 'Assisted', label: 'Assisted' }, { value: 'Managed', label: 'Managed' }]} />
     </Form.Item>
-    <Form.Item label={areasLabel} extra="These areas add a management gate. They cannot exceed Definition capability or host authority. With no areas selected, the agent has no management access.">
+    <Form.Item label={areasLabel} extra={`These areas add a management gate; IAM permissions and Definition capability still apply. With no areas selected, the agent has no management access.${definition ? '' : value.scopes === null ? ' Source: Definition defaults.' : ' Source: Instance override.'}`}>
       <Flex vertical gap={token.paddingXS}>
         {!definition && <Button disabled={disabled} style={{ alignSelf: 'flex-start' }} onClick={() => update({ scopes: null })}>Inherit areas</Button>}
         <Checkbox.Group aria-label={definition ? 'Default self-management areas' : areasLabel} className="self-management-options"
@@ -68,21 +65,21 @@ export function SelfManagementFields({ value, defaults, disabled, definition = f
           onChange={scopes => update({ scopes: scopes as HarnessScope[] })} />
       </Flex>
     </Form.Item>
-    {mode === 'Managed' && <Form.Item label={automaticLabel} extra="Capabilities, privacy, triggers, credentials and management widening always require exact approval. Skill deletion and customization also require exact approval.">
+    <Form.Item label={automaticLabel} extra={`Used only in Managed mode; stored choices are retained in Off and Assisted. Capabilities, privacy, triggers, credentials, policy widening, Skill deletion and customization require exact approval.${definition ? '' : value.managedAutoApply === null ? ' Source: Definition defaults.' : ' Source: Instance override.'}`}>
       <Flex vertical gap={token.paddingXS}>
         {!definition && <Button disabled={disabled} style={{ alignSelf: 'flex-start' }} onClick={() => update({ managedAutoApply: null })}>Inherit automatic changes</Button>}
         <Checkbox.Group aria-label={automaticLabel} className="self-management-options" style={optionStyle}
           disabled={disabled} value={value.managedAutoApply ?? defaults.managedAutoApply ?? []} options={automaticChanges}
           onChange={values => update({ managedAutoApply: values as ManagementAutoApply[] })} />
       </Flex>
-    </Form.Item>}
+    </Form.Item>
     <Typography.Text strong>Built-in management procedures</Typography.Text>
-    <Typography.Text type="secondary">Read-only · On demand · version 1. Procedure enablement never grants authority; Off/Frozen suppresses both.</Typography.Text>
+    <Typography.Text type="secondary">Read-only · On demand · version 1. These are stored choices. Off/Frozen suppresses both; effective availability also requires selected Definition capabilities and current IAM authority. Inspect Skills for capability blockers.</Typography.Text>
     {(['configurationAssistance', 'harnessAuthoring'] as const).map(key => {
       const label = key === 'configurationAssistance' ? 'Configuration assistance' : 'Harness authoring';
       return <Form.Item key={key} label={label}>
-        {definition ? <Switch aria-label={`Default ${label.toLowerCase()} procedure`} disabled={disabled}
-          checked={value[key] ?? defaults.builtInSkills?.[key] ?? true} onChange={enabled => update({ [key]: enabled })} />
+        {definition ? <label className="self-management-procedure-choice"><Switch aria-label={`Default ${label.toLowerCase()} procedure`} disabled={disabled}
+          checked={value[key] ?? defaults.builtInSkills?.[key] ?? true} onChange={enabled => update({ [key]: enabled })} /></label>
           : <Select aria-label={`${label} procedure`} disabled={disabled}
             value={value[key] === null ? 'inherit' : value[key] ? 'enabled' : 'disabled'}
             options={[{ value: 'inherit', label: `Inherit (${(defaults.builtInSkills?.[key] ?? true) ? 'Enabled' : 'Disabled'})` },

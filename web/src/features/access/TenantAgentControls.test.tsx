@@ -10,7 +10,7 @@ const context: TenantContext = { tenant: { tenantId: 'tenant', name: 'Controls o
 const profile = { maxSteps: 48, durationSeconds: 360, perToolSeconds: 30, preset: 1, sandboxCommandSeconds: 120 };
 const controls = () => ({ agent: { principalId: 'principal', systemIdentityId: 'identity', instance: { instanceId: 'agent', persona: { name: 'Alex', role: 'Guide', description: 'Guide', tone: 'Calm' }, personaRevision: 1, revision: 4, activeVersion: 1, lifecycle: 'Active', unattendedOfferingId: 'alpha', unattendedReasoningEffort: 'high' } }, securityRevision: 7, canUpdate: true,
   budgets: { instanceRevision: 4, securityRevision: 7, overrides: { standard: profile }, definitionDefaults: null, hostLimits: { maxSteps: 144, durationSeconds: 900, perToolSeconds: 30, sandboxCommandSeconds: 180 } },
-  management: { securityRevision: 7, policy: { instanceRevision: 4, policyRevision: 2, source: 'instance', effective: { ...defaultManagement, mode: 'Assisted', scopes: ['Settings'] }, definitionDefaults: defaultManagement, overrides: { mode: { value: 'Assisted' }, scopes: { value: ['Settings'] } } } }
+  management: { securityRevision: 7, policy: { instanceRevision: 4, policyRevision: 2, source: 'per-field', effective: { ...defaultManagement, mode: 'Assisted', scopes: ['Settings'] }, definitionDefaults: defaultManagement, overrides: { mode: { value: 'Assisted' }, scopes: { value: ['Settings'] } } } }
 } as TenantAgentControlsView);
 const fetchMock = vi.fn<typeof fetch>(); let current: TenantAgentControlsView; let stale = false, denied = false, readFailure = false, malformedAck = false, catalogFailure = false;
 const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
@@ -21,7 +21,7 @@ beforeEach(() => {
   fetchMock.mockImplementation(async (path, options) => {
     const url = String(path);
     if (url.endsWith('/csrf')) return response({ token: 'csrf' });
-    if (url.endsWith('/chat/models')) return catalogFailure ? response({}, 503) : response({ defaultOfferingId: 'alpha', models: [{ key: 'alpha', displayName: 'Alpha', supportedReasoningEfforts: ['low', 'high'] }, { key: 'beta', displayName: 'Beta', supportedReasoningEfforts: [] }] });
+    if (url.endsWith('/chat/models')) return catalogFailure ? response({}, 503) : response({ defaultOfferingId: 'alpha', models: [{ offeringId: 'alpha', displayName: 'Alpha', supportedReasoningEfforts: ['low', 'high'] }, { offeringId: 'beta', displayName: 'Beta', supportedReasoningEfforts: [] }] });
     if (['PUT', 'POST'].includes(options?.method ?? '')) {
       if (stale) return response({ reasonCode: 'stale_revision' }, 409);
       const body = JSON.parse(String(options?.body)); current = structuredClone(current); current.securityRevision++; current.agent.instance.revision++;
@@ -60,6 +60,9 @@ it('freezes the saved policy and unfreezes with saved overrides while retaining 
   fireEvent.click(screen.getByRole('button', { name: 'Freeze self-management' })); await screen.findByText(/Organization: Controls organization/);
   fireEvent.click(screen.getAllByRole('button', { name: 'Freeze self-management' }).at(-1)!);
   await screen.findByText('Self-management is frozen'); expect(screen.getByRole('combobox', { name: 'Self-management mode' }).closest('.ant-select')).toHaveTextContent('Off');
+  expect(screen.getByRole('status', { name: 'Saved self-management policy' })).toHaveTextContent('Saved mode: Assisted');
+  expect(screen.getByRole('status', { name: 'Saved self-management policy' })).toHaveTextContent('Frozen');
+  expect(screen.getByRole('checkbox', { name: 'Conversation preferences' }).closest('label')).toBeVisible();
   expect(JSON.parse(String(writes()[0][1]?.body))).toEqual({ expectedRevision: 7, expectedInstanceRevision: 4 });
   fireEvent.click(screen.getByRole('button', { name: 'Unfreeze self-management' }));
   fireEvent.click((await screen.findAllByRole('button', { name: 'Unfreeze self-management' })).at(-1)!);

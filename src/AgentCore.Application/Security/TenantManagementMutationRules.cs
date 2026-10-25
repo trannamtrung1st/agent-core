@@ -152,7 +152,7 @@ public static class TenantManagementMutationRules
     }
     private static HarnessManagementState Policy(AgentInstance owner, AgentDefinition baseline, JsonElement args)
     {
-        var view = HarnessManagementRules.View(owner, baseline); var overrides = view.Overrides ?? (view.Source == "instance" ? ManagementPolicyOverrides.FromLegacy(view.Effective) : new());
+        var view = HarnessManagementRules.View(owner, baseline); var overrides = view.Overrides ?? new();
         overrides = overrides with { Mode = new(Enum.Parse<HarnessManagementMode>(args.GetProperty("mode").GetString()!, false)),
             Scopes = new(args.GetProperty("scopes").EnumerateArray().Select(a => Enum.Parse<HarnessManagementScope>(a.GetString()!, false)).ToArray()),
             AutoApply = new(args.GetProperty("managedAutoApply").EnumerateArray().Select(a => Enum.Parse<ManagementAutoApply>(a.GetString()!, false)).ToArray()) };

@@ -71,6 +71,9 @@ public sealed partial class TenantSessionAccessTests
         var agent = (await host.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
         var state = (await host.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!; var actor = Assert.Single(state.Users).PrincipalId;
         var access = host.Services.GetRequiredService<TenantAccessService>();
+        var privateSpace = (await host.Services.GetRequiredService<ITenantSpaceStore>().FindPrivateSpaceAsync(tenant, instance))!;
+        var contextRole = await access.SaveRoleAsync(actor, tenant, null, "Read exact management context", ["spaces.read"], await Revision(owner, tenant));
+        await access.AssignRoleAsync(actor, tenant, agent.PrincipalId, contextRole.RoleId, TenantSpaceService.Scope(tenant, privateSpace.SpaceId), await Revision(owner, tenant));
         var role = await access.SaveRoleAsync(actor, tenant, null, "Exact management reader", read ? preferences ? ["agents.read", "agents.update"] : ["agents.read"] : ["agents.update"], await Revision(owner, tenant));
         await access.AssignRoleAsync(actor, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForResource(tenant, "agent", instance.ToString("D")), await Revision(owner, tenant));
         return (tenant, instance);

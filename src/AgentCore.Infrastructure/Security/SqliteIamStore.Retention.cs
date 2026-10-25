@@ -49,17 +49,18 @@ public sealed partial class SqliteIamStore
             db.Entry(grant).CurrentValues.SetValues(grant with { Status = OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) });
         foreach (var approval in approvalRows.Where(a => a.Status == (int)TenantApprovalStatus.Pending))
             db.Entry(approval).CurrentValues.SetValues(TenantApprovalRecord.From(approval.Domain().Decide(now >= approval.Domain().ExpiresAt ? TenantApprovalStatus.Expired : TenantApprovalStatus.Cancelled, approval.Revision, now)));
-        // Unknown effects remain recoverable. Persist expiry and cancellation intent,
+        // Unknown effects remain recoverable. Persist expiry and factual cancellation,
         // but never redact their evidence or report successful execution.
         if (allRuns.Any(r => r.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate))
         {
             foreach (var runRow in runRows)
             {
                 var run = AgentRunStoreMapping.ToDomain(runRow);
-                if (!run.IsTerminal && !run.CancellationRequested)
+                if (!run.IsTerminal)
                 {
-                    var requested = run.RequestCancellation(run.Revision, null, now);
+                    var requested = TenantRunCancellationRules.Cancel(run, now);
                     AgentRunStoreMapping.Apply(runRow, requested); await TenantCoreEventProduction.StageRunAsync(db, run, requested, ct).ConfigureAwait(false);
+                    await SettleTenantCompletion(db, requested, run.Claim?.Generation, ct).ConfigureAwait(false);
                 }
             }
             if (!SessionLifecycle.IsTerminal(current.LifecycleStatus))

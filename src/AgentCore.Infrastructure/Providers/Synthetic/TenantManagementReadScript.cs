@@ -9,8 +9,9 @@ internal static class TenantManagementReadScript
     internal static IReadOnlyList<ModelGenerationEvent>? Generate(ModelRequest request)
     {
         const string prefix = "synthetic-tenant-management-read: ";
-        var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User && m.Text.StartsWith(prefix, StringComparison.Ordinal))?.Text;
-        if (prompt is null) return null;
+        var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text;
+        // Historical management instructions never select the script for a new user task.
+        if (prompt?.StartsWith(prefix, StringComparison.Ordinal) != true) return null;
         var selected = prompt[prefix.Length..].Trim();
         var childSelection = selected.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
         var child = childSelection.Length > 0 && TenantManagementReadContract.IsChildTool(childSelection[0]);

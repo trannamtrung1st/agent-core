@@ -19,6 +19,22 @@ export async function canonicalFetch(api: APIRequestContext, path: string, optio
   }
   return response;
 }
+
+// Space membership supplies context, never IAM. Conversational fixtures explicitly
+// grant their executor read access to its exact protected Private Space.
+export async function grantPrivateSpaceRead(api: APIRequestContext, tenant: string, instance: string, principalId?: string) {
+  const root = `/api/v2/tenants/${tenant}`;
+  async function call(path: string, data?: unknown) {
+    const csrf = await (await api.get('/api/v2/auth/csrf')).json();
+    const response = await canonicalFetch(api, path, { method: data === undefined ? 'GET' : 'POST', headers: { 'X-AgentCore-CSRF': csrf.token }, data });
+    expect(response.ok(), `${path}: ${response.status()}`).toBeTruthy(); return response.json();
+  }
+  const agent = await call(root + `/agents/${instance}`), space = await call(root + `/agents/${instance}/private-space`);
+  const revision = async () => (await call(root + '/access/me')).revision;
+  const principal = principalId ?? agent.principalId;
+  const role = await call(root + '/roles', { name: `Read exact context ${principal}`, permissions: ['spaces.read'], expectedRevision: await revision() });
+  await call(root + '/role-assignments', { principalId: principal, roleId: role.roleId, resourceType: 'space', resourceId: space.spaceId, expectedRevision: await revision() });
+}
 export async function signInTenant(page: Page, login: string, password: string) {
   for (let attempt = 0; attempt < 2; attempt++) {
     // A deliberate fresh form/CSRF after an explicit limiter refusal matches the

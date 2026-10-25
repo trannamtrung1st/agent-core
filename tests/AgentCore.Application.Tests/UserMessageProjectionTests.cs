@@ -24,7 +24,7 @@ public sealed class UserMessageProjectionTests
             new("text", Text: " "), new("invocation", InvocationKind: "skill", SkillKey: "instance:report-writing", Label: "Report writing"),
             new("text", Text: " Analyze browser alternatives")]);
         Assert.Equal("/research + /report-writing · Analyze browser alternatives", UserMessageProjection.ForTitle(entry));
-        var reference = new UserResourceReference("homeFile", AgentInstanceId: Guid.NewGuid(), Path: "/home/proposal.md");
+        var reference = new UserResourceReference("homeFile", SpaceId: Guid.NewGuid(), Path: "/home/proposal.md");
         var review = Entry([new("text", Text: "Review "), new("reference", Reference: reference, Label: "/home/proposal.md")]);
         Assert.Equal("Review proposal.md", UserMessageProjection.ForTitle(review));
         var longTitle = Entry([new("invocation", InvocationKind: "skill", SkillKey: "definition:say"), new("text", Text: " " + new string('x', 500))]);

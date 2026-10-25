@@ -57,7 +57,12 @@ public static class TenantAgentConfigurationRules
         if (change.HarnessManagement is { } management
             && System.Text.Json.JsonSerializer.Serialize(management.Preparation) != System.Text.Json.JsonSerializer.Serialize(current.HarnessManagement?.Preparation))
             throw new ArgumentException("Historical Harness preparation cannot be created or changed.");
-        if (change.HarnessManagement?.Overrides is { } overrides) Admin.HarnessManagementRules.Validate(overrides);
+        if (change.HarnessManagement is { } policyState)
+        {
+            if (policyState.Overrides is null || policyState.PolicyRevision < 1)
+                throw new ArgumentException("Canonical self-management overrides are required.");
+            Admin.HarnessManagementRules.Validate(policyState.Overrides);
+        }
         return current with { Persona = change.Persona ?? current.Persona, ActiveVersion = change.ActiveVersion ?? current.ActiveVersion,
             PersonaRevision = current.PersonaRevision + (change.Persona is not null && change.Persona != current.Persona ? 1 : 0),
             Revision = checked(current.Revision + 1), UpdatedAt = at,

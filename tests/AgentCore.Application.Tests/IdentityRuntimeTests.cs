@@ -197,7 +197,8 @@ public sealed class IdentityRuntimeTests
             var text = File.ReadAllText(path);
             Assert.DoesNotContain("OpenAI.", text, StringComparison.Ordinal);
             Assert.False(ContainsChatCompletionDto(text), $"Provider DTO reference in {path}");
-            Assert.DoesNotContain("openrouter", text, StringComparison.OrdinalIgnoreCase);
+            // Catalog provider kinds/endpoints are metadata; vendor SDK namespaces remain forbidden.
+            Assert.DoesNotContain("OpenRouter.", text, StringComparison.Ordinal);
         }
     }
 

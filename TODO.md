@@ -85,9 +85,9 @@ Implement the approved coherent cutover: Space owns situational instructions and
 
 **Local implementation complete (25 October 2026).** Tenant-owned protected connections, selectable offerings, explicit defaults, five adapter kinds, native/compatible capabilities and canonical runtime/authoring/UI selection replace static Real inference configuration. The [delivery audit](docs/reports/dynamic-model-management-delivery-2026-10-25.md#final-requirement-audit) records focused SQLite/InMemory/API/Runtime/Synthetic browser evidence and migration/reset safety. Live-provider calls, physical devices, deployment and optional CI remain unrun; no application milestone acceptance is implied. Routing/Decision Intelligence remains initiative 6. The [main integration report](docs/reports/model-space-main-integration-2026-10-25.md) records the combined Space/Environment/model qualification; neither model configuration nor membership alone grants execution in a Space.
 
-### 4. Self-Management & Admin Assistant
+### 4. Agent Self-Management
 
-Consolidate existing Harness/Self-Management with IAM through current tools, workflows and authority owners: permission-controlled inspection/configuration, agent-assisted configuration and policy management, exact approvals for protected actions, and Managed/Frozen behavior. Admin Assistant is an authorized agent principal using those capabilities. Keep Continuity independent. Complete the [existing successor acceptance gap](#open-work-and-acceptance-gaps) without treating the implemented subsystem as new.
+**Local completion delivered (26 October 2026).** Self-management for ordinary Agent Instances uses current tenant IAM, configuration owners, tools and exact approvals. Off/Assisted/Managed and the independent Frozen lock retain sparse Definition inheritance. The [completion delivery](docs/reports/agent-self-management-delivery-2026-10-26.md) records the one-time policy cutover and current local verification. No Admin Assistant feature, special identity or administration subsystem is installed. Users may configure an ordinary administrative helper later, but cross-Agent/IAM/Space/model administration requires both appropriate IAM and explicitly supported target-aware tools. Current self-management tools target only their executing Instance. Continuity remains independent; owner-opt-in live UAT stays in [remaining external obligations](#open-work-and-acceptance-gaps).
 
 ### 5. Message, Execution & Chat Simplification
 
@@ -165,7 +165,7 @@ Always keep this section. These personal ideas are future direction, not approve
 | 9. Shared situational context and bindings | Initiative 2: Space + Membership; Environments hold typed variables |
 | 10. KOL reviews, videos, forums/pages | Strategy: Marketing & Commercialization |
 | 11. Commercial video / apparent coworkers reveal | Strategy: Marketing & Commercialization |
-| 12. Admin assistant | Initiative 4: Self-Management & Admin Assistant |
+| 12. Admin assistant (historical label) | Initiative 4: Agent Self-Management; ordinary Instances, no special assistant feature |
 | 13. PNG and other file creation/processing | Supporting: Files & Processing |
 | 14. RAG / Chroma DB | Supporting: RAG & Retrieval |
 | 15. Teamwork / communication / delegation / workflows / Grok-style inspiration | Initiative 9: Task Delegation & Communication |

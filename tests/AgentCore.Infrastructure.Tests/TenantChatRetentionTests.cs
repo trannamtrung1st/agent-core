@@ -73,6 +73,7 @@ public sealed class TenantChatRetentionTests
         if (uncertain)
         {
             Assert.Null(snapshot.DurablyDeletedAt); Assert.True(retained.CancellationRequested);
+            Assert.Equal(AgentRunStatus.Cancelled, retained.Status); Assert.Null(retained.Claim);
             Assert.Equal(AgentRunSideEffectDisposition.InFlight, retained.SideEffect.Disposition);
             var retry = Assert.Single(await sessions.ListDueSessionsAsync(null, 10));
             Assert.False(await sessions.RetireDueSessionAsync(retry, Guid.NewGuid()));

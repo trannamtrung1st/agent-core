@@ -25,7 +25,7 @@ All commands ran from the repository root unless `web/` is shown. .NET commands 
 | `dotnet build src/AgentCore.Api/AgentCore.Api.csproj` | Passed, 0 warnings/errors; latest API test build also compiles the final host recovery changes. |
 | Infrastructure `TenantChatRetentionTests\|TenantSessionLifecycleTests\|TenantSessionIntegrationTests` | 40 passed: both stores, exact deadline, no saved catalog entry, stale retirement CAS, factual cancellation/uncertain-effect preservation, Saved pin and terminal due, lifecycle and reopen. |
 | Infrastructure `TenantChatRetentionTests\|ChatRetentionMigrationTests` after adding private file coverage | 11 passed: bound Attachment/Artifact lookup and content unavailable at exact due before scan; existing byte cleanup is idempotent; migration preserves history and known Host provenance, rejects unknown Legacy source and lossy tenant-policy downgrade. |
-| Infrastructure `FrozenMigrationMetadataTests\|CanonicalModelIdentityMigrationTests\|CanonicalSchemaAcceptanceTests` | 44 passed: historical trigger ownership (188 current guards), canonical identity migration and current physical/model schema parity. |
+| Infrastructure `FrozenMigrationMetadataTests\|CanonicalModelIdentityMigrationTests\|CanonicalSchemaAcceptanceTests` | 44 passed: historical trigger ownership (188 guards before main synchronization), canonical identity migration and current physical/model schema parity. |
 | Application `SessionCompletionIntentTests\|SessionRuntimeCompletionTests\|LifecycleTransition\|SessionRuntimeInterruption\|SessionRuntimeTool` | 12 passed: reason-only/forged arguments, current claim/Session/foreground policy, checkpoint intent recovery and current durable final response required. |
 | Application `VoiceRealtimeRegressionTests\|SpeechPlaybackTests\|SessionRuntimeLifecycleRoutingTests\|ContextAssemblerTests\|QueuedAttachmentRuntimeTests\|ToolExecutionBudgetTests` | 71 passed: retained interruption, response lifecycle, playback/heard boundaries, context and queued-file behavior. |
 | API `Canonical_Session_HTTP_pins_authenticated_creator` | 1 passed: existing authenticated creator/executor, CSRF, foreign tenant, stale revision, lifecycle/delete and retired route behavior. |
@@ -59,10 +59,28 @@ Final raw logs and captures are local under `local/verification/chat-simplificat
 
 ## Operations and limits
 
-Ship backend, migration and browser together. Back up supported database, keys and byte roots; migrate a copy and use the existing explicit upgrade/startup procedure. Saved defaults are pinned at creation; Temporary is fixed creation +24h. Logical access expires immediately; physical cleanup is eventual. InFlight/Indeterminate effects retain evidence and cancellation intent for factual reconciliation, and external Space/email/service effects remain independently owned. Recovery handles one failed due Session without starving later targets.
+Ship backend, migration and browser together. Back up supported database, keys and byte roots; migrate a copy and use the existing explicit upgrade/startup procedure. Saved defaults are pinned at creation; Temporary is fixed creation +24h. Logical access expires immediately; physical cleanup is eventual. InFlight/Indeterminate effects retain evidence after factual Run cancellation clears the claim and settles completion accounting; physical retirement waits for factual reconciliation, and external Space/email/service effects remain independently owned. Recovery handles one failed due Session without starving later targets.
 
 Hosted CI/full solution tests, live-provider calls, production deployment/restore and physical headset/microphone checks were not requested or run. Synthetic runtime/voice regression evidence does not certify audible quality. The two pre-existing orphan Impeccable briefs for removed AdminApp/ApprovalModal surfaces were reported by tooling; this task updates only the affected current Chat/governance briefs. Historical unscoped browser fixtures and reports remain historical, outside the canonical tenant journeys exercised here.
 
 ## Source and main integration
 
 Baseline: `ed73a7762e4818a765438b236184824c9b9b4971`. Implementation commit and subsequent main synchronization are recorded in the final verification follow-up. No supported migration history was removed, no provider credentials were used, and no hosted Actions run was dispatched.
+
+
+## Main synchronization qualification
+
+Implementation `642a754e` was committed and pushed to `develop/branch-1` before fetching main. Main advanced to `0ac18c7e` (`ffe4c9b9` Self-Management implementation plus its evidence commit). The merge retains both features: README and design context keep both summaries; the tenant-chat configuration includes both new retention journeys and main's management-read suite. Automatic merges retain main's explicit Private Space fixture authority, sparse policy guards, current Synthetic management-task selection, approval checks and shared SelfManagementFields presentation.
+
+`20261026010000_CanonicalSelfManagement` precedes `20261026080000_ChatRetention`; the retention upgrade/refusal test now targets that actual predecessor. The combined current schema has 190 triggers, including both features' guards. No historical migration was rewritten. A final retirement check now uses incumbent factual cancellation to clear a quiescent uncertain Run's claim and settle accounting while preserving its InFlight/Indeterminate disposition and private evidence; it neither claims the external effect succeeded nor deletes its evidence.
+
+Post-merge checks:
+
+- Domain: `ManagementPolicyRestrictionTests|SessionLifecycle|AgentRun`, 68 passed.
+
+- Infrastructure: `TenantChatRetentionTests|ChatRetentionMigrationTests|SelfManagement_one_time|SelfManagement_sqlite|FrozenMigrationMetadataTests|CanonicalSchemaAcceptanceTests`, 63 passed; final uncertain-claim retirement recheck `TenantChatRetentionTests`, 8 passed.
+- API: `Explicit_agent_completion|Tenant_live_MessagePack_JavaScript|SelfManagementAuthorityTests|Canonical_Session_HTTP_pins_authenticated_creator`, 17 passed.
+- Browser: the four files `chat-retention.spec.ts`, `tenant-chat.spec.ts`, `tenant-management-reads.spec.ts`, `tenant-management-mutations.spec.ts` selected with `--grep 'Saved completion|Temporary long text|management read consent approve 1440|management command settings.patch approve 1440|tenant text, rendered|local queue drains|tenant Steer'`, 7 passed (3.1m). Same `TENANT_CHAT_API_PORT=5098 TENANT_CHAT_WEB_PORT=5188 CI=1 pnpm exec playwright test --config playwright.tenant-chat.config.ts` prefix as above.
+- Frontend: ChatApp, Composer, TenantAgentControls, TenantGovernance, realtime tenant/race selected 146 cases. Four files passed 132 cases on the combined run. Two Admin cases failed under concurrent build/test load (one 30s timeout and one transient modal visibility assertion); isolated `--maxWorkers=1 --no-file-parallelism` recheck passed all 14 cases in those two files. No assertion or product behavior was weakened. `pnpm run build` passed typecheck and Vite (31.16s); existing chunk-size and third-party PURE-annotation warnings remain.
+
+The merged source commit is recorded by the final documentation follow-up so it identifies all behavior changes without a self-referential commit hash. These tests qualify the combined local implementation; hosted CI, production restore/deployment, live providers and physical audio remain unrun.

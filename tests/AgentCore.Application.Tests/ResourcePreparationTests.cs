@@ -96,7 +96,7 @@ public sealed class ResourcePreparationTests
             "scope" => new(HarnessManagementMode.Assisted, [HarnessManagementScope.Skills], [], []),
             _ => Definition.SelfManagement
         } };
-        if (fence == "frozen") owner = owner with { HarnessManagement = new(Definition.SelfManagement! with { Frozen = true }) };
+        if (fence == "frozen") owner = owner with { HarnessManagement = new(Definition.SelfManagement! with { Frozen = true }, Overrides: new()) };
         if (fence == "archived") owner = owner with { Lifecycle = AgentInstanceLifecycle.Archived };
         Assert.Throws<AgentCoreException>(() => TenantAgentResourcePreparation.Choice(owner, definition, new([], []), new([], []), [source],
             "definition:" + source.ResourceId.ToString("D"), false, null, 0, SkillAuthor.Agent, At));

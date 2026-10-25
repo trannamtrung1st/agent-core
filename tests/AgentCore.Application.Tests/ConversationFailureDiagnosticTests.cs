@@ -341,7 +341,7 @@ public sealed class ConversationFailureDiagnosticTests
             modelSelection: new SessionModelSelection(
                 "dca30000-0000-4000-8000-000000000001",
                 "dca20000-0000-4000-8000-000000000001",
-                "dca30000-0000-4000-8000-000000000001",
+                "diagnostic-private-external-model",
                 ModelSelectionSource.TenantDefault,
                 null));
         Assert.True(await runtime.SubmitPersistedUserTextAsync("fail", Guid.Parse("019944af-00d7-7000-8000-000000000081")));
@@ -351,7 +351,7 @@ public sealed class ConversationFailureDiagnosticTests
         Assert.Equal(DiagnosticId, logged.Properties["DiagnosticId"]);
         Assert.Equal(instanceId, logged.Properties["AgentInstanceId"]);
         Assert.Equal("dca20000-0000-4000-8000-000000000001", logged.Properties["ConnectionId"]);
-        Assert.DoesNotContain("dca30000-0000-4000-8000-000000000001", logged.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("diagnostic-private-external-model", logged.Message, StringComparison.Ordinal);
     }
 
     [Fact]

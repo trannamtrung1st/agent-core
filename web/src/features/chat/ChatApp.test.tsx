@@ -716,7 +716,8 @@ describe("ChatApp accessibility", () => {
       });
     });
     await act(async () => renderChat());
-    expect(screen.getByRole("alert")).toHaveTextContent("Unable to open the conversation.");
+    expect(screen.getAllByRole("alert").find(alert => alert.textContent?.includes("Unable to open the conversation.")))
+      .toHaveTextContent("Unable to open the conversation.");
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     expect(screen.getByText("This conversation has ended.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();

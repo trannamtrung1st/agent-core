@@ -10,8 +10,12 @@ namespace AgentCore.Infrastructure.Persistence;
 public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
 {
     private static readonly System.Text.Json.JsonSerializerOptions SnapshotJson = new(System.Text.Json.JsonSerializerDefaults.Web);
-    private static HarnessManagementState? CopyManagement(HarnessManagementState? state) => state is null ? null
-        : System.Text.Json.JsonSerializer.Deserialize<HarnessManagementState>(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(state, SnapshotJson), SnapshotJson);
+    private static HarnessManagementState? CopyManagement(HarnessManagementState? state)
+    {
+        if (state is null) return null;
+        if (state.Overrides is null) throw new ArgumentException("Canonical self-management overrides are required.");
+        return System.Text.Json.JsonSerializer.Deserialize<HarnessManagementState>(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(state, SnapshotJson), SnapshotJson);
+    }
     private static AgentInstance CopyInstance(AgentInstance instance) => instance with { SettingsOverrides = instance.SettingsOverrides?.Copy(), HarnessManagement = CopyManagement(instance.HarnessManagement) };
     public InMemoryCoreEventStore CoreEvents { get; set; } = new();
 

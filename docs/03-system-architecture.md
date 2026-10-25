@@ -151,6 +151,8 @@ Pure shared resolution primitives are reused across views and admission; there i
 
 ### Self-management and contextual Harness
 
+Self-management belongs to ordinary Agent Instances. There is no built-in Admin Assistant identity, facade or separate lifecycle. Existing tools are own-Instance only; a future user-configured administrative helper needs both IAM and supported target-aware tools for broader operations. The canonical resolver reads sparse overrides only; the [one-time persistence cutover](15-persistence-and-configuration.md#self-management-migration-and-recovery) handles installed full policies before traffic.
+
 Disabled/Assisted/Managed mode, independent delegated areas, permitted auto-apply choices and freeze constrain configuration authoring. Definition capability maxima, current/pinned policy, raw parent/child/source reads and operation policy remain mandatory. A model cannot enable/unfreeze itself or publish a shared Definition through these commands. Supported Managed low-risk changes keep their explicit exceptions; other protected changes use exact canonical consent.
 
 Canonical Harness commands compile into existing settings/Resource planners and effects. Their semantic witness is retained without a second candidate/refinement executor. Retained preparation/approval serialization is private hash-bound history, not consent. Policy/freeze/assessment fields remain current configuration. No field erasure, consent rehash or database reset follows from this distinction. [Retained-history qualification](reports/tenant-harness-history-verification-2026-10-24.md) and [self-management owners](04-backend-interfaces.md#unified-self-management-application-owners) own details.

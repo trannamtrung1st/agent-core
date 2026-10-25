@@ -8,6 +8,8 @@ Tenant-owned dynamic model management is implemented locally: five adapter kinds
 
 The [model and Space integration](docs/reports/model-space-main-integration-2026-10-25.md) records combined migration, authority and conversation verification after synchronizing main. Inference offerings remain tenant scoped; Space/Environment selection retains independent membership and IAM checks.
 
+Agent Self-Management completion uses ordinary tenant Instances and the existing IAM/configuration/approval owners. The [completion delivery](docs/reports/agent-self-management-delivery-2026-10-26.md) records the one-time sparse-policy migration, retained immutable history, UI refinement and current local verification limits. No special Admin Assistant feature is installed.
+
 Chat supports Saved or fixed 24-hour Temporary conversations, default-Off scoped agent completion, and deliberate long-text attachments. [The cutover report](docs/reports/chat-simplification-2026-10-26.md) records local Synthetic verification and operational limits.
 
 Agent Core is a lightweight runtime for creating persistent AI identities capable of natural, real-time conversation.

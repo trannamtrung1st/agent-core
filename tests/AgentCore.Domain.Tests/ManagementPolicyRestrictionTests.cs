@@ -3,6 +3,29 @@ namespace AgentCore.Domain.Tests;
 
 public sealed class ManagementPolicyRestrictionTests
 {
+    [Theory]
+    [InlineData("{\"unknown\":true}")]
+    [InlineData("{\"mode\":{\"value\":\"Managed\",\"unknown\":true}}")]
+    [InlineData("{\"configurationAssistance\":{}}")]
+    public void Sparse_policy_JSON_rejects_unknown_fields_and_missing_wrapper_values(string json)
+        => Assert.Throws<System.Text.Json.JsonException>(() => System.Text.Json.JsonSerializer.Deserialize<ManagementPolicyOverrides>(json,
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+
+    [Fact]
+    public void Unnormalized_live_state_fails_closed_instead_of_inheriting_or_using_the_full_policy()
+    {
+        // Only policy participates in this pure resolver; the other fields are irrelevant here.
+        var definition = new AgentDefinition(2, "test", 1, new("Test", "Test", "", ""), [], "", null!, null!, null!, null!, null!, new Dictionary<string, string>(), SelfManagement: Full());
+        var now = DateTimeOffset.UtcNow;
+        var owner = new AgentInstance(Guid.NewGuid(), definition.Id, 1, definition.Identity, AgentInstanceLifecycle.Active, now, now,
+            HarnessManagement: new(Full()));
+        Assert.Contains("SelfManagementNormalizationRequired", Assert.Throws<InvalidOperationException>(() => ManagementPolicyResolver.Resolve(definition, owner)).Message);
+        Assert.Equal(HarnessManagementMode.Managed, ManagementPolicyResolver.Resolve(definition, owner with { HarnessManagement = null }).Mode);
+        var explicitEmpty = new ManagementPolicyOverrides(Scopes: new([]), AutoApply: new([]), ConfigurationAssistance: new(false));
+        var effective = ManagementPolicyResolver.Resolve(definition, owner with { HarnessManagement = new(Full() with { Frozen = true }, Overrides: explicitEmpty) });
+        Assert.Empty(effective.Scopes); Assert.Empty(effective.ManagedAutoApply!);
+        Assert.False(effective.BuiltInSkills!.ConfigurationAssistance); Assert.True(effective.Frozen);
+    }
     private static HarnessManagementPolicy Full(HarnessManagementMode mode = HarnessManagementMode.Managed) => new(mode,
         Enum.GetValues<HarnessManagementScope>(), ["conversation:user", "https://example.test"], ["workspace.read", "web.fetch"],
         ManagedAutoApply: Enum.GetValues<ManagementAutoApply>());

@@ -37,10 +37,10 @@ public sealed partial class InMemoryIamStore
                 _approvals[approval.RequestId] = approval.Decide(now >= approval.ExpiresAt ? TenantApprovalStatus.Expired : TenantApprovalStatus.Cancelled, approval.Revision, now);
             if (all.Any(r => r.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate))
             {
-                foreach (var run in all.Where(r => !r.IsTerminal && !r.CancellationRequested))
+                foreach (var run in all.Where(r => !r.IsTerminal))
                 {
-                    var requested = run.RequestCancellation(run.Revision, null, now);
-                    sessionBacking.SaveRetainedTenantOperationRun(requested, run.Revision); AppendTenantCoreRun(run, requested);
+                    var requested = TenantRunCancellationRules.Cancel(run, now);
+                    sessionBacking.SaveRetainedTenantOperationRun(requested, run.Revision); AppendTenantCoreRun(run, requested); SettleTenantCompletion(requested, run.Claim?.Generation);
                 }
                 sessionBacking.ExpireDueTenantSession(target, now);
                 if (!SessionLifecycle.IsTerminal(current.LifecycleStatus))
