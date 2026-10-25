@@ -367,7 +367,12 @@ public sealed record SessionReadyProjection(
     Guid? AgentRunId = null,
     string OutputActivity = "Idle",
     bool HasOlderHistory = false,
-    long? HistoryBeforeSequence = null);
+    long? HistoryBeforeSequence = null,
+    SessionRetentionKind RetentionKind = SessionRetentionKind.Saved,
+    DateTimeOffset? RetentionDueAtUtc = null,
+    AgentCompletionAuthority AgentCompletion = AgentCompletionAuthority.Disabled,
+    string? LifecycleReason = null,
+    LifecycleTransitionSource? LifecycleSource = null);
 
 public sealed record ReadyOutput(SessionReadyProjection Ready) : OutputPayload;
 
@@ -431,7 +436,10 @@ public sealed record StateChangedOutput(
     bool Muted,
     Guid? StreamId,
     string? PauseReason = null,
-    SessionLifecycleStatus LifecycleStatus = SessionLifecycleStatus.Active) : OutputPayload;
+    SessionLifecycleStatus LifecycleStatus = SessionLifecycleStatus.Active,
+    string? LifecycleReason = null,
+    LifecycleTransitionSource? LifecycleSource = null,
+    DateTimeOffset? RetentionDueAtUtc = null) : OutputPayload;
 
 public sealed record PlaybackStopOutput(string Reason) : OutputPayload;
 

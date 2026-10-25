@@ -126,7 +126,7 @@ public sealed partial class TenantCredentialAccessTests
                     .Where(key => !window.StartsWith("exception", StringComparison.Ordinal) || key != "drive.write").ToArray();
                 var role = await access.SaveRoleAsync(human, setup.Tenant, null, "Exact recoverable account operations", permissions, await Revision(owner, setup.Tenant));
                 var assignment = await access.AssignRoleAsync(human, setup.Tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(setup.Tenant), await Revision(owner, setup.Tenant));
-                session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = setup.Instance, expectedRevision = await Revision(owner, setup.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
+                session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = setup.Instance, expectedRevision = await Revision(owner, setup.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
                 var steps = new List<object>();
                 if (email) steps.Add(new { tool = ToolCatalog.EmailCreateDraft, arguments = new { accountRef = setup.Alias, to = new[] { "offline@example.test" }, subject = "Exact recovery", body = "Private immutable recovery body" } });
                 if (tool == ToolCatalog.DriveUpload) await first.Services.GetRequiredService<ITenantWorkspaceMutationStore>().WriteTenantAsync(new TenantWorkspaceReference.SessionWorking(setup.Tenant, session), "/working/recovery.bin", bytes, _ => ValueTask.CompletedTask);

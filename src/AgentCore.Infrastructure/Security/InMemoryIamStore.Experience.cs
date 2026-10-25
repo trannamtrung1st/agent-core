@@ -37,7 +37,7 @@ public sealed partial class InMemoryIamStore : ITenantExperienceStore
         else if (kind == ExperienceSourceKind.AgentRun)
         {
             var source = sessionBacking.ReadRetainedTenantOperationRun(reader.Security.Tenant.TenantId, id);
-            if (source is null || source.AgentInstanceId != run.AgentInstanceId || source.Owner.ExecutorPrincipalId != reader.Agent.PrincipalId || !TenantExperienceRules.Substantive(source) || sessionBacking.ReadTenantSession(reader.Security.Tenant.TenantId, source.SessionId) is null)
+            if (source is null || source.AgentInstanceId != run.AgentInstanceId || source.Owner.ExecutorPrincipalId != reader.Agent.PrincipalId || !TenantExperienceRules.Substantive(source) || sessionBacking.ReadTenantSession(reader.Security.Tenant.TenantId, source.SessionId) is not { Snapshot.RetentionKind: SessionRetentionKind.Saved })
                 throw new AccessDeniedException("experience_source_unavailable");
             var raw = new TenantExperienceSourceWitness(kind, id, source.SessionId, 0, source.Revision, 0, 0, id, source.Revision, new string('a', 64));
             TenantExperienceRules.RawAsync(reader, raw, false, iam, ct, human).AsTask().GetAwaiter().GetResult();

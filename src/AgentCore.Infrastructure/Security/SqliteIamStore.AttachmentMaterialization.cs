@@ -14,7 +14,7 @@ public sealed partial class SqliteIamStore
         var attachments = attachmentBacking ?? throw new AccessDeniedException("tenant_effect_unavailable");
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var (state, session, agent) = await RequireAttachmentHuman(db, proof, ct).ConfigureAwait(false);
-        var item = await SqliteAttachmentStore.Owned(db, proof.Owner.TenantId, proof.Owner.SessionId).AsNoTracking().SingleOrDefaultAsync(a => a.AttachmentId == source.AttachmentId.ToString("D"), ct).ConfigureAwait(false);
+        var item = await SqliteAttachmentStore.Owned(db, proof.Owner.TenantId, proof.Owner.SessionId, (clock ?? TimeProvider.System).GetUtcNow()).AsNoTracking().SingleOrDefaultAsync(a => a.AttachmentId == source.AttachmentId.ToString("D"), ct).ConfigureAwait(false);
         if (item is null || SqliteAttachmentStore.Domain(item) != source) throw new AccessDeniedException("resource_unavailable");
         await TenantAttachmentMaterializationRules.RequireAsync(state, session, agent, proof.Human.PrincipalId, source, new IamAuthorizer(this), (clock ?? TimeProvider.System).GetUtcNow(), ct).ConfigureAwait(false);
         if (state.Tenant.Revision != proof.SecurityRevision || agent.Instance.Revision != proof.InstanceRevision) return null;

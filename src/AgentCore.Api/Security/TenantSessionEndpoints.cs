@@ -13,6 +13,7 @@ public static class TenantSessionEndpoints
     public sealed record MessageRequest(Guid MessageId, string Text, long ExpectedRevision, long ExpectedSessionRevision, IReadOnlyList<Guid>? AttachmentIds = null, string? Behavior = null,
         Guid? InterruptedRunId = null, long? ExpectedRunRevision = null, AgentCore.Contracts.Realtime.UserMessagePartDto[]? Parts = null);
     public sealed record RunWitness(long ExpectedRevision, long ExpectedRunRevision);
+    public sealed record CompletionPolicyRequest(bool Allowed, long ExpectedRevision, long ExpectedSessionRevision);
     public static void Map(WebApplication app)
     {
         app.MapGet("/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/composer", (Guid instanceId, string category, string? search, string? cursor, Guid? spaceId, HttpContext http,
@@ -22,6 +23,14 @@ public static class TenantSessionEndpoints
             return Results.Json(await service.DiscoverAsync(actor.TenantId, instanceId, Initiator(http, actor), category, search, cursor, ct, spaceId).ConfigureAwait(false));
         })).RequireAuthorization();
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/sessions").RequireAuthorization();
+        group.MapPut("/{sessionId:guid}/agent-completion", (Guid sessionId, CompletionPolicyRequest body, HttpContext http,
+            TenantSessionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            var saved = await service.ChangeAsync(actor.TenantId, Initiator(http, actor),
+                new(sessionId, body.ExpectedSessionRevision, TenantSessionAction.SetAgentCompletion, AgentCompletionAllowed: body.Allowed), body.ExpectedRevision, ct).ConfigureAwait(false);
+            return Results.Json(Safe(saved!));
+        }));
         group.MapGet("/{sessionId:guid}/approvals", (Guid sessionId, int? page, int? pageSize, HttpContext http,
             TenantConversationApprovalService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
@@ -60,7 +69,9 @@ public static class TenantSessionEndpoints
                 mode = view.Mode.ToString().ToLowerInvariant(), pendingMode = (string?)null, status = view.Status.ToString().ToLowerInvariant(),
                 lifecycleStatus = LifecycleTransition.ToWire(view.LifecycleStatus), view.CreatedAt, view.UpdatedAt,
                 agentId = view.Agent.Id, agentVersion = view.Agent.Version, agentName = view.Agent.Name, agentRole = view.Agent.Role,
-                model = HttpMapping.ToModel(view.Model, null) });
+                model = HttpMapping.ToModel(view.Model, null), retentionKind = view.RetentionKind.ToString().ToLowerInvariant(),
+                view.RetentionDueAtUtc, agentCompletion = view.AgentCompletion.ToString().ToLowerInvariant(), view.LifecycleReason,
+                lifecycleSource = view.LifecycleSource?.ToString().ToLowerInvariant() });
         }));
         group.MapGet("/{sessionId:guid}/messages", (Guid sessionId, long? after, long? before, int? limit, HttpContext http,
             TenantConversationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
@@ -126,7 +137,8 @@ public static class TenantSessionEndpoints
         {
             var actor = IdentityHttp.TenantContext(http);
             var initiator = new TenantSessionInitiator(actor.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
-            var item = await service.CreateAsync(actor.TenantId, body.AgentInstanceId, initiator, HttpMapping.ParseMode(body.Mode), body.ExpectedRevision, body.ExpectedInstanceRevision, body.OfferingId?.ToString("D"), body.ReasoningEffort, ct).ConfigureAwait(false);
+            var item = await service.CreateAsync(actor.TenantId, body.AgentInstanceId, initiator, HttpMapping.ParseMode(body.Mode), body.ExpectedRevision, body.ExpectedInstanceRevision, body.OfferingId?.ToString("D"), body.ReasoningEffort, ct, body.RetentionKind switch { "saved" => AgentCore.Domain.Conversation.SessionRetentionKind.Saved,
+                "temporary" => AgentCore.Domain.Conversation.SessionRetentionKind.Temporary, _ => throw AgentCoreErrors.Validation("retentionKind must be saved or temporary.") }).ConfigureAwait(false);
             return Results.Json(Safe(item), statusCode: 201);
         }));
         group.MapGet("", (int? page, int? pageSize, bool? includeArchived, HttpContext http, TenantSessionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
@@ -152,5 +164,7 @@ public static class TenantSessionEndpoints
     private static object Safe(TenantSessionMetadata item) => new { item.Owner.TenantId, item.Owner.SessionId, item.Owner.AgentInstanceId,
         item.Owner.ExecutorPrincipalId, item.Owner.CreatedByPrincipalId, item.Title, mode = item.Mode.ToString().ToLowerInvariant(),
         status = item.Status.ToString().ToLowerInvariant(), item.Revision, item.CreatedAt, item.UpdatedAt,
-        lifecycleStatus = LifecycleTransition.ToWire(item.LifecycleStatus), item.ArchivedAt, item.AgentId, item.AgentVersion, item.AgentName, item.AgentRole, item.CanManage, item.PauseReason, item.ContextSelection };
+        lifecycleStatus = LifecycleTransition.ToWire(item.LifecycleStatus), item.ArchivedAt, item.AgentId, item.AgentVersion, item.AgentName, item.AgentRole, item.CanManage, item.PauseReason, item.ContextSelection,
+        retentionKind = item.RetentionKind.ToString().ToLowerInvariant(), item.RetentionDueAtUtc,
+        agentCompletion = item.AgentCompletion.ToString().ToLowerInvariant(), item.LifecycleReason, lifecycleSource = item.LifecycleSource?.ToString().ToLowerInvariant() };
 }

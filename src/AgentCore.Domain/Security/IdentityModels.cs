@@ -9,7 +9,7 @@ public sealed record Account(Guid AccountId, string LoginKey, string DisplayName
     string PasswordHash, string SecurityStamp, IdentityStatus Status, DateTimeOffset CreatedAt);
 
 public sealed record Tenant(Guid TenantId, string Name, string Slug, IdentityStatus Status,
-    long Revision, DateTimeOffset CreatedAt);
+    long Revision, DateTimeOffset CreatedAt, int? SavedChatRetentionDays = null);
 
 public sealed record TenantUser(Guid UserId, Guid TenantId, Guid AccountId, Guid PrincipalId,
     IdentityStatus Status, DateTimeOffset CreatedAt);

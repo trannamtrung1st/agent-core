@@ -65,9 +65,9 @@ public sealed partial class SqliteIamStore
         }, ct).ConfigureAwait(false);
         return written ? saved : null;
     }
-    private static IQueryable<AgentRunRecord> OwnedRuns(AgentCoreDbContext db, Guid tenant) => db.AgentRuns.Where(r => r.TenantId == tenant
+    private IQueryable<AgentRunRecord> OwnedRuns(AgentCoreDbContext db, Guid tenant) => db.AgentRuns.Where(r => r.TenantId == tenant
         && db.Set<TenantSessionRecord>().Any(s => s.TenantId == tenant && s.SessionId == r.SessionId && s.AgentInstanceId == r.AgentInstanceId && s.ExecutorPrincipalId == r.ExecutorPrincipalId)
-        && db.Sessions.Any(s => s.SessionId == r.SessionId && s.DurablyDeletedAtUtc == null));
+        && db.Sessions.Any(s => s.SessionId == r.SessionId && s.DurablyDeletedAtUtc == null && (s.RetentionDueAtUtc == null || s.RetentionDueAtUtc > (clock ?? TimeProvider.System).GetUtcNow().ToUnixTimeMilliseconds())));
     public async ValueTask<AgentRun?> FindTenantRunAsync(Guid tenantId, Guid runId, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -145,7 +145,7 @@ public sealed partial class SqliteIamStore
                 throw new SecurityConflictException("session_queue_full");
             var attachmentRows = new List<AttachmentRecordRow>(sources.Count);
             foreach (var source in sources)
-                attachmentRows.Add(await SqliteAttachmentStore.Owned(db, next.Tenant.TenantId, run.SessionId)
+                attachmentRows.Add(await SqliteAttachmentStore.Owned(db, next.Tenant.TenantId, run.SessionId, (clock ?? TimeProvider.System).GetUtcNow())
                     .SingleOrDefaultAsync(a => a.AttachmentId == source.AttachmentId.ToString("D") && a.ContentDeletedAtUtc == null, ct).ConfigureAwait(false)
                     ?? throw new AccessDeniedException("attachment_unavailable"));
             TenantAttachmentBindingRules.Current(admission, attachmentRows.Select(SqliteAttachmentStore.Domain).ToArray(), (clock ?? TimeProvider.System).GetUtcNow());

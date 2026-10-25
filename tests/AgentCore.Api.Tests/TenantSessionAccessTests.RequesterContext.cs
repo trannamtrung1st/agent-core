@@ -45,7 +45,7 @@ public sealed partial class TenantSessionAccessTests
                 expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
                 overrides = new { mode = new { value = "Assisted" }, scopes = new { value = new[] { "Settings" } } }
             })).StatusCode);
-            var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }));
+            var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }));
             var sessionId = session.GetProperty("sessionId").GetGuid();
             var identity = factory.Services.GetRequiredService<IdentityService>(); var access = factory.Services.GetRequiredService<TenantAccessService>();
             var account = await identity.RegisterAsync("requester@example.test", "Verified Requester", "explicit-requester-test-password");

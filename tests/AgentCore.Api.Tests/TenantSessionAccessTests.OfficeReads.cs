@@ -57,7 +57,7 @@ public sealed partial class TenantSessionAccessTests
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var workspace = api + (working ? $"/sessions/{session}/workspace" : $"/agents/{instance}/workspace");
             const string body = "Private Office content thử nghiệm";
             var processor = factory.Services.GetRequiredService<IOfficeProcessor>();
@@ -153,7 +153,7 @@ public sealed partial class TenantSessionAccessTests
             if (proof)
             {
                 await File.WriteAllTextAsync(proofPath + "-completed.json", "{}");
-                var secondSession = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+                var secondSession = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
                 var secondWorkspace = api + $"/sessions/{secondSession}/workspace";
                 var secondPath = "/working/quarterly-spreadsheet-inspection-with-long-name-thử-nghiệm-試験-2026.xlsx";
                 const string sheet = "Quarterly results 試験 thử";

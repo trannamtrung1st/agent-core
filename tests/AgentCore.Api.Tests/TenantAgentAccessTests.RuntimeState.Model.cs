@@ -43,7 +43,7 @@ public sealed partial class TenantAgentAccessTests
                 set = new { agentStateVisibility = "CurrentSession" }, clear = Array.Empty<string>() })).StatusCode);
             instanceRevision++;
         }
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = id, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = id, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
         var admitted = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Observe this Run without allocating native resources", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }));
         var runId = admitted.GetProperty("runId").GetGuid();
         await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);

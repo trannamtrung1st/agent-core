@@ -84,7 +84,7 @@ public sealed partial class TenantSessionAccessTests
                 factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentCore.Api.Realtime.AgentCoreOptions>>().Value.MaxActiveSessions = 1;
                 var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) })))
                     .GetProperty("instance").GetProperty("instanceId").GetGuid();
-                var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+                var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
                 var id = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Hold this Synthetic turn", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 })))
                     .GetProperty("runId").GetGuid();
                 await model.Entered.Task.WaitAsync(TimeSpan.FromSeconds(20));
@@ -111,7 +111,7 @@ public sealed partial class TenantSessionAccessTests
                         if (released) capacity.ReleaseTenantRuntime(); else await Task.Delay(25, deadline.Token);
                     }
                 Assert.False(model.Release.Task.IsCompleted); Assert.Equal(1, model.Calls);
-                var second = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+                var second = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
                 var next = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{second}/messages", new { messageId = Guid.NewGuid(), text = "A separate Synthetic turn", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
                 Assert.Equal(AgentRunStatus.Completed, (await AwaitCancelledTenantRun(runs, tenant, next)).Status);
                 model.Release.TrySetResult(); await model.LateAttempted.Task.WaitAsync(TimeSpan.FromSeconds(15));

@@ -16,7 +16,7 @@ public sealed partial class SqliteIamStore
         TenantRuntimeRules.RequireOwner(owner); await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         return await CompletionSource(db, owner, childRunId, ct).ConfigureAwait(false);
     }
-    private static async Task<TenantBackgroundCompletion?> CompletionSource(AgentCoreDbContext db, AgentRunOwner owner, Guid childRunId, CancellationToken ct)
+    private async Task<TenantBackgroundCompletion?> CompletionSource(AgentCoreDbContext db, AgentRunOwner owner, Guid childRunId, CancellationToken ct)
     {
         var row = await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == owner.TenantId && r.AgentRunId == childRunId.ToString("D")
             && r.AgentInstanceId == owner.AgentInstanceId.ToString("D") && r.ExecutorPrincipalId == owner.ExecutorPrincipalId, ct).ConfigureAwait(false);

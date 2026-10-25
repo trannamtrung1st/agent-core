@@ -31,7 +31,7 @@ public sealed partial class SqliteIamStore : ITenantAuthorizationAuditStore
         catch (DbUpdateException error) when (IsConstraint(error)) { return false; }
         catch (SqliteException error) when (error.SqliteErrorCode is 5 or 6) { return false; }
     }
-    private static async ValueTask<TenantWorkspaceOwnership?> WorkspaceOwnershipAsync(AgentCoreDbContext db, AgentCore.Domain.Conversation.TenantWorkspaceReference owner, CancellationToken ct)
+    private async ValueTask<TenantWorkspaceOwnership?> WorkspaceOwnershipAsync(AgentCoreDbContext db, AgentCore.Domain.Conversation.TenantWorkspaceReference owner, CancellationToken ct)
     {
         if (owner is AgentCore.Domain.Conversation.TenantWorkspaceReference.SpaceHome home)
         {

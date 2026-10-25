@@ -85,7 +85,7 @@ public sealed partial class TenantAgentAccessTests
         Guid? destination = null;
         if (existingConversation)
         {
-            using var created = await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 });
+            using var created = await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 });
             Assert.Equal(System.Net.HttpStatusCode.Created, created.StatusCode); destination = (await Json(created)).GetProperty("sessionId").GetGuid();
         }
         var saved = await Json(await owner.PostAsJsonAsync(api + $"/agents/{instance}/automations", new { enabled = true, name = "Exact manual target", instructions = "Execute only the accepted manual task.", requiresTools = false, targetSessionId = destination,

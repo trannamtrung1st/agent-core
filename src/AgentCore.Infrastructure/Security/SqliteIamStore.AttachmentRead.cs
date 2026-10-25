@@ -16,7 +16,7 @@ public sealed partial class SqliteIamStore
     private async ValueTask RequireAttachmentReadSource(AgentCoreDbContext db, Guid tenant, PreparedAttachmentRead value, AgentRun run, TenantAgent agent, CancellationToken ct)
     {
         var session = await ReadSandboxSession(db, tenant, value.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        var item = await SqliteAttachmentStore.Owned(db, tenant, value.SessionId).SingleOrDefaultAsync(a => a.AttachmentId == value.AttachmentId.ToString("D"), ct).ConfigureAwait(false)
+        var item = await SqliteAttachmentStore.Owned(db, tenant, value.SessionId, (clock ?? TimeProvider.System).GetUtcNow()).SingleOrDefaultAsync(a => a.AttachmentId == value.AttachmentId.ToString("D"), ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("resource_unavailable");
         var current = AgentCore.Application.Agents.InstanceSettingsResolver.Resolve(await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false), agent.Instance.SettingsOverrides);
         TenantAttachmentReadRules.Require(value, run, agent, current, session, SqliteAttachmentStore.Domain(item));

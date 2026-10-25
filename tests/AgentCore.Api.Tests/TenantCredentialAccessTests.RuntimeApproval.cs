@@ -39,7 +39,7 @@ public sealed partial class TenantCredentialAccessTests
         var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
         var role = await access.SaveRoleAsync(principal, tenant, null, "Bound metadata", ["credentials.read"], await Revision(owner, tenant));
         await access.AssignRoleAsync(principal, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForResource(tenant, "credential", credentialId.ToString("D")), await Revision(owner, tenant));
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
         var runId = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Check the bound Drive connection", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
         var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var run = (await runs.FindTenantRunAsync(tenant, runId))!;
         var time = factory.Services.GetRequiredService<TimeProvider>(); var ids = factory.Services.GetRequiredService<IIdGenerator>(); var at = time.GetUtcNow();

@@ -20,7 +20,7 @@ public sealed partial class TenantAgentAccessTests
         using var owner = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, id, isolation) = await IsolationAgent(owner); var api = $"/api/v2/tenants/{tenant}";
         var principal = (await Json(await owner.GetAsync(api + $"/agents/{id}"))).GetProperty("principalId").GetGuid();
-        async Task<Guid> Session() => (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = id, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+        async Task<Guid> Session() => (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = id, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
         var a = await Session(); var b = await Session(); var now = DateTimeOffset.UtcNow;
         var first = new SandboxProfile("p-" + Guid.NewGuid().ToString("N"), 1, "Private profile", "Private metadata", true,
             "docker.io/library/python@sha256:" + new string('a', 64), InitializationScript: "echo private-state-source-sentinel", TenantId: tenant);

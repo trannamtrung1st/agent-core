@@ -50,7 +50,7 @@ public sealed partial class TenantSessionAccessTests
             }
             async Task<TenantBrowserOwner> Session(Guid agent)
             {
-                var id = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = agent, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+                var id = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = agent, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
                 var saved = (await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(tenant, id))!;
                 return new(tenant, agent, saved.Owner.ExecutorPrincipalId, id);
             }

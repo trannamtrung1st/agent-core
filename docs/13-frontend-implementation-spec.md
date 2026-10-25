@@ -1107,3 +1107,10 @@ Expanded Memory details expose `View sources` for an immediate single supersedes
 ## Historical continuity read Review
 
 Chat and the Approvals inbox reuse the existing exact-read inspector for `inspect_continuity`. Show the saved query/window, named historical sources and entry ranges, separately owned learned sources and the current authorized excerpts. Historical statements are untrusted retained observations; confirmation authorizes only the exact saved read in this task and leaves raw source/reviewer access mandatory. A changed observation withholds substituted current excerpts, disables approval/rejection, and keeps authorized cancellation available. Cancellation followed by a fresh task/read can prepare a new observation. Consent status and eventual read outcome remain separate. Existing Ant Design typography, Drawer, confirmation, spacing and desktop/narrow behavior remain shared with other protected reads.
+
+
+## Saved, Temporary and long text Chat
+
+New Chat preselects Saved and offers Temporary with a 24-hour disclosure and notice that explicit external effects can persist. Retention cannot change after creation. Temporary shows a locale-formatted deadline and is absent from saved/archived catalog. Expiry clears private transcript/cache and playback and presents an unavailable state with New Chat. Completed history stays read-only, with factual agent completion reason when supplied. Session agent-completion delegation defaults Off and requires the existing management authority.
+
+Direct text remains bounded to 8,000 UTF-16 units. An oversized plain-text-only draft offers explicit Attach long text through the existing upload queue, producing exact original UTF-8 text/plain bytes. Preserve the original through upload and admission ACK; rejection/retry must remain recoverable. Mixed typed chips are never flattened or activated by conversion. Show targeted guidance instead. Reuse Chat header, composer/file tiles, SessionRail and governance Ant Design v6 patterns, token spacing, keyboard/focus and responsive layouts.

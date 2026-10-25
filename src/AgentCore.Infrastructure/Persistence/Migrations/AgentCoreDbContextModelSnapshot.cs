@@ -210,6 +210,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AgentCore.Domain.Security.Tenant", b =>
                 {
+                    b.Property<int?>("SavedChatRetentionDays")
+                        .HasColumnType("INTEGER");
+
                     b.Property<Guid>("TenantId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
@@ -3018,6 +3021,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SessionRecord", b =>
                 {
+                    b.Property<int>("RetentionKind").HasColumnType("INTEGER");
+                    b.Property<int?>("RetainAfterTerminalDays").HasColumnType("INTEGER");
+                    b.Property<long?>("RetentionDueAtUtc").HasColumnType("INTEGER");
+
                     b.Property<string>("SessionId")
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
@@ -3109,6 +3116,8 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasIndex("AgentInstanceId");
 
                     b.HasIndex("DurablyDeletedAtUtc", "ArchivedAtUtc", "UpdatedAtUtc", "SessionId");
+
+                    b.HasIndex("RetentionDueAtUtc", "SessionId");
 
                     b.ToTable("Sessions", (string)null);
                 });

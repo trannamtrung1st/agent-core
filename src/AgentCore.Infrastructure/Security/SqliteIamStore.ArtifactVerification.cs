@@ -13,7 +13,7 @@ public sealed partial class SqliteIamStore
     {
         var value = request.Operation.ArtifactVerification!;
         var session = await ReadSandboxSession(db, request.TenantId, value.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        var item = await SqliteArtifactStore.Owned(db, request.TenantId, value.SessionId).SingleOrDefaultAsync(a => a.ArtifactId == value.ArtifactId.ToString("D"), ct).ConfigureAwait(false)
+        var item = await SqliteArtifactStore.Owned(db, request.TenantId, value.SessionId, (clock ?? TimeProvider.System).GetUtcNow()).SingleOrDefaultAsync(a => a.ArtifactId == value.ArtifactId.ToString("D"), ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("resource_unavailable");
         var current = AgentCore.Application.Agents.InstanceSettingsResolver.Resolve(await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false), agent.Instance.SettingsOverrides);
         TenantArtifactVerificationRules.Require(value, run, agent, current, session, SqliteArtifactStore.FromRow(item));

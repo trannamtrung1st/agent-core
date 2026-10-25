@@ -97,7 +97,7 @@ public sealed partial class TenantSessionAccessTests
             else if (operation == "instructions") args["content"] = content;
             else { args["id"] = operation == "select" ? scenario == "uneligible" ? "harness.inspect" : ToolCatalog.WebFetch : ToolCatalog.AttachmentsRead; args[operation == "select" ? "enabled" : "allowUnreadUnsupportedTypes"] = operation == "configure" && scenario == "ceiling"; }
             model.Arguments = JsonSerializer.Serialize(args);
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = revision }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = revision }))).GetProperty("sessionId").GetGuid();
             var sent = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Retain REVISED-HARNESS-CONTENT in this Instance using the exact Harness command.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, sent.StatusCode); var initial = (await Json(sent)).GetProperty("runId").GetGuid();
             if (factory is ApprovalExecutionFactory memory) Volatile.Write(ref memory.Enabled, true);

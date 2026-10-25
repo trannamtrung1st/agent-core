@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace AgentCore.Infrastructure.Security;
 public sealed partial class SqliteIamStore
 {
-    private static async Task<bool> ContinuitySourceOwnersAvailable(AgentCoreDbContext db, TenantMemoryReader reader, PreparedContinuityRead read, CancellationToken ct)
+    private async Task<bool> ContinuitySourceOwnersAvailable(AgentCoreDbContext db, TenantMemoryReader reader, PreparedContinuityRead read, CancellationToken ct)
     {
         var ids = TenantContinuityRules.Sessions(read).Select(s => s.SessionId.ToString("D")).ToArray();
         return await OwnedSessions(db, reader.Security.Tenant.TenantId).CountAsync(s => ids.Contains(s.SessionId) && s.AgentInstanceId == reader.Run.AgentInstanceId.ToString("D") && s.ExecutorPrincipalId == reader.Agent.PrincipalId, ct).ConfigureAwait(false) == ids.Length;

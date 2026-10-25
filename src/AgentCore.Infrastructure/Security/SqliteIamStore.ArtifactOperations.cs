@@ -41,7 +41,7 @@ public sealed partial class SqliteIamStore : ITenantArtifactOperationStore
             if (commit.Source?.ResourceKey is { } sourceKey) await RequireResourcePin(db, sourceKey, commit.Source.ResourceRevision, run, target, ct).ConfigureAwait(false);
             if (commit.Source is { AttachmentId: { } attachmentId } attachmentSource)
             {
-                var attachment = await SqliteAttachmentStore.Owned(db, run.Owner.TenantId!.Value, run.SessionId).SingleOrDefaultAsync(a => a.AttachmentId == attachmentId.ToString("D") && a.ContentDeletedAtUtc == null, ct).ConfigureAwait(false);
+                var attachment = await SqliteAttachmentStore.Owned(db, run.Owner.TenantId!.Value, run.SessionId, (clock ?? TimeProvider.System).GetUtcNow()).SingleOrDefaultAsync(a => a.AttachmentId == attachmentId.ToString("D") && a.ContentDeletedAtUtc == null, ct).ConfigureAwait(false);
                 TenantAttachmentArtifactRules.Require(attachmentSource, session.Owner, attachment is null ? null : SqliteAttachmentStore.Domain(attachment));
             }
             await TenantArtifactSourceRules.RequireAuthorityAsync(before, run, path, new IamAuthorizer(this), false, ct, ownedSources: true).ConfigureAwait(false);

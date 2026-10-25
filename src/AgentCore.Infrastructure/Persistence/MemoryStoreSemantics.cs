@@ -39,6 +39,9 @@ internal static class MemoryStoreSemantics
         && left.PinnedPersonaRevision == right.PinnedPersonaRevision
         && left.Origin == right.Origin
         && left.PendingAgentInputIds.SequenceEqual(right.PendingAgentInputIds)
+        && left.RetentionKind == right.RetentionKind
+        && left.RetainAfterTerminalDays == right.RetainAfterTerminalDays
+        && left.RetentionDueAtUtc == right.RetentionDueAtUtc
         && left.Surfaces == right.Surfaces
         && IncomingEntriesMatch(left.Entries, right.Entries);
 

@@ -40,7 +40,7 @@ public sealed partial class InMemoryIamStore : ITenantContinuityStore
         foreach (var id in selected.Where(id => id != run.SessionId && (visible is null || visible.Contains(id))))
         {
             var source = sessionBacking.ReadTenantSession(reader.Security.Tenant.TenantId, id);
-            if (source is null || source.Owner.AgentInstanceId != run.AgentInstanceId || source.Owner.ExecutorPrincipalId != reader.Agent.PrincipalId) continue;
+            if (source is null || source.Snapshot.RetentionKind == AgentCore.Domain.Conversation.SessionRetentionKind.Temporary || source.Owner.AgentInstanceId != run.AgentInstanceId || source.Owner.ExecutorPrincipalId != reader.Agent.PrincipalId) continue;
             var witness = named?.Single(s => s.SessionId == id);
             var after = witness?.AfterEntrySequence ?? (args.Kind == "Session" ? args.AfterEntrySequence : Math.Max(0, source.Snapshot.DurableLastEntrySequence - 20));
             var limit = witness?.Limit ?? (args.Kind == "Session" ? args.Limit : 20);

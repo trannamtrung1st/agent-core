@@ -28,7 +28,7 @@ public sealed partial class TenantAgentAccessTests
         var agent = await Json(await client.GetAsync(api + $"/agents/{instance}"));
         var role = await Json(await client.PostAsJsonAsync(api + "/roles", new { name = "Unrelated dispatch executor", permissions = new[] { "agents.chat" }, expectedRevision = await Revision(client, tenant) }));
         await Json(await client.PostAsJsonAsync(api + "/role-assignments", new { principalId = agent.GetProperty("principalId").GetGuid(), roleId = role.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(client, tenant) }));
-        async Task<Guid> Create() => (await Json(await client.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedInstanceRevision = 1, expectedRevision = await Revision(client, tenant) }))).GetProperty("sessionId").GetGuid();
+        async Task<Guid> Create() => (await Json(await client.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedInstanceRevision = 1, expectedRevision = await Revision(client, tenant) }))).GetProperty("sessionId").GetGuid();
         var scanned = await Create(); var target = await Create(); var host = factory.Services.GetRequiredService<TenantSessionRuntimeHost>();
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         host.BeforeDispatchRegistration = async id => { if (id == target) { entered.TrySetResult(); await release.Task; } };
@@ -58,13 +58,13 @@ public sealed partial class TenantAgentAccessTests
         await using var factory = new RequestIsolationFactory(sqlite, clock: clock);
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, isolation) = await IsolationAgent(client); var api = $"/api/v2/tenants/{tenant}";
-        var early = variant == "relaxed" ? (await Json(await client.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedInstanceRevision = 1, expectedRevision = await Revision(client, tenant) }))).GetProperty("sessionId").GetGuid() : (Guid?)null;
+        var early = variant == "relaxed" ? (await Json(await client.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedInstanceRevision = 1, expectedRevision = await Revision(client, tenant) }))).GetProperty("sessionId").GetGuid() : (Guid?)null;
         var preview = await Json(await client.PostAsync(isolation + "/presets/Stateless", null));
         Assert.Equal(HttpStatusCode.OK, (await ApplyIsolation(client, isolation, preview)).StatusCode);
         var agent = await Json(await client.GetAsync(api + $"/agents/{instance}"));
         var role = await Json(await client.PostAsJsonAsync(api + "/roles", new { name = "Request text executor", permissions = new[] { "agents.chat" }, expectedRevision = await Revision(client, tenant) }));
         await Json(await client.PostAsJsonAsync(api + "/role-assignments", new { principalId = agent.GetProperty("principalId").GetGuid(), roleId = role.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(client, tenant) }));
-        var session = early ?? (await Json(await client.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedInstanceRevision = 2, expectedRevision = await Revision(client, tenant) }))).GetProperty("sessionId").GetGuid();
+        var session = early ?? (await Json(await client.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedInstanceRevision = 2, expectedRevision = await Revision(client, tenant) }))).GetProperty("sessionId").GetGuid();
         var message = Guid.NewGuid(); var route = api + $"/sessions/{session}/messages";
         var first = await Json(await client.PostAsJsonAsync(route, new { messageId = message, text = "First isolated request", expectedRevision = await Revision(client, tenant), expectedSessionRevision = 1 }));
         var run = first.GetProperty("runId").GetGuid();

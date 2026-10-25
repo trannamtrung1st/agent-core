@@ -37,7 +37,8 @@ public sealed partial class SqliteIamStore : ITenantExperienceStore
         if (kind != ExperienceSourceKind.AgentRun) throw new AccessDeniedException("experience_source_unavailable");
         var metadata = await OwnedRuns(db, reader.Security.Tenant.TenantId).AsNoTracking().Where(r => r.AgentRunId == id.ToString("D") && r.AgentInstanceId == run.AgentInstanceId.ToString("D") && r.ExecutorPrincipalId == reader.Agent.PrincipalId)
             .Select(r => new { r.SessionId, r.Revision }).SingleOrDefaultAsync(ct).ConfigureAwait(false) ?? throw new AccessDeniedException("experience_source_unavailable");
-        if (!await db.Sessions.AnyAsync(s => s.SessionId == metadata.SessionId && s.DurablyDeletedAtUtc == null, ct).ConfigureAwait(false)) throw new AccessDeniedException("experience_source_unavailable");
+        if (!await db.Sessions.AnyAsync(s => s.SessionId == metadata.SessionId && s.DurablyDeletedAtUtc == null
+            && s.RetentionKind == (int)SessionRetentionKind.Saved, ct).ConfigureAwait(false)) throw new AccessDeniedException("experience_source_unavailable");
         await TenantExperienceRules.RawAsync(reader, new(kind, id, Guid.Parse(metadata.SessionId), 0, metadata.Revision, 0, 0, id, metadata.Revision, new string('a', 64)), false, iam, ct, human).ConfigureAwait(false);
         var row = await OwnedRuns(db, reader.Security.Tenant.TenantId).AsNoTracking().SingleAsync(r => r.AgentRunId == id.ToString("D"), ct).ConfigureAwait(false); var sourceRun = AgentRunStoreMapping.ToDomain(row);
         await RequireTenantOutputSources(db, sourceRun, ct).ConfigureAwait(false);

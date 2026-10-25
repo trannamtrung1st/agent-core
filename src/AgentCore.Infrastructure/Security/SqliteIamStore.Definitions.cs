@@ -54,7 +54,7 @@ public sealed partial class SqliteIamStore
         if (TenantArtifactRules.TryId(scope, out var artifact))
         {
             await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-            return await SqliteArtifactStore.OwnedTenant(db, scope.TenantId!.Value).AnyAsync(a => a.ArtifactId == artifact.ToString("D"), ct).ConfigureAwait(false);
+            return await SqliteArtifactStore.OwnedTenant(db, scope.TenantId!.Value, (clock ?? TimeProvider.System).GetUtcNow()).AnyAsync(a => a.ArtifactId == artifact.ToString("D"), ct).ConfigureAwait(false);
         }
         if (TenantRunRules.TryId(scope, out var run))
         {

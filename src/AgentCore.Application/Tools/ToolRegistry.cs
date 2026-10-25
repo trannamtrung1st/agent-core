@@ -213,6 +213,10 @@ public static class ToolRegistry
                 ToolEffect.Write,
                 ToolOfferRule.ConfigurationWhenRoleAllows,
                 ToolResourceScope.Session),
+            [ToolCatalog.SessionComplete] = Descriptor(ToolCatalog.SessionComplete,
+                "Request completion of this conversation. Success accepts durable intent; give your final reply next. Completion is reported only after that reply is saved. Do not perform further effects.",
+                """{"type":"object","additionalProperties":false,"properties":{"reason":{"type":"string","minLength":1,"maxLength":500}},"required":["reason"]}""",
+                ToolEffect.Write, ToolOfferRule.TenantExecutionAuthority, ToolResourceScope.Session, ToolReplaySafety.NonReplayable),
             [ToolCatalog.WorkComplete] = Descriptor(
                 ToolCatalog.WorkComplete,
                 AgentCore.Application.Work.WorkCompletionRequest.Contract.Description,

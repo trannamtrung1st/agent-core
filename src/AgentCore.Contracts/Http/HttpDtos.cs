@@ -6,7 +6,7 @@ public sealed record HealthResponse(string Status, string Profile, int ProtocolV
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record TenantSessionCreateRequest(Guid AgentInstanceId, long ExpectedRevision, long ExpectedInstanceRevision,
-    string Mode = "text", Guid? OfferingId = null, string? ReasoningEffort = null);
+    string Mode = "text", Guid? OfferingId = null, string? ReasoningEffort = null, string? RetentionKind = null);
 
 /// <param name="Source">Ignored on all lifecycle routes; authority is fixed per route (user vs host).</param>
 public sealed record TransitionLifecycleRequest(string Target, string? Source = null, string? Reason = null);

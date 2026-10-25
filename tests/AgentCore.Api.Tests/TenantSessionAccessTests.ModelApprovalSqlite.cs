@@ -69,7 +69,7 @@ public sealed partial class TenantSessionAccessTests
                 desired = actual.Instance.Persona with { Name = "Durable model-requested persona" };
                 if (preferences) firstModel.ProposedPreferenceAuthorization = """{"set":{"language":"vi"},"clear":[]}""";
                 else firstModel.ProposedPersona = desired;
-                var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }));
+                var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }));
                 var sessionId = session.GetProperty("sessionId").GetGuid();
                 runId = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{sessionId}/messages", new { messageId = Guid.NewGuid(), text = "Persist the requested persona approval", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
                 var runs = first.Services.GetRequiredService<ITenantRunStore>(); AgentRun? waiting = null;

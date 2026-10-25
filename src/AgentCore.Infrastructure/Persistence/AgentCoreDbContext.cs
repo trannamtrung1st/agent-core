@@ -5,6 +5,9 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class SessionRecord
 {
+    public int RetentionKind { get; set; }
+    public int? RetainAfterTerminalDays { get; set; }
+    public long? RetentionDueAtUtc { get; set; }
     public string SessionId { get; set; } = "";
     public string AgentId { get; set; } = "";
     public int AgentVersion { get; set; }
@@ -345,6 +348,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.Title).HasMaxLength(200).IsRequired();
             entity.Property(row => row.WorkspaceOwned).HasDefaultValue(true);
             entity.HasIndex(row => new { row.DurablyDeletedAtUtc, row.ArchivedAtUtc, row.UpdatedAtUtc, row.SessionId });
+            entity.HasIndex(row => new { row.RetentionDueAtUtc, row.SessionId });
             entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
             entity.HasIndex(row => row.AgentInstanceId);
             entity.Property(row => row.OriginJson).HasDefaultValue("{\"kind\":0}").IsRequired();

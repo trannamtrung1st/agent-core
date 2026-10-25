@@ -225,6 +225,8 @@ public sealed partial class ScriptedLanguageModel : ILanguageModel
             foreach (var item in instanceSkillEvents) yield return item;
             yield break;
         }
+        if (SessionCompletionScript.Generate(request) is { } completionEvents)
+        { foreach (var e in completionEvents) yield return e; yield break; }
         if (SelfManagementScript.Generate(request) is { } managementEvents)
         { foreach (var e in managementEvents) yield return e; yield break; }
 

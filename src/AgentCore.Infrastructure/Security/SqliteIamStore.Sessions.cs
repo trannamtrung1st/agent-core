@@ -66,8 +66,8 @@ public sealed partial class SqliteIamStore
         entry.HeardTextEndExclusive = 0; entry.ReceivedTextEndExclusive = 0;
         if (entry.Status == nameof(EntryStatus.Streaming)) entry.Status = nameof(EntryStatus.Interrupted);
     }
-    private static IQueryable<TenantSessionRecord> OwnedSessions(AgentCoreDbContext db, Guid tenant) => db.Set<TenantSessionRecord>().Where(s => s.TenantId == tenant
-        && db.Sessions.Any(row => row.SessionId == s.SessionId && row.DurablyDeletedAtUtc == null));
+    private IQueryable<TenantSessionRecord> OwnedSessions(AgentCoreDbContext db, Guid tenant) => db.Set<TenantSessionRecord>().Where(s => s.TenantId == tenant
+        && db.Sessions.Any(row => row.SessionId == s.SessionId && row.DurablyDeletedAtUtc == null && (row.RetentionDueAtUtc == null || row.RetentionDueAtUtc > (clock ?? TimeProvider.System).GetUtcNow().ToUnixTimeMilliseconds())));
     public async ValueTask<TenantSession?> FindTenantSessionAsync(Guid tenantId, Guid sessionId, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -83,7 +83,8 @@ public sealed partial class SqliteIamStore
         var query = OwnedSessions(db, tenantId).AsNoTracking();
         if (allowedIds is not null) { var ids = allowedIds.Select(id => id.ToString("D")).ToArray(); query = query.Where(s => ids.Contains(s.SessionId)); }
         if (!includeArchived) query = query.Where(s => db.Sessions.Any(row => row.SessionId == s.SessionId && row.ArchivedAtUtc == null));
-        if (surface is { } selected) query = query.Where(s => db.Sessions.Any(row => row.SessionId == s.SessionId && (row.Surfaces & (int)selected) != 0));
+        if (surface is { } selected) query = query.Where(s => db.Sessions.Any(row => row.SessionId == s.SessionId && (row.Surfaces & (int)selected) != 0
+            && (selected != SessionSurface.ChatList || row.RetentionKind != (int)SessionRetentionKind.Temporary)));
         if (instanceId is { } instance) query = query.Where(s => s.AgentInstanceId == instance.ToString("D"));
         var total = await query.CountAsync(ct).ConfigureAwait(false);
         var ordered = recentFirst ? query.OrderByDescending(s => db.Sessions.Where(row => row.SessionId == s.SessionId).Select(row => row.UpdatedAtUtc).Single()).ThenBy(s => s.SessionId)
@@ -101,6 +102,8 @@ public sealed partial class SqliteIamStore
             var agent = await OwnedAgents(db, owner.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == owner.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false);
             if (agent is null || agent.Instance.Revision != expectedInstanceRevision) return false;
             TenantSessionRules.RequireExecutor((await ReadTenantAsync(db, owner.TenantId, ct).ConfigureAwait(false))!, Owned(agent));
+            if (snapshot.RetentionKind == SessionRetentionKind.Saved && snapshot.RetainAfterTerminalDays != next.Tenant.SavedChatRetentionDays)
+                throw new ArgumentException("Saved Chat retention must pin the current tenant policy.");
             TenantSessionRules.ValidateCreation(owner, snapshot, Owned(agent), initiator, audit, (await db.Set<SpaceRecord>().SingleOrDefaultAsync(s => s.TenantId == owner.TenantId && s.OwnerInstanceId == owner.AgentInstanceId.ToString("D") && s.DeletedAt == null, ct).ConfigureAwait(false))?.Domain() ?? throw new AccessDeniedException("private_space_unavailable"));
             if (await db.Sessions.AnyAsync(s => s.SessionId == snapshot.SessionId.ToString("D"), ct).ConfigureAwait(false)
                 || await db.Set<TenantSessionRecord>().AnyAsync(s => s.SessionId == snapshot.SessionId.ToString("D"), ct).ConfigureAwait(false)) return false;

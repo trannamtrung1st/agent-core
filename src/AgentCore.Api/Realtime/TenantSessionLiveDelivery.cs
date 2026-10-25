@@ -149,7 +149,8 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
                         speech?.EffectivePlan.SynthesisCapabilities ?? new(false, false, false, false, false, []), "semantic",
                         entries.Count == 0 ? 0 : entries.Max(e => e.Sequence), entries.OrderBy(e => e.Sequence).ToArray(), active, "none", "none",
                         recipient.LifecycleStatus, ModelSelection: recipient.Model, AgentRunId: active is null ? null : source!.Run.AgentRunId,
-                        OutputActivity: active is null ? "Idle" : "Generating", HasOlderHistory: history.HasOlder, HistoryBeforeSequence: history.NextBefore);
+                        OutputActivity: active is null ? "Idle" : "Generating", HasOlderHistory: history.HasOlder, HistoryBeforeSequence: history.NextBefore, RetentionKind: recipient.RetentionKind,
+                        RetentionDueAtUtc: recipient.RetentionDueAtUtc, AgentCompletion: recipient.AgentCompletion, LifecycleReason: recipient.LifecycleReason, LifecycleSource: recipient.LifecycleSource);
                     ready = ready with { InputTransport = speech?.EffectivePlan.InputTransport ?? "none", OutputTransport = speech?.EffectivePlan.OutputTransport ?? "none" };
                     var output = new SessionOutput(Context(session), active, new ReadyOutput(ready));
                     var mapped = SessionEventMapper.Map(output, subscription.Attachment, ++subscription.Sequence);

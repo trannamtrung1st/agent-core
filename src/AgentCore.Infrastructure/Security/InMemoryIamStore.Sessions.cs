@@ -64,6 +64,8 @@ public sealed partial class InMemoryIamStore
             var agent = FindTenantAgentAsync(owner.TenantId, owner.AgentInstanceId, ct).Result;
             if (agent is null || agent.Instance.Revision != expectedInstanceRevision) return ValueTask.FromResult(false);
             TenantSessionRules.RequireExecutor(before, agent);
+            if (snapshot.RetentionKind == SessionRetentionKind.Saved && snapshot.RetainAfterTerminalDays != next.Tenant.SavedChatRetentionDays)
+                throw new ArgumentException("Saved Chat retention must pin the current tenant policy.");
             TenantSessionRules.ValidateCreation(owner, snapshot, agent, initiator, audit, FindPrivateSpaceAsync(owner.TenantId, owner.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("private_space_unavailable"));
             ct.ThrowIfCancellationRequested(); if (!sessionBacking.CreateTenantSession(owner, snapshot)) return ValueTask.FromResult(false);
             _tenants[owner.TenantId] = next; _audit.Add(audit); return ValueTask.FromResult(true);

@@ -42,6 +42,7 @@ public sealed partial class SqliteIamStore : ITenantContinuityStore
         else if (args.Id is { } sourceId) roots = roots.Where(s => s.SessionId == sourceId.ToString("D"));
         var metadata = await (from root in roots join session in db.Sessions.AsNoTracking() on root.SessionId equals session.SessionId
             join snapshot in db.Snapshots.AsNoTracking() on root.SessionId equals snapshot.SessionId
+            where session.RetentionKind == (int)SessionRetentionKind.Saved
             orderby session.UpdatedAtUtc descending, root.SessionId
             select new { root.SessionId, session.Revision, snapshot.LastEntrySequence, session.Title, snapshot.Summary, session.UpdatedAtUtc }).Take(TenantContinuityRules.CandidateLimit + 1).ToArrayAsync(ct).ConfigureAwait(false);
         var documents = new List<TenantHistoricalSession>();

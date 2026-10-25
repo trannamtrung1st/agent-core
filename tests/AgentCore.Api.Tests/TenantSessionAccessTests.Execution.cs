@@ -35,7 +35,7 @@ public sealed partial class TenantSessionAccessTests
         var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
         var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
         var executor = agent.GetProperty("principalId").GetGuid();
-        var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
+        var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
         var id = session.GetProperty("sessionId").GetGuid();
         var response = await owner.PostAsJsonAsync(api + $"/sessions/{id}/messages", new { messageId = Guid.NewGuid(), text = "Hello Synthetic examiner", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
@@ -70,7 +70,7 @@ public sealed partial class TenantSessionAccessTests
         var api = $"/api/v2/tenants/{tenant}";
         var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
         var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
-        var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
+        var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
         var id = session.GetProperty("sessionId").GetGuid();
         var receipt = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{id}/messages", new { messageId = Guid.NewGuid(), text = "Do not process after archive", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }));
         var runId = receipt.GetProperty("runId").GetGuid();

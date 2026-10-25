@@ -34,6 +34,7 @@ public sealed partial class InMemoryIamStore
             if (draftEntryId is not null && draft is null) throw AgentCoreErrors.Conflict("Response draft was not found.");
             RequireTenantOutputSources(run, ct);
             var applyLearning = PrepareLearningCommit(frame, snapshot, completion.Learning, ct);
+            AgentCore.Application.Tools.SessionCompletionIntent.ValidateOutcome(run, sessionBacking.ReadTenantSession(frame.Owner.TenantId!.Value, frame.SessionId)!.Snapshot, snapshot, (clock ?? TimeProvider.System).GetUtcNow());
             AgentRunStoreMapping.ValidateOutcome(snapshot, run, completion, draft);
             AgentRun next; try { next = completion.Apply(run, () => diagnosticId); }
             catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }

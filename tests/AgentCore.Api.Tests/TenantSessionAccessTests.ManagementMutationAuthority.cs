@@ -42,7 +42,7 @@ public sealed partial class TenantSessionAccessTests
                 revision=4;model.Arguments=ManagementCommand("settings.patch","").Replace("\"expectedInstanceRevision\":3","\"expectedInstanceRevision\":4");
             }
             if(boundary=="independent_without_reviewer") Assert.Equal(HttpStatusCode.OK,(await owner.PutAsJsonAsync(api+"/operation-policies/agents.update",new { mode="always",independentReview=true,expectedRevision=await Revision(owner,tenant),expectedPolicyRevision=0 })).StatusCode);
-            var created=await Json(await owner.PostAsJsonAsync(api+"/sessions",new { agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=revision }));var session=created.GetProperty("sessionId").GetGuid();
+            var created=await Json(await owner.PostAsJsonAsync(api+"/sessions",new { retentionKind="saved", agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=revision }));var session=created.GetProperty("sessionId").GetGuid();
             var response=await owner.PostAsJsonAsync(api+$"/sessions/{session}/messages",new { messageId=Guid.NewGuid(),text="Attempt an exact configuration change through its actual current authority.",expectedRevision=await Revision(owner,tenant),expectedSessionRevision=1 });
             Assert.Equal(HttpStatusCode.Accepted,response.StatusCode);var runId=(await Json(response)).GetProperty("runId").GetGuid();if(factory is ApprovalExecutionFactory memory)Volatile.Write(ref memory.Enabled,true);
             var final=await AwaitManagementRun(host.Services.GetRequiredService<ITenantRunStore>(),tenant,runId);
@@ -67,7 +67,7 @@ public sealed partial class TenantSessionAccessTests
             var (tenant,instance)=await SetupManagementMutation(host,owner);var api=$"/api/v2/tenants/{tenant}";
             var state=(await host.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!;var role=state.Roles.Single(r=>r.Name=="Exact management reader");
             await host.Services.GetRequiredService<TenantAccessService>().SaveRoleAsync(Assert.Single(state.Users).PrincipalId,tenant,role.RoleId,role.Name,["agents.read"],state.Tenant.Revision);
-            var created=await Json(await owner.PostAsJsonAsync(api+"/sessions",new { agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=3 }));var session=created.GetProperty("sessionId").GetGuid();
+            var created=await Json(await owner.PostAsJsonAsync(api+"/sessions",new { retentionKind="saved", agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=3 }));var session=created.GetProperty("sessionId").GetGuid();
             var response=await owner.PostAsJsonAsync(api+$"/sessions/{session}/messages",new { messageId=Guid.NewGuid(),text="Request one exact configuration authorization without a standing write role.",expectedRevision=await Revision(owner,tenant),expectedSessionRevision=1 });
             Assert.Equal(HttpStatusCode.Accepted,response.StatusCode);var runId=(await Json(response)).GetProperty("runId").GetGuid();if(factory is ApprovalExecutionFactory memory)Volatile.Write(ref memory.Enabled,true);
             var runs=host.Services.GetRequiredService<ITenantRunStore>();var pending=await AwaitManagementRun(runs,tenant,runId,true);Assert.Equal(AgentRunStatus.WaitingForApproval,pending.Status);

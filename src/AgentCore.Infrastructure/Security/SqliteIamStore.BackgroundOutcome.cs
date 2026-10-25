@@ -41,6 +41,8 @@ public sealed partial class SqliteIamStore
         var draft = draftEntryId is { } id ? await db.Entries.SingleOrDefaultAsync(e => e.SessionId == frame.SessionId.ToString("D") && e.EntryId == id.ToString("D"), ct).ConfigureAwait(false) : null;
         if (draftEntryId is not null && draft is null) throw AgentCoreErrors.Conflict("Response draft was not found.");
         await RequireTenantOutputSources(db, run, ct).ConfigureAwait(false);
+        var chatRow = await db.Sessions.Include(s => s.Snapshot).SingleAsync(s => s.SessionId == frame.SessionId.ToString("D"), ct).ConfigureAwait(false);
+        AgentCore.Application.Tools.SessionCompletionIntent.ValidateOutcome(run, SqliteMemoryStore.ToSnapshot(chatRow, []), snapshot, (clock ?? TimeProvider.System).GetUtcNow());
         AgentRunStoreMapping.ValidateOutcome(snapshot, run, completion, draft is null ? null : SqliteMemoryStore.ToEntry(draft));
         AgentRun next; try { next = completion.Apply(run, () => diagnosticId); }
         catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }

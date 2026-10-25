@@ -8,7 +8,7 @@ public sealed record TenantOperationPolicyView(string Permission, PermissionAppr
     bool HumanOnly, bool Delegatable, bool CanManage);
 public sealed record TenantOperationPolicyPage(IReadOnlyList<TenantOperationPolicyView> Items, int Total, int Page, int PageSize, long SecurityRevision);
 
-public sealed class TenantOperationPolicyService(IIamStore store, ITenantOperationPolicyStore policies, IamAuthorizer authorizer, IdentityService identity, IIdGenerator ids, TimeProvider time)
+public sealed partial class TenantOperationPolicyService(IIamStore store, ITenantOperationPolicyStore policies, IamAuthorizer authorizer, IdentityService identity, IIdGenerator ids, TimeProvider time)
 {
     public async ValueTask<TenantOperationPolicyView> ReadAsync(Guid tenant, TenantSessionInitiator actor, string permission, CancellationToken ct = default)
     {

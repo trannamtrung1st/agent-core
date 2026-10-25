@@ -107,7 +107,7 @@ public sealed partial class TenantSessionAccessTests
             var logs = new ManagementMutationLogs(); host.Services.GetRequiredService<ILoggerFactory>().AddProvider(logs);
             var (tenant, instance) = await SetupManagementMutation(host, owner); var api = $"/api/v2/tenants/{tenant}";
             var key = host.Services.GetRequiredService<IModelCatalog>().DefaultOfferingId; model.Arguments = ManagementCommand(tool, key);
-            var created = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 })); var session = created.GetProperty("sessionId").GetGuid();
+            var created = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 })); var session = created.GetProperty("sessionId").GetGuid();
             var response = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Inspect then apply this exact Agent configuration through qualified consent.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, response.StatusCode); var runId = (await Json(response)).GetProperty("runId").GetGuid();
             if (factory is ApprovalExecutionFactory memory) Volatile.Write(ref memory.Enabled, true);

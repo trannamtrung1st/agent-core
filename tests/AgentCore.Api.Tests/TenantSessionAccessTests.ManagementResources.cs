@@ -87,7 +87,7 @@ public sealed partial class TenantSessionAccessTests
             if (scenario == "approve" && operation is "enable" or "delete" or "update" or "inherited_disable")
                 registered.AfterCommandRead = new("resource-original-pin", ToolCatalog.WorkspaceRead, JsonSerializer.Serialize(new { path = selected.GetProperty("virtualPath").GetString() }));
             registered.Arguments = JsonSerializer.Serialize(arguments); registered.SuppressConsent = scenario == "parent_only";
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 4 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 4 }))).GetProperty("sessionId").GetGuid();
             var submitted = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Please save REVISED-RESOURCE-TEXT as the reviewed Resource draft.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, submitted.StatusCode); var runId = (await Json(submitted)).GetProperty("runId").GetGuid();
             if (factory is ApprovalExecutionFactory memory) Volatile.Write(ref memory.Enabled, true);

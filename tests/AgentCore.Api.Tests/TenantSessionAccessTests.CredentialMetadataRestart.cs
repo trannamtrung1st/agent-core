@@ -37,7 +37,7 @@ public sealed partial class TenantSessionAccessTests
                     new("Restart metadata account", CredentialKind.Password, CredentialPurpose.General, null, ["https://login.example.test"], "restart-private-password"), await Revision(owner, tenant));
                 credentialId = credential.Credential.CredentialId;
                 await first.Services.GetRequiredService<TenantCredentialBindingService>().BindAsync(human, tenant, instance, credentialId, "account", await Revision(owner, tenant), 1, 1);
-                var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
+                var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
                 var access = first.Services.GetRequiredService<TenantAccessService>();
                 foreach (var target in new[] { ("credentials.read", TenantCredentialRules.Scope(tenant, credentialId)), ("sessions.read", TenantSessionRules.Scope(tenant, session)) })
                 {

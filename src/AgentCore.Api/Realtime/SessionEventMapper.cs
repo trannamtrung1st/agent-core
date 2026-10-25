@@ -96,6 +96,9 @@ public static class SessionEventMapper
             {
                 ["status"] = HttpMapping.ToStatus(state.Status),
                 ["lifecycleStatus"] = LifecycleTransition.ToWire(state.LifecycleStatus),
+                ["lifecycleReason"] = state.LifecycleReason,
+                ["lifecycleSource"] = state.LifecycleSource?.ToString().ToLowerInvariant(),
+                ["retentionDueAtUtc"] = state.RetentionDueAtUtc?.ToString("O"),
                 ["mode"] = HttpMapping.ToMode(state.Mode),
                 ["pendingMode"] = state.PendingMode is { } pending ? HttpMapping.ToMode(pending) : null,
                 ["inputState"] = ToInput(state.InputState),
@@ -219,6 +222,11 @@ public static class SessionEventMapper
             ["outputState"] = ToOutput(ready.OutputActivity),
             ["agentRunId"] = ready.AgentRunId?.ToString(),
             ["lifecycleStatus"] = LifecycleTransition.ToWire(ready.LifecycleStatus),
+            ["retentionKind"] = ready.RetentionKind.ToString().ToLowerInvariant(),
+            ["retentionDueAtUtc"] = ready.RetentionDueAtUtc?.ToString("O"),
+            ["agentCompletion"] = ready.AgentCompletion.ToString().ToLowerInvariant(),
+            ["lifecycleReason"] = ready.LifecycleReason,
+            ["lifecycleSource"] = ready.LifecycleSource?.ToString().ToLowerInvariant(),
             ["agent"] = new Dictionary<string, object?>
             {
                 ["id"] = ready.Agent.Id,

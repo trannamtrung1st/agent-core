@@ -125,7 +125,7 @@ public sealed partial class TenantSessionAccessTests
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var workspace = api + $"/agents/{instance}/workspace/content?path=%2Fhome%2Fprogress.txt&expectedRevision=";
             Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(workspace + await Revision(owner, tenant), new ByteArrayContent(Encoding.UTF8.GetBytes(ProgressSource)))).StatusCode);
             var access = factory.Services.GetRequiredService<TenantAccessService>();

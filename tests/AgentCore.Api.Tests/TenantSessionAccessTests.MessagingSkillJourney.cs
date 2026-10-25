@@ -79,7 +79,7 @@ public sealed partial class TenantSessionAccessTests
                         input = new { id, name = id, description = "Exact on-demand procedure metadata", procedure, projection = "OnDemand", enabled = true, requiredCapabilities = new[] { "chat.respond" } } });
                     Assert.Equal(HttpStatusCode.OK, skill.StatusCode); instanceRevision++;
                 }
-                session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
+                session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
                 Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(api + $"/agents/{instance}/workspace/content?path=%2Fhome%2Fbilling.txt&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent("Exact saved billing total: 91."u8.ToArray()))).StatusCode);
                 var access = first.Services.GetRequiredService<TenantAccessService>();
                 var role = await access.SaveRoleAsync(human, tenant, null, "Exact source and missed Skill", ["agents.read", "sessions.read", "workspaces.read", "skills.read"], await Revision(owner, tenant));

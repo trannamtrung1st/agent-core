@@ -128,3 +128,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 TENANT STEER — 2026-10-21: Reuse the queued-message row and explicit Ctrl/Cmd+Enter without a second composer. Default Send/Queue does not cancel. Current exact response-cancellation eligibility gates Steer, and refusal preserves local text/files with row recovery. Shared mobile queue actions keep 44px minimum hits and 8px gaps; desktop retains compact native buttons. Synthetic MCP row/keyboard interruption, separate queued-draft consumption and 1440/390px geometry are observed; the successor report owns repeatable browser, denial and recovery qualification. Normative tokens, fonts, theme and historical evidence remain unchanged.
 
 SESSION CONTEXT (2026-10-25): A compact per-Session Space row preserves agent identity/history while offering next-turn selection. Hide ordinary Environment controls when disabled, show stale/pending state and provide explicit stale clear. Response-progress refresh keeps the open draft, and different tenant/Session keys retire it. Composer home references carry actual Space identity. See [Space management](space-environment-management.md) and the current frontend/protocol owners.
+
+
+## Chat retention synchronization — 2026-10-26
+
+Reuse direct Ant Design Saved/Temporary, scoped Agent completion and governed Forever/days controls. Overflow stays in the existing composer/file queue, preserving literal text and typed chips. Expired content unmounts private file/sandbox drawers. Local Synthetic verification and responsive observations belong to [the cutover report](../../docs/reports/chat-simplification-2026-10-26.md); older screenshots/evidence remain historical.

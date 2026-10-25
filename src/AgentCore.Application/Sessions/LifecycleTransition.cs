@@ -80,8 +80,7 @@ public static class LifecycleTransition
             "host" => LifecycleTransitionSource.Host,
             "system" => LifecycleTransitionSource.System,
             "agent" => LifecycleTransitionSource.Agent,
-            "legacy" => LifecycleTransitionSource.Legacy,
-            _ => throw AgentCoreErrors.Validation("source must be host, system, user, agent, or legacy.")
+            _ => throw AgentCoreErrors.Validation("source must be host, system, user, or agent.")
         };
 
     /// <summary>
@@ -100,7 +99,6 @@ public static class LifecycleTransition
             LifecycleTransitionSource.System => "system",
             LifecycleTransitionSource.User => "user",
             LifecycleTransitionSource.Agent => "agent",
-            LifecycleTransitionSource.Legacy => "legacy",
             _ => source.ToString().ToLowerInvariant()
         };
 
@@ -110,8 +108,7 @@ public static class LifecycleTransition
         SessionCompletionPolicy policy)
     {
         if (source is LifecycleTransitionSource.Host
-            or LifecycleTransitionSource.System
-            or LifecycleTransitionSource.Legacy)
+            or LifecycleTransitionSource.System)
         {
             return;
         }
@@ -192,6 +189,7 @@ public static class LifecycleTransition
                 LifecycleReason = reason,
                 LifecycleSource = source,
                 LifecycleChangedAt = now,
+                RetentionDueAtUtc = SessionRetention.TerminalDue(snapshot, now),
                 UpdatedAt = now
             }
         };

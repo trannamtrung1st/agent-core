@@ -19,11 +19,14 @@ class Human {
   async session(tenant) {
     const prefix=`/api/v2/tenants/${tenant}`;
     const agent=await this.json(prefix+'/agents',{templateId:'examiner',version:1,expectedRevision:await this.revision(tenant)});
+    const space=await this.json(prefix+`/agents/${agent.instance.instanceId}/private-space`);
+    const role=await this.json(prefix+'/roles',{name:'Exact wire Chat Space read',permissions:['spaces.read'],expectedRevision:await this.revision(tenant)});
+    await this.json(prefix+'/role-assignments',{principalId:agent.principalId,roleId:role.roleId,resourceType:'space',resourceId:space.spaceId,expectedRevision:await this.revision(tenant)});
     const directory=await this.json(prefix+'/chat/agents?page=0&pageSize=100');
     const selected=directory.items.find(item=>item.instanceId===agent.instance.instanceId);
     assert.ok(selected);assert.equal(typeof selected.voiceAvailable,'boolean');assert.equal(directory.canCreateSessions,true);
     assert.ok(!JSON.stringify(selected).match(/ownerCapability|systemIdentityId|principalId|settingsOverrides|executionBudgets|harnessManagement|tone/i));
-    return (await this.json(prefix+'/sessions',{agentInstanceId:selected.instanceId,expectedRevision:directory.securityRevision,expectedInstanceRevision:selected.revision})).sessionId;
+    return (await this.json(prefix+'/sessions',{retentionKind:'saved',agentInstanceId:selected.instanceId,expectedRevision:directory.securityRevision,expectedInstanceRevision:selected.revision})).sessionId;
   }
   async send(tenant,session,text) {
     const prefix=`/api/v2/tenants/${tenant}`, metadata=await this.json(prefix+`/sessions/${session}`);

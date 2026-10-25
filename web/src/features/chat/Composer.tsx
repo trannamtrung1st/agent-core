@@ -2,7 +2,8 @@ import { AudioFilled, AudioMutedOutlined, AudioOutlined, DeleteOutlined, DownOut
 import { Alert, Button, Dropdown, Flex, theme, Tooltip } from "antd";
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import type { PendingAttachment } from "../../services/attachments";
-import { composerSteerEnabled, queueComposerFiles, removeComposerFile, removeQueuedSend, retryComposerFile, steerQueuedSend } from "../../services/realtime";
+import { attachLongComposerText, composerSteerEnabled, queueComposerFiles, removeComposerFile, removeQueuedSend, retryComposerFile, steerQueuedSend } from "../../services/realtime";
+import { MAX_DIRECT_TEXT } from './longText';
 import type { PendingSendItem } from "../../state/sessionStore";
 import { PendingAttachmentView } from "./AttachmentPreview";
 import { MessageParts } from "./MessageParts";
@@ -204,7 +205,8 @@ export function Composer({
   onResumeCapture,
   onRetry,
   modelControls,
-  imageIncompatibilityMessage
+  imageIncompatibilityMessage,
+  modelSupportsFileTools
 }: {
   draft: string;
   parts?: MessagePart[] | null;
@@ -242,6 +244,7 @@ export function Composer({
   onRetry: () => void;
   modelControls?: ReactNode;
   imageIncompatibilityMessage?: string | null;
+  modelSupportsFileTools?: boolean;
 }) {
   const { token } = theme.useToken();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -249,7 +252,10 @@ export function Composer({
   const [fileIntakes, setFileIntakes] = useState(0);
   const [pickerRequest, setPickerRequest] = useState<PickerRequest>(null);
   const [editorValid, setEditorValid] = useState(true);
-  const canSend = suppliedCanSend && fileIntakes === 0 && editorValid;
+  const [longTextError, setLongTextError] = useState<string | null>(null);
+  const oversized = draft.length > MAX_DIRECT_TEXT;
+  const mixed = parts?.some(part => part.kind !== 'text') === true;
+  const canSend = suppliedCanSend && fileIntakes === 0 && editorValid && !oversized;
   const [queueExpanded, setQueueExpanded] = useState(false);
 
   useEffect(() => {
@@ -305,6 +311,16 @@ export function Composer({
       {imageIncompatibilityMessage ? (
         <Alert type="warning" showIcon message={imageIncompatibilityMessage} />
       ) : null}
+      {oversized ? <Flex vertical gap={token.paddingXS} role="status">
+        <span>{draft.length.toLocaleString()} / 8,000 characters. {mixed ? 'Attach the large literal text separately and keep your @ references and / Skills selected.' : 'Shorten this message or attach the original text as a file.'}</span>
+        {modelSupportsFileTools === false ? <span>This model cannot use file-reading tools. Keep the original text available or choose a model with tools before sending the attachment.</span> : null}
+        {!mixed && fileAttachmentsEnabled ? <Button disabled={!ready || fileIntakes > 0} onClick={() => {
+          setLongTextError(null); setFileIntakes(count => count + 1);
+          void attachLongComposerText().catch(error => setLongTextError(error instanceof Error ? error.message : 'Unable to attach text.'))
+            .finally(() => { setFileIntakes(count => count - 1); focusMessage(); });
+        }}>Attach long text</Button> : null}
+      </Flex> : null}
+      {longTextError ? <Alert type="error" title={longTextError} /> : null}
 
       {pendingSendQueue.length > 0 ? (
         <section className="pending-send-queue" aria-label="Queued messages">

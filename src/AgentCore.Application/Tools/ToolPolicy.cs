@@ -12,6 +12,10 @@ public static class ToolPolicy
         IToolConfigurationGate configurationGate,
         ToolExecutionAdmission? admission = null)
     {
+        if (toolName == ToolCatalog.SessionComplete)
+            return admission is { TenantId: not null, AgentRunId: not null, AgentRunGeneration: not null, OwnedSessionId: not null,
+                SupportsTools: true, Detached: false, TriggerKind: TriggerKind.UserTurn, ConfigurationContinuationTarget: null }
+                ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (TenantContextToolContract.IsTool(toolName))
             return admission is { TenantId: not null, AgentRunId: not null, AgentRunGeneration: not null, SupportsTools: true } && TenantContextToolContract.Allows(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (!ToolRegistry.TryGet(toolName, out var descriptor))
@@ -199,6 +203,9 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (descriptor.Name == ToolCatalog.SessionComplete)
+            return context is { ModelSupportsTools: true, ExecutionContext: not null, DetachedExecution: false }
+                && context.CurrentContextTools.Contains(descriptor.Name, StringComparer.Ordinal);
         if (TenantContextToolContract.IsTool(descriptor.Name))
             return context is { ModelSupportsTools: true, ExecutionContext: not null } && context.CurrentContextTools.Contains(descriptor.Name, StringComparer.Ordinal) && TenantContextToolContract.Allows(definition, descriptor.Name);
         if (context?.ExecutionContext is { } message && descriptor.Name == ToolCatalog.AppMessageSend)

@@ -120,7 +120,7 @@ public sealed partial class TenantSessionAccessTests
                     input = new { logicalPath = name, kind = AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Reference, mediaType = OfficeLimits.DocumentMime, content = bytes } }));
                 resourceKey = saved.GetProperty("resource").GetProperty("key").GetString(); instanceRevision = saved.GetProperty("instanceRevision").GetInt64();
             }
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
             var workspace = api + (working ? $"/sessions/{session}/workspace" : $"/spaces/{privateSpace.SpaceId}/workspace");
             var path = (resource ? "/agent/instance/resources/" : working ? "/working/" : "/home/") + name;
             if (spaceResource) path=AgentCore.Domain.Spaces.SpaceResourceKeys.VirtualPath(privateSpace.SpaceId,spaceSourceId!.Value,name);

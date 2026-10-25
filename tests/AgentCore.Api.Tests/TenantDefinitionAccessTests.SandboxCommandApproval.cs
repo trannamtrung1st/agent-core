@@ -46,7 +46,7 @@ public sealed partial class TenantDefinitionAccessTests
         await access.AssignRoleAsync(actor, tenant, executor, role.RoleId, AccessScope.ForResource(tenant, "agent", instance.ToString("D")), await Revision(owner, tenant));
         role = await access.SaveRoleAsync(actor, tenant, null, "Sandbox source", ["sandbox.read"], await Revision(owner, tenant));
         await access.AssignRoleAsync(actor, tenant, executor, role.RoleId, TenantSandboxProfileRules.Scope(tenant, profileId), await Revision(owner, tenant));
-        var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
+        var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
         var id = session.GetProperty("sessionId").GetGuid();
         var submitted = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{id}/messages", new { messageId = Guid.NewGuid(), text = "Prepare exact Sandbox command", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }));
         var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var run = (await runs.FindTenantRunAsync(tenant, submitted.GetProperty("runId").GetGuid()))!;

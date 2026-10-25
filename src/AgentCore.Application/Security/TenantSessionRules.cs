@@ -7,6 +7,19 @@ namespace AgentCore.Application.Security;
 
 public static class TenantSessionRules
 {
+    public static async ValueTask<TenantSession> UnavailableAsync(IIamStore security, ITenantSessionStore sessions, TenantSecurityState state, Guid session,
+        Guid human, IamAuthorizer iam, CancellationToken ct)
+    {
+        if (await sessions.FindExpiredSessionAsync(state.Tenant.TenantId, session, ct).ConfigureAwait(false) is { } expired
+            && (await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get("sessions.read"), Scope(state.Tenant.TenantId, session), ct).ConfigureAwait(false)).Allowed
+            && (await iam.CheckTenantAsync(state, human, PermissionCatalog.Get("agents.chat"), AccessScope.ForResource(state.Tenant.TenantId, "agent", expired.Owner.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false)).Allowed)
+        {
+            var current = await security.ReadTenantAsync(state.Tenant.TenantId, ct).ConfigureAwait(false);
+            if (current?.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
+            throw new AccessDeniedException("session_expired");
+        }
+        throw new AccessDeniedException("resource_unavailable");
+    }
     public static void RequireExecutor(TenantSecurityState state, TenantAgent agent)
     {
         if (!state.SystemIdentities.Any(i => i.AgentInstanceId == agent.Instance.InstanceId && i.PrincipalId == agent.PrincipalId && i.Status == IdentityStatus.Active)
@@ -30,6 +43,7 @@ public static class TenantSessionRules
     }
     public static void ValidateCreation(TenantSessionRoot owner, SessionSnapshot snapshot, TenantAgent agent, TenantSessionInitiator initiator, AuthorizationAudit audit, AgentCore.Domain.Spaces.Space privateSpace)
     {
+        SessionRetention.Validate(snapshot);
         snapshot.ContextSelection?.Validate();
         if (snapshot.ContextSelection is not { EnvironmentId: null, Revision: 1, EffectiveAfterRunId: null, TransitionId: null } selection
             || selection.TenantId != owner.TenantId || selection.SpaceId != privateSpace.SpaceId || selection.EnvironmentSelectionEpoch != 0

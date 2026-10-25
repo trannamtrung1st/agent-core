@@ -22,7 +22,7 @@ test('request isolation completes the live Chat, retains history, and New chat a
     await call(api, isolation + '/apply', { expectedRevision: preview.securityRevision, expected: preview.plan.expected, draft: preview.plan.draft, fingerprint: preview.plan.fingerprint });
     const role = await call<{ roleId: string }>(api, root + '/roles', { name: 'Isolated Chat executor', permissions: ['agents.chat'], expectedRevision: await revision() });
     await call(api, root + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await revision() });
-    const first = await call<{ sessionId: string }>(api, root + '/sessions', { agentInstanceId: id, expectedInstanceRevision: 2, expectedRevision: await revision() });
+    const first = await call<{ sessionId: string }>(api, root + '/sessions', { retentionKind: "saved", agentInstanceId: id, expectedInstanceRevision: 2, expectedRevision: await revision() });
     await page.setViewportSize({ width: 1440, height: 1000 }); await page.goto('/sign-in');
     await page.getByLabel('Email', { exact: true }).fill('tenant-chat-owner@example.test'); await page.getByLabel('Password', { exact: true }).fill('synthetic-tenant-chat-password');
     await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();

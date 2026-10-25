@@ -10,7 +10,8 @@ namespace AgentCore.Application.Security;
 
 public sealed record TenantSessionMetadata(TenantSessionRoot Owner, string Title, SessionMode Mode, SessionStatus Status,
     long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, SessionLifecycleStatus LifecycleStatus, DateTimeOffset? ArchivedAt,
-    string AgentId, int AgentVersion, string AgentName, string AgentRole, bool CanManage = false, string? PauseReason = null, AgentCore.Domain.Spaces.SessionContextSelection? ContextSelection = null);
+    string AgentId, int AgentVersion, string AgentName, string AgentRole, bool CanManage = false, string? PauseReason = null, AgentCore.Domain.Spaces.SessionContextSelection? ContextSelection = null, SessionRetentionKind RetentionKind = SessionRetentionKind.Saved, DateTimeOffset? RetentionDueAtUtc = null,
+    AgentCompletionAuthority AgentCompletion = AgentCompletionAuthority.Disabled, string? LifecycleReason = null, LifecycleTransitionSource? LifecycleSource = null);
 public sealed record TenantSessionMetadataPage(IReadOnlyList<TenantSessionMetadata> Items, int Total, int Page, int PageSize);
 
 public sealed partial class TenantSessionService(IIamStore security, ITenantAgentStore agents, ITenantSessionStore sessions, ITenantRunStore runs,
@@ -18,7 +19,7 @@ public sealed partial class TenantSessionService(IIamStore security, ITenantAgen
     ITenantModelCatalogReader modelCatalogs, VoiceAvailability voice, IIdGenerator ids, TimeProvider time, ITenantArtifactStore? artifacts = null, ITenantAttachmentStore? attachments = null, TenantBrowserRetirementService? browserRetirement = null)
 {
     public async ValueTask<TenantSessionMetadata> CreateAsync(Guid tenant, Guid instance, TenantSessionInitiator initiator, SessionMode mode,
-        long expectedSecurityRevision, long expectedInstanceRevision, string? offeringId = null, string? reasoningEffort = null, CancellationToken ct = default)
+        long expectedSecurityRevision, long expectedInstanceRevision, string? offeringId = null, string? reasoningEffort = null, CancellationToken ct = default, SessionRetentionKind retentionKind = SessionRetentionKind.Saved)
     {
         var state = await Human(tenant, initiator, ct).ConfigureAwait(false);
         foreach (var key in new[] { "sessions.create", "sessions.read" }) await Require(state, initiator.PrincipalId, key, AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
@@ -27,6 +28,7 @@ public sealed partial class TenantSessionService(IIamStore security, ITenantAgen
         if (parent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
         TenantSessionRules.RequireExecutor(state, parent);
         if (state.Tenant.Revision != expectedSecurityRevision || parent.Instance.Revision != expectedInstanceRevision) throw new SecurityConflictException("stale_revision");
+        if (!Enum.IsDefined(retentionKind)) throw AgentCoreErrors.Validation("Unknown retention kind.");
         if (mode is not (SessionMode.Text or SessionMode.Voice)) throw AgentCoreErrors.Validation("Unknown Session mode.");
         var baseline = Guid.TryParse(parent.Instance.DefinitionId, out var definitionId)
             ? (await definitions.FindDefinitionPublicationAsync(tenant, definitionId, parent.Instance.ActiveVersion, ct).ConfigureAwait(false))?.Payload
@@ -44,7 +46,9 @@ public sealed partial class TenantSessionService(IIamStore security, ITenantAgen
             LastUserActivityAt: now, Purpose: SessionPurpose.OngoingDefault, CompletionPolicy: SessionCompletionPolicy.Default,
             LifecycleSource: LifecycleTransitionSource.System, LifecycleChangedAt: now,
             ModelSelection: SessionModelBinder.Bind(models, offeringId, reasoningEffort, ModelSelectionSource.User, definition.ModelDefaults),
-            PinnedPersona: parent.Instance.Persona, PinnedPersonaRevision: parent.Instance.PersonaRevision, ContextSelection: selection);
+            PinnedPersona: parent.Instance.Persona, PinnedPersonaRevision: parent.Instance.PersonaRevision, ContextSelection: selection, RetentionKind: retentionKind,
+            RetainAfterTerminalDays: retentionKind == SessionRetentionKind.Saved ? state.Tenant.SavedChatRetentionDays : null,
+            RetentionDueAtUtc: retentionKind == SessionRetentionKind.Temporary ? now.AddHours(24) : null);
         var owner = new TenantSessionRoot(tenant, id, instance, parent.PrincipalId, initiator.PrincipalId, now);
         var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };
         var audit = new AuthorizationAudit(ids.NewId(), tenant, initiator.PrincipalId, "sessions.create", id.ToString("D"), "allowed", "session_created", now);
@@ -54,7 +58,8 @@ public sealed partial class TenantSessionService(IIamStore security, ITenantAgen
     public async ValueTask<TenantSessionMetadata> ReadAsync(Guid tenant, Guid id, TenantSessionInitiator human, CancellationToken ct = default)
     {
         var state = await Human(tenant, human, ct).ConfigureAwait(false);
-        var item = await sessions.FindTenantSessionAsync(tenant, id, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+        var item = await sessions.FindTenantSessionAsync(tenant, id, ct).ConfigureAwait(false)
+            ?? await TenantSessionRules.UnavailableAsync(security, sessions, state, id, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
         await Require(state, human.PrincipalId, "sessions.read", TenantSessionRules.Scope(tenant, id), ct).ConfigureAwait(false);
         var result = await MetadataAsync(state, human.PrincipalId, item, ct).ConfigureAwait(false);
         await Unchanged(state, human, ct).ConfigureAwait(false);
@@ -82,7 +87,8 @@ public sealed partial class TenantSessionService(IIamStore security, ITenantAgen
     private static TenantSessionMetadata Metadata(TenantSession item, bool canManage = false) => new(item.Owner, item.Snapshot.Title, item.Snapshot.Mode, item.Snapshot.Status,
         item.Snapshot.Revision, item.Snapshot.CreatedAt, item.Snapshot.UpdatedAt, item.Snapshot.LifecycleStatus, item.Snapshot.ArchivedAt,
         item.Snapshot.Definition.Id, item.Snapshot.Definition.Version, (item.Snapshot.PinnedPersona ?? item.Snapshot.Definition.Identity).Name,
-        (item.Snapshot.PinnedPersona ?? item.Snapshot.Definition.Identity).Role, canManage, item.Snapshot.PauseReason, item.Snapshot.ContextSelection);
+        (item.Snapshot.PinnedPersona ?? item.Snapshot.Definition.Identity).Role, canManage, item.Snapshot.PauseReason, item.Snapshot.ContextSelection, item.Snapshot.RetentionKind, item.Snapshot.RetentionDueAtUtc,
+        (item.Snapshot.CompletionPolicy ?? SessionCompletionPolicy.Default).AgentCompletion, item.Snapshot.LifecycleReason, item.Snapshot.LifecycleSource);
     private async ValueTask<TenantSessionMetadata> MetadataAsync(TenantSecurityState state, Guid actor, TenantSession item, CancellationToken ct) =>
         Metadata(item, (await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("sessions.manage"), TenantSessionRules.Scope(item.Owner.TenantId, item.Owner.SessionId), ct).ConfigureAwait(false)).Allowed);
     private ValueTask<TenantSecurityState> Human(Guid tenant, TenantSessionInitiator initiator, CancellationToken ct) =>

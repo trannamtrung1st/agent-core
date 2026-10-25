@@ -12,7 +12,7 @@ const web = `http://127.0.0.1:${process.env.TENANT_CHAT_WEB_PORT ?? '5179'}`;
 process.env.TENANT_CHAT_TEST_BASE_URL = web;
 
 export default defineConfig({
-  testDir: './e2e', testMatch: ['tenant-chat.spec.ts', 'memory-semantics.spec.ts', 'tenant-memory-management.spec.ts', 'tenant-management-mutations.spec.ts', 'tenant-management-inspections.spec.ts', 'tenant-approval-independence.spec.ts'], fullyParallel: false, workers: 1, retries: 0,
+  testDir: './e2e', testMatch: ['chat-retention.spec.ts', 'tenant-chat.spec.ts', 'memory-semantics.spec.ts', 'tenant-memory-management.spec.ts', 'tenant-management-mutations.spec.ts', 'tenant-management-inspections.spec.ts', 'tenant-approval-independence.spec.ts'], fullyParallel: false, workers: 1, retries: 0,
   timeout: 60_000, expect: { timeout: 15_000 }, reporter: 'list',
   outputDir: path.join(root, 'results'), use: { baseURL: web, trace: 'retain-on-failure' },
   webServer: [{

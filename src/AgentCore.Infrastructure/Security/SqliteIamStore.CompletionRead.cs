@@ -20,7 +20,7 @@ public sealed partial class SqliteIamStore
         var files = new List<ArtifactRecord>();
         foreach (var expected in TenantCompletionReadRules.Artifacts(read))
         {
-            var row = await SqliteArtifactStore.Owned(db, request.TenantId, read.ChildSessionId).SingleOrDefaultAsync(a => a.ArtifactId == expected.ArtifactId.ToString("D"), ct).ConfigureAwait(false);
+            var row = await SqliteArtifactStore.Owned(db, request.TenantId, read.ChildSessionId, (clock ?? TimeProvider.System).GetUtcNow()).SingleOrDefaultAsync(a => a.ArtifactId == expected.ArtifactId.ToString("D"), ct).ConfigureAwait(false);
             var item = row is null ? null : SqliteArtifactStore.FromRow(row);
             if (item is null || item.AgentRunId != read.SourceRunId || TenantArtifactVerificationRules.Witness(item) != expected)
                 throw new AccessDeniedException("completion_source_changed");

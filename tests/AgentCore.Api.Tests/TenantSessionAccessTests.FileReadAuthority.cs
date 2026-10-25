@@ -52,7 +52,7 @@ public sealed partial class TenantSessionAccessTests
             var api = $"/api/v2/tenants/{tenant}";
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             Assert.True((await owner.PatchAsJsonAsync(api + $"/sessions/{session}", new { title = "Private file retirement sentinel", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 })).IsSuccessStatusCode);
             var office = factory.Services.GetRequiredService<IOfficeProcessor>();
             var bytes = office.CreateDocument(new("Private file retirement sentinel", [new("Section", ["Private file body retirement sentinel"], null)]), default).Bytes;
@@ -130,6 +130,10 @@ public sealed partial class TenantSessionAccessTests
     }
     private sealed class FileFinalReadSessionStore(ITenantSessionStore inner, FileFinalReadRace race) : ITenantSessionStore
     {
+        public ValueTask<IReadOnlyList<TenantSessionRetentionTarget>> ListDueSessionsAsync(TenantSessionRetentionTarget? after, int limit, CancellationToken ct = default) => inner.ListDueSessionsAsync(after, limit, ct);
+        public ValueTask<TenantSessionRetentionTarget?> FindExpiredSessionAsync(Guid tenant, Guid session, CancellationToken ct = default) => inner.FindExpiredSessionAsync(tenant, session, ct);
+        public ValueTask<bool> RetireDueSessionAsync(TenantSessionRetentionTarget target, Guid auditId, CancellationToken ct = default) => inner.RetireDueSessionAsync(target, auditId, ct);
+
         public async ValueTask<TenantSession?> FindTenantSessionAsync(Guid tenantId, Guid sessionId, CancellationToken ct = default)
         { var value = await inner.FindTenantSessionAsync(tenantId, sessionId, ct); await race.After(false); return value; }
         public ValueTask<TenantSessionPage> ListTenantSessionsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default, bool includeArchived = true, SessionSurface? surface = null, Guid? instanceId = null, bool recentFirst = false) => inner.ListTenantSessionsAsync(tenantId, allowedIds, page, pageSize, ct, includeArchived, surface, instanceId, recentFirst);

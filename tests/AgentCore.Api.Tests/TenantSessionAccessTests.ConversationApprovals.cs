@@ -29,7 +29,7 @@ public sealed partial class TenantSessionAccessTests
             var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
             await Json(await owner.PutAsJsonAsync(api + $"/agents/{instance}/self-management", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
                 overrides = new { mode = new { value = "Assisted" }, scopes = new { value = new[] { "Settings" } } } }));
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
             var events = new ConcurrentQueue<ServerEvent>(); await using var socket = TenantSocket(ready.BaseAddress!, cookies, events); await socket.StartAsync();
             Assert.True((await socket.InvokeAsync<CommandAck>("AttachTenant", TenantAttach(tenant, session))).Accepted);
             var sent = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = ScriptedLanguageModel.ApprovalReviewMarker, expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }));

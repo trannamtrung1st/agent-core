@@ -30,7 +30,7 @@ public sealed partial class TenantCredentialAccessTests
                 familyAssignment = (await access.AssignRoleAsync(human, setup.Tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(setup.Tenant), await Revision(owner, setup.Tenant))).AssignmentId;
                 Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/" + family + ".read", new { mode = "always", independentReview = false,
                     expectedRevision = await Revision(owner, setup.Tenant), expectedPolicyRevision = 0 })).StatusCode);
-                var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = setup.Instance, expectedRevision = await Revision(owner, setup.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
+                var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = setup.Instance, expectedRevision = await Revision(owner, setup.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
                 initial = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Discover one exact family after application restart",
                     expectedRevision = await Revision(owner, setup.Tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
                 var waiting = await AwaitAccountConsent(first.Services.GetRequiredService<ITenantRunStore>(), setup.Tenant, initial, new HashSet<Guid>());

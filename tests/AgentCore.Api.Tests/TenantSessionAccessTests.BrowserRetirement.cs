@@ -46,7 +46,7 @@ public sealed partial class TenantSessionAccessTests
             var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
             async Task<Guid> Agent() => (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
             var instance = await Agent(); var unrelated = await Agent();
-            async Task<Guid> Session(Guid agent) => (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = agent, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            async Task<Guid> Session(Guid agent) => (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = agent, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var first = await Session(instance); var second = await Session(instance); var third = await Session(unrelated);
             if (first.CompareTo(second) > 0) (first, second) = (second, first);
             var native = Assert.IsType<NativePlaywrightBrowser>(factory.Services.GetRequiredService<IBrowser>()); var sessions = factory.Services.GetRequiredService<ITenantSessionStore>();

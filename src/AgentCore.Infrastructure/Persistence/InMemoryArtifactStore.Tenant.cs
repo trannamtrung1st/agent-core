@@ -6,6 +6,8 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed partial class InMemoryArtifactStore : ITenantArtifactStore
 {
+    internal IReadOnlySet<Guid> RetainedTenantArtifactIds(Guid tenant, Guid session) => _items.Values
+        .Where(item => item.TenantId == tenant && item.SessionId == session).Select(item => item.ArtifactId).ToHashSet();
     private InMemoryMemoryStore? _sessions;
     internal InMemoryArtifactStore BindTenantAuthority(InMemoryMemoryStore sessions)
     {

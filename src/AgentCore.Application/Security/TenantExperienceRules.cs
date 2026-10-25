@@ -23,6 +23,8 @@ public static class TenantExperienceRules
             && value.AccountId == reader.User?.AccountId && value.UserId == reader.User?.UserId);
     public static void Eligible(TenantMemoryReader reader, TenantIsolationMetadata metadata, string tool)
     {
+        if (reader.Session.Snapshot.RetentionKind == SessionRetentionKind.Temporary || reader.RootSession.Snapshot.RetentionKind == SessionRetentionKind.Temporary)
+            throw new AccessDeniedException("temporary_session_memory_unavailable");
         if (!TenantTaskExecutionContract.Allows(reader.Run, reader.Current) || !metadata.ExperienceEnabled
             || !TenantExperienceToolContract.Allows(reader.Current, reader.Run.Admission.Configuration?.ContinuitySettings, tool)
             || !TenantExperienceToolContract.Allows(reader.Run.Admission.Configuration!.Definition, reader.Run.Admission.Configuration.ContinuitySettings, tool)

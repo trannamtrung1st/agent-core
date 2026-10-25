@@ -22,8 +22,8 @@ test('Runtime State refresh, expiry, exact reader scope and revocation work on n
     await call(api, root + `/agents/${id}/persona`, { persona: { name, role: 'Guide', description: 'Observe only readable runtime facts', tone: 'Clear' }, expectedRevision: await revision(), expectedInstanceRevision: 1, expectedPersonaRevision: 1 }, 'PUT');
     const executor = await call<{ roleId: string }>(api, root + '/roles', { name: 'Runtime text executor', permissions: ['agents.chat'], expectedRevision: await revision() });
     await call(api, root + '/role-assignments', { principalId: agent.principalId, roleId: executor.roleId, expectedRevision: await revision() });
-    const a = await call<{ sessionId: string }>(api, root + '/sessions', { agentInstanceId: id, expectedInstanceRevision: 2, expectedRevision: await revision() });
-    await call(api, root + '/sessions', { agentInstanceId: id, expectedInstanceRevision: 2, expectedRevision: await revision() });
+    const a = await call<{ sessionId: string }>(api, root + '/sessions', { retentionKind: "saved", agentInstanceId: id, expectedInstanceRevision: 2, expectedRevision: await revision() });
+    await call(api, root + '/sessions', { retentionKind: "saved", agentInstanceId: id, expectedInstanceRevision: 2, expectedRevision: await revision() });
     const admitted = await call<{ runId: string }>(api, root + `/sessions/${a.sessionId}/messages`, { messageId: crypto.randomUUID(), text: 'Hello from the State observation fixture', expectedSessionRevision: 1, expectedRevision: await revision() });
     await expect.poll(async () => (await call<{ status: string }>(api, root + `/agent-runs/${admitted.runId}`)).status).toBe('completed');
     const route = `/t/${tenant}/admin/agents/${id}/state`;

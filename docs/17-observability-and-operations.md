@@ -916,3 +916,11 @@ The command atomically moves the complete old tree to a new destination on the s
 ## Space ownership release operations
 
 The breaking Space workspace release uses an explicit [backup, clean-data cutover and rollback procedure](space-environment-cutover.md). Startup preserves incompatible state and refuses service; it never resets installed data or converts Instance homes automatically. The dated implementation ledger distinguishes local Synthetic/Docker proof from unverified deployment acceptance. Shared cleanup retains tombstones and waits for exact live/uncertain mount ownership; Private cleanup remains Agent decommission owned.
+
+
+## Chat retention operations
+
+Ship migration, backend and browser contracts together. Back up supported SQLite data with the existing backup/restore procedure and migrate a copy before cutover; do not reset customer data. Quiesce/drain admissions under existing shutdown ownership. Maintenance scans due Sessions in bounded batches using authoritative time and revision witnesses, retires work and hands deletion to existing cleanup owners. Logical expiry is immediate; physical byte removal may lag retryable source cleanup. Diagnostics must remain body-free and distinguish due backlog, settlement and cleanup failure. Unknown effects stay recoverable and are never replayed to clear retention backlog.
+
+
+The existing five-minute maintenance pass processes at most 100 due Sessions per call, retaining a cursor so deferred items do not starve later due work. Inspect body-free `Retired due Session` / `Retention settlement deferred` messages by tenant/Session ID and authorization audit actions `sessions.retention.expire` / `sessions.retention.delete`. `system_due_effect_reconciliation_pending` means visibility is already revoked but evidence is retained until uncertain effects are factually resolved. Fix the underlying cleanup/reconciliation failure and let existing recovery retry; never replay an unknown effect or clear tombstones/deadlines to reduce backlog. Matching runtime/voice retirement waits are bounded at ten seconds each. Native bytes are removed by existing Attachment, Artifact, workspace, browser and sandbox cleanup ownership, so logical expiry does not promise instantaneous filesystem erasure.

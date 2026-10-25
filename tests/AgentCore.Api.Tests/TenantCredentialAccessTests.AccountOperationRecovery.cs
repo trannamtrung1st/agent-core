@@ -34,7 +34,7 @@ public sealed partial class TenantCredentialAccessTests
                     new { tool = ToolCatalog.DriveCreateFolder, arguments = new { accountRef = setup.Alias, authEpoch = 1, name = "Exact restored folder", parentId = "root" } },
                     new { tool = ToolCatalog.DriveGet, arguments = new { accountRef = setup.Alias, operationId = "$operation" } }
                 } });
-                var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = setup.Instance, expectedRevision = await Revision(owner, setup.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
+                var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = setup.Instance, expectedRevision = await Revision(owner, setup.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
                 initial = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = command,
                     expectedRevision = await Revision(owner, setup.Tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
                 var runs = first.Services.GetRequiredService<ITenantRunStore>(); var approvals = first.Services.GetRequiredService<ITenantApprovalStore>();

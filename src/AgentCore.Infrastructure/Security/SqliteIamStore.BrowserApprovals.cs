@@ -17,7 +17,7 @@ public sealed partial class SqliteIamStore
         TenantBrowserOperationRules.Require(value, run, agent, baseline, session);
         foreach (var source in TenantBrowserUploadRules.Sources(value))
         {
-            var row = await SqliteArtifactStore.Owned(db, request.TenantId, value.SessionId)
+            var row = await SqliteArtifactStore.Owned(db, request.TenantId, value.SessionId, (clock ?? TimeProvider.System).GetUtcNow())
                 .SingleOrDefaultAsync(a => a.ArtifactId == source.ArtifactId.ToString("D"), ct).ConfigureAwait(false);
             TenantBrowserUploadRules.Require(request.TenantId, value.SessionId, source, row is null ? null : SqliteArtifactStore.FromRow(row));
         }

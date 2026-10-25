@@ -47,7 +47,7 @@ public sealed partial class TenantAgentAccessTests
     private static async Task<(Guid Session, Guid Run)> SubmitProfileRequest(HttpClient client, Guid tenant, Guid instance, long instanceRevision = 1, Guid? existing = null, string message = "Observe the currently owned Profile")
     {
         var api = $"/api/v2/tenants/{tenant}";
-        var session = existing ?? (await Json(await client.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(client, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
+        var session = existing ?? (await Json(await client.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(client, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
         var current = await Json(await client.GetAsync(api + $"/sessions/{session}"));
         var response = await client.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = message, expectedRevision = await Revision(client, tenant), expectedSessionRevision = current.GetProperty("revision").GetInt64() });
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode); return (session, (await Json(response)).GetProperty("runId").GetGuid());

@@ -88,6 +88,7 @@ public static class TenantMemoryRules
     }
     public static async ValueTask<bool> AvailableAsync(TenantMemoryReader reader, bool write, IamAuthorizer iam, CancellationToken ct)
     {
+        if (reader.Session.Snapshot.RetentionKind == SessionRetentionKind.Temporary || reader.RootSession.Snapshot.RetentionKind == SessionRetentionKind.Temporary) return false;
         if (reader.Security.Tenant.Status != IdentityStatus.Active || reader.Agent.Instance.Lifecycle != AgentInstanceLifecycle.Active
             || reader.Run.Admission.Configuration is null || reader.Run.Owner.ExecutorPrincipalId != reader.Agent.PrincipalId
             || reader.Session.Owner.ExecutorPrincipalId != reader.Agent.PrincipalId || reader.Session.Snapshot.ProfileId is not null

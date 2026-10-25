@@ -73,7 +73,7 @@ public sealed partial class TenantCredentialAccessTests
         if (review) Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/" + family + ".read", new { mode = "always", independentReview = choice == "no-reviewer", expectedRevision = await Revision(owner, s.Tenant), expectedPolicyRevision = 0 })).StatusCode);
         if (choice.EndsWith("final-family", StringComparison.Ordinal) || choice.EndsWith("final-metadata", StringComparison.Ordinal)) model.BeforeAnswer = async () => await access.RevokeAssignmentAsync(actor, s.Tenant,
             choice.EndsWith("final-family", StringComparison.Ordinal) ? familyRead!.AssignmentId : metadata.AssignmentId, await Revision(owner, s.Tenant));
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
         var initial = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Discover only the exact bound account family",
             expectedRevision = await Revision(owner, s.Tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
         var runs = factory.Services.GetRequiredService<ITenantRunStore>(); TenantApprovalRequest? request = null;
@@ -160,7 +160,7 @@ public sealed partial class TenantCredentialAccessTests
         await access.AssignRoleAsync(actor, s.Tenant, agent.PrincipalId, role.RoleId, TenantCredentialRules.Scope(s.Tenant, s.Credential), await Revision(owner, s.Tenant));
         var lookahead = await access.AssignRoleAsync(actor, s.Tenant, agent.PrincipalId, role.RoleId, TenantCredentialRules.Scope(s.Tenant, later), await Revision(owner, s.Tenant));
         if (revoke) model.BeforeAnswer = async () => await access.RevokeAssignmentAsync(actor, s.Tenant, lookahead.AssignmentId, await Revision(owner, s.Tenant));
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 4 }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 4 }))).GetProperty("sessionId").GetGuid();
         var initial = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Inspect the filtered first account page",
             expectedRevision = await Revision(owner, s.Tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
         var finished = await AwaitCredentialRun(factory.Services.GetRequiredService<ITenantRunStore>(), s.Tenant, initial, false);

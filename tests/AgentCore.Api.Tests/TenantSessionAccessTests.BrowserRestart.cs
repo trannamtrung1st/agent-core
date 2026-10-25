@@ -93,7 +93,7 @@ public sealed partial class TenantSessionAccessTests
                 var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
                 var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
                 instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); executor = agent.GetProperty("principalId").GetGuid();
-                var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
+                var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
                 sessionId = session.GetProperty("sessionId").GetGuid(); var access = first.Services.GetRequiredService<TenantAccessService>();
                 var role = await access.SaveRoleAsync(human, tenant, null, "Reviewed browser", ["browser.read", "browser.use"], await Revision(owner, tenant));
                 browserAssignment = (await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForResource(tenant, "agent", instance.ToString("D")), await Revision(owner, tenant))).AssignmentId;

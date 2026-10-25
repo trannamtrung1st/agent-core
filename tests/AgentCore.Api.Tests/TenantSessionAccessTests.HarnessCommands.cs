@@ -30,7 +30,7 @@ public sealed partial class TenantSessionAccessTests
         await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
         model.Arguments = JsonSerializer.Serialize(new { expectedVersion = 32, expectedInstanceRevision = 3, policyRevision = agent.Instance.HarnessManagement!.PolicyRevision,
             content = "Retained exact Harness instructions.", expected = "The next Run uses these instructions.", observed = "Prepared a literal instruction draft; no production task executed." });
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 }))).GetProperty("sessionId").GetGuid();
         var sent = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Update your complete Harness instructions after exact review.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
         Assert.Equal(HttpStatusCode.Accepted, sent.StatusCode); var initial = (await Json(sent)).GetProperty("runId").GetGuid(); Volatile.Write(ref factory.Enabled, true);
         string Trace() => JsonSerializer.Serialize(model.Requests.SelectMany(r => r.Messages).Where(m => m.Role == ModelRole.Tool).Distinct().Select(m => new { m.Name, m.Text }));

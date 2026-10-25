@@ -10,7 +10,7 @@ public sealed partial class InMemoryIamStore
         TenantSessionInitiator initiator, AuthorizationAudit audit, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
-        if (audit.ActorPrincipalId != initiator.PrincipalId || audit.TenantId != next.Tenant.TenantId || audit.Action != "tenant.operation_policy.update"
+        if (audit.ActorPrincipalId != initiator.PrincipalId || audit.TenantId != next.Tenant.TenantId || audit.Action is not ("tenant.operation_policy.update" or "tenant.chat_retention.update")
             || next.Tenant.Revision != checked(expectedSecurityRevision + 1)) throw new ArgumentException("Invalid operation policy transaction.");
         lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate)
         {

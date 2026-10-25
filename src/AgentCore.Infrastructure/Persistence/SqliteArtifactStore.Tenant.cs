@@ -8,11 +8,11 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed partial class SqliteArtifactStore : ITenantArtifactStore
 {
-    internal static IQueryable<ArtifactRecordRow> Owned(AgentCoreDbContext db, Guid tenant, Guid session) => OwnedTenant(db, tenant).Where(a => a.SessionId == session.ToString("D"));
-    internal static IQueryable<ArtifactRecordRow> OwnedTenant(AgentCoreDbContext db, Guid tenant) => db.Artifacts.AsNoTracking()
+    internal static IQueryable<ArtifactRecordRow> Owned(AgentCoreDbContext db, Guid tenant, Guid session, DateTimeOffset at) => OwnedTenant(db, tenant, at).Where(a => a.SessionId == session.ToString("D"));
+    internal static IQueryable<ArtifactRecordRow> OwnedTenant(AgentCoreDbContext db, Guid tenant, DateTimeOffset at) => db.Artifacts.AsNoTracking()
         .Where(a => a.TenantId == tenant
             && db.Set<TenantSessionRecord>().Any(s => s.TenantId == tenant && s.SessionId == a.SessionId
-                && db.Sessions.Any(saved => saved.SessionId == s.SessionId && saved.DurablyDeletedAtUtc == null))
+                && db.Sessions.Any(saved => saved.SessionId == s.SessionId && saved.DurablyDeletedAtUtc == null && (saved.RetentionDueAtUtc == null || saved.RetentionDueAtUtc > at.ToUnixTimeMilliseconds())))
             && (a.AgentRunId != null && db.AgentRuns.Any(r => r.TenantId == tenant && r.AgentRunId == a.AgentRunId && r.SessionId == a.SessionId)
                 || a.AgentRunId == null && a.CreatedByPrincipalId != null && a.SourceAttachmentId != null && a.WorkspaceLogicalPath != null
                     && db.Attachments.Any(s => s.TenantId == tenant && s.SessionId == a.SessionId && s.AttachmentId == a.SourceAttachmentId)));
@@ -23,7 +23,7 @@ public sealed partial class SqliteArtifactStore : ITenantArtifactStore
             ?? throw new AccessDeniedException("session_unavailable");
         var row = await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == frame.RunId.ToString("D") && r.TenantId == root.TenantId, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("run_unavailable");
-        if (!await db.Sessions.AnyAsync(s => s.SessionId == root.SessionId && s.DurablyDeletedAtUtc == null, ct).ConfigureAwait(false)) throw new AccessDeniedException("session_unavailable");
+        if (!await db.Sessions.AnyAsync(s => s.SessionId == root.SessionId && s.DurablyDeletedAtUtc == null && (s.RetentionDueAtUtc == null || s.RetentionDueAtUtc > at.ToUnixTimeMilliseconds()), ct).ConfigureAwait(false)) throw new AccessDeniedException("session_unavailable");
         TenantRuntimeRules.Require(frame, root.Domain(), AgentRunStoreMapping.ToDomain(row), at);
     }
     private static bool OwnedSession(AgentCoreDbContext db, Guid session) => db.Set<TenantSessionRecord>().Any(s => s.SessionId == session.ToString("D"))
@@ -98,7 +98,7 @@ public sealed partial class SqliteArtifactStore : ITenantArtifactStore
     {
         if (_deleted.ContainsKey(session)) return null;
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-        var row = await Owned(db, tenant, session).SingleOrDefaultAsync(a => a.ArtifactId == artifact.ToString("D"), ct).ConfigureAwait(false);
+        var row = await Owned(db, tenant, session, time.GetUtcNow()).SingleOrDefaultAsync(a => a.ArtifactId == artifact.ToString("D"), ct).ConfigureAwait(false);
         return row is null ? null : FromRow(row);
     }
     public async ValueTask<ArtifactPage> ListTenantAsync(Guid tenant, Guid session, IReadOnlyList<Guid>? allowed, Guid? before,
@@ -106,7 +106,7 @@ public sealed partial class SqliteArtifactStore : ITenantArtifactStore
     {
         TenantArtifactRules.Query(tenant, session, limit);
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-        var query = Owned(db, tenant, session);
+        var query = Owned(db, tenant, session, time.GetUtcNow());
         if (_deleted.ContainsKey(session)) query = query.Where(_ => false);
         if (allowed is not null) { var ids = allowed.Select(id => id.ToString("D")).ToArray(); query = query.Where(a => ids.Contains(a.ArtifactId)); }
         if (run is not null) query = query.Where(a => a.AgentRunId == run.Value.ToString("D"));

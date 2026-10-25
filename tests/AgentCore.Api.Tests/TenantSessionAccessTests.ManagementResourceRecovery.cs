@@ -35,7 +35,7 @@ public sealed partial class TenantSessionAccessTests
                 var agent = (await first.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!; var access = first.Services.GetRequiredService<TenantAccessService>();
                 var role = await access.SaveRoleAsync(human, tenant, null, "Resource author", ["agents.read", "resources.read", "resources.manage"], await Revision(owner, tenant));
                 await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
-                session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 }))).GetProperty("sessionId").GetGuid();
+                session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 }))).GetProperty("sessionId").GetGuid();
                 var sent = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Save DURABLE-REVIEWED-RESOURCE-TEXT after exact review, including after restart.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
                 Assert.Equal(HttpStatusCode.Accepted, sent.StatusCode); initial = (await Json(sent)).GetProperty("runId").GetGuid();
                 var pending = await AwaitManagementRun(first.Services.GetRequiredService<ITenantRunStore>(), tenant, initial, true); Assert.Equal(AgentRunStatus.WaitingForApproval, pending.Status); requestId = pending.ApprovalRequestId!.Value;

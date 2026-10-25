@@ -10,12 +10,12 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed partial class SqliteAttachmentStore : ITenantAttachmentStore
 {
-    internal static IQueryable<AttachmentRecordRow> Owned(AgentCoreDbContext db, Guid tenant, Guid session) => db.Attachments.Where(a => a.TenantId == tenant && a.SessionId == session.ToString("D")
-        && db.Set<TenantSessionRecord>().Any(s => s.TenantId == tenant && s.SessionId == a.SessionId && db.Sessions.Any(saved => saved.SessionId == s.SessionId && saved.DurablyDeletedAtUtc == null)));
-    internal static async ValueTask RequireTenantOwner(AgentCoreDbContext db, TenantSessionRoot owner, CancellationToken ct)
+    internal static IQueryable<AttachmentRecordRow> Owned(AgentCoreDbContext db, Guid tenant, Guid session, DateTimeOffset at) => db.Attachments.Where(a => a.TenantId == tenant && a.SessionId == session.ToString("D")
+        && db.Set<TenantSessionRecord>().Any(s => s.TenantId == tenant && s.SessionId == a.SessionId && db.Sessions.Any(saved => saved.SessionId == s.SessionId && saved.DurablyDeletedAtUtc == null && (saved.RetentionDueAtUtc == null || saved.RetentionDueAtUtc > at.ToUnixTimeMilliseconds()))));
+    internal async ValueTask RequireTenantOwner(AgentCoreDbContext db, TenantSessionRoot owner, CancellationToken ct)
     {
         var actual = await db.Set<TenantSessionRecord>().AsNoTracking().SingleOrDefaultAsync(s => s.TenantId == owner.TenantId && s.SessionId == owner.SessionId.ToString("D"), ct).ConfigureAwait(false);
-        if (actual is null || actual.Domain() != owner || !await db.Sessions.AnyAsync(s => s.SessionId == actual.SessionId && s.DurablyDeletedAtUtc == null, ct).ConfigureAwait(false))
+        if (actual is null || actual.Domain() != owner || !await db.Sessions.AnyAsync(s => s.SessionId == actual.SessionId && s.DurablyDeletedAtUtc == null && (s.RetentionDueAtUtc == null || s.RetentionDueAtUtc > time.GetUtcNow().ToUnixTimeMilliseconds()), ct).ConfigureAwait(false))
             throw new AccessDeniedException("resource_unavailable");
     }
     private void RequireUnowned(Guid session)
@@ -35,7 +35,7 @@ public sealed partial class SqliteAttachmentStore : ITenantAttachmentStore
         if (item != TenantAttachmentRules.Pending(owner, item.AttachmentId, item.UploadRequestId!.Value, item.UploadedByPrincipalId!.Value,
             item.DisplayName, item.ContentType, item.Readable, upload.Bytes, item.CreatedAt)) throw new SecurityConflictException("attachment_upload_mismatch");
         var now = time.GetUtcNow().ToUnixTimeMilliseconds();
-        var used = await Owned(db, owner.TenantId, owner.SessionId).Where(a => a.State == nameof(AttachmentState.Bound) || a.ExpiresAtUtc > now).SumAsync(a => (long?)a.ByteSize, ct).ConfigureAwait(false) ?? 0;
+        var used = await Owned(db, owner.TenantId, owner.SessionId, time.GetUtcNow()).Where(a => a.State == nameof(AttachmentState.Bound) || a.ExpiresAtUtc > now).SumAsync(a => (long?)a.ByteSize, ct).ConfigureAwait(false) ?? 0;
         if (used + item.ByteSize > AttachmentLimits.MaxBytesSession) throw TenantAttachmentRules.Quota();
         var files = TenantFiles(owner.TenantId, owner.SessionId); var path = "/working/" + item.AttachmentId.ToString("N");
         try
@@ -55,17 +55,17 @@ public sealed partial class SqliteAttachmentStore : ITenantAttachmentStore
     }
     internal static AttachmentRecord Domain(AttachmentRecordRow row) => FromRow(row);
     public async ValueTask<bool> OwnsTenantAsync(Guid tenant, Guid session, Guid attachment, CancellationToken ct = default)
-    { await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); return await Owned(db, tenant, session).AnyAsync(a => a.AttachmentId == attachment.ToString("D"), ct).ConfigureAwait(false); }
+    { await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); return await Owned(db, tenant, session, time.GetUtcNow()).AnyAsync(a => a.AttachmentId == attachment.ToString("D"), ct).ConfigureAwait(false); }
     public async ValueTask<AttachmentRecord?> FindTenantAsync(Guid tenant, Guid session, Guid attachment, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); var now = time.GetUtcNow().ToUnixTimeMilliseconds();
-        var row = await Owned(db, tenant, session).AsNoTracking().SingleOrDefaultAsync(a => a.AttachmentId == attachment.ToString("D") && a.ContentDeletedAtUtc == null
+        var row = await Owned(db, tenant, session, time.GetUtcNow()).AsNoTracking().SingleOrDefaultAsync(a => a.AttachmentId == attachment.ToString("D") && a.ContentDeletedAtUtc == null
             && (a.State == nameof(AttachmentState.Bound) || a.ExpiresAtUtc > now), ct).ConfigureAwait(false); return row is null ? null : FromRow(row);
     }
     public async ValueTask<TenantAttachmentPage> ListTenantAsync(Guid tenant, Guid session, IReadOnlyList<Guid>? allowed, Guid? before, int limit, CancellationToken ct = default, bool boundOnly = false)
     {
         TenantAttachmentRules.Query(tenant, session, limit); await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); var now = time.GetUtcNow().ToUnixTimeMilliseconds();
-        var query = Owned(db, tenant, session).AsNoTracking().Where(a => a.ContentDeletedAtUtc == null && (a.State == nameof(AttachmentState.Bound) || a.ExpiresAtUtc > now));
+        var query = Owned(db, tenant, session, time.GetUtcNow()).AsNoTracking().Where(a => a.ContentDeletedAtUtc == null && (a.State == nameof(AttachmentState.Bound) || a.ExpiresAtUtc > now));
         if (boundOnly) query = query.Where(a => a.State == nameof(AttachmentState.Bound));
         if (allowed is not null) { var ids = allowed.Select(id => id.ToString("D")).ToArray(); query = query.Where(a => ids.Contains(a.AttachmentId)); }
         if (before is { } cursor)

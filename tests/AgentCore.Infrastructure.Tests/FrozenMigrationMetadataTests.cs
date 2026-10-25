@@ -113,7 +113,7 @@ public sealed class FrozenMigrationMetadataTests
                 Assert.Equal(guard.Value, modelPredecessor[guard.Key]);
             await migrator.MigrateAsync();
             var current = await Schema(db);
-            Assert.Equal(186, current.Keys.Count(k => k.StartsWith("trigger:", StringComparison.Ordinal)));
+            Assert.Equal(188, current.Keys.Count(k => k.StartsWith("trigger:", StringComparison.Ordinal)));
             foreach (var guard in modelPredecessor.Where(item => item.Key.StartsWith("trigger:", StringComparison.Ordinal)))
             {
                 // Canonical identity changes these four field references. The

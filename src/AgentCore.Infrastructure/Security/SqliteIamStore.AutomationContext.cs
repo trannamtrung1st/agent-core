@@ -9,7 +9,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore
 {
-    private static async ValueTask RequireAutomationContextAuthoring(AgentCoreDbContext db, TenantSecurityState state, TenantAgent agent,
+    private async ValueTask RequireAutomationContextAuthoring(AgentCoreDbContext db, TenantSecurityState state, TenantAgent agent,
         Automation? current, Automation proposed, Guid? human, IamAuthorizer iam, CancellationToken ct, bool force = false)
     {
         if (!force && !TenantAutomationContextRules.CheckAuthoring(current, proposed)) return;

@@ -122,6 +122,11 @@ export type PendingSendItem = {
 };
 
 export type SessionView = {
+  retentionKind: "saved" | "temporary";
+  retentionDueAtUtc: string | null;
+  agentCompletion: string;
+  lifecycleReason: string | null;
+  lifecycleSource: string | null;
   connection: ConnectionStatus;
   sessionId: string | null;
   attachmentId: string | null;
@@ -205,6 +210,7 @@ export const emptySession = (): SessionView => ({
   pendingMode: null,
   status: "created",
   lifecycleStatus: null,
+  retentionKind: "saved", retentionDueAtUtc: null, agentCompletion: "disabled", lifecycleReason: null, lifecycleSource: null,
   inputState: "idle",
   outputState: "idle",
   entries: [],
@@ -692,6 +698,10 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         pendingMode: payload.pendingMode == null ? null : asString(payload.pendingMode) === "voice" ? "voice" : "text",
         status: asString(payload.status),
         lifecycleStatus: asString(payload.lifecycleStatus) || null,
+        retentionKind: payload.retentionKind === "temporary" ? "temporary" : "saved",
+        retentionDueAtUtc: asString(payload.retentionDueAtUtc) || null,
+        agentCompletion: asString(payload.agentCompletion) || "disabled",
+        lifecycleReason: asString(payload.lifecycleReason) || null, lifecycleSource: asString(payload.lifecycleSource) || null,
         inputState: asString(payload.inputState) || "idle",
         outputState: orphanLiveClear ? "idle" : outputState,
         entries: history,
@@ -963,6 +973,8 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         lastServerSequence: event.sequence,
         status,
         lifecycleStatus: asString(event.payload.lifecycleStatus) || (terminal ? state.lifecycleStatus ?? "ended" : state.lifecycleStatus),
+        lifecycleReason: asString(event.payload.lifecycleReason) || state.lifecycleReason, lifecycleSource: asString(event.payload.lifecycleSource) || state.lifecycleSource,
+        retentionDueAtUtc: asString(event.payload.retentionDueAtUtc) || state.retentionDueAtUtc,
         pauseReason: paused ? pauseReason : null,
         voiceAvailable: terminal ? false : state.voiceAvailable,
         inputState: asString(event.payload.inputState) || state.inputState,
@@ -1083,6 +1095,7 @@ export type SessionStore = SessionView & {
   chatAgentQuery: string;
   chatAgentHasMore: boolean;
   newChatIdentityKey: string;
+  newChatRetentionKind: "saved" | "temporary";
   selectedAgentId: string;
   modelCatalog: ModelDescriptor[];
   modelCatalogDefaultOfferingId: string | null;
@@ -1128,6 +1141,7 @@ export const useSessionStore = create<SessionStore>(() => ({
   chatAgentQuery: '',
   chatAgentHasMore: false,
   newChatIdentityKey: "",
+  newChatRetentionKind: "saved",
   selectedAgentId: "examiner",
   modelCatalog: [],
   modelCatalogDefaultOfferingId: null,

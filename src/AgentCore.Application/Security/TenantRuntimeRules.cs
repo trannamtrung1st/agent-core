@@ -20,6 +20,9 @@ public static class TenantRuntimeRules
     {
         if (!contextSwitch && next.ContextSelection != before.ContextSelection || next.ContextSelection?.TenantId != frame.Owner.TenantId
             || next.SessionId != frame.SessionId || next.AgentInstanceId != frame.Owner.AgentInstanceId || next.ProfileId is not null
+            || before.RetentionKind != next.RetentionKind || before.RetainAfterTerminalDays != next.RetainAfterTerminalDays
+            || next.RetentionDueAtUtc != (SessionLifecycle.IsTerminal(next.LifecycleStatus) && !SessionLifecycle.IsTerminal(before.LifecycleStatus)
+                ? SessionRetention.TerminalDue(before, next.LifecycleChangedAt ?? next.UpdatedAt) : before.RetentionDueAtUtc)
             || before.Origin != next.Origin || before.Definition.Id != next.Definition.Id || before.Definition.Version != next.Definition.Version
             || next.Surfaces != (foreground ? SessionOrigin.ContinueInChat(before.Surfaces) : before.Surfaces)
             || next.DurablyDeletedAt is not null || next.ArchivedAt != before.ArchivedAt || before.DurablyDeletedAt is not null)

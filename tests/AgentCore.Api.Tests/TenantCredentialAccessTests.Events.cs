@@ -100,7 +100,7 @@ public sealed partial class TenantCredentialAccessTests
         }
         var webhook = await Json(await owner.PostAsJsonAsync(api + "/webhooks", new { displayName = "Receipt source", eventKey = "events.qualified", expectedRevision = await Revision(owner, tenant) }));
         var source = webhook.GetProperty("source").GetProperty("resourceId").GetGuid(); var token = webhook.GetProperty("token").GetString()!;
-        Guid? completionDestination = execute ? (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid() : null;
+        Guid? completionDestination = execute ? (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid() : null;
         var route = api + $"/agents/{instance}/automations";
         Guid? pinnedSpace = null, pinnedEnvironment = null;
         async Task PinContext()

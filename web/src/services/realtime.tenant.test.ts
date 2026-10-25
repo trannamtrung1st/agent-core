@@ -7,7 +7,7 @@ vi.mock('./tenantChat', async importOriginal => ({
   tenantInterruptWitness: tenant.interruption
 }));
 import { emptySession, useSessionStore } from '../state/sessionStore';
-import { realtimeTestHooks, sendDraft, reportCommittedEntries, steerQueuedSend } from './realtime';
+import { realtimeTestHooks, expireCurrentChat, sendDraft, reportCommittedEntries, steerQueuedSend } from './realtime';
 const hooks = realtimeTestHooks!;
 beforeEach(() => {
   tenant.witness.mockReset(); tenant.interruption.mockReset(); hooks.resetOutput();
@@ -123,4 +123,21 @@ it('reports speech coordinates independently of longer rendered display text', a
     sourceEventId: null, deliveryMode: 'voice', createdAt: '2026-10-21T00:00:00Z', text: 'A much longer visual explanation and a table.', speechText: 'A brief reply.', status: 'streaming', heardTextEndExclusive: 0, receivedTextEndExclusive: 0 }] });
   await hooks.sendPlayback('PlaybackProgress', 'playback.progress', 'response-one', 480);
   expect(invoke).toHaveBeenCalledWith('PlaybackProgress', expect.objectContaining({ payload: { consumedSamples: 480, textEndExclusive: 14 } }));
+});
+
+
+it('expiry clears private state immediately and late rejected admission or ready cannot resurrect it', async () => {
+  tenant.witness.mockResolvedValue({ expectedRevision: 3, expectedSessionRevision: 4 });
+  let resolve!: (value: unknown) => void;
+  const invoke = vi.fn(() => new Promise(done => { resolve = done; }));
+  hooks.setConnection({ invoke, stop: vi.fn().mockResolvedValue(undefined), off: vi.fn() } as never);
+  useSessionStore.setState({ draft: 'Private temporary original', retentionKind: 'temporary' });
+  const sending = sendDraft(); await vi.waitFor(() => expect(invoke).toHaveBeenCalled());
+  const retiring = expireCurrentChat('session-one');
+  expect(useSessionStore.getState()).toMatchObject({ lifecycleStatus: 'expired', entries: [], draft: '', pendingAttachments: [], pendingSendQueue: [] });
+  resolve({ accepted: false, error: { category: 'Session', code: 'Conflict', message: 'Expired' } });
+  await sending; await retiring;
+  hooks.handleEvent({ protocolVersion: 1, sessionId: 'session-one', attachmentId: 'attachment-one', eventId: 'late-ready', sequence: 1,
+    timestamp: new Date().toISOString(), correlationId: 'test', causationId: null, responseId: null, type: 'session.ready', payload: { history: [{ text: 'Private expired text' }] } });
+  expect(useSessionStore.getState()).toMatchObject({ lifecycleStatus: 'expired', entries: [], draft: '', pendingAttachments: [] });
 });

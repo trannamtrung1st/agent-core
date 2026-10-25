@@ -8,8 +8,20 @@ namespace AgentCore.Api.Security;
 public static class TenantOperationPolicyEndpoints
 {
     public sealed record PolicyRequest(string Mode, bool IndependentReview, long ExpectedRevision, long ExpectedPolicyRevision);
+    public sealed record ChatRetentionRequest(int? SavedChatRetentionDays, long ExpectedRevision);
     public static void Map(WebApplication app)
     {
+        var retention = app.MapGroup("/api/v2/tenants/{tenantId:guid}/governance/chat-retention").RequireAuthorization();
+        retention.MapGet("", (HttpContext http, TenantOperationPolicyService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            return Results.Json(await service.ReadChatRetentionAsync(actor.TenantId, Initiator(http, actor), ct).ConfigureAwait(false));
+        }));
+        retention.MapPut("", (ChatRetentionRequest body, HttpContext http, TenantOperationPolicyService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            return Results.Json(await service.SaveChatRetentionAsync(actor.TenantId, Initiator(http, actor), body.SavedChatRetentionDays, body.ExpectedRevision, ct).ConfigureAwait(false));
+        }));
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/operation-policies").RequireAuthorization();
         group.MapGet("", (int? page, int? pageSize, string? q, HttpContext http, TenantOperationPolicyService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
