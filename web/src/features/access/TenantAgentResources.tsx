@@ -36,14 +36,24 @@ export function TenantAgentResources({ context, id }: { context: TenantContext; 
   const view = state.data; const busy = command.busy || confirming; const reloadButton = useRef<ComponentRef<typeof Button>>(null);
   const alive = useRef(false); const confirmation = useRef<ReturnType<typeof confirmAction> | null>(null);
   const changedInEditor = useRef(false);
+  const pendingFocus = useRef<HTMLElement | 'reload' | null>(null);
   useEffect(() => { alive.current = true; return () => { alive.current = false; confirmation.current?.destroy(); }; }, []);
   useEffect(() => { if (view) { setCommitted(false); if (page > 0 && page * 10 >= view.total) setPage(Math.max(0, Math.ceil(view.total / 10) - 1)); } }, [view, page]);
   useEffect(() => { if (lostRead(state.error)) { setSelection(undefined); confirmation.current?.destroy(); } }, [state.error]);
+  useEffect(() => {
+    // Closing must commit before either control can receive focus. A row opener
+    // also needs current collection facts; read-loss Reload survives that read.
+    const target = pendingFocus.current;
+    if (!target || selection || busy || (target !== 'reload' && state.loading)) return;
+    pendingFocus.current = null;
+    if (target !== 'reload' && target.isConnected && !target.matches(':disabled, [aria-disabled="true"]')) target.focus({ preventScroll: true });
+    else reloadButton.current?.focus({ preventScroll: true });
+  }, [selection, busy, state.loading]);
   const guard = useAccessDraftGuard(false, busy, () => {});
   const blocked = busy || committed || stale(command.error) || state.loading;
   function reload() { command.clearError(); setRefresh(value => value + 1); }
-  function close() { const opener = selection?.opener; setSelection(undefined); if (changedInEditor.current) { changedInEditor.current = false; reload(); } requestAnimationFrame(() => { if (opener?.isConnected) opener.focus(); else reloadButton.current?.focus(); }); }
-  function retireDetail() { changedInEditor.current = true; close(); }
+  function close(focus: 'opener' | 'reload' = 'opener') { pendingFocus.current = focus === 'reload' || changedInEditor.current ? 'reload' : selection?.opener ?? 'reload'; setSelection(undefined); if (changedInEditor.current) { changedInEditor.current = false; reload(); } }
+  function retireDetail() { changedInEditor.current = true; close('reload'); }
   async function mutate(item: TenantResourceItem, operation: 'enabled' | 'delete', enabled?: boolean | null) {
     if (!view || command.busy || committed || stale(command.error) || selection) return;
     const resource = item.resource;

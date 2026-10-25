@@ -8,12 +8,13 @@ vi.mock('../filePreview/FilePreview', () => ({ FilePreviewButton: () => <button>
 const context = { tenant: { tenantId: 'tenant', name: 'Regional organization', slug: 'regional' }, userId: 'u', principalId: 'p', permissions: [], roles: [], revision: 7 } as TenantContext;
 const initial = () => ({ agent: { principalId: 'principal', systemIdentityId: 'identity', instance: { instanceId: 'agent', definitionId: 'source', persona: { name: 'Alex', role: 'Guide', description: 'Regional guide', tone: 'Calm' }, revision: 4, personaRevision: 1, activeVersion: 1, lifecycle: 'Active' } },
   items: [{ resource: { key: 'instance:00000000-0000-0000-0000-000000000001', origin: 'Instance', logicalPath: 'references/local.txt', kind: 2, mediaType: 'text/plain', contentSha256: 'a'.repeat(64), byteLength: 6, enabled: true, enabledOverride: null, revision: 2, virtualPath: '/agent/instance/resources/references/local.txt', dependencies: [], sourceDefinitionId: null, sourceDefinitionVersion: null }, canManage: true, canDelete: true, canCopy: false }], total: 1, page: 0, pageSize: 10, securityRevision: 7, canCreate: true, allReadable: true } as TenantResourceEditor);
-const fetchMock = vi.fn<typeof fetch>(); let current: TenantResourceEditor, writeStatus: number, readStatus: number, malformed: boolean, detailDenied: boolean, deferred: boolean, failureAt: number, manifestDrift: number, manifestCount: number;
+const fetchMock = vi.fn<typeof fetch>(); let current: TenantResourceEditor, writeStatus: number, readStatus: number, malformed: boolean, detailDenied: boolean, deferred: boolean, deferCollection: boolean, failureAt: number, manifestDrift: number, manifestCount: number;
 let resolveDetail: ((response: Response) => void) | undefined;
+let resolveCollection: ((response: Response) => void) | undefined;
 const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 const writes = () => fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST');
 beforeEach(() => {
-  resetIdentityCsrf(); current = initial(); writeStatus = readStatus = 200; failureAt = manifestDrift = manifestCount = 0; malformed = detailDenied = deferred = false; resolveDetail = undefined; fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock);
+  resetIdentityCsrf(); current = initial(); writeStatus = readStatus = 200; failureAt = manifestDrift = manifestCount = 0; malformed = detailDenied = deferred = deferCollection = false; resolveDetail = resolveCollection = undefined; fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock);
   fetchMock.mockImplementation(async (path, options) => {
     const url = String(path);
     if (url.endsWith('/csrf')) return response({ token: 'csrf' });
@@ -29,7 +30,7 @@ beforeEach(() => {
       if (deferred) return new Promise(resolve => { resolveDetail = resolve; });
       return detailDenied ? response({ reasonCode: 'permission_denied' }, 403) : response({ agent: current.agent, item: current.items[0], securityRevision: current.securityRevision });
     }
-    if (url.includes('/resources/editor')) return readStatus === 200 ? response(current) : response({ reasonCode: readStatus === 403 ? 'permission_denied' : 'unavailable' }, readStatus);
+    if (url.includes('/resources/editor')) return deferCollection ? new Promise(resolve => { resolveCollection = resolve; }) : readStatus === 200 ? response(current) : response({ reasonCode: readStatus === 403 ? 'permission_denied' : 'unavailable' }, readStatus);
     if (url.endsWith('/resources')) return readStatus === 200 ? response({ catalog: { instanceRevision: current.agent.instance.revision, resources: manifestCount ? Array.from({ length: manifestCount }, (_, index) => ({ ...current.items[0].resource, logicalPath: `existing/${index}.txt` })) : current.items.map(item => item.resource) }, securityRevision: current.securityRevision + manifestDrift }) : response({ reasonCode: 'unavailable' }, readStatus);
     throw new Error('Unexpected ' + url);
   });
@@ -40,10 +41,13 @@ async function edit() { fireEvent.click(screen.getByRole('button', { name: 'Edit
 const staged = (name: string) => { const file = new File([name], name, { type: 'text/plain' }); Object.defineProperties(file, { webkitRelativePath: { value: `package/references/${name}` }, arrayBuffer: { value: async () => new TextEncoder().encode(name).buffer } }); return file; };
 
 it('saves exact local metadata with current witnesses while preserving omitted bytes and enabled choice', async () => {
-  await open(); await edit(); fireEvent.change(screen.getByLabelText('Resource logical path'), { target: { value: 'references/renamed.txt' } }); fireEvent.click(screen.getByRole('button', { name: 'Save resource' }));
+  await open(); await edit(); fireEvent.change(screen.getByLabelText('Resource logical path'), { target: { value: 'references/renamed.txt' } }); deferCollection = true; fireEvent.click(screen.getByRole('button', { name: 'Save resource' }));
   await waitFor(() => expect(writes()).toHaveLength(1)); const body = JSON.parse(String(writes()[0][1]?.body));
   expect(body).toMatchObject({ expectedRevision: 7, expectedInstanceRevision: 4, input: { resourceId: '00000000-0000-0000-0000-000000000001', expectedResourceRevision: 2, logicalPath: 'references/renamed.txt', kind: 2, mediaType: 'text/plain' } });
   expect(body.input).not.toHaveProperty('content'); expect(body.input).not.toHaveProperty('enabled'); await waitFor(() => expect(screen.queryByRole('button', { name: 'Save resource' })).not.toBeInTheDocument());
+  await waitFor(() => expect(resolveCollection).toBeTypeOf('function'));
+  const reload = screen.getByRole('button', { name: 'Reload resources' }); await waitFor(() => expect(reload).toHaveFocus());
+  await act(async () => resolveCollection!(response(current))); await screen.findByText('references/renamed.txt'); expect(reload).toHaveFocus();
 });
 it('retains a stale draft and refreshes exact witnesses and untouched availability before an explicit retry', async () => {
   writeStatus = 409; await open(); await edit(); fireEvent.change(screen.getByLabelText('Resource logical path'), { target: { value: 'references/retained.txt' } }); fireEvent.click(screen.getByRole('button', { name: 'Save resource' })); await screen.findByText(/Access has changed since/);
@@ -72,7 +76,11 @@ it('stages files until Save, retains only the uncommitted remainder and resumes 
 it('permits exact read-only inspection without IAM tools and retires protected content on read loss', async () => {
   current.canCreate = false; current.allReadable = false; current.items[0].canManage = current.items[0].canDelete = false; await open(); expect(screen.getByRole('button', { name: 'Add Instance resources' })).toBeDisabled(); expect(screen.queryByRole('button', { name: 'Edit resource' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Inspect resource' })); await screen.findByText('/agent/instance/resources/references/local.txt'); expect(screen.queryByRole('button', { name: 'Save resource' })).not.toBeInTheDocument();
-  detailDenied = true; readStatus = 403; fireEvent.click(screen.getByRole('button', { name: 'Reload latest resources' })); await waitFor(() => { expect(screen.queryByText('/agent/instance/resources/references/local.txt')).not.toBeInTheDocument(); expect(screen.queryByText('references/local.txt')).not.toBeInTheDocument(); }); expect(writes()).toHaveLength(0);
+  detailDenied = deferCollection = true; readStatus = 403; fireEvent.click(screen.getByRole('button', { name: 'Reload latest resources' })); await waitFor(() => { expect(screen.queryByText('/agent/instance/resources/references/local.txt')).not.toBeInTheDocument(); expect(screen.queryByText('references/local.txt')).not.toBeInTheDocument(); });
+  await waitFor(() => expect(resolveCollection).toBeTypeOf('function'));
+  const reload = screen.getByRole('button', { name: 'Reload resources' }); await waitFor(() => expect(reload).toHaveFocus());
+  await act(async () => resolveCollection!(response({ reasonCode: 'permission_denied' }, 403)));
+  expect(reload).toHaveFocus(); expect(writes()).toHaveLength(0);
 });
 it('requires coherent complete-manifest facts before an explicit staged import', async () => {
   manifestDrift = 1; await open(); fireEvent.click(screen.getByRole('button', { name: 'Add Instance resources' })); await screen.findByRole('button', { name: 'Choose resource files' });

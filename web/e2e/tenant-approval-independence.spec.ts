@@ -109,7 +109,15 @@ for (const exceptional of [false, true]) for (const decision of ['approve', 'rej
       const confirmation = reviewer.getByRole('dialog', { name: `${decide}?`, exact: true });
       await confirmation.getByRole('button', { name: decide, exact: true }).click();
       await expect(detail.getByText(`${decision === 'approve' ? 'Approved' : 'Rejected'} decision recorded.`, { exact: true })).toBeVisible();
-      await expect.poll(async () => (await call<{ instance: { revision: number } }>(api, prefix + `/agents/${agent.instance.instanceId}`)).instance.revision).toBe(decision === 'approve' ? 2 : 1);
+      await expect.poll(async () => {
+        const path = prefix + `/agents/${agent.instance.instanceId}`;
+        const response = await api.get(path);
+        // An approval effect can change the security/Instance witness during this read.
+        // Only that explicit read conflict stays inside the existing bounded poll.
+        if (response.status() === 409 && (await response.json()).reasonCode === 'stale_revision') return null;
+        expect(response.ok(), `GET ${path}: ${response.status()} ${await response.text()}`).toBeTruthy();
+        return ((await response.json()) as { instance: { revision: number } }).instance.revision;
+      }).toBe(decision === 'approve' ? 2 : 1);
       const saved = await call<{ items: { section: string; effective: { agentInstructions?: string } }[] }>(api, prefix + `/agents/${agent.instance.instanceId}/settings`);
       expect(saved.items.find(item => item.section === 'instructions')!.effective.agentInstructions).toBe(decision === 'approve' ? after : before);
       const decided = await call<{ decision: { principalId: string }; status: string }>(api, prefix + `/approvals/${request.requestId}`);
