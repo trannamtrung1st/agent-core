@@ -17,12 +17,14 @@ public sealed partial class OpenAICompatibleLanguageModel
         if (items.Count == 0) return null;
         var bytes = JsonSerializer.SerializeToUtf8Bytes(new { model = _options.DefaultModel, transport = _options.Transport.ToString(), items });
         if (bytes.Length > MaxContinuationBytes) throw new JsonException("Continuation exceeds limit.");
-        return Convert.ToBase64String(bytes);
+        var encoded = Convert.ToBase64String(bytes);
+        return _options.ProtectContinuation?.Invoke(encoded) ?? encoded;
     }
 
     private List<JsonElement> DecodeContinuation(string? token, ModelInferenceTransport transport)
     {
         if (token is null) return [];
+        token = _options.UnprotectContinuation?.Invoke(token) ?? token;
         if (token.Length > ((MaxContinuationBytes + 2) / 3) * 4) throw new InvalidContinuationException("Language model continuation exceeds the size limit.");
         try
         {

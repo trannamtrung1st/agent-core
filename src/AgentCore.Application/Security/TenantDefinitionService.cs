@@ -7,7 +7,7 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed partial class TenantDefinitionService(IIamStore security, ITenantDefinitionStore definitions, IamAuthorizer authorizer,
-    ProviderAliasSet aliases, IModelCatalog models, IToolConfigurationGate configuration, IIdGenerator ids, TimeProvider time, IDefinitionResourceContentStore content, AgentDefinitionDraftSyntheticEvaluationRunner evaluation,
+    ProviderAliasSet aliases, ITenantModelCatalogReader modelCatalogs, IToolConfigurationGate configuration, IIdGenerator ids, TimeProvider time, IDefinitionResourceContentStore content, AgentDefinitionDraftSyntheticEvaluationRunner evaluation,
     IBuiltInDefinitionTemplateSource templates, IdentityService identity)
 {
     public ValueTask<TenantDefinitionPage> ListAsync(Guid actor, Guid tenant, int page = 0, int pageSize = 30, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
@@ -88,7 +88,7 @@ public sealed partial class TenantDefinitionService(IIamStore security, ITenantD
         var draft = await OwnedDraft(tenant, draftId, ct).ConfigureAwait(false); var id = Guid.Parse(draft.DefinitionId);
         var state = await ForChange(actor, tenant, "publish", Scope(tenant, id), expectedRevision, ct, initiator).ConfigureAwait(false);
         if (draft.Revision != expectedDraftRevision) throw new SecurityConflictException("stale_revision");
-        _ = Validate(draft.Candidate, true);
+        _ = Validate(draft.Candidate, true, await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false));
         var snapshot = await definitions.ReadDefinitionDraftSnapshotAsync(tenant, draftId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         await RequireDestinationResources(state, actor, snapshot.Resources.Count, ct).ConfigureAwait(false);
         var now = time.GetUtcNow();
@@ -134,17 +134,20 @@ public sealed partial class TenantDefinitionService(IIamStore security, ITenantD
         await RequireReadWitness(actor, tenant, before.Tenant.Revision, initiator, ct).ConfigureAwait(false);
         return result;
     }
-    public async ValueTask RequireAuthoringAsync(Guid actor, Guid tenant, Guid? definitionId, CancellationToken ct = default, HumanSessionReference? initiator = null)
+    public async ValueTask<AdminAuthoringOptions> AuthoringOptionsAsync(Guid actor, Guid tenant, Guid? definitionId, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         var before = await HumanState(actor, tenant, initiator, ct).ConfigureAwait(false);
         if (definitionId is { } id) _ = await AccessAsync(actor, tenant, id, ct).ConfigureAwait(false);
         else await RequireResourcePermission(before, actor, "agent-definitions.create", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
+        var catalog = await modelCatalogs.ReadAsync(before, ct).ConfigureAwait(false);
+        var result = new AdminAuthoringOptionsService(aliases).Get(catalog);
         await RequireReadWitness(actor, tenant, before.Tenant.Revision, initiator, ct).ConfigureAwait(false);
+        return result;
     }
-    private AgentDefinitionCandidate Validate(AgentDefinitionCandidate candidate, bool publication)
+    private AgentDefinitionCandidate Validate(AgentDefinitionCandidate candidate, bool publication, IModelCatalog? models = null)
     {
         candidate = CapabilityAuthorizationResolver.ResolveCandidate(candidate);
-        if (publication) AgentDefinitionCandidateValidator.ValidateForPublication(candidate, aliases, models, configuration);
+        if (publication) AgentDefinitionCandidateValidator.ValidateForPublication(candidate, aliases, models ?? throw new InvalidOperationException("An authorized tenant catalog is required."), configuration);
         else AgentDefinitionCandidateValidator.ValidateForPersistence(candidate, aliases);
         return candidate;
     }

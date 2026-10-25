@@ -7,7 +7,7 @@ namespace AgentCore.Api.Tests;
 
 // Test builders author the final wire shape directly.
 internal sealed record IntervalAutomationDraft(long ExpectedRevision, bool Enabled, [property: JsonIgnore] int IntervalSeconds,
-    string Instructions, string? ModelKey = null, string? ReasoningEffort = null)
+    string Instructions, string? OfferingId = null, string? ReasoningEffort = null)
 {
     public AutomationExecutionTargetDto ExecutionTarget => new("backgroundSession");
     public AutomationCompletionDeliveryDto CompletionDelivery => new("none");
@@ -16,7 +16,7 @@ internal sealed record IntervalAutomationDraft(long ExpectedRevision, bool Enabl
         AnchorAtUtc: DateTimeOffset.UtcNow.AddHours(1).ToString("O")), TriggerId: Guid.NewGuid().ToString())];
 }
 internal sealed record ScheduleAutomationDraft(long ExpectedRevision, bool Enabled, string Instructions,
-    [property: JsonIgnore] AutomationTiming Schedule, string? ModelKey = null, string? ReasoningEffort = null)
+    [property: JsonIgnore] AutomationTiming Schedule, string? OfferingId = null, string? ReasoningEffort = null)
 {
     public AutomationExecutionTargetDto ExecutionTarget => new("backgroundSession");
     public AutomationCompletionDeliveryDto CompletionDelivery => new("none");

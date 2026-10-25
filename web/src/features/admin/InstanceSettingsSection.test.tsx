@@ -14,7 +14,7 @@ vi.mock('./ExecutionBudgetsSection', () => ({ InstanceExecutionBudgets: () => nu
 afterEach(cleanup);
 
 it('retires an acknowledged section after an unreadable response and explicitly reloads without replaying it', async () => {
-  const transport = { list: vi.fn().mockResolvedValue(sections()), patch: vi.fn().mockRejectedValue(new IdentityCompletionError()), models: vi.fn().mockResolvedValue({ models: [], defaultKey: null }) };
+  const transport = { list: vi.fn().mockResolvedValue(sections()), patch: vi.fn().mockRejectedValue(new IdentityCompletionError()), models: vi.fn().mockResolvedValue({ models: [], defaultOfferingId: null }) };
   render(<ConfigProvider><App><InstanceSettingsSection sandboxContext={fixtureSandbox} instanceId="tenant-agent" archived={false} onUpdated={() => {}} transport={transport} /></App></ConfigProvider>);
   await editVoiceWithOtherDraft();
   await screen.findByText(/Settings were saved\./);
@@ -27,13 +27,13 @@ it('retires an acknowledged section after an unreadable response and explicitly 
 });
 
 it('makes a tenant model catalog failure visible and retries only its read', async () => {
-  const transport = { list: vi.fn().mockResolvedValue(sections()), patch: vi.fn(), models: vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ models: [], defaultKey: null }) };
+  const transport = { list: vi.fn().mockResolvedValue(sections()), patch: vi.fn(), models: vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ models: [], defaultOfferingId: null }) };
   render(<ConfigProvider><App><InstanceSettingsSection sandboxContext={fixtureSandbox} instanceId="tenant-agent" archived={false} onUpdated={() => {}} transport={transport} /></App></ConfigProvider>);
   fireEvent.click(await screen.findByRole('button', { name: 'Reload models' }));
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Reload models' })).not.toBeInTheDocument());
   expect(transport.models).toHaveBeenCalledTimes(2); expect(transport.patch).not.toHaveBeenCalled();
 });
-beforeEach(() => { vi.clearAllMocks(); vi.mocked(modelApi.listModels).mockResolvedValue({ defaultKey: 'host', models: [] }); });
+beforeEach(() => { vi.clearAllMocks(); vi.mocked(modelApi.listModels).mockResolvedValue({ defaultOfferingId: 'host', models: [] }); });
 
 function sections(revision = 1, voiceEnabled = true): settingsTypes.SettingsSection[] {
   return [
@@ -86,14 +86,14 @@ it('reports a committed save when refresh fails and recovers without replaying i
 
 it('uses host-default reasoning choices for an explicit null catalog key and orders effort semantically', async () => {
   const model = { tools: true, vision: false, structuredOutput: true, reasoning: true };
-  vi.mocked(modelApi.listModels).mockResolvedValue({ defaultKey: 'host', models: [
-    { ...model, key: 'host', displayName: 'Host model', supportedReasoningEfforts: ['high', 'low', 'medium'] },
-    { ...model, key: 'definition', displayName: 'Definition model', supportedReasoningEfforts: ['max'] }
+  vi.mocked(modelApi.listModels).mockResolvedValue({ defaultOfferingId: 'host', models: [
+    { ...model, offeringId: 'host', displayName: 'Host model', supportedReasoningEfforts: ['high', 'low', 'medium'] },
+    { ...model, offeringId: 'definition', displayName: 'Definition model', supportedReasoningEfforts: ['max'] }
   ] });
   vi.mocked(api.listInstanceSettings).mockResolvedValue([{ section: 'modelDefaults', instanceRevision: 1,
-    definitionId: 'agent', definitionVersion: 1, overrides: { catalogKey: null, reasoningEffort: null },
-    effective: { catalogKey: null, reasoningEffort: null }, definitionDefaults: { catalogKey: 'definition', reasoningEffort: 'max' },
-    sources: { catalogKey: 'instance', reasoningEffort: 'instance' }, configurationHash: 'hash' }]);
+    definitionId: 'agent', definitionVersion: 1, overrides: { offeringId: null, reasoningEffort: null },
+    effective: { offeringId: null, reasoningEffort: null }, definitionDefaults: { offeringId: 'definition', reasoningEffort: 'max' },
+    sources: { offeringId: 'instance', reasoningEffort: 'instance' }, configurationHash: 'hash' }]);
   render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
   fireEvent.click(await screen.findByRole('button', { name: /^Model defaults/ }));
   const effort = screen.getByRole('combobox', { name: 'Reasoning effort' });
@@ -217,4 +217,40 @@ it('edits sandbox storage in MiB while saving exact sparse bytes and preserving 
   fireEvent.click(screen.getByRole('button',{name:'Discard Sandbox environment changes'}));
   expect(storage).toHaveValue('128.5');
   expect(api.patchInstanceSettings).toHaveBeenCalledTimes(1);
+});
+
+it('retains unavailable model and effort explicitly without silently choosing the tenant default', async () => {
+  const retired = 'dca30000-0000-4000-8000-000000000099';
+  vi.mocked(modelApi.listModels).mockResolvedValue({ defaultOfferingId: 'host', models: [
+    { offeringId: 'host', displayName: 'Available model', connectionLabel: 'Production', tools: true, vision: false, structuredOutput: true,
+      reasoning: true, supportedReasoningEfforts: ['low'], defaultReasoningEffort: 'low' }
+  ] });
+  vi.mocked(api.listInstanceSettings).mockResolvedValue([{ section: 'modelDefaults', instanceRevision: 1,
+    definitionId: 'agent', definitionVersion: 1, overrides: { offeringId: retired, reasoningEffort: 'high' },
+    effective: { offeringId: retired, reasoningEffort: 'high' }, definitionDefaults: { offeringId: null, reasoningEffort: null },
+    sources: { offeringId: 'instance', reasoningEffort: 'instance' }, configurationHash: 'hash' }]);
+  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: /^Model defaults/ }));
+  expect(await screen.findByText(`Unavailable · ${retired}`, { exact: true })).toBeVisible();
+  expect(screen.getByText('high · Unavailable', { exact: true })).toBeVisible();
+  expect(screen.getByRole('combobox', { name: 'Reasoning effort' })).toBeDisabled();
+  expect(api.patchInstanceSettings).not.toHaveBeenCalled();
+});
+
+it('clears an inherited unsupported effort when explicitly changing the model', async () => {
+  const beta = 'dca30000-0000-4000-8000-000000000002';
+  vi.mocked(modelApi.listModels).mockResolvedValue({ defaultOfferingId: 'host', models: [
+    { offeringId: beta, displayName: 'Scripted Beta', connectionLabel: 'Offline Synthetic', tools: true, vision: false,
+      structuredOutput: true, reasoning: false, supportedReasoningEfforts: [], defaultReasoningEffort: null }
+  ] });
+  const section: settingsTypes.SettingsSection = { section: 'modelDefaults', instanceRevision: 1, definitionId: 'agent', definitionVersion: 1,
+    overrides: {}, effective: { offeringId: 'host', reasoningEffort: 'high' }, definitionDefaults: { offeringId: 'host', reasoningEffort: 'high' },
+    sources: { offeringId: 'definition', reasoningEffort: 'definition' }, configurationHash: 'hash' };
+  vi.mocked(api.listInstanceSettings).mockResolvedValue([section]); vi.mocked(api.patchInstanceSettings).mockResolvedValue(section);
+  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: /^Model defaults/ }));
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Default model' }));
+  fireEvent.click(await screen.findByTitle('Scripted Beta · Offline Synthetic'));
+  fireEvent.click(screen.getByRole('button', { name: 'Save Model defaults' }));
+  await waitFor(() => expect(api.patchInstanceSettings).toHaveBeenCalledWith('owner', expect.anything(), { offeringId: beta, reasoningEffort: null }, []));
 });

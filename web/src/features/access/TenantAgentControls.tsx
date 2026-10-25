@@ -20,7 +20,7 @@ import { useTenantCommand } from './useTenantCommand';
 export type TenantControlPage = 'execution-budgets' | 'self-management' | 'unattended-model';
 type Draft = { budgets: ExecutionBudgetPolicy; management: SelfManagementDraft; model: { key: string; effort: string } };
 const budgetDraft = (value: ExecutionBudgetPolicy | null): ExecutionBudgetPolicy => ({ standard: value?.standard ?? null, interactiveBrowser: value?.interactiveBrowser ?? null, unattendedBoundBrowser: value?.unattendedBoundBrowser ?? null });
-const draftOf = (view: TenantAgentControlsView): Draft => ({ budgets: budgetDraft(view.budgets.overrides), management: managementDraftOf(view.management.policy), model: { key: view.agent.instance.unattendedModelCatalogKey ?? '', effort: view.agent.instance.unattendedReasoningEffort ?? '' } });
+const draftOf = (view: TenantAgentControlsView): Draft => ({ budgets: budgetDraft(view.budgets.overrides), management: managementDraftOf(view.management.policy), model: { key: view.agent.instance.unattendedOfferingId ?? '', effort: view.agent.instance.unattendedReasoningEffort ?? '' } });
 const titles: Record<TenantControlPage, string> = { 'execution-budgets': 'Execution budgets', 'self-management': 'Self-management', 'unattended-model': 'Unattended model' };
 const draftPart = (draft: Draft, page: TenantControlPage) => page === 'execution-budgets' ? draft.budgets : page === 'self-management' ? draft.management : draft.model;
 
@@ -40,7 +40,7 @@ export function TenantAgentControls({ context, id, page }: { context: TenantCont
   const guard = useAccessDraftGuard(dirty && !(committed && resetAfterRead.current), command.busy, () => {});
   const view = state.data; const writable = !!view?.canUpdate && view.agent.instance.lifecycle === 'Active'; const disabled = !writable || command.busy || committed || command.requiresReload;
   const reload = () => { command.clearError(); state.reload(); };
-  const selected = catalog.data?.models.find(model => model.key === (draft?.model.key || catalog.data?.defaultKey));
+  const selected = catalog.data?.models.find(model => model.offeringId === (draft?.model.key || catalog.data?.defaultOfferingId));
   const invalidModel = !!catalog.data && !!draft && (!!draft.model.key && !selected || !!draft.model.effort && !selected?.supportedReasoningEfforts.includes(draft.model.effort));
   const valid = !!draft && !!view && (page === 'execution-budgets' ? validExecutionBudgets(draft.budgets, view.budgets.hostLimits) : page !== 'unattended-model' || !!catalog.data && !invalidModel);
   function save(lock?: boolean) {
@@ -48,7 +48,7 @@ export function TenantAgentControls({ context, id, page }: { context: TenantCont
     const suffix = lock === true ? '/self-management/freeze' : page === 'execution-budgets' ? '/execution-budgets' : page === 'self-management' ? '/self-management' : '/unattended-model';
     const policy = lock === undefined ? draft.management : managementDraftOf(view.management.policy);
     const body = { expectedRevision: view.securityRevision, expectedInstanceRevision: view.agent.instance.revision,
-      ...(lock === true ? {} : page === 'execution-budgets' ? { budgets: draft.budgets } : page === 'self-management' ? { overrides: managementOverridesOf(policy), ...(lock === false ? { frozen: false } : {}) } : { catalogKey: draft.model.key || null, reasoningEffort: draft.model.effort || null }) };
+      ...(lock === true ? {} : page === 'execution-budgets' ? { budgets: draft.budgets } : page === 'self-management' ? { overrides: managementOverridesOf(policy), ...(lock === false ? { frozen: false } : {}) } : { offeringId: draft.model.key || null, reasoningEffort: draft.model.effort || null }) };
     void command.run(async signal => {
       try { await identityRequest<unknown>(tenantAgentApi(tenant, id, suffix), { method: lock === true ? 'POST' : 'PUT', body, signal }); }
       catch (error) { if (!(error instanceof IdentityCompletionError)) throw error; }
@@ -72,7 +72,7 @@ export function TenantAgentControls({ context, id, page }: { context: TenantCont
           <Form layout="vertical" className="admin-config-form"><SelfManagementFields value={draft.management} defaults={view.management.policy.definitionDefaults} disabled={disabled} onChange={management => update({ management })} /></Form>
           <Typography.Text type="secondary">Revocation and freeze take effect immediately. Other saved changes apply to the next new Run.</Typography.Text>
         </> : <>
-          {catalog.loading ? <AccessLoading /> : catalog.error ? <AccessError error={catalog.error} retry={catalog.reload} /> : <ExecutionModelFields models={catalog.data?.models ?? []} defaultModelKey={catalog.data?.defaultKey ?? undefined} modelKey={draft.model.key} reasoningEffort={draft.model.effort} disabled={disabled || !catalog.data} showLabels modelLabel="Unattended model" effortLabel="Unattended reasoning effort" defaultLabel="Execution default" onChange={(key, effort) => update({ model: { key, effort } })} />}
+          {catalog.loading ? <AccessLoading /> : catalog.error ? <AccessError error={catalog.error} retry={catalog.reload} /> : <ExecutionModelFields models={catalog.data?.models ?? []} defaultOfferingId={catalog.data?.defaultOfferingId ?? undefined} offeringId={draft.model.key} reasoningEffort={draft.model.effort} disabled={disabled || !catalog.data} showLabels modelLabel="Unattended model" effortLabel="Unattended reasoning effort" defaultLabel="Execution default" onChange={(key, effort) => update({ model: { key, effort } })} />}
           {invalidModel && <Alert type="warning" showIcon title="The saved selection is unavailable" description="Choose a current catalog model and supported reasoning effort, or reset to the execution default before saving." />}
           <Typography.Text type="secondary">Execution default uses the existing agent execution defaults. Model choice grants no additional authority.</Typography.Text>
         </>}

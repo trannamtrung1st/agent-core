@@ -11,10 +11,11 @@ public sealed record TenantAttachmentPreparedRead(AgentRun Run, TenantSecuritySt
 
 public sealed partial class TenantAttachmentRuntimeContextService
 {
-    private bool ReadVision(AgentRun run)
+    private async ValueTask<bool> ReadVision(View view, CancellationToken ct)
     {
-        var model = models.Get(run.PinnedModel.CatalogKey);
-        if (model is null || !model.Tools || model.ProviderAlias != run.PinnedModel.ProviderAlias || model.ModelId != run.PinnedModel.ModelId)
+        var run = view.Run; var models = await modelCatalogs.ReadAsync(view.State, ct).ConfigureAwait(false);
+        var model = models.Get(run.PinnedModel.OfferingId);
+        if (model is null || !model.Tools || model.ConnectionId != run.PinnedModel.ConnectionId || model.ExternalModelId != run.PinnedModel.ExternalModelId || model.Route != run.PinnedModel.Binding?.Route)
             throw new AccessDeniedException("capability_unavailable");
         return model.Vision;
     }
@@ -33,7 +34,7 @@ public sealed partial class TenantAttachmentRuntimeContextService
     {
         var args = TenantAttachmentReadContract.Parse(arguments);
         var (view, source) = await RequireRead(frame, args, ct, approved: true).ConfigureAwait(false);
-        var value = WitnessRead(source, args, ReadVision(view.Run)); var review = false;
+        var value = WitnessRead(source, args, await ReadVision(view, ct).ConfigureAwait(false)); var review = false;
         foreach (var (permission, scope) in TenantAttachmentReadRules.Targets(view.State.Tenant.TenantId, value))
             review |= await TenantSandboxReadOperationRules.NeedsReviewAsync(view.State, view.Run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, permission, scope, iam, ct).ConfigureAwait(false);
         await MetadataFence(frame, view, source, args, ct).ConfigureAwait(false);
@@ -45,7 +46,7 @@ public sealed partial class TenantAttachmentRuntimeContextService
         var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, run.Claim?.Generation ?? Guid.Empty);
         var (view, source) = await RequireRead(frame, args, ct, approved: true, live: false).ConfigureAwait(false);
         if (view.Run.Revision != run.Revision || view.Agent.Instance.Revision != request.Operation.ExpectedInstanceRevision
-            || view.Agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision || value.Vision && !ReadVision(view.Run)
+            || view.Agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision || value.Vision && !await ReadVision(view, ct).ConfigureAwait(false)
             || WitnessRead(source, args, value.Vision) != value) throw new SecurityConflictException("attachment_source_changed");
         await MetadataFence(frame, view, source, args, ct, live: false).ConfigureAwait(false);
     }
@@ -72,7 +73,7 @@ public sealed partial class TenantAttachmentRuntimeContextService
             || receipt.Outcome != TenantOperationOutcome.Completed || receipt.ReasonCode != TenantAttachmentReadRules.Reason || receipt.TenantId != request.TenantId
             || receipt.RequestId != request.RequestId || receipt.OperationId != request.Operation.OperationId || receipt.ActionHash != request.Operation.ActionHash
             || receipt.InstanceId != request.Operation.InstanceId || receipt.SessionId != request.SessionId || receipt.ExecutorPrincipalId != request.ExecutorPrincipalId
-            || receipt.RootActivationId != request.RootActivationId || value.Vision && !ReadVision(current.Run)
+            || receipt.RootActivationId != request.RootActivationId || value.Vision && !await ReadVision(current, ct).ConfigureAwait(false)
             || WitnessRead(source, TenantAttachmentReadContract.Parse(value.ArgumentsJson), value.Vision) != value
             || await approvals.FindApprovalAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false) != request
             || await effects.FindOperationReceiptAsync(request.TenantId, receipt.OperationId, ct).ConfigureAwait(false) != receipt

@@ -29,6 +29,18 @@ public sealed partial class SqliteIamStore
         foreach (var row in rows) if (await CredentialView(db, tenantId, row, ct).ConfigureAwait(false) is { } item) items.Add(item);
         return new(items, count, page, pageSize);
     }
+    public async ValueTask<IReadOnlyDictionary<Guid, DateTimeOffset>> ReadTenantCredentialRotationsAsync(Guid tenantId,
+        IReadOnlyList<Guid> credentialIds, CancellationToken ct = default)
+    {
+        if (tenantId == Guid.Empty || credentialIds.Count > 100 || credentialIds.Contains(Guid.Empty)) throw new ArgumentException("Invalid credential metadata scope.");
+        var ids = credentialIds.Select(id => id.ToString("D")).ToArray();
+        await using var db = await contexts.CreateDbContextAsync(ct);
+        var owned = db.Set<TenantCredentialRecord>().Where(r => r.TenantId == tenantId && r.DeletedAt == null && ids.Contains(r.CredentialId)).Select(r => r.CredentialId);
+        var values = await db.Set<AuthorizationAudit>().AsNoTracking().Where(a => a.TenantId == tenantId && a.Action == "credentials.replace"
+            && a.Decision == "allowed" && owned.Contains(a.Target)).GroupBy(a => a.Target)
+            .Select(g => new { Id = g.Key, At = g.Max(a => a.At) }).ToArrayAsync(ct);
+        return values.ToDictionary(row => Guid.Parse(row.Id), row => row.At);
+    }
     public ValueTask<bool> TrySaveTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision, TenantCredentialRoot owner,
         Credential value, long expectedRevision, long expectedSecretRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
@@ -59,6 +71,7 @@ public sealed partial class SqliteIamStore
             var root = await db.Set<TenantCredentialRecord>().SingleOrDefaultAsync(r => r.CredentialId == key && r.TenantId == next.Tenant.TenantId && r.DeletedAt == null, ct).ConfigureAwait(false);
             var row = await db.Credentials.SingleOrDefaultAsync(c => c.CredentialId == key, ct).ConfigureAwait(false);
             if (root is null || row is null || row.Revision != expectedRevision || row.SecretRevision != expectedSecretRevision) return false;
+            if (await db.Set<ProviderConnectionRecord>().AnyAsync(c => c.TenantId == next.Tenant.TenantId && c.CredentialId == key, ct)) throw new SecurityConflictException("credential_in_use");
             if (await db.AgentCredentialBindings.AnyAsync(b => b.CredentialId == key, ct).ConfigureAwait(false)) throw new SecurityConflictException("credential_in_use");
             // Mark the real owner tombstone before the incumbent Credential FK
             // cascades its watch. The outer security/audit transaction keeps this

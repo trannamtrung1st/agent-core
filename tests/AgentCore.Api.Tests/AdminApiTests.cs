@@ -67,8 +67,8 @@ public sealed class AdminSecretSentinelApiFactory : AgentCoreApiFactory
     protected override IReadOnlyDictionary<string, string?> ExtraConfiguration =>
         new Dictionary<string, string?>
         {
-            ["OPENROUTER_API_KEY"] = "OPENROUTER_SECRET_SENTINEL",
-            ["Providers:LanguageModels:primary-llm:ApiKey"] = "OPENROUTER_SECRET_SENTINEL"
+            ["OPENROUTER_API_KEY"] = "SPEECH_SECRET_SENTINEL",
+            ["Providers:SpeechRecognizers:primary-stt:ApiKey"] = "SPEECH_SECRET_SENTINEL"
         };
 }
 

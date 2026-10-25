@@ -13,7 +13,7 @@ public sealed partial class TenantApprovedOperationService(IIamStore security,
     ITenantApprovalStore approvals,
     ITenantApprovedOperationStore effects,
     TenantOperationAuthorizer operations,
-    TenantRunConfigurationResolver configuration, IIdGenerator ids, TimeProvider time, IModelCatalog models, ProviderAliasSet aliases,
+    TenantRunConfigurationResolver configuration, IIdGenerator ids, TimeProvider time, ITenantModelCatalogReader modelCatalogs, ProviderAliasSet aliases,
     TenantSandboxControlOperationTarget? controlTargets = null,
     TenantSandboxRuntimeReadService? sandboxReads = null,
     TenantCredentialRuntimeReadService? credentialReads = null,
@@ -119,6 +119,7 @@ public sealed partial class TenantApprovedOperationService(IIamStore security,
                 var (latest, baseline) = await configuration.BaselineAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
                 if (latest.Instance.Revision != agent.Instance.Revision) throw new SecurityConflictException("stale_revision");
                 var patch = TenantPreferenceToolContract.Patch(preferences);
+                var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
                 try { _ = InstanceSettingsRules.ResolvePatch(baseline, latest.Instance.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear, models, aliases); }
                 catch (AgentCoreException) { reason = "operation_configuration_changed"; }
             }

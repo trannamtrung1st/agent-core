@@ -137,21 +137,21 @@ PYTHON''')
 
     def test_dotenv_reaches_backend_with_hyphenated_keys_and_keeps_secrets_out_of_vite(self):
         import json
-        (self.root / '.env').write_text("""OPENROUTER_API_KEY='literal-$value-$(touch should-not-exist)'
-Providers__LanguageModels__primary-llm__DefaultModel=operator-selected-model
-Providers__ModelCatalog__DefaultKey=operator-default-model
+        (self.root / '.env').write_text("""OPENAI_API_KEY='literal-$value-$(touch should-not-exist)'
+Providers__SpeechRecognizers__primary-stt__Model=operator-selected-speech-model
+Providers__SpeechSynthesizers__primary-tts__Model=operator-selected-voice-model
 VITE_AGENTCORE_REALTIME_PROTOCOL=json
 AGENTCORE_DEV_STATE_DIR=local/env-state
 """)
-        self.env['OPENROUTER_API_KEY'] = 'older-inherited-value'
+        self.env['OPENAI_API_KEY'] = 'older-inherited-value'
         # A native executable receives these names unchanged; Linux /bin/sh
         # discards hyphenated keys before starting a child process.
         dotnet = self.bin / 'dotnet'
         dotnet.write_text(f'#!{sys.executable}\n' + '''import json, os, pathlib, sys, time
 pathlib.Path('backend-env.json').write_text(json.dumps({
- 'key': os.environ.get('OPENROUTER_API_KEY'),
- 'model': os.environ.get('Providers__LanguageModels__primary-llm__DefaultModel'),
- 'catalog': os.environ.get('Providers__ModelCatalog__DefaultKey'),
+ 'key': os.environ.get('OPENAI_API_KEY'),
+ 'model': os.environ.get('Providers__SpeechRecognizers__primary-stt__Model'),
+ 'catalog': os.environ.get('Providers__SpeechSynthesizers__primary-tts__Model'),
  'args': sys.argv[1:]}))
 time.sleep(300)
 ''')
@@ -159,7 +159,7 @@ time.sleep(300)
         self.command('pnpm', '''python3 - <<'PYTHON'
 import json, os, pathlib
 pathlib.Path('frontend-env.json').write_text(json.dumps({
- 'hasKey': 'OPENROUTER_API_KEY' in os.environ,
+ 'hasKey': 'OPENAI_API_KEY' in os.environ,
  'hasProvider': any(k.startswith('Providers__') for k in os.environ),
  'protocol': os.environ.get('VITE_AGENTCORE_REALTIME_PROTOCOL')}))
 PYTHON
@@ -172,8 +172,8 @@ exec sleep 300''')
         backend = json.loads((self.root / 'backend-env.json').read_text())
         frontend = json.loads((self.root / 'web/frontend-env.json').read_text())
         self.assertEqual(backend['key'], 'literal-$value-$(touch should-not-exist)')
-        self.assertEqual(backend['model'], 'operator-selected-model')
-        self.assertEqual(backend['catalog'], 'operator-default-model')
+        self.assertEqual(backend['model'], 'operator-selected-speech-model')
+        self.assertEqual(backend['catalog'], 'operator-selected-voice-model')
         self.assertIn('--no-launch-profile', backend['args'])
         self.assertNotIn('--launch-profile', backend['args'])
         self.assertEqual(frontend, {'hasKey': False, 'hasProvider': False, 'protocol': 'json'})
@@ -183,7 +183,7 @@ exec sleep 300''')
 
     def test_invalid_dotenv_fails_without_executing_or_printing_the_value(self):
         private = 'private-invalid-quote-sentinel'
-        (self.root / '.env').write_text("OPENROUTER_API_KEY='" + private)
+        (self.root / '.env').write_text("OPENAI_API_KEY='" + private)
         result = self.run_script('start', '--api-only')
         self.assertEqual(result.returncode, 2)
         self.assertIn('Cannot load native .env', result.stderr)

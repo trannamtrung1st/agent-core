@@ -25,9 +25,9 @@ public sealed class TenantAutomationAuthoringTests
     };
     private static Automation Build(Automation? current, TenantAutomationChange change, DateTimeOffset at, AgentDefinition? definition = null, TenantAgent? agent = null) =>
         TenantAutomationAuthoring.Build(agent ?? Agent, definition ?? Definition, current, change, TenantAutomationPresetRules.Provenance(current, change, at), at,
-            ModelCatalogFactory.Synthetic(), new SystemIdGenerator(TimeProvider.System), null);
+            AgentCore.Infrastructure.Providers.Synthetic.SyntheticModelCatalog.Create(), new SystemIdGenerator(TimeProvider.System), null);
     private static TenantAutomationChange Change(Automation value, bool? enabled = null) => new(enabled ?? value.Status == AutomationStatus.Active, value.Name,
-        value.Instructions, value.IsSchedule ? value.Schedule : null, value.ModelOverrideCatalogKey, value.ModelOverrideReasoningEffort, value.RequiresTools, value.RequiresVision,
+        value.Instructions, value.IsSchedule ? value.Schedule : null, value.ModelOverrideOfferingId, value.ModelOverrideReasoningEffort, value.RequiresTools, value.RequiresVision,
         value.IsSchedule ? null : value.Triggers.Select(t => new TenantAutomationTriggerChange(t.TriggerId, t.Configuration, t.Enabled, t.Revision)).ToArray(),
         value.CompletionDelivery.SessionId, value.ExecutionTarget.SessionId);
 

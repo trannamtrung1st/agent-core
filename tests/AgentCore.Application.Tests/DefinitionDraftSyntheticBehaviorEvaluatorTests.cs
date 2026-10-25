@@ -17,7 +17,6 @@ public sealed class DefinitionDraftSyntheticBehaviorEvaluatorTests
     {
         var evaluator = new SyntheticDefinitionDraftBehaviorEvaluator(
             new DefinitionDraftSyntheticOfflineLanguageModel(),
-            TestModelCatalogs.Synthetic(),
             ToolConfigurationGates.AllowAll);
         var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Examiner) with
         {
@@ -49,13 +48,7 @@ public sealed class DefinitionDraftSyntheticBehaviorEvaluatorTests
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
         services.AddAgentCoreInfrastructure(
             ResolveAgentDirectory(),
-            profile: "Real",
-            languageModel: new LanguageModelProviderOptions
-            {
-                Adapter = "OpenAICompatible",
-                BaseUrl = "https://example.invalid",
-                ApiKey = "test-key"
-            });
+            profile: "Real");
         using var provider = services.BuildServiceProvider();
         var evaluator = provider.GetRequiredService<IDefinitionDraftSyntheticBehaviorEvaluator>();
         Assert.IsType<SyntheticDefinitionDraftBehaviorEvaluator>(evaluator);

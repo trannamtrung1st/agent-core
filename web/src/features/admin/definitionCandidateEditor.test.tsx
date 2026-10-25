@@ -11,22 +11,20 @@ import { exposedRoles } from "../../test/exposedRoles";
 import { ScopedExecutionBudgetLimits } from './executionBudgetLimits';
 import type { AdminAuthoringOptions } from '../../services/adminApi';
 const authoringOptions = {
-  languageModelAliases: ["backup-llm", "primary-llm"],
   speechRecognizerAliases: ["primary-stt"],
   speechSynthesizerAliases: ["primary-tts"],
-  defaultLanguageModelAlias: "primary-llm",
   defaultSpeechRecognizerAlias: "primary-stt",
   defaultSpeechSynthesizerAlias: "primary-tts",
-  defaultModelKey: "scripted-alpha",
+  defaultOfferingId: "dca30000-0000-4000-8000-000000000001",
   models: [
     {
-      key: "scripted-alpha",
+      offeringId: "dca30000-0000-4000-8000-000000000001",
       displayName: "Scripted Alpha",
       supportedReasoningEfforts: ["low", "medium", "high"],
       defaultReasoningEffort: "medium"
     },
     {
-      key: "scripted-beta",
+      offeringId: "dca30000-0000-4000-8000-000000000002",
       displayName: "Scripted Beta",
       supportedReasoningEfforts: [],
       defaultReasoningEffort: null
@@ -75,9 +73,8 @@ const storedCandidate = {
     maxSilentEvaluations: 8,
     maxInactivityMs: 900000
   },
-  modelDefaults: { catalogKey: "scripted-alpha", reasoningEffort: "low" },
+  modelDefaults: { offeringId: "dca30000-0000-4000-8000-000000000001", reasoningEffort: "low" },
   providerPreferences: {
-    languageModel: "primary-llm",
     speechRecognizer: null,
     speechSynthesizer: null,
     interruptionClassifier: "heuristic"
@@ -246,6 +243,19 @@ describe("definition candidate editor", () => {
     expect(saved.skills).toEqual([inherited, { ...refund, procedure: "REFUND_PROCEDURE_EDITED" }]);
   });
 
+  it("retains an unavailable model and effort without substituting an available model", () => {
+    suppliedAuthoring = authoringOptions; suppliedFailure = undefined;
+    const candidate = { ...storedCandidate, modelDefaults: { offeringId: 'dca30000-0000-4000-8000-000000000099', reasoningEffort: 'high' } };
+    const changed = vi.fn();
+    render(<DefinitionCandidateEditor candidate={candidate} view="form" jsonText={candidateToJson(candidate)}
+      busy={false} onCandidateChange={changed} onJsonTextChange={vi.fn()} onViewChange={vi.fn()} />);
+    openSettings();
+    expect(screen.getByText('Unavailable · dca30000-0000-4000-8000-000000000099', { exact: true })).toBeVisible();
+    expect(screen.getByLabelText('Reasoning')).toBeDisabled();
+    expect(screen.getByText(/Its effort is retained/)).toBeVisible();
+    expect(changed).not.toHaveBeenCalled();
+  });
+
   it("orders descending model efforts without rewriting the selected candidate", async () => {
     const descending = { ...authoringOptions, models: authoringOptions.models.map(model => ({ ...model,
       supportedReasoningEfforts: [...model.supportedReasoningEfforts].reverse() })) };
@@ -294,7 +304,7 @@ describe("definition candidate editor", () => {
       identity: { name: string; role: string; tone: string };
       voice: { voiceId: string };
       metadata: { owner: string };
-      modelDefaults: { catalogKey: string };
+      modelDefaults: { offeringId: string };
     };
     expect(edited.identity.name).toBe("Guide");
     expect(edited.voice.voiceId).toBe("verse");

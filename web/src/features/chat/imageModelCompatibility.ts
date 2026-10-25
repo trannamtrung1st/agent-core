@@ -1,7 +1,7 @@
 import type { ModelDescriptor } from "../../services/api";
 import type { PendingAttachment } from "../../services/attachments";
 import type { PendingSendItem } from "../../state/sessionStore";
-import { DEFAULT_MODEL_KEY } from "./ModelPicker";
+import { INHERIT_MODEL } from "./ModelPicker";
 
 export const IMAGE_MODEL_INCOMPATIBLE_MESSAGE =
   "This model cannot read images. Choose a vision-capable model to send this attachment.";
@@ -24,22 +24,22 @@ export function pendingSendQueueIncludesImage(queue: readonly PendingSendItem[])
 }
 
 export function resolveModelVision(
-  models: readonly Pick<ModelDescriptor, "key" | "vision">[],
+  models: readonly Pick<ModelDescriptor, "offeringId" | "vision">[],
   modelValue: string,
-  defaultKey: string | null
+  defaultOfferingId: string | null
 ): boolean | null {
-  const key = modelValue === DEFAULT_MODEL_KEY ? defaultKey : modelValue;
+  const key = modelValue === INHERIT_MODEL ? defaultOfferingId : modelValue;
   if (!key) {
     return null;
   }
 
-  return models.find((model) => model.key === key)?.vision ?? null;
+  return models.find((model) => model.offeringId === key)?.vision ?? null;
 }
 
 export type ImageModelCompatibilityInput = {
-  models: readonly Pick<ModelDescriptor, "key" | "vision">[];
+  models: readonly Pick<ModelDescriptor, "offeringId" | "vision">[];
   modelValue: string;
-  defaultKey: string | null;
+  defaultOfferingId: string | null;
   pendingAttachments: readonly PendingAttachment[];
   pendingSendQueue: readonly PendingSendItem[];
 };
@@ -56,7 +56,7 @@ export function imageModelCompatibility(input: ImageModelCompatibilityInput): {
     return { hasImage: false, incompatible: false, message: null };
   }
 
-  const vision = resolveModelVision(input.models, input.modelValue, input.defaultKey);
+  const vision = resolveModelVision(input.models, input.modelValue, input.defaultOfferingId);
   if (vision !== false) {
     return { hasImage: true, incompatible: false, message: null };
   }

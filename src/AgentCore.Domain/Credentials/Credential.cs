@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace AgentCore.Domain.Credentials;
 
 public enum CredentialKind { Password, ApiKey, Token, Certificate, PrivateKey, Generic }
-public enum CredentialPurpose { General, EmailAccount, GoogleDriveAccount, ContainerRegistry }
+public enum CredentialPurpose { General, EmailAccount, GoogleDriveAccount, ContainerRegistry, ModelInference }
 public enum CredentialStatus { Active, Disabled }
 
 public sealed record Credential(Guid CredentialId, string DisplayName, CredentialKind Kind,

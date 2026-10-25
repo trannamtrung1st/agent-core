@@ -42,7 +42,7 @@ public sealed record AdminEffectiveConfigurationResponse(
     AdminMemoryPolicyResponse MemoryPolicy,
     AdminTriggerPolicyResponse? TriggerPolicy,
     AdminDurableExecutionEligibilityResponse DurableExecutionEligibility,
-    string? UnattendedModelCatalogKey = null,
+    string? UnattendedOfferingId = null,
     string? UnattendedReasoningEffort = null,
     AdminBrowserConfigurationResponse? Browser = null,
     System.Text.Json.JsonElement? ExecutionBudgets = null);
@@ -56,11 +56,11 @@ public sealed record AdminProviderPreferencesResponse(
     string InterruptionClassifier);
 
 public sealed record AdminEffectiveModelResponse(
-    string CatalogKey,
+    string OfferingId,
     string DisplayName,
     string SelectionSource,
     string? ReasoningEffort,
-    string? ModelId);
+    string? ExternalModelId);
 
 public sealed record AdminKnowledgeSourceResponse(
     string Identity,
@@ -151,13 +151,11 @@ public sealed record AdminDefinitionDraftRevisionRequest(string DraftId, long Re
 public sealed record AdminDefinitionPublicationRevisionRequest(int Version, long MetadataRevision);
 
 public sealed record AdminAuthoringOptionsResponse(
-    IReadOnlyList<string> LanguageModelAliases,
     IReadOnlyList<string> SpeechRecognizerAliases,
     IReadOnlyList<string> SpeechSynthesizerAliases,
-    string? DefaultLanguageModelAlias,
     string? DefaultSpeechRecognizerAlias,
     string? DefaultSpeechSynthesizerAlias,
-    string DefaultModelKey,
+    string DefaultOfferingId,
     IReadOnlyList<AdminAuthoringModelOptionResponse> Models,
     IReadOnlyList<string> InterruptionClassifiers);
 
@@ -300,14 +298,14 @@ public sealed record AdminAgentInstanceResponse(
     long Revision,
     long PersonaRevision,
     AdminPersonaResponse Persona,
-    string? UnattendedModelCatalogKey = null,
+    string? UnattendedOfferingId = null,
     string? UnattendedReasoningEffort = null,
     AdminBrowserConfigurationResponse? Browser = null,
     System.Text.Json.JsonElement? ExecutionBudgets = null);
 
 public sealed record AdminSetUnattendedModelRequest(
     long ExpectedRevision,
-    string? CatalogKey,
+    string? OfferingId,
     string? ReasoningEffort);
 
 public sealed record AdminUpdateAgentInstancePersonaRequest(

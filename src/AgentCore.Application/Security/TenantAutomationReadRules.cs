@@ -32,7 +32,7 @@ public static class TenantAutomationReadRules
     public static TenantAutomationReadSource[] Sources(PreparedAutomationRead value) => JsonSerializer.Deserialize<TenantAutomationReadSource[]>(value.SourcesJson) ?? throw new ArgumentException("Use exact Automation sources.");
     public static TenantAutomationEventReadSource[] Events(PreparedAutomationRead value) => JsonSerializer.Deserialize<TenantAutomationEventReadSource[]>(value.EventSourcesJson) ?? throw new ArgumentException("Use exact event sources.");
     public static string ConfigurationHash(Automation value) => TenantMemoryOperationRules.Hash(JsonSerializer.Serialize(new { value.AutomationId, value.Owner, value.Revision,
-        value.Name, value.Instructions, value.Status, value.ModelOverrideCatalogKey, value.ModelOverrideReasoningEffort, value.RequiresTools, value.RequiresVision,
+        value.Name, value.Instructions, value.Status, value.ModelOverrideOfferingId, value.ModelOverrideReasoningEffort, value.RequiresTools, value.RequiresVision,
         value.ExecutionTarget, value.CompletionDelivery, value.NextOccurrenceAtUtc, value.OccurrenceCount, value.ExpiresAtUtc, value.SuspensionReason, value.Provenance,
         triggers = value.Triggers.Select(t => new { t.TriggerId, t.Revision, t.Enabled, configuration = JsonSerializer.SerializeToElement(t.Configuration, t.Configuration.GetType()) }) }));
     public static string EventHash(TenantEventDelivery delivery) => TenantMemoryOperationRules.Hash(JsonSerializer.Serialize(new { delivery.TenantId, delivery.EventId,
@@ -86,7 +86,7 @@ public static class TenantAutomationReadRules
         var events = JsonSerializer.Serialize(deliveries.Select(d => new TenantAutomationEventReadSource(d.Subscription.AutomationId, d.EventId, d.Subscription.TriggerId,
             d.Subscription.SourceKind, d.Subscription.ResourceId, d.Core?.Event.Key == "email.message.received" ? AgentCore.Domain.Email.EmailEventReferences.AccountId(d.Core.Event.DataJson) : null, EventHash(d))));
         object Summary(Automation a) => new { a.AutomationId, a.Revision, a.Name, status = Status(a.Status), instructions = TenantContinuityRules.Safe(a.Instructions, args.AutomationId is null ? 160 : 600, out _),
-            instructionsExcerpt = a.Instructions.Length > (args.AutomationId is null ? 160 : 600), a.ModelOverrideCatalogKey, a.ModelOverrideReasoningEffort, a.RequiresTools, a.RequiresVision,
+            instructionsExcerpt = a.Instructions.Length > (args.AutomationId is null ? 160 : 600), a.ModelOverrideOfferingId, a.ModelOverrideReasoningEffort, a.RequiresTools, a.RequiresVision,
             a.Provenance.PresetId, a.Provenance.PresetVersion, a.ExecutionTarget, a.CompletionDelivery, a.NextOccurrenceAtUtc, a.OccurrenceCount,
             triggerCount = a.Triggers.Count, nextTriggerCursor = args.AutomationId is null || a.Triggers.Count <= args.TriggerCursor + 2 ? (int?)null : args.TriggerCursor + 2,
             triggers = args.AutomationId is null ? null : a.Triggers.Skip(args.TriggerCursor).Take(2).Select(t => new { t.TriggerId, t.Revision, t.Enabled, kind = t.Configuration.Kind.ToString(),

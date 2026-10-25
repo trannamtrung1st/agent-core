@@ -1,4 +1,5 @@
 using AgentCore.Domain.Conversation;
+using System.Text.Json.Serialization;
 
 namespace AgentCore.Domain.Triggers;
 
@@ -9,38 +10,44 @@ public enum ExecutionModelSource
     ConversationDefault = 2
 }
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class ExecutionModelPin
 {
     public ExecutionModelPin(
-        string catalogKey,
-        string providerAlias,
-        string modelId,
+        string offeringId,
+        string connectionId,
+        string externalModelId,
         string? reasoningEffort,
-        ExecutionModelSource source)
+        ExecutionModelSource source,
+        AgentCore.Domain.Models.ModelBinding? binding = null)
     {
         if (!Enum.IsDefined(source))
         {
             throw new ArgumentException("Execution model source is not valid.", nameof(source));
         }
 
-        CatalogKey = AgentRunText.RequireToken(catalogKey, AgentRunLimits.MaxModelFieldCharacters, "Model catalog key");
-        ProviderAlias = AgentRunText.RequireToken(providerAlias, AgentRunLimits.MaxModelFieldCharacters, "Model provider");
-        ModelId = AgentRunText.RequireToken(modelId, AgentRunLimits.MaxModelFieldCharacters, "Model");
+        OfferingId = AgentRunText.RequireToken(offeringId, AgentRunLimits.MaxModelFieldCharacters, "Model catalog key");
+        ConnectionId = AgentRunText.RequireToken(connectionId, AgentRunLimits.MaxModelFieldCharacters, "Model provider");
+        ExternalModelId = AgentRunText.RequireToken(externalModelId, AgentRunLimits.MaxExternalModelIdCharacters, "External model ID");
         ReasoningEffort = reasoningEffort is null
             ? null
             : AgentRunText.RequireToken(reasoningEffort, AgentRunLimits.MaxReasoningEffortCharacters, "Reasoning effort");
         Source = source;
+        binding?.RequireIdentity(OfferingId, ConnectionId, ExternalModelId);
+        Binding = binding;
     }
 
-    public string CatalogKey { get; }
+    public string OfferingId { get; }
 
-    public string ProviderAlias { get; }
+    public string ConnectionId { get; }
 
-    public string ModelId { get; }
+    public string ExternalModelId { get; }
 
     public string? ReasoningEffort { get; }
 
     public ExecutionModelSource Source { get; }
+
+    public AgentCore.Domain.Models.ModelBinding? Binding { get; }
 
     public static string ToWire(ExecutionModelSource source) =>
         source switch

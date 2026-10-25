@@ -44,7 +44,6 @@ public static class InfrastructureServiceCollectionExtensions
         this IServiceCollection services,
         string agentDirectory,
         string profile = "Synthetic",
-        LanguageModelProviderOptions? languageModel = null,
         PersistenceOptions? persistence = null,
         InteractionPolicy? interaction = null,
         SpeechProvidersOptions? speech = null,
@@ -94,14 +93,18 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton(persistence);
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton(SyntheticProviderAliases.Default);
-        services.TryAddSingleton<IModelCatalog>(provider =>
-            ModelCatalogFactory.Create(profile, languageModel, provider.GetService<IConfiguration>()));
+        if (string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase))
+            services.TryAddSingleton<IModelCatalog>(provider => SyntheticModelCatalog.Create());
+        services.TryAddSingleton<ITenantModelCatalogReader>(provider =>
+            string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase)
+                ? new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(
+                    provider.GetRequiredService<IIamStore>(), provider.GetRequiredService<ITenantModelStore>())
+                : new TenantModelCatalogReader(provider.GetRequiredService<ITenantModelStore>(), provider.GetRequiredService<IIamStore>()));
         services.TryAddSingleton<ILanguageModelResolver>(provider =>
-            new LanguageModelResolver(
-                provider,
-                profile,
-                languageModel ?? new LanguageModelProviderOptions { Adapter = "Scripted" },
-                provider.GetRequiredService<IModelCatalog>()));
+            string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase)
+                ? new AgentCore.Infrastructure.Providers.Synthetic.SyntheticLanguageModelResolver(
+                    provider.GetRequiredService<ILanguageModel>(), provider.GetRequiredService<ITenantModelRouteAuthority>())
+                : new LanguageModelResolver(provider.GetRequiredService<IModelProviderFactory>()));
         services.TryAddSingleton<IToolConfigurationGate>(provider => new ToolConfigurationGate(
             provider.GetService<IWebSearchProvider>(),
             provider.GetService<IPublicWebFetcher>(),
@@ -115,9 +118,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IDefinitionDraftSyntheticBehaviorEvaluator, SyntheticDefinitionDraftBehaviorEvaluator>();
         services.TryAddSingleton<AgentDefinitionDraftSyntheticEvaluationRunner>();
         services.TryAddSingleton<IInitiativeEvaluator>(provider =>
-            new DefaultInitiativeEvaluator(
-                provider.GetRequiredService<PromptContextBuilder>(),
-                LanguageModelFactory.Create(provider, profile, languageModel)));
+            new DefaultInitiativeEvaluator(provider.GetRequiredService<PromptContextBuilder>()));
         services.TryAddSingleton<IAgentBrain>(provider =>
             new DefaultAgentBrain(
                 provider.GetRequiredService<PromptContextBuilder>(),
@@ -298,6 +299,13 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<AgentCore.Application.Security.TenantArtifactService>();
         services.TryAddSingleton<IArtifactReferenceAuthorizer>(provider =>
             new SessionArtifactAuthorizer(provider.GetService<IArtifactStore>()));
+        services.AddHttpClient(ModelProviderHttp.ClientName, client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(provider => ModelProviderHttp.CreateHandler(provider.GetRequiredService<AgentCore.Application.Models.ModelEndpointPolicy>()));
+        services.TryAddSingleton<IModelMetadataTransport>(provider => string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase)
+            ? new SyntheticModelMetadataTransport()
+            : new ModelMetadataTransport(provider.GetRequiredService<IHttpClientFactory>().CreateClient(ModelProviderHttp.ClientName),
+                provider.GetRequiredService<ITenantCredentialStore>(), provider.GetRequiredService<ICredentialProtector>(),
+                provider.GetRequiredService<AgentCore.Application.Models.ModelEndpointPolicy>()));
         services.AddHttpClient(OpenAICompatibleLanguageModel.HttpClientName, client =>
         {
             client.Timeout = Timeout.InfiniteTimeSpan;
@@ -319,8 +327,8 @@ public static class InfrastructureServiceCollectionExtensions
         {
             client.Timeout = Timeout.InfiniteTimeSpan;
         }).WithErrorDiagnostics();
-        services.TryAddSingleton<ILanguageModel>(provider =>
-            LanguageModelFactory.Create(provider, profile, languageModel));
+        if (string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase))
+            services.TryAddSingleton<ILanguageModel>(provider => new ScriptedLanguageModel());
         services.TryAddSingleton<IApprovedKnowledgeCatalog>(provider =>
             new FileApprovedKnowledgeCatalog(agentDirectory));
         services.TryAddSingleton<IRoleKnowledgeContentResolver>(provider =>
@@ -361,28 +369,11 @@ public static class InfrastructureServiceCollectionExtensions
         }
         else
         {
-            services.TryAddSingleton<ModelTriggerCommandAuthorizer>(static provider =>
-            {
-                var selection = SessionModelBinder.PinDefault(provider.GetRequiredService<IModelCatalog>());
-                var descriptor = provider.GetRequiredService<IModelCatalog>().Get(selection.CatalogKey)!;
-                // Use the least expensive declared effort for this internal purpose;
-                // keep the pinned route and ordinary conversation defaults unchanged.
-                if (descriptor.Reasoning)
-                {
-                    var effort = new[] { "none", "minimal", "low", "medium", "high", "xhigh", "max" }
-                        .FirstOrDefault(candidate => descriptor.SupportedReasoningEfforts.Contains(candidate, StringComparer.OrdinalIgnoreCase));
-                    if (effort is not null) selection = selection with { ReasoningEffort = effort };
-                }
-                return new ModelTriggerCommandAuthorizer(
-                    provider.GetRequiredService<ILanguageModelResolver>().Resolve(selection, ModelPurpose.TriggerAuthorization),
-                    selection.ReasoningEffort,
-                    provider.GetService<ILogger<ModelTriggerCommandAuthorizer>>(), descriptor, provider.GetRequiredService<TimeProvider>());
-            });
-            services.TryAddSingleton<ITriggerCommandAuthorizer>(static provider =>
-                provider.GetRequiredService<ModelTriggerCommandAuthorizer>());
+            services.TryAddSingleton<ITriggerCommandAuthorizer, TenantTriggerCommandAuthorizer>();
         }
         services.TryAddSingleton<IEventFilterEvaluator, AgentCore.Infrastructure.Events.RestrictedEventFilter>();
-        services.TryAddSingleton<IUserTurnCapabilityValidator, UserTurnCapabilityValidator>();
+        if (string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase))
+            services.TryAddSingleton<IUserTurnCapabilityValidator, UserTurnCapabilityValidator>();
 
         WebSearchProviderRegistration.AddPublicWeb(services, profile);
         EmailProviderRegistration.AddEmail(services);
@@ -414,7 +405,7 @@ public static class InfrastructureServiceCollectionExtensions
         {
             var speech = provider.GetRequiredService<SpeechResolution>();
             return new SessionRuntimeFactory(
-                provider.GetRequiredService<ILanguageModel>(),
+                provider.GetRequiredService<ILanguageModelResolver>(),
                 provider.GetRequiredService<IAgentBrain>(),
                 provider.GetRequiredService<IIdGenerator>(),
                 provider.GetRequiredService<TimeProvider>(),
@@ -430,8 +421,8 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<AgentCore.Application.Security.TenantRunProfileService>(),
                 provider.GetRequiredService<AgentCore.Application.Security.TenantMemoryService>(),
                 provider.GetRequiredService<AgentCore.Application.Security.TenantExperienceService>(),
-                provider.GetRequiredService<ILanguageModelResolver>(),
-                provider.GetRequiredService<IModelCatalog>(),
+                string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase) ? provider.GetRequiredService<ILanguageModel>() : null,
+                string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase) ? provider.GetRequiredService<IModelCatalog>() : null,
                 provider.GetRequiredService<IDiagnosticIdSource>());
         });
         return services;

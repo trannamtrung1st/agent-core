@@ -21,7 +21,11 @@ public sealed record TriggerCommandAuthorizationVerdict(TriggerCommandAuthorizat
 
 public sealed record AutomationAuthorizationRequest(string CurrentUserText, TriggerCommandAction Action,
     string ToolName, JsonElement ProposedAction, string ActionHash,
-    ScheduleConversationContext? ScheduleContext = null, ScheduleDraftContext? ScheduleDraft = null, string? ConversationEvidenceJson = null, bool AdmittedTask = false);
+    ScheduleConversationContext? ScheduleContext = null, ScheduleDraftContext? ScheduleDraft = null, string? ConversationEvidenceJson = null, bool AdmittedTask = false)
+{
+    [System.Text.Json.Serialization.JsonIgnore]
+    public ModelInvocation? Invocation { get; internal init; }
+}
 
 public interface ITriggerCommandAuthorizer
 {
@@ -65,7 +69,7 @@ public sealed class ModelTriggerCommandAuthorizer(
                 (proposed.ScheduleContext?.ToPromptLines() ?? []).Concat(proposed.ScheduleDraft?.ToPromptLines() ?? [])
                     .Append(proposed.ConversationEvidenceJson ?? "[]"))),
             ContextSection.Evidence(ContextSectionId.ToolResults, ContextSourceKind.Tool, proposed.ProposedAction.GetRawText())
-        ], purpose: ContextPurpose.Platform), [new(ModelRole.User, proposed.CurrentUserText)], maxOutputTokens: InitialOutputTokens, temperature: 0, reasoningEffort: reasoningEffort);
+        ], purpose: ContextPurpose.Platform), [new(ModelRole.User, proposed.CurrentUserText)], maxOutputTokens: InitialOutputTokens, reasoningEffort: reasoningEffort);
 
         // Both attempts share one deadline, further bounded by the calling tool/turn.
         using var timeout = new CancellationTokenSource(ClassificationTimeout, time);
@@ -116,9 +120,9 @@ public sealed class ModelTriggerCommandAuthorizer(
             {
                 var elapsed = time.GetElapsedTime(started).TotalMilliseconds;
                 activity?.SetTag("action", requestedAction.ToString());
-                activity?.SetTag("catalog", SafeMetadata(descriptor?.Key));
-                activity?.SetTag("provider", SafeMetadata(descriptor?.ProviderAlias));
-                activity?.SetTag("model", SafeMetadata(descriptor?.ModelId));
+                activity?.SetTag("catalog", SafeMetadata(descriptor?.OfferingId));
+                activity?.SetTag("provider", SafeMetadata(descriptor?.ConnectionId));
+                activity?.SetTag("model", SafeMetadata(descriptor?.ExternalModelId));
                 activity?.SetTag("transport", descriptor?.Transport.ToString() ?? "Unknown");
                 activity?.SetTag("reasoning_effort", SafeMetadata(reasoningEffort));
                 activity?.SetTag("attempt", attempt);
@@ -129,8 +133,8 @@ public sealed class ModelTriggerCommandAuthorizer(
                 activity?.SetTag("output_tokens", outputTokens);
                 activity?.SetTag("valid_decision", validDecision);
                 if (!validDecision) activity?.SetStatus(ActivityStatusCode.Error, stop);
-                logger?.LogInformation("Automation authorization classifier action={Action} catalog={CatalogKey} provider={ProviderAlias} model={ModelId} transport={Transport} effort={ReasoningEffort} maxOutputTokens={MaxOutputTokens} attempt={Attempt} maxAttempts={MaxAttempts} elapsedMs={ElapsedMs} terminal={Terminal} outputTokens={OutputTokens} validDecision={ValidDecision} traceId={TraceId}",
-                    requestedAction, SafeMetadata(descriptor?.Key), SafeMetadata(descriptor?.ProviderAlias), SafeMetadata(descriptor?.ModelId),
+                logger?.LogInformation("Automation authorization classifier action={Action} catalog={OfferingId} provider={ConnectionId} model={ExternalModelId} transport={Transport} effort={ReasoningEffort} maxOutputTokens={MaxOutputTokens} attempt={Attempt} maxAttempts={MaxAttempts} elapsedMs={ElapsedMs} terminal={Terminal} outputTokens={OutputTokens} validDecision={ValidDecision} traceId={TraceId}",
+                    requestedAction, SafeMetadata(descriptor?.OfferingId), SafeMetadata(descriptor?.ConnectionId), SafeMetadata(descriptor?.ExternalModelId),
                     descriptor?.Transport.ToString() ?? "Unknown", SafeMetadata(reasoningEffort), request.MaxOutputTokens, attempt, 2,
                     elapsed, stop, outputTokens, validDecision, Activity.Current?.TraceId.ToString());
             }

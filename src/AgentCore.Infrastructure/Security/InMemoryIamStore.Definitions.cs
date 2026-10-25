@@ -10,7 +10,8 @@ public sealed partial class InMemoryIamStore
     public ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (instances.CredentialGate) lock (definitions.TenantGate)
-            return ValueTask.FromResult(TenantEventAdmissionRules.TryId(scope, out var coreEvent) ? sessionBacking.CoreEvents.OwnsTenantEvent(scope.TenantId!.Value, coreEvent)
+            return ValueTask.FromResult(AgentCore.Application.Models.TenantModelRules.TryId(scope, out _) ? OwnsModelResource(scope)
+                : TenantEventAdmissionRules.TryId(scope, out var coreEvent) ? sessionBacking.CoreEvents.OwnsTenantEvent(scope.TenantId!.Value, coreEvent)
                 : TenantWebhookRules.TryId(scope, out var webhook) ? webhookBacking.OwnsTenantSource(scope.TenantId!.Value, webhook)
                 : TenantAutomationRules.TryId(scope, out var automation) ? automationBacking.OwnsTenantAutomation(scope.TenantId!.Value, automation)
                 : TenantWorkspaceRules.TryParse(scope, out _, out _) ? OwnsWorkspace(scope, ct)

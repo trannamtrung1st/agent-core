@@ -60,7 +60,7 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   await page.getByRole("button", { name: "Save configuration" }).click();
   const savedResponse = await saved;
   expect(savedResponse.ok()).toBeTruthy();
-  expect((await savedResponse.json()).unattendedModelCatalogKey).toBe("scripted-alpha");
+  expect((await savedResponse.json()).unattendedOfferingId).toBe("dca30000-0000-4000-8000-000000000001");
   await expect(automation.getByText("Effective source: Unattended default (Scripted Alpha)")).toBeVisible();
   await expect(automation.getByRole("alert")).toHaveCount(0);
   const reloaded = page.waitForResponse(
@@ -68,7 +68,7 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   );
   await page.reload();
   const config = await reloaded;
-  expect((await config.json()).unattendedModelCatalogKey).toBe("scripted-alpha");
+  expect((await config.json()).unattendedOfferingId).toBe("dca30000-0000-4000-8000-000000000001");
   await navigateAdmin(page, "Continuity");
   await navigateAdmin(page, "Automation");
   await navigateAdmin(page, "Policies & models");

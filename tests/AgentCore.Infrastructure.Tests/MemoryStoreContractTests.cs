@@ -15,6 +15,32 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class MemoryStoreContractTests
 {
     [Fact]
+    public async Task Exact_model_binding_survives_snapshot_summary_and_history_reopen_without_secret_material()
+    {
+        await using var sqlite = await SqliteAsync();
+        var preset = AgentCore.Application.Models.BuiltinModelPresets.All.First(p => p.Kind == AgentCore.Domain.Models.ModelProviderKind.Anthropic);
+        var route = new AgentCore.Domain.Models.ModelRoutePin(Guid.NewGuid(), Guid.NewGuid(), 4, Guid.NewGuid(), 6,
+            Guid.NewGuid(), 8, 3, preset.Kind, preset.ExternalModelId, preset.Transport);
+        var binding = new AgentCore.Domain.Models.ModelBinding(route, preset.Capabilities, "Captured model label", "Captured connection label");
+        var selection = new SessionModelSelection(route.OfferingId.ToString("D"), route.ConnectionId.ToString("D"), route.ExternalModelId,
+            ModelSelectionSource.User, "medium", true, binding);
+        var provenance = new ModelGenerationProvenance(selection.OfferingId, selection.ConnectionId, selection.ExternalModelId, "medium", binding);
+        foreach (var store in new IMemoryStore[] { new InMemoryMemoryStore(), sqlite.Store })
+        {
+            var entry = Entry(Guid.NewGuid(), 1, EntryStatus.Completed, "Retained reply") with { ModelProvenance = provenance };
+            var snapshot = First() with { ModelSelection = selection, SummaryModel = provenance, Entries = [entry] };
+            await store.SaveAsync(snapshot, 0); await store.SaveAsync(snapshot, 0);
+            var reopened = store == sqlite.Store ? new SqliteMemoryStore(sqlite.Factory, TimeProvider.System) : store;
+            var saved = (await reopened.LoadAsync(snapshot.SessionId))!;
+            Assert.Equal(binding, saved.ModelSelection!.Binding); Assert.Equal(binding, saved.SummaryModel!.Binding);
+            var retained = (await reopened.ReadHistoryAsync(snapshot.SessionId, 0, 10)).Single();
+            Assert.Equal(binding, retained.ModelProvenance!.Binding); Assert.Equal(3, retained.ModelProvenance.Binding!.Route.SecretRevision);
+            Assert.Equal("Captured model label", retained.ModelProvenance.Binding.ModelLabel);
+            Assert.DoesNotContain("ProtectedPayload", System.Text.Json.JsonSerializer.Serialize(saved.ModelSelection));
+        }
+    }
+
+    [Fact]
     public async Task Structured_parts_remain_typed_immutable_and_identical_after_sqlite_reopen()
     {
         await using var sqlite = await SqliteAsync();
@@ -1102,17 +1128,17 @@ public sealed class MemoryStoreContractTests
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}.db");
         var selection = new SessionModelSelection(
-            "scripted-alpha",
-            "primary-llm",
-            "scripted-alpha",
-            ModelSelectionSource.SystemDefault,
+            "dca30000-0000-4000-8000-000000000001",
+            "dca20000-0000-4000-8000-000000000001",
+            "dca30000-0000-4000-8000-000000000001",
+            ModelSelectionSource.TenantDefault,
             "medium");
         var entry = Entry(Guid.NewGuid(), 1, EntryStatus.Completed, "Hello") with
         {
             ModelProvenance = new ModelGenerationProvenance(
-                "scripted-alpha",
-                "primary-llm",
-                "scripted-alpha",
+                "dca30000-0000-4000-8000-000000000001",
+                "dca20000-0000-4000-8000-000000000001",
+                "dca30000-0000-4000-8000-000000000001",
                 "medium")
         };
         var snapshot = First() with { Entries = [entry], ModelSelection = selection };
@@ -1176,7 +1202,7 @@ public sealed class MemoryStoreContractTests
             new ConversationPolicy("concise", true, "en", 256),
             new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
             new VoiceConfiguration(false, "default", 1.0),
-            new ProviderPreferences("primary-llm", null, null),
+            new ProviderPreferences(null, null),
             new Dictionary<string, string>());
 
     private sealed class TestFactory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>

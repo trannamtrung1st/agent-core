@@ -12,7 +12,7 @@ public sealed record TenantCredentialCreate(string DisplayName, CredentialKind K
 public sealed record TenantCredentialUpdate(string DisplayName, CredentialStatus Status,
     IReadOnlyDictionary<string, string>? Metadata, IReadOnlyList<string>? AllowedOrigins,
     EmailAccountProfile? EmailAccount = null, ContainerRegistryProfile? ContainerRegistry = null);
-public sealed record TenantCredentialView(Guid TenantId, CredentialView Credential);
+public sealed record TenantCredentialView(Guid TenantId, CredentialView Credential, DateTimeOffset? LastRotatedAt = null);
 public sealed record TenantCredentialViewPage(IReadOnlyList<TenantCredentialView> Items, int Total, int Page, int PageSize);
 public sealed record TenantCredentialAccess(IReadOnlyList<string> Permissions, long Revision);
 
@@ -46,8 +46,9 @@ public sealed class TenantCredentialService(IIamStore security, ITenantCredentia
                     allowed.Add(Guid.Parse(scope.ResourceId!));
         }
         var result = await credentials.ListTenantCredentialsAsync(tenant, allowed, Math.Clamp(page, 0, 100_000), Math.Clamp(pageSize, 1, 100), ct).ConfigureAwait(false);
+        var rotations = await credentials.ReadTenantCredentialRotationsAsync(tenant, result.Items.Select(item => item.Value.CredentialId).ToArray(), ct).ConfigureAwait(false);
         await CompleteRead(actor, tenant, state.Tenant.Revision, initiator, ct).ConfigureAwait(false);
-        return new(result.Items.Select(View).ToArray(), result.Total, result.Page, result.PageSize);
+        return new(result.Items.Select(item => View(item, rotations.TryGetValue(item.Value.CredentialId, out var at) ? at : null)).ToArray(), result.Total, result.Page, result.PageSize);
     }
     public async ValueTask<TenantCredentialView> ReadAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
@@ -55,8 +56,9 @@ public sealed class TenantCredentialService(IIamStore security, ITenantCredentia
         var decision = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("credentials.read"), TenantCredentialRules.Scope(tenant, id), ct).ConfigureAwait(false);
         if (!decision.Allowed) throw new AccessDeniedException(decision.ReasonCode);
         var current = await Owned(tenant, id, ct).ConfigureAwait(false);
+        var rotations = await credentials.ReadTenantCredentialRotationsAsync(tenant, [id], ct).ConfigureAwait(false);
         await CompleteRead(actor, tenant, state.Tenant.Revision, initiator, ct).ConfigureAwait(false);
-        return View(current);
+        return View(current, rotations.TryGetValue(id, out var at) ? at : null);
     }
     public async ValueTask<TenantCredentialView> CreateAsync(Guid actor, Guid tenant, TenantCredentialCreate input, long expectedSecurityRevision, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
@@ -73,6 +75,7 @@ public sealed class TenantCredentialService(IIamStore security, ITenantCredentia
         if (!oauth)
         {
             Validate(() => { CredentialRules.ProtectedValue(input.ProtectedValue!); return true; });
+            if (input.Purpose == CredentialPurpose.ModelInference) Validate(() => { AgentCore.Application.Models.TenantModelRules.ApiKey(input.ProtectedValue!); return true; });
             value = value with { ProtectedPayload = protector.Protect(id, 1, input.ProtectedValue!) };
         }
         var root = new TenantCredentialRoot(tenant, id, now);
@@ -86,6 +89,7 @@ public sealed class TenantCredentialService(IIamStore security, ITenantCredentia
         var owned = await Owned(tenant, id, ct).ConfigureAwait(false);
         var state = await ForWrite(actor, tenant, TenantCredentialRules.Scope(tenant, id), expectedSecurityRevision, true, ct, initiator).ConfigureAwait(false);
         RequireRevision(owned, expectedRevision); var now = time.GetUtcNow();
+        var rotations = await credentials.ReadTenantCredentialRotationsAsync(tenant, [id], ct).ConfigureAwait(false);
         var email = input.EmailAccount ?? owned.Value.EmailAccount;
         if (owned.Value.EmailAccount?.AuthMethod == EmailAuthMethod.GoogleOAuth2 && input.EmailAccount is { } incoming)
         {
@@ -106,7 +110,7 @@ public sealed class TenantCredentialService(IIamStore security, ITenantCredentia
         Validate(() => { TenantCredentialRules.ValidateChange(owned.Owner, value, owned.Value, expectedRevision, owned.Value.SecretRevision); return true; });
         if (!await credentials.TrySaveTenantCredentialAsync(Advance(state), expectedSecurityRevision, owned.Owner, value, expectedRevision, owned.Value.SecretRevision,
             Audit(tenant, actor, id, "update", now), ct, initiator).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
-        return View(owned with { Value = value });
+        return View(owned with { Value = value }, rotations.TryGetValue(id, out var rotatedAt) ? rotatedAt : null);
     }
     public async ValueTask<TenantCredentialView> ReplaceAsync(Guid actor, Guid tenant, Guid id, string value,
         long expectedSecurityRevision, long expectedRevision, CancellationToken ct = default, HumanSessionReference? initiator = null)
@@ -117,11 +121,12 @@ public sealed class TenantCredentialService(IIamStore security, ITenantCredentia
         if (owned.Value.Purpose == CredentialPurpose.GoogleDriveAccount || owned.Value.EmailAccount?.AuthMethod == EmailAuthMethod.GoogleOAuth2)
             throw AgentCoreErrors.Validation("Use correlated OAuth authorization to replace this connection.");
         Validate(() => { CredentialRules.ProtectedValue(value); return true; }); var now = time.GetUtcNow();
+        if (owned.Value.Purpose == CredentialPurpose.ModelInference) Validate(() => { AgentCore.Application.Models.TenantModelRules.ApiKey(value); return true; });
         var updated = owned.Value with { ProtectedPayload = protector.Protect(id, owned.Value.ProtectionVersion, value),
             SecretRevision = checked(owned.Value.SecretRevision + 1), Revision = checked(expectedRevision + 1), UpdatedAtUtc = now };
         if (!await credentials.TrySaveTenantCredentialAsync(Advance(state), expectedSecurityRevision, owned.Owner, updated, expectedRevision, owned.Value.SecretRevision,
             Audit(tenant, actor, id, "replace", now), ct, initiator).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
-        return View(owned with { Value = updated });
+        return View(owned with { Value = updated }, now);
     }
     public async ValueTask DeleteAsync(Guid actor, Guid tenant, Guid id, long expectedSecurityRevision, long expectedRevision, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
@@ -159,6 +164,6 @@ public sealed class TenantCredentialService(IIamStore security, ITenantCredentia
     private static void RequireRevision(TenantCredential current, long revision) { if (revision < 1 || current.Value.Revision != revision) throw new SecurityConflictException("stale_revision"); }
     private static TenantSecurityState Advance(TenantSecurityState state) => state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };
     private AuthorizationAudit Audit(Guid tenant, Guid actor, Guid id, string operation, DateTimeOffset at) => new(ids.NewId(), tenant, actor, "credentials." + operation, id.ToString("D"), "allowed", "credential_changed", at);
-    private static TenantCredentialView View(TenantCredential item) => new(item.Owner.TenantId, CredentialProjection.View(item.Value, item.BindingCount));
+    private static TenantCredentialView View(TenantCredential item, DateTimeOffset? lastRotatedAt = null) => new(item.Owner.TenantId, CredentialProjection.View(item.Value, item.BindingCount), lastRotatedAt);
     private static T Validate<T>(Func<T> action) { try { return action(); } catch (ArgumentException ex) { throw AgentCoreErrors.Validation(ex.Message); } }
 }

@@ -11,7 +11,7 @@ public sealed record TenantActivitySession(TenantSessionMetadata Session, Sessio
 public sealed record TenantActivityPage<T>(IReadOnlyList<T> Items, int Total, int Page, int PageSize, long SecurityRevision);
 public sealed record TenantActivityRun(Guid RunId, Guid SessionId, Guid AgentInstanceId, TrustedExecutionContext Context,
     AgentRunStatus Status, long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, ActivationKind ActivationKind,
-    AgentRunOutputContract OutputContract, string ModelCatalogKey, int AttemptCount, int MaxAttempts, string? ProgressSummary, string? Objective, string? OutcomeText, AgentRunOutcomeKind? OutcomeKind,
+    AgentRunOutputContract OutputContract, string ModelOfferingId, int AttemptCount, int MaxAttempts, string? ProgressSummary, string? Objective, string? OutcomeText, AgentRunOutcomeKind? OutcomeKind,
     string? FailureCode, string? FailureSummary, Guid? DiagnosticId, bool CancellationRequested, bool CanCancel);
 public sealed record TenantActivityDelivery(string Status, Guid? TargetSessionId, string? Reason);
 public sealed record TenantBackgroundDetail(TenantActivitySession Session, TenantActivityRun? InitialRun,
@@ -146,7 +146,7 @@ public sealed class TenantActivityService(IIamStore security, ITenantSessionStor
     }
     private async ValueTask<TenantActivityRun> Run(TenantSecurityState state, AgentRun run, TenantSessionInitiator human, CancellationToken ct) =>
         new(run.AgentRunId, run.SessionId, run.AgentInstanceId, run.Admission.ExecutionContext!, run.Status, run.Revision, run.CreatedAtUtc, run.UpdatedAtUtc,
-            run.Admission.Activation.Kind, run.Admission.OutputContract, run.PinnedModel.CatalogKey, run.AttemptCount, run.MaxAttempts, run.Progress?.Summary, TenantExperienceReviewRules.DisplayObjective(run), run.Result?.Text, run.Result?.OutcomeKind,
+            run.Admission.Activation.Kind, run.Admission.OutputContract, run.PinnedModel.OfferingId, run.AttemptCount, run.MaxAttempts, run.Progress?.Summary, TenantExperienceReviewRules.DisplayObjective(run), run.Result?.Text, run.Result?.OutcomeKind,
             run.Failure?.Code, run.Failure?.Summary, run.Failure?.DiagnosticId, run.CancellationRequested, !run.IsTerminal && !run.CancellationRequested && await Can(state, human.PrincipalId, "agent-runs.cancel", TenantRunRules.Scope(state.Tenant.TenantId, run.AgentRunId), ct).ConfigureAwait(false)
                 && await Can(state, human.PrincipalId, "agents.chat", AccessScope.ForResource(state.Tenant.TenantId, "agent", run.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false));
     private delegate bool ResourceId(AccessScope scope, out Guid id);

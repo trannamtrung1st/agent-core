@@ -1,0 +1,13 @@
+import type { TenantContext } from '../services/identity';
+import type { ModelAdmin, ModelCapabilities, ModelConnection, ModelOffering, ModelPreset } from '../services/models';
+export const modelTenant = '11111111-1111-4111-8111-111111111111';
+export const connectionId = '22222222-2222-4222-8222-222222222222';
+export const offeringId = '33333333-3333-4333-8333-333333333333';
+export const keyId = '44444444-4444-4444-8444-444444444444';
+export const modelContext: TenantContext = { tenant: { tenantId: modelTenant, name: 'Model organization', slug: 'models' }, userId: 'user', principalId: 'human', permissions: ['models.read', 'models.manage', 'model-connections.read', 'model-connections.manage', 'model-connections.test', 'credentials.read', 'credentials.manage'], roles: [], revision: 10 };
+const capabilities: ModelCapabilities = { tools: true, vision: true, hierarchy: 'NativeDeveloper', semanticMode: 'NativeStructuredOutput', structuredOutput: true, forcedToolChoice: true, reasoningEfforts: ['low', 'medium', 'high'], defaultReasoningEffort: 'medium' };
+export const modelPreset: ModelPreset = { presetId: 'dca10000-0000-4000-8000-000000000001', kind: 'OpenAI', externalModelId: 'gpt-6-luna', label: 'GPT-6 Luna', transport: 'Responses', capabilities: { ...capabilities, source: 'VerifiedPreset', verifiedAt: null }, enabled: true, archived: false, revision: 1 };
+export const modelConnection: ModelConnection = { connectionId, tenantId: modelTenant, kind: 'OpenAI', label: 'Research connection', endpoint: 'https://api.openai.com/v1/', credentialId: keyId, noCredential: false, enabled: true, revision: 1, createdAt: '2026-10-25T00:00:00Z', updatedAt: '2026-10-25T00:00:00Z', lastTestAt: null, lastTestResult: null };
+export const modelOffering: ModelOffering = { offeringId, tenantId: modelTenant, connectionId, kind: 'OpenAI', presetId: modelPreset.presetId, externalModelId: modelPreset.externalModelId, label: modelPreset.label, transport: 'Responses', capabilities: modelPreset.capabilities, enabled: true, retired: false, revision: 1, observation: 'Unknown', lastSeenAt: null };
+export const modelCatalog = (): ModelAdmin => structuredClone({ connections: [modelConnection], offerings: [modelOffering], presets: [modelPreset], settings: { tenantId: modelTenant, defaultOfferingId: offeringId, defaultReasoningEffort: null, revision: 1 }, securityRevision: 10,
+  access: { canCreateConnection: true, canCreateOffering: true, canManageDefault: true, manageConnectionIds: [connectionId], testConnectionIds: [connectionId], manageOfferingIds: [offeringId] }, availability: [{ offeringId, available: true, reason: 'available' }] });

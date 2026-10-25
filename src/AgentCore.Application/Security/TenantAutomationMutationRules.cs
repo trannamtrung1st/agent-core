@@ -113,7 +113,7 @@ public static class TenantAutomationMutationRules
         if (value.ToolName != ToolCatalog.AutomationDelete)
         {
             if (change.Name != proposed.Name || change.Instructions != proposed.Instructions || change.Enabled != (proposed.Status == AutomationStatus.Active)
-                || change.ModelKey != proposed.ModelOverrideCatalogKey || change.ReasoningEffort != proposed.ModelOverrideReasoningEffort
+                || change.OfferingId != proposed.ModelOverrideOfferingId || change.ReasoningEffort != proposed.ModelOverrideReasoningEffort
                 || change.RequiresTools != proposed.RequiresTools || change.RequiresVision != proposed.RequiresVision
                 || change.ReportToSessionId != proposed.CompletionDelivery.SessionId || change.TargetSessionId != proposed.ExecutionTarget.SessionId
                 || proposed.ExpiresAtUtc != source.Current?.ExpiresAtUtc

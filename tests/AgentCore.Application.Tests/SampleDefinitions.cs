@@ -15,7 +15,7 @@ internal static class SampleDefinitions
         new ConversationPolicy("concise", true, "en", 256),
         new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
         new VoiceConfiguration(true, "default", 1.0),
-        new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+        new ProviderPreferences("primary-stt", "primary-tts"),
         new Dictionary<string, string> { ["scenario"] = "practice-exam" });
 
     public static AgentDefinition Support { get; } = new(
@@ -29,6 +29,6 @@ internal static class SampleDefinitions
         new ConversationPolicy("concise", true, "en", 256),
         new InitiativePolicy(true, 10000, 30000, 1, ["longSilence", "environmentUpdate", "unfinishedInteraction"]),
         new VoiceConfiguration(true, "default", 1.0),
-        new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+        new ProviderPreferences("primary-stt", "primary-tts"),
         new Dictionary<string, string> { ["scenario"] = "order-support" });
 }

@@ -72,7 +72,7 @@ public static class TenantAutomationAdmissionApprovalRules
         Shape(request, agent);
         if (TenantAutomationRules.Hash(resolved) != p.ConfigurationHash) throw new SecurityConflictException("operation_witness_changed");
         var source = Source(p); var at = admittedAt ?? source.AdmittedAtUtc; var model = p.Occurrence.ModelPin ?? throw new ArgumentException("An exact occurrence model is required.");
-        if (p.Model.CatalogKey != model.CatalogKey || p.Model.ProviderAlias != model.ProviderAlias || p.Model.ModelId != model.ModelId || p.Model.ReasoningEffort != model.ReasoningEffort) throw new ArgumentException("Model witness changed.");
+        if (p.Model.OfferingId != model.OfferingId || p.Model.ConnectionId != model.ConnectionId || p.Model.ExternalModelId != model.ExternalModelId || p.Model.ReasoningEffort != model.ReasoningEffort) throw new ArgumentException("Model witness changed.");
         if (TenantAutomationConversationRules.Existing(p.Current))
         {
             var target = TenantAutomationConversationRules.Require(p.Current, conversation, p.Conversation

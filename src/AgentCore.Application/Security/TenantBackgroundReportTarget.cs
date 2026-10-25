@@ -7,7 +7,7 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed class TenantBackgroundReportTarget(ITenantRuntimeStore runtime, ITenantRunStore runs, IIamStore security,
-    TenantRunConfigurationResolver configurations, IamAuthorizer iam, IModelCatalog models, TenantReportSourceReadService? sourceReads = null)
+    TenantRunConfigurationResolver configurations, IamAuthorizer iam, ITenantModelCatalogReader modelCatalogs, TenantReportSourceReadService? sourceReads = null)
 {
     public async ValueTask<(TenantBackgroundCompletion Source, TenantSecurityState State, TenantAgent Agent, ResolvedAgentRunConfiguration Configuration, SessionModelSelection Model)> ResolveAsync(AgentRunOwner owner, Guid child, CancellationToken ct)
     {
@@ -19,6 +19,7 @@ public sealed class TenantBackgroundReportTarget(ITenantRuntimeStore runtime, IT
         if (sourceReads is not null) await sourceReads.RequireAuthorizedAsync(source, state, ct).ConfigureAwait(false);
         else await TenantReportReadRules.RequireAsync(state, source, iam, ct).ConfigureAwait(false);
         await TenantExecutionLineage.RequireRequesterAsync(source.Child, state, iam, runs, ct).ConfigureAwait(false);
+        var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         var model = SessionModelBinder.RefreshDefault(models, current.Configuration.Configuration.Definition, source.Parent!.Snapshot.ModelSelection)
             ?? throw new AccessDeniedException("target_model_unavailable");
         return (source, state, current.Agent, current.Configuration, model);
@@ -29,7 +30,7 @@ public sealed class TenantBackgroundReportTarget(ITenantRuntimeStore runtime, IT
         TenantApprovalRules.Validate(request, current.Source.Child, current.Agent);
         TenantBackgroundReportRules.Require(request, current.Source, current.Agent, current.Configuration.Configuration.Definition);
         var p = request.Operation.BackgroundReport!; var model = current.Model;
-        if (p.Model != new PreparedBackgroundModel(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort)
+        if (p.Model != new PreparedBackgroundModel(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort, model.Binding)
             || p.ConfigurationHash != TenantBackgroundCreationRules.Hash(current.Configuration)) throw new AccessDeniedException("operation_witness_changed");
         var root = await TenantExecutionLineage.RootAsync(current.Source.Child, runs, ct).ConfigureAwait(false);
         await TenantBackgroundReportRules.ExecutorAsync(current.State, request, root, current.Configuration.Configuration.Definition, iam, ct, current.Source).ConfigureAwait(false);

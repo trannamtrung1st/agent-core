@@ -377,20 +377,20 @@ describe("applyServerEvent", () => {
           history: [],
           capabilities: {
             model: {
-              catalogKey: "scripted-beta",
+              offeringId: "dca30000-0000-4000-8000-000000000002",
               displayName: "Scripted Beta",
               selectionSource: "user",
               reasoningEffort: null,
-              modelId: "scripted-beta"
+              externalModelId: "dca30000-0000-4000-8000-000000000002"
             }
           }
         }
       })
     );
-    expect(state.sessionModelKey).toBe("scripted-beta");
+    expect(state.sessionOfferingId).toBe("dca30000-0000-4000-8000-000000000002");
     expect(state.sessionModelDisplayName).toBe("Scripted Beta");
     expect(state.sessionModelSource).toBe("user");
-    expect(state.sessionModelId).toBe("scripted-beta");
+    expect(state.sessionExternalModelId).toBe("dca30000-0000-4000-8000-000000000002");
   });
 
   it("applies mute from session.state.changed without dropping voice mode", () => {

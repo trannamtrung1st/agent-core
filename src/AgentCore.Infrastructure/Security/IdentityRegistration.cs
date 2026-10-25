@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using Microsoft.Extensions.Configuration;
 using AgentCore.Application.Security;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -93,6 +94,13 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantDefinitionService>();
         services.TryAddSingleton<ITenantCredentialStore>(provider => (ITenantCredentialStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantCredentialService>();
+        services.TryAddSingleton<ITenantModelStore>(provider => (ITenantModelStore)provider.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<AgentCore.Application.Models.ModelEndpointPolicy>(provider => new(
+            provider.GetService<Microsoft.Extensions.Configuration.IConfiguration>()?.GetSection("Models:AllowedLocalOrigins").Get<string[]>() ?? []));
+        services.TryAddSingleton<AgentCore.Application.Models.TenantModelManagementService>();
+        services.TryAddSingleton<AgentCore.Application.Models.SystemModelPresetService>();
+        services.TryAddSingleton<ITenantModelRouteAuthority, AgentCore.Application.Models.TenantModelRouteAuthority>();
+        services.TryAddSingleton<IModelProviderFactory, AgentCore.Infrastructure.Providers.TenantModelProviderFactory>();
         services.TryAddSingleton<ITenantSandboxProfileStore>(p => (ITenantSandboxProfileStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantSandboxProfileService>();
         services.TryAddSingleton<TenantSandboxImageAuthorization>();

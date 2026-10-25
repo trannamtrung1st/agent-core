@@ -18,7 +18,7 @@ public sealed partial class TenantApprovalService(IIamStore security,
     ITenantApprovalStore approvals,
     ITenantAgentStore agents,
     TenantOperationAuthorizer operations, IamAuthorizer authorizer, IdentityService identity, IIdGenerator ids, TimeProvider time,
-    TenantRunConfigurationResolver configuration, IModelCatalog models, ProviderAliasSet aliases,
+    TenantRunConfigurationResolver configuration, ITenantModelCatalogReader modelCatalogs, ProviderAliasSet aliases,
     ITenantApprovedOperationStore effects,
     TenantCredentialOperationTarget? credentialTargets = null,
     TenantSandboxOperationTarget? sandboxTargets = null,
@@ -72,6 +72,7 @@ public sealed partial class TenantApprovalService(IIamStore security,
             snapshot = TenantApprovalSnapshotRules.Preferences(current, baseline);
             if (TenantLocalEffectRules.Eligibility(run, current, effective) is { } unavailable) return await PreparationOutcome(state, run, operation, OperationDecisionKind.Denied, unavailable, null, ct).ConfigureAwait(false);
             var patch = TenantPreferenceToolContract.Patch(preferences);
+            var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
             _ = InstanceSettingsRules.ResolvePatch(baseline, current.Instance.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear, models, aliases);
             managementReview = !TenantPreferenceToolContract.Allows(pinned) || !TenantPreferenceToolContract.Allows(effective);
         }

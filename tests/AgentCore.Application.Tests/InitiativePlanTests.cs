@@ -311,7 +311,7 @@ public sealed class InitiativePlanTests
         var model = new ScriptedLanguageModel(
             ["""{"decision":"speak","intent":"hint","objective":"Should not run."}"""]);
         var builder = new PromptContextBuilder();
-        var brain = new DefaultAgentBrain(builder, new DefaultInitiativeEvaluator(builder, model));
+        var brain = new DefaultAgentBrain(builder, new DefaultInitiativeEvaluator(builder));
         var context = ExaminerContext(DateTimeOffset.UtcNow, 90, VietnamQuestion, "hmmm", speaksThisSilencePeriod: 1);
         var decision = await brain.DecideAsync(context, Guid.NewGuid(), CancellationToken.None);
         Assert.IsType<StaySilent>(decision);
@@ -457,7 +457,7 @@ public sealed class InitiativePlanTests
     private static RecordingAgentBrain RecordingDefaultBrain(ILanguageModel model) =>
         new(new DefaultAgentBrain(
             new PromptContextBuilder(),
-            new DefaultInitiativeEvaluator(new PromptContextBuilder(), model)));
+            new DefaultInitiativeEvaluator(new PromptContextBuilder())));
 
     private static SessionRuntime Create(
         ISessionOutput output,

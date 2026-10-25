@@ -20,20 +20,22 @@ export type HealthResponse = {
 };
 
 export type SessionModelChoice = {
-  key?: string | null;
+  offeringId?: string | null;
   reasoningEffort?: string | null;
 };
 
 export type SessionModelSelection = {
-  catalogKey: string;
+  offeringId: string;
   displayName: string;
   selectionSource: string;
   reasoningEffort?: string | null;
-  modelId?: string | null;
+  externalModelId?: string | null;
+  connectionId?: string | null;
+  connectionLabel?: string | null;
 };
 
 export type ModelDescriptor = {
-  key: string;
+  offeringId: string;
   displayName: string;
   tools: boolean;
   vision: boolean;
@@ -43,10 +45,15 @@ export type ModelDescriptor = {
   defaultReasoningEffort?: string | null;
   contextCategory?: string | null;
   costCategory?: string | null;
+  connectionId?: string | null;
+  connectionLabel?: string | null;
+  externalModelId?: string | null;
 };
 
 export type ModelCatalog = {
-  defaultKey: string;
+  defaultOfferingId: string | null;
+  defaultReasoningEffort?: string | null;
+  defaultSource?: "tenantDefault" | "agentDefault";
   models: ModelDescriptor[];
 };
 
@@ -85,7 +92,7 @@ export type AgentRun = {
   approval: { approvalId: string; revision: number; actionHash: string; toolName: string; preview: string; expiresAt: string } | null;
   outcome: { kind: string; summary: string; outcomeEntryId: string | null; attentionRequired: boolean } | null;
   failureCode: string | null; failureSummary: string | null; diagnosticId: string | null;
-  knownEffectSummary: string | null; modelCatalogKey: string; responseId: string | null;
+  knownEffectSummary: string | null; modelOfferingId: string; responseId: string | null;
   automationId: string | null; experienceId: string | null; sourceOccurrenceId: string | null; sourceBackgroundSessionId?: string | null;
 };
 export type CursorPage<T> = { items: T[]; nextCursor: string | null; hasMore: boolean };
@@ -198,7 +205,7 @@ export function drawerPageSearch(query?: DrawerPageQuery): string {
 export type InstanceActivitySession = { session: CatalogItem; origin: string; surfaces: string[] };
 
 export async function listChatAgentInstances(): Promise<ChatAgentInstance[]> { return (await tenantChatCandidates()).items; }
-export const listModels = (): Promise<ModelCatalog> => tenantChatModels();
+export const listModels = (instanceId?: string): Promise<ModelCatalog> => tenantChatModels(instanceId);
 export const createSessionForInstance = (id: string, model?: SessionModelChoice | null): Promise<SessionResponse> => createTenantChat(id, model);
 export async function endSession(id: string): Promise<void> { await tenantChatMutation(id, 'complete'); }
 export const listCatalog = (options?: { cursor?: string | null; includeArchived?: boolean; limit?: number }): Promise<CatalogPage> => tenantChatCatalog(options);

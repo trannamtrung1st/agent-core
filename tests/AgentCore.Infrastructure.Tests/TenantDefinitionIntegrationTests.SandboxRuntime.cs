@@ -78,12 +78,12 @@ public sealed partial class TenantDefinitionIntegrationTests
             await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, role.RoleId, TenantCredentialRules.Scope(owner.TenantId, credential), await Revision());
         }
         var sessions = new TenantSessionService(f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam,
-            f.Definitions, builtIns, f.Identity, f.Authorizer, ModelCatalogFactory.Synthetic(), new(), f.Ids, TimeProvider.System);
+            f.Definitions, builtIns, f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), new(), f.Ids, TimeProvider.System);
         var session = await sessions.CreateAsync(owner.TenantId, agent.Instance.InstanceId, new(human.AccountId, human.AuthenticationSessionId, human.PrincipalId), SessionMode.Text, await Revision(), agent.Instance.Revision);
         var resolver = new TenantRunConfigurationResolver((ITenantAgentStore)f.Iam, f.Definitions, builtIns,
             new(f.Resources, builtIns, new NoBuiltinKnowledge(), f.Content), (ITenantCredentialBindingStore)f.Iam,
             (ITenantSandboxProfileStore)f.Iam, p.Images, p.Ready, f.Authorizer);
-        var runs = new TenantRunService(f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam, resolver, f.Identity, f.Authorizer, ModelCatalogFactory.Synthetic(), f.Ids, TimeProvider.System);
+        var runs = new TenantRunService(f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam, resolver, f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), f.Ids, TimeProvider.System);
         var receipt = await runs.SubmitTextAsync(owner.TenantId, session.Owner.SessionId, new(human.AccountId, human.AuthenticationSessionId, human.PrincipalId),
             f.Ids.NewId(), "Run one bounded command", await Revision(), 1);
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(owner.TenantId, receipt.RunId))!;
@@ -159,7 +159,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
             new AgentRunCommand.CommitCancellation(run.Revision, DateTimeOffset.UtcNow, run.Claim!.Generation, "Exact cleanup required"), f.Ids.NewId());
         var sessions = new TenantSessionService(f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam, f.Definitions,
-            new SessionNoBuiltinFallback(), f.Identity, f.Authorizer, ModelCatalogFactory.Synthetic(), new(), f.Ids, TimeProvider.System);
+            new SessionNoBuiltinFallback(), f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), new(), f.Ids, TimeProvider.System);
         var savedSession = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Session.SessionId))!;
         await sessions.ChangeAsync(s.Tenant, new(s.Human.AccountId, s.Human.AuthenticationSessionId, s.Human.PrincipalId),
             new(s.Session.SessionId, savedSession.Snapshot.Revision, TenantSessionAction.Delete), await Revision());

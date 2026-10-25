@@ -28,7 +28,6 @@ services:
       Persistence__DefinitionResourceRoot: /data/definition-resources
       Persistence__AttachmentRoot: /data/attachments
       Persistence__ArtifactRoot: /data/artifacts
-      Providers__LanguageModels__primary-llm__Adapter: Scripted
       # This image does not install Chromium. Leave browser tools off until that runtime is packaged.
       Browser__Enabled: "false"
       # Cookie authentication requires HTTPS. Use docker-compose.https.yml with

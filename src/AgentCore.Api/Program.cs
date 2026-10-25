@@ -44,17 +44,10 @@ builder.Services.AddSingleton<SchedulerReadiness>();
 builder.Services.AddHostedService<OpenSandboxHostedService>();
 var agentDirectory = ResolveAgentDirectory(builder);
 var profile = builder.Configuration["AgentCore:Profile"] ?? "Synthetic";
-var languageModel = builder.Configuration.GetSection("Providers:LanguageModels:primary-llm")
-    .Get<LanguageModelProviderOptions>() ?? new LanguageModelProviderOptions { Adapter = "Scripted" };
-if (string.IsNullOrEmpty(languageModel.ApiKey))
-{
-    languageModel.ApiKey = builder.Configuration["OPENROUTER_API_KEY"];
-}
 
 builder.Services.AddAgentCoreInfrastructure(
     agentDirectory,
     profile,
-    languageModel,
     ResolvePersistenceOptions(builder, profile),
     new InteractionPolicy(
         DegradedInterruptMs: builder.Configuration.GetValue("Interaction:DegradedInterruptMs", 250),
@@ -150,6 +143,7 @@ AuthorizationAuditEndpoints.Map(app);
 SystemAdministrationEndpoints.Map(app);
 TenantAgentEndpoints.Map(app);
 TenantCredentialEndpoints.Map(app);
+ModelManagementEndpoints.Map(app);
 TenantEmailMonitoringEndpoints.Map(app);
 TenantConnectedAccountEndpoints.Map(app);
 TenantSandboxProfileEndpoints.Map(app);

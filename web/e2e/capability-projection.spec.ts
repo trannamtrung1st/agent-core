@@ -55,7 +55,7 @@ test("Admin pins All with always projection and Chat loads only the needed inter
   const ownerResponse = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: id, version: 1 } });
   expect(ownerResponse.ok(), await ownerResponse.text()).toBe(true);
   const owner = (await ownerResponse.json()).instanceId;
-  const sessionResponse = await page.request.post("/api/v2/sessions", { headers, data: { agentInstanceId: owner, mode: "text", modelCatalogKey: "scripted-alpha" } });
+  const sessionResponse = await page.request.post("/api/v2/sessions", { headers, data: { agentInstanceId: owner, mode: "text", modelOfferingId: "dca30000-0000-4000-8000-000000000001" } });
   expect(sessionResponse.ok()).toBe(true);
   const session = (await sessionResponse.json()).sessionId;
   await page.goto(`/c/${session}`);

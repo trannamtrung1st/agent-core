@@ -46,7 +46,7 @@ public sealed class NativeBrowserSemanticActionTests
             var definition = new AgentDefinition(2, "frame-test", 1, new("Frame", "Role", "Description", "Tone"), [], "Use direct browser targets.",
                 new("answerNewTurn", true, true), new("balanced", false, "en", 2048),
                 new(false, 60_000, 120_000, 1, ["longSilence"], 0), new(false, "default", 1),
-                new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>(),
+                new("primary-stt", "primary-tts"), new Dictionary<string, string>(),
                 new RoleEnvironment(ToolAllowlist: [ToolCatalog.BrowserSnapshot]));
             var receipt = await executor.ExecuteAsync(definition, id, new("frame-root", ToolCatalog.BrowserSnapshot, JsonSerializer.Serialize(new { frameRef = reference })), ToolLimits.MaxOutputBytes,
                 admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));

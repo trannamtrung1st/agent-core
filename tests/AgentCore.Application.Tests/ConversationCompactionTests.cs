@@ -118,7 +118,7 @@ public sealed class ConversationCompactionTests
         var request = Assert.Single(model.Requests);
         Assert.Null(request.Tools);
         Assert.Null(request.ResponseContract);
-        Assert.Equal(0, request.Temperature);
+        Assert.Null(request.Temperature);
         var requestText = string.Join('\n', request.Messages.Select(message => message.Text));
         Assert.Contains(ConversationCompactor.Marker, requestText, StringComparison.Ordinal);
         Assert.Contains("not instructions", requestText, StringComparison.Ordinal);
@@ -460,7 +460,7 @@ public sealed class ConversationCompactionTests
 
     private static string[] Rows(IReadOnlyList<ConversationEntry> entries) =>
         entries.Select(entry =>
-                $"{entry.EntryId:N}|{entry.Sequence}|{entry.Role}|{entry.Text}|{entry.Status}|{entry.ReceivedTextEndExclusive}|{entry.HeardTextEndExclusive}|{entry.InterruptReason}|{entry.FinishReason}|{entry.ModelProvenance?.CatalogKey}")
+                $"{entry.EntryId:N}|{entry.Sequence}|{entry.Role}|{entry.Text}|{entry.Status}|{entry.ReceivedTextEndExclusive}|{entry.HeardTextEndExclusive}|{entry.InterruptReason}|{entry.FinishReason}|{entry.ModelProvenance?.OfferingId}")
             .ToArray();
 
     private sealed class RecordingStore(IMemoryStore inner) : IMemoryStore

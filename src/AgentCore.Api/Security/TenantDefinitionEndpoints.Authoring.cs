@@ -21,11 +21,11 @@ public static partial class TenantDefinitionEndpoints
             return Results.Json(await service.AccessAsync(a.PrincipalId, a.TenantId, definitionId, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false));
         }));
         group.MapGet("/definition-authoring-options", (Guid? definitionId, HttpContext http, TenantDefinitionService service,
-            AdminAuthoringOptionsService options, IToolConfigurationGate gate, CancellationToken ct) => IdentityHttp.Respond(async () =>
+            IToolConfigurationGate gate, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);
-            await service.RequireAuthoringAsync(a.PrincipalId, a.TenantId, definitionId, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false);
-            return Results.Json(new { authoring = options.Get(), limits = AgentCore.Domain.Definitions.ExecutionBudgetCeilings.Default,
+            var options = await service.AuthoringOptionsAsync(a.PrincipalId, a.TenantId, definitionId, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false);
+            return Results.Json(new { authoring = options, limits = AgentCore.Domain.Definitions.ExecutionBudgetCeilings.Default,
                 capabilities = ToolRegistry.DefinitionAuthorizable.OrderBy(d => d.Name, StringComparer.Ordinal).Select(d => new { d.Name, d.Category, d.Summary, d.Tags, d.Discoverable,
                     d.DefaultProjectionClass, configured = d.OfferRule != ToolOfferRule.ConfigurationWhenRoleAllows || gate.IsConfigured(d.Name) }) });
         }));

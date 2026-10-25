@@ -154,14 +154,6 @@ internal static class AgentDefinitionCandidateValidator
         AgentDefinition definition,
         ProviderAliasSet aliases)
     {
-        if (!aliases.LanguageModels.Contains(definition.ProviderPreferences.LanguageModel))
-        {
-            yield return Blocking(
-                "providerPreferences.languageModel",
-                "unknown_provider_alias",
-                $"languageModel alias '{definition.ProviderPreferences.LanguageModel}' is not configured.");
-        }
-
         if (definition.ProviderPreferences.SpeechRecognizer is { } stt
             && !aliases.SpeechRecognizers.Contains(stt))
         {
@@ -186,20 +178,22 @@ internal static class AgentDefinitionCandidateValidator
         IModelCatalog catalog)
     {
         var defaults = definition.ModelDefaults;
-        var hasAgentKey = !SessionModelBinder.IsDefaultKey(defaults?.CatalogKey);
-        var key = hasAgentKey ? defaults!.CatalogKey!.Trim() : catalog.DefaultKey;
+        var hasAgentKey = !SessionModelBinder.IsInheritedOffering(defaults?.OfferingId);
+        // Inheriting an as-yet-unconfigured tenant default is valid authoring, not an executable pin.
+        if (!hasAgentKey && string.IsNullOrWhiteSpace(defaults?.ReasoningEffort)) return [];
+        var key = hasAgentKey ? defaults!.OfferingId!.Trim() : catalog.DefaultOfferingId;
         if (catalog.Get(key) is null)
         {
-            return [Blocking("modelDefaults.catalogKey", "unknown_model", $"Model '{key}' is not in the catalog.")];
+            return [Blocking("modelDefaults.offeringId", "unknown_model", $"Model '{key}' is not in the catalog.")];
         }
 
         try
         {
             _ = SessionModelBinder.Bind(
                 catalog,
-                requestedKey: null,
+                requestedOfferingId: null,
                 requestedEffort: null,
-                ModelSelectionSource.SystemDefault,
+                ModelSelectionSource.TenantDefault,
                 defaults);
             return [];
         }

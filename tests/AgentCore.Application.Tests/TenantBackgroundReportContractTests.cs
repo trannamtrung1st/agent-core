@@ -10,7 +10,7 @@ namespace AgentCore.Application.Tests;
 public sealed class TenantBackgroundReportContractTests
 {
     private static PreparedBackgroundReport Report() => new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 3, Guid.NewGuid(), 2, 0, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
-        JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(TriggerKind.BackgroundCompleted, """{"summary":"Exact completion","status":"Completed"}""", null, 0)), new string('a', 64), new("synthetic", "primary-llm", "scripted-alpha", null));
+        JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(TriggerKind.BackgroundCompleted, """{"summary":"Exact completion","status":"Completed"}""", null, 0)), new string('a', 64), new("synthetic", "dca20000-0000-4000-8000-000000000001", "dca30000-0000-4000-8000-000000000001", null));
     [Fact]
     public void Report_semantic_dedupe_retains_source_and_destination_while_exact_grants_bind_all_witnesses()
     {

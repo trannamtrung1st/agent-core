@@ -14,7 +14,7 @@ public sealed class ContextCutoverTests
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static AgentDefinition Definition => new(2, "cutover", 1, new("Alex", "Assistant", "Practice", "Calm"), ["Practice"], "Owner authored behavior",
         new("acknowledgeThenContinue", true, true), new("concise", true, "en", 256), new(false, 8000, 30000, 1, []),
-        new(false, "default", 1), new("primary-llm", null, null), new Dictionary<string, string>());
+        new(false, "default", 1), new(null, null), new Dictionary<string, string>());
 
     [Fact]
     public async Task Explicit_conversion_preserves_versions_data_and_backup_and_rejects_old_input()

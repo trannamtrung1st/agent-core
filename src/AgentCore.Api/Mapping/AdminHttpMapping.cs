@@ -24,7 +24,7 @@ internal static class AdminHttpMapping
             instance.Revision,
             instance.PersonaRevision,
             ToPersona(instance.Persona),
-            instance.UnattendedModelCatalogKey,
+            instance.UnattendedOfferingId,
             instance.UnattendedReasoningEffort, ExecutionBudgets: instance.ExecutionBudgets is null ? null : JsonSerializer.SerializeToElement(instance.ExecutionBudgets, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
 
     private static AdminPersonaResponse ToPersona(AgentIdentity persona) =>

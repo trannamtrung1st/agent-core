@@ -51,7 +51,7 @@ public sealed partial class TenantAttachmentRuntimeContextService
         // Fitting a full canonical response first would discard its useful prefix after wrapping.
         var overhead = Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(new { path = args.Path, attachmentVirtualRead = origin })) - 1;
         // One source, parser, approval fingerprint and refusal history, regardless of virtual spelling.
-        var result = await InspectReadCore(frame, arguments, ReadVision((await Load(frame, ct).ConfigureAwait(false)).Run), Math.Max(0, remainingBytes - overhead), officeReader, ct, approved: false).ConfigureAwait(false);
+        var result = await InspectReadCore(frame, arguments, await ReadVision(await Load(frame, ct).ConfigureAwait(false), ct).ConfigureAwait(false), Math.Max(0, remainingBytes - overhead), officeReader, ct, approved: false).ConfigureAwait(false);
         await RequireVirtual(frame, call.Name, call.ArgumentsJson, ct, approved: false).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(result.Text)) return result.Text;
         var payload = JsonNode.Parse(result.Text)?.AsObject();

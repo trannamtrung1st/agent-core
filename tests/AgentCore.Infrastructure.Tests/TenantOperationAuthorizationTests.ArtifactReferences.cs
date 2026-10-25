@@ -20,7 +20,7 @@ public sealed partial class TenantOperationAuthorizationTests
             configuration = f.RunConfiguration(new ResourceExportOnlyBuiltIns(f.BuiltIns));
             var currentSession = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(setup.Tenant, setup.Run.SessionId))!;
             var admission = await new TenantRunService(f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam, configuration,
-                f.Identity, f.Authorizer, AgentCore.Infrastructure.Providers.ModelCatalogFactory.Synthetic(), f.Ids, f.Clock)
+                f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), f.Ids, f.Clock)
                 .SubmitTextAsync(setup.Tenant, currentSession.Owner.SessionId, setup.Owner, f.Ids.NewId(), "Source-export-only response", (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision, currentSession.Snapshot.Revision);
             setup = setup with { Run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(setup.Tenant, admission.RunId))! };
             Assert.True(AgentCore.Application.Tools.TenantWorkspaceArtifactContract.Allows(setup.Run.Admission.Configuration!.Definition));

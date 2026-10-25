@@ -223,7 +223,7 @@ trailer<< /Root 1 0 R >>
         new ConversationPolicy("concise", true, "en", 256),
         new InitiativePolicy(true, 10000, 30000, 1, ["longSilence"]),
         new VoiceConfiguration(false, "default", 1.0),
-        new ProviderPreferences("primary-llm", null, null),
+        new ProviderPreferences(null, null),
         new Dictionary<string, string>(),
         new RoleEnvironment(
             ToolAllowlist:

@@ -27,7 +27,7 @@ public sealed partial class TenantApprovalService
         if (!(await authorizer.CheckTenantAsync(state, run.Owner.ExecutorPrincipalId!.Value, PermissionCatalog.Get("sessions.create"), AccessScope.ForTenant(reference.TenantId), ct).ConfigureAwait(false)).Allowed)
             primary = "sessions.create";
         var value = new PreparedBackgroundStart(reference.TenantId, run.SessionId, ids.NewSessionId(), ids.NewId(), ids.NewId(), ids.NewId(), ids.NewId(),
-            task.Objective, task.Title, task.ReportCompletion, primary, TenantBackgroundCreationRules.Hash(resolved), new(run.PinnedModel.CatalogKey, run.PinnedModel.ProviderAlias, run.PinnedModel.ModelId, run.PinnedModel.ReasoningEffort));
+            task.Objective, task.Title, task.ReportCompletion, primary, TenantBackgroundCreationRules.Hash(resolved), new(run.PinnedModel.OfferingId, run.PinnedModel.ConnectionId, run.PinnedModel.ExternalModelId, run.PinnedModel.ReasoningEffort, run.PinnedModel.Binding));
         var op = TenantApprovalRules.PrepareBackgroundStart(ids.NewId(), run.AgentInstanceId, value, agent.Instance.Revision, agent.Instance.PersonaRevision);
         var previous = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.ExecutionContext!.RootActivationId, agent.PrincipalId, op, ct).ConfigureAwait(false);
         if (previous is not null) return await DuplicateOutcome(state, run, previous, ct).ConfigureAwait(false);

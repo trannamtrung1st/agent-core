@@ -258,7 +258,7 @@ public sealed class TriggerStoreContractTests
                 new ConversationPolicy("concise", true, "en", 256),
                 new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
                 new VoiceConfiguration(false, "default", 1.0),
-                new ProviderPreferences("primary-llm", null, null),
+                new ProviderPreferences(null, null),
                 new Dictionary<string, string>()),
             SessionMode.Text,
             null,

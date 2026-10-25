@@ -16,7 +16,7 @@ public sealed record AgentInstance(
     DateTimeOffset UpdatedAt,
     long Revision = 1,
     long PersonaRevision = 1,
-    string? UnattendedModelCatalogKey = null,
+    string? UnattendedOfferingId = null,
     string? UnattendedReasoningEffort = null,
     HarnessManagementState? HarnessManagement = null,
     ExecutionBudgetPolicy? ExecutionBudgets = null, InstanceSettingsOverrides? SettingsOverrides = null,

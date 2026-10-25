@@ -28,7 +28,7 @@ public sealed class TenantEventAdmissionContractTests
         var occurrence = TenantEventAdmissionRules.Occurrence(automation, delivery, model, at, 1);
         var intent = new PreparedAutomationAdmission(tenant, automation, TenantEventAdmissionRules.Next(automation, at), occurrence,
             Guid.NewGuid(), target ?? Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null, "webhooks.read", new('a', 64),
-            new(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort), witness, target is null ? null : new(7, 2));
+            new(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort), witness, target is null ? null : new(7, 2));
         return TenantApprovalRules.PrepareAutomationAdmission(Guid.NewGuid(), instance, intent, 1, 1);
     }
     [Fact]

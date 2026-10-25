@@ -551,9 +551,9 @@ public sealed partial class SqliteAgentInstanceStore(
             row.ExecutionBudgetsJson = update.ExecutionBudgets is null ? null : JsonSerializer.Serialize(update.ExecutionBudgets, Json);
         if (update.SetUnattendedModel)
         {
-            row.UnattendedModelCatalogKey = string.IsNullOrWhiteSpace(update.UnattendedModelCatalogKey)
+            row.UnattendedOfferingId = string.IsNullOrWhiteSpace(update.UnattendedOfferingId)
                 ? null
-                : update.UnattendedModelCatalogKey.Trim();
+                : update.UnattendedOfferingId.Trim();
             row.UnattendedReasoningEffort = string.IsNullOrWhiteSpace(update.UnattendedReasoningEffort)
                 ? null
                 : update.UnattendedReasoningEffort.Trim();
@@ -620,7 +620,7 @@ public sealed partial class SqliteAgentInstanceStore(
             DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc),
             row.Revision,
             row.PersonaRevision,
-            row.UnattendedModelCatalogKey,
+            row.UnattendedOfferingId,
             row.UnattendedReasoningEffort,
             row.HarnessManagementJson is null ? null : JsonSerializer.Deserialize<HarnessManagementState>(row.HarnessManagementJson, Json),
             row.ExecutionBudgetsJson is null ? null : JsonSerializer.Deserialize<ExecutionBudgetPolicy>(row.ExecutionBudgetsJson, Json),
@@ -639,7 +639,7 @@ public sealed partial class SqliteAgentInstanceStore(
             UpdatedAtUtc = instance.UpdatedAt.ToUnixTimeMilliseconds(),
             Revision = instance.Revision,
             PersonaRevision = instance.PersonaRevision,
-            UnattendedModelCatalogKey = instance.UnattendedModelCatalogKey,
+            UnattendedOfferingId = instance.UnattendedOfferingId,
             UnattendedReasoningEffort = instance.UnattendedReasoningEffort,
             SettingsOverridesJson = instance.SettingsOverrides is null ? null : JsonSerializer.Serialize(instance.SettingsOverrides, Json),
             ExecutionBudgetsJson = instance.ExecutionBudgets is null ? null : JsonSerializer.Serialize(instance.ExecutionBudgets, Json),

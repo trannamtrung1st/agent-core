@@ -9,8 +9,8 @@ public sealed record TenantSession(TenantSessionRoot Owner, SessionSnapshot Snap
 public sealed record TenantSessionPage(IReadOnlyList<TenantSession> Items, int Total, int Page, int PageSize);
 public sealed record TenantSessionInitiator(Guid AccountId, Guid AuthenticationSessionId, Guid PrincipalId)
     : HumanSessionReference(AccountId, AuthenticationSessionId, PrincipalId);
-public enum TenantSessionAction { Rename, Archive, Restore, Pause, Resume, Complete, Cancel, Delete }
-public sealed record TenantSessionChange(Guid SessionId, long ExpectedSessionRevision, TenantSessionAction Action, string? Title = null);
+public enum TenantSessionAction { Rename, Archive, Restore, Pause, Resume, Complete, Cancel, Delete, SelectModel }
+public sealed record TenantSessionChange(Guid SessionId, long ExpectedSessionRevision, TenantSessionAction Action, string? Title = null, SessionModelSelection? Model = null);
 
 // Existing Session rows and immutable ownership commit with security/audit. No legacy adoption.
 public interface ITenantSessionStore

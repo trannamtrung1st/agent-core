@@ -4,7 +4,7 @@ export const fixtureRun: AgentRun = {
   status: "completed", revision: 3, attemptCount: 1, maxAttempts: 3, cancellationRequested: false, cancellationAvailable: false,
   progress: null, nextRetryAt: null, createdAt: "2026-10-08T09:00:00Z", updatedAt: "2026-10-08T09:01:00Z",
   approval: null, outcome: { kind: "Response", summary: "The background check finished.", outcomeEntryId: "result-entry", attentionRequired: false },
-  failureCode: null, failureSummary: null, diagnosticId: null, knownEffectSummary: null, modelCatalogKey: "synthetic-default", responseId: "response-1", automationId: null, experienceId: null, sourceOccurrenceId: null
+  failureCode: null, failureSummary: null, diagnosticId: null, knownEffectSummary: null, modelOfferingId: "synthetic-default", responseId: "response-1", automationId: null, experienceId: null, sourceOccurrenceId: null
 };
 export const fixtureBackground: BackgroundSession = {
   originalTitle: "Progress check",

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Native Real dev stack: http-openrouter API (:5080) + Vite (:5173).
+# Native Real dev stack: http-real API (:5080) + Vite (:5173).
 # Optional nopCommerce demo (:5088) with AgentCore.OrderEvents plugin + webhook env from .env.
 #
 # Usage:
@@ -13,7 +13,7 @@
 #   scripts/dev-real.sh stop --with-store    # also scripts/nopcommerce-demo.sh stop
 #   scripts/dev-real.sh status               # health + nopCommerce plugin check
 #
-# Reads .env automatically; put OPENROUTER_API_KEY there (no user-secrets required). For the store demo,
+# Reads .env automatically; configure tenant model connections after IAM bootstrap. For the store demo,
 # set NOPCOMMERCE_DB_PASSWORD and optionally AGENTCORE_WEBHOOK_URL / AGENTCORE_WEBHOOK_TOKEN
 # (URL should use host.docker.internal:5080 from the nopCommerce container).
 set -euo pipefail

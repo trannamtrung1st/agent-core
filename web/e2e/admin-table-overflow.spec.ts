@@ -40,7 +40,7 @@ test("collection links wrap without overlapping adjacent cells at desktop and mo
     const response = await route.fetch();
     const data = await response.json();
     data.items[0].outcome = "NeedsAttention";
-    data.items[0].effectiveModelKey = "deepseek-v41-flash";
+    data.items[0].effectiveOfferingId = "deepseek-v41-flash";
     await route.fulfill({ response, json: data });
   });
   await page.goto(`/admin/instances/${instanceId}/automation`);

@@ -26,7 +26,7 @@ public sealed class NativeEffectiveConfigurationTests
             (await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion))!, TestModelCatalogs.Synthetic(), new AllowAllToolGate(), "builtIn", "published");
         Assert.Equal(1, config.DefinitionVersion);
         Assert.Equal("Pinned", config.Persona.Name);
-        Assert.False(string.IsNullOrWhiteSpace(config.EffectiveModel.CatalogKey));
+        Assert.False(string.IsNullOrWhiteSpace(config.EffectiveModel.OfferingId));
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public sealed class NativeEffectiveConfigurationTests
     [Fact]
     public void Effective_configuration_projects_shared_definition_fields()
     {
-        var preferences = new ProviderPreferences("primary-llm", "primary-stt", "primary-tts");
+        var preferences = new ProviderPreferences("primary-stt", "primary-tts");
         var definition = Sample("examiner", 1, "Examiner v1") with
         {
             ProviderPreferences = preferences,
@@ -97,8 +97,8 @@ public sealed class NativeEffectiveConfigurationTests
         Assert.Equal(MemoryPolicy.Disabled, config.MemoryPolicy);
         Assert.Equal(preferences, config.ProviderPreferences);
         Assert.Equal(new[] { ToolCatalog.KnowledgeRetrieve, ToolCatalog.WorkspaceCopy, ToolCatalog.WorkspaceRead }, config.EffectiveToolAllowlist);
-        Assert.Equal("scripted-alpha", config.EffectiveModel.CatalogKey);
-        Assert.Equal("systemDefault", config.EffectiveModel.SelectionSource);
+        Assert.Equal("dca30000-0000-4000-8000-000000000001", config.EffectiveModel.OfferingId);
+        Assert.Equal("tenantDefault", config.EffectiveModel.SelectionSource);
     }
 
     private static AgentDefinition Sample(string id, int version, string name) =>
@@ -113,7 +113,7 @@ public sealed class NativeEffectiveConfigurationTests
             new ConversationPolicy("short", true, "en", 512),
             new InitiativePolicy(false, 1_000, 1_000, 1, []),
             new VoiceConfiguration(false, "voice", 1),
-            new ProviderPreferences("primary-llm", null, null),
+            new ProviderPreferences(null, null),
             new Dictionary<string, string>());
 
     private sealed class AllowAllToolGate : IToolConfigurationGate

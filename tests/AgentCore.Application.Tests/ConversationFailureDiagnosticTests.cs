@@ -339,10 +339,10 @@ public sealed class ConversationFailureDiagnosticTests
             diagnostics,
             agentInstanceId: instanceId,
             modelSelection: new SessionModelSelection(
-                "scripted-alpha",
-                "primary-llm",
-                "scripted-alpha",
-                ModelSelectionSource.SystemDefault,
+                "dca30000-0000-4000-8000-000000000001",
+                "dca20000-0000-4000-8000-000000000001",
+                "dca30000-0000-4000-8000-000000000001",
+                ModelSelectionSource.TenantDefault,
                 null));
         Assert.True(await runtime.SubmitPersistedUserTextAsync("fail", Guid.Parse("019944af-00d7-7000-8000-000000000081")));
         await runtime.WaitUntilIdleAsync();
@@ -350,8 +350,8 @@ public sealed class ConversationFailureDiagnosticTests
         var logged = Assert.Single(logs.Entries, entry => entry.Level == LogLevel.Error);
         Assert.Equal(DiagnosticId, logged.Properties["DiagnosticId"]);
         Assert.Equal(instanceId, logged.Properties["AgentInstanceId"]);
-        Assert.Equal("primary-llm", logged.Properties["ProviderAlias"]);
-        Assert.DoesNotContain("scripted-alpha", logged.Message, StringComparison.Ordinal);
+        Assert.Equal("dca20000-0000-4000-8000-000000000001", logged.Properties["ConnectionId"]);
+        Assert.DoesNotContain("dca30000-0000-4000-8000-000000000001", logged.Message, StringComparison.Ordinal);
     }
 
     [Fact]

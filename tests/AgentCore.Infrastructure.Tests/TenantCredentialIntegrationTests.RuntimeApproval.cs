@@ -23,7 +23,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var current = security ?? f.Iam; var iam = new IamAuthorizer(current);
         return new(current, (ITenantApprovalStore)current, (ITenantAgentStore)current,
             new(current, (ITenantRunStore)current, (ITenantAgentStore)current, iam, new((ITenantAuthorizationAuditStore)current, f.Ids, f.Clock)),
-            iam, f.Identity, f.Ids, f.Clock, f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default,
+            iam, f.Identity, f.Ids, f.Clock, f.RunConfiguration(), new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(current), SyntheticProviderAliases.Default,
             (ITenantApprovedOperationStore)current, new((ITenantCredentialBindingStore)current, f.RunConfiguration()));
     }
     private static async Task<RuntimeCredentialSetup> RuntimeCredential(Fixture f, bool use, CredentialPurpose purpose = CredentialPurpose.GoogleDriveAccount, bool password = false)
@@ -100,7 +100,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var iam = new IamAuthorizer(f.Iam);
         var local = new TenantApprovedOperationService(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, (ITenantApprovalStore)f.Iam,
             (ITenantApprovedOperationStore)f.Iam, new(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, iam, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock)),
-            f.RunConfiguration(), f.Ids, f.Clock, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default);
+            f.RunConfiguration(), f.Ids, f.Clock, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), SyntheticProviderAliases.Default);
         var denied = await Assert.ThrowsAsync<AccessDeniedException>(() => local.ExecuteAsync(new(setup.Tenant, run.AgentRunId), request.RequestId,
             request.Operation.OperationId, run.Claim!.Generation, request.Operation.ActionHash).AsTask());
         Assert.Equal("tenant_effect_unavailable", denied.ReasonCode);

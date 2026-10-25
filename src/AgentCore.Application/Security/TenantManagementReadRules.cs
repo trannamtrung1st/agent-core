@@ -43,7 +43,7 @@ public static class TenantManagementReadRules
         var excerpts = new List<string>();
         if (TenantManagementInspectionSources.IsInspection(args.Tool)) data = inspection ?? throw new AccessDeniedException("management_inspection_unavailable");
         else if (args.Tool == "management.inspect") data = HarnessManagementRules.View(owner, baseline);
-        else if (args.Tool == "automation.preferences.inspect") data = new { owner.UnattendedModelCatalogKey, owner.UnattendedReasoningEffort };
+        else if (args.Tool == "automation.preferences.inspect") data = new { owner.UnattendedOfferingId, owner.UnattendedReasoningEffort };
         else if (args.Tool == "settings.list") data = InstanceSettingsResolver.Sections.Select(section => new { section,
             hasOverrides = InstanceSettingsResolver.Overrides(owner.SettingsOverrides ?? new(), section).Count > 0 });
         else

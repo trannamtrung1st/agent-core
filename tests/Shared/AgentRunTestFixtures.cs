@@ -13,7 +13,7 @@ internal static class AgentRunTestFixtures
         [new(Guid.NewGuid(), 1, sourceEventId ?? Guid.NewGuid(), ConversationRole.User, "Check the record", null,
             EntryStatus.Completed, SessionMode.Text, 0, 16, now)], "", 0, null, owner.ProfileId, now, now,
         owner.AgentInstanceId, PinnedPersona: definition.Identity,
-        ModelSelection: new("scripted-alpha", "primary-llm", "scripted-alpha", ModelSelectionSource.SystemDefault, null));
+        ModelSelection: new("dca30000-0000-4000-8000-000000000001", "dca20000-0000-4000-8000-000000000001", "dca30000-0000-4000-8000-000000000001", ModelSelectionSource.TenantDefault, null));
 
     internal static AgentRun Run(SessionSnapshot snapshot, DateTimeOffset now, IReadOnlyList<EffectiveSkill>? skills = null,
         Guid? runId = null) => AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(), runId ?? Guid.NewGuid(),

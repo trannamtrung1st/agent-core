@@ -277,7 +277,7 @@ public sealed class InitiativeTests
             output,
             model,
             time,
-            new DefaultAgentBrain(new PromptContextBuilder(), new DefaultInitiativeEvaluator(new PromptContextBuilder(), model)),
+            new DefaultAgentBrain(new PromptContextBuilder(), new DefaultInitiativeEvaluator(new PromptContextBuilder())),
             definition);
         await runtime.AttachAsync();
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -485,7 +485,7 @@ public sealed class InitiativeTests
             output,
             model,
             time,
-            new DefaultAgentBrain(new PromptContextBuilder(), new DefaultInitiativeEvaluator(new PromptContextBuilder(), model)),
+            new DefaultAgentBrain(new PromptContextBuilder(), new DefaultInitiativeEvaluator(new PromptContextBuilder())),
             definition);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hi");
@@ -940,7 +940,7 @@ public sealed class InitiativeTests
     private static RecordingAgentBrain RecordingDefaultBrain(ILanguageModel model) =>
         new(new DefaultAgentBrain(
             new PromptContextBuilder(),
-            new DefaultInitiativeEvaluator(new PromptContextBuilder(), model)));
+            new DefaultInitiativeEvaluator(new PromptContextBuilder())));
 
     [Fact]
     public async Task Detach_after_inactivity_pause_preserves_pause_reason()

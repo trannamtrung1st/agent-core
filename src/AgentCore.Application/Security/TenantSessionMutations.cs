@@ -14,8 +14,15 @@ public static class TenantSessionMutations
         if (current.SessionId != change.SessionId || current.DurablyDeletedAt is not null || !Enum.IsDefined(change.Action)) throw new ArgumentException("Invalid Session mutation.");
         if (current.Status is SessionStatus.Attached or SessionStatus.Ending || current.PendingAgentInputIds.Count > 0) throw new SecurityConflictException("session_in_use");
         if (change.Action != TenantSessionAction.Rename && change.Title is not null) throw AgentCoreErrors.Validation("Title applies only to renaming a Session.");
+        if ((change.Action == TenantSessionAction.SelectModel) != (change.Model is not null))
+            throw AgentCoreErrors.Validation("A model selection applies only to a model change.");
+        if (change.Action == TenantSessionAction.SelectModel
+            && (current.Mode != SessionMode.Text || current.PendingMode is not null || current.ArchivedAt is not null
+                || current.LifecycleStatus != SessionLifecycleStatus.Active || !current.Surfaces.HasFlag(SessionSurface.ChatList)))
+            throw new SecurityConflictException("session_in_use");
         var next = change.Action switch
         {
+            TenantSessionAction.SelectModel => current with { ModelSelection = change.Model },
             TenantSessionAction.Rename => current with { Title = Title(change.Title) },
             TenantSessionAction.Archive => current with { ArchivedAt = current.ArchivedAt ?? at },
             TenantSessionAction.Restore => current with { ArchivedAt = null },

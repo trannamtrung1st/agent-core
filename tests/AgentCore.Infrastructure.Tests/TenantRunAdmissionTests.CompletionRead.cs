@@ -22,11 +22,11 @@ public sealed partial class TenantRunAdmissionTests
         (ITenantSessionStore)f.Iam, (ITenantArtifactStore)f.Artifacts, f.RunConfiguration(), f.Iam, f.Authorizer, f.Clock,
         (ITenantApprovalStore)f.Iam, (ITenantApprovedOperationStore)f.Iam);
     private static TenantApprovalService CompletionReadApprovals(Fixture f) => new(f.Iam, (ITenantApprovalStore)f.Iam, (ITenantAgentStore)f.Iam,
-        AttachmentOperations(f), f.Authorizer, f.Identity, f.Ids, f.Clock, f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default,
+        AttachmentOperations(f), f.Authorizer, f.Identity, f.Ids, f.Clock, f.RunConfiguration(), new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), SyntheticProviderAliases.Default,
         (ITenantApprovedOperationStore)f.Iam, completionReads: CompletionReads(f));
     private static TenantApprovedOperationService CompletionReadEffects(Fixture f) => new(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam,
         (ITenantApprovalStore)f.Iam, (ITenantApprovedOperationStore)f.Iam, AttachmentOperations(f), f.RunConfiguration(), f.Ids, f.Clock,
-        ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, completionReads: CompletionReads(f));
+        new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), SyntheticProviderAliases.Default, completionReads: CompletionReads(f));
     private sealed record CompletionReadCase(BackgroundSetup Parent, Guid ChildSession, AgentRun Child, Guid Reader, TenantApprovalRequest Request);
     private static async Task<CompletionReadCase> CompletionReadPending(Fixture f, string permission = "agent-runs.read", bool metadata = false)
     {

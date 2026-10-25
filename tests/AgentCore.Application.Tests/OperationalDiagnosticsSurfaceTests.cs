@@ -67,8 +67,8 @@ public sealed class OperationalDiagnosticsSurfaceTests
         OperationalDiagnostics.RecordToolDenial("sandbox.run");
         OperationalDiagnostics.RecordResourceLimit("workspaceStore");
         OperationalDiagnostics.RecordResourceLimit("attachmentItem");
-        OperationalDiagnostics.RecordModelSelection("scripted-alpha", "primary-llm");
-        OperationalDiagnostics.RecordModelSelection("sk-secret-key", "primary-llm");
+        OperationalDiagnostics.RecordModelSelection("dca30000-0000-4000-8000-000000000001", "dca20000-0000-4000-8000-000000000001");
+        OperationalDiagnostics.RecordModelSelection("sk-secret-key", "dca20000-0000-4000-8000-000000000001");
         listener.Dispose();
 
         Assert.Contains(tags, tag => tag.Instrument == OperationalDiagnostics.DetachInstrument && tag.Key == "reason" && tag.Value == "acceptedWork");
@@ -82,7 +82,7 @@ public sealed class OperationalDiagnosticsSurfaceTests
         Assert.Contains(tags, tag => tag.Instrument == OperationalDiagnostics.ToolDenialInstrument && tag.Key == "reason" && tag.Value == "forbidden");
         Assert.Contains(tags, tag => tag.Instrument == OperationalDiagnostics.ResourceLimitInstrument && tag.Key == "reason" && tag.Value == "workspaceStore");
         Assert.Contains(tags, tag => tag.Instrument == OperationalDiagnostics.ModelSelectionInstrument && tag.Key == "result" && tag.Value == "selected");
-        Assert.DoesNotContain(tags, tag => tag.Key is "definitionId" or "instanceId" or "catalogKey");
+        Assert.DoesNotContain(tags, tag => tag.Key is "definitionId" or "instanceId" or "offeringId");
         Assert.All(tags, tag => Assert.DoesNotContain("sk-secret", tag.Value, StringComparison.OrdinalIgnoreCase));
 
         var events = RuntimeTelemetry.SnapshotTimeline();
@@ -90,7 +90,7 @@ public sealed class OperationalDiagnosticsSurfaceTests
         Assert.Contains(events, item => item.Stage == OperationalDiagnostics.MemoryMutationInstrument && item.Detail == "session:written");
         Assert.Contains(events, item =>
             item.Stage == OperationalDiagnostics.ModelSelectionInstrument
-            && item.Detail == "catalogKey=scripted-alpha;providerAlias=primary-llm");
+            && item.Detail == "offeringId=dca30000-0000-4000-8000-000000000001;connectionId=dca20000-0000-4000-8000-000000000001");
         Assert.Contains(events, item =>
             item.Stage == OperationalDiagnostics.AdminInstrument
             && item.Detail is not null

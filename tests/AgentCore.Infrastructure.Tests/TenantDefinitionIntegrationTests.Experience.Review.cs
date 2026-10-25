@@ -17,7 +17,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         store ??= f.Iam; var builtIns = new SessionNoBuiltinFallback();
         var resolver = new TenantRunConfigurationResolver((ITenantAgentStore)store, f.Definitions, builtIns,
             new(f.Resources, builtIns, new NoBuiltinKnowledge(), f.Content), (ITenantCredentialBindingStore)store);
-        return new(store, f.Identity, (ITenantExperienceReviewStore)store, resolver, ModelCatalogFactory.Synthetic(), f.Ids, TimeProvider.System);
+        return new(store, f.Identity, (ITenantExperienceReviewStore)store, resolver, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(store), f.Ids, TimeProvider.System);
     }
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_experience_manual_review_admits_one_human_root_graph_and_records_private_facts_through_normal_tools(bool sqlite)

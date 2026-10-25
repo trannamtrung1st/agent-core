@@ -104,7 +104,7 @@ public sealed class RoleEnvironmentTests
         await using var runtime = CreateRuntime(
             output,
             time,
-            new DefaultAgentBrain(new PromptContextBuilder(), new DefaultInitiativeEvaluator(new PromptContextBuilder(), model)),
+            new DefaultAgentBrain(new PromptContextBuilder(), new DefaultInitiativeEvaluator(new PromptContextBuilder())),
             definition,
             model);
         await runtime.AttachAsync();

@@ -192,7 +192,7 @@ public abstract class AdminPublicationHistoryTests
             new ConversationPolicy("concise", true, "en", 512),
             new InitiativePolicy(false, 30_000, 60_000, 1, []),
             new VoiceConfiguration(false, "alloy", 1.0),
-            new ProviderPreferences("primary-llm", null, null),
+            new ProviderPreferences(null, null),
             new Dictionary<string, string>());
 
     [Fact]

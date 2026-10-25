@@ -91,7 +91,7 @@ public sealed class ConversationCompactor(IMemoryStore store, ILogger? logger = 
         var request = ContextAssembler.Create(Guid.NewGuid(), new EffectiveContextSnapshot([
             ContextSection.Core(CoreProcedure.OperatingContract), ContextSection.Core(CoreProcedure.Compaction),
             ContextSection.Evidence(ContextSectionId.History, ContextSourceKind.Session, selection.PromptText)
-        ], purpose: ContextPurpose.Platform), maxOutputTokens: 800, temperature: 0);
+        ], purpose: ContextPurpose.Platform), maxOutputTokens: 800);
 
         string text;
         bool failed;

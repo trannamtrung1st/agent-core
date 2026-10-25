@@ -2,15 +2,16 @@ using AgentCore.Application.Ports;
 
 namespace AgentCore.Application.Agents;
 
-public sealed class DefaultInitiativeEvaluator(PromptContextBuilder builder, ILanguageModel initiativeModel)
+public sealed class DefaultInitiativeEvaluator(PromptContextBuilder builder)
     : IInitiativeEvaluator
 {
     public ValueTask<AgentDecision> EvaluateAsync(
         AgentContext context,
         Guid responseId,
-        CancellationToken cancellationToken = default) =>
-        InitiativeEvaluator.EvaluateAsync(
-            context.LanguageModel ?? initiativeModel,
+        CancellationToken cancellationToken = default) => context.LanguageModel is not { } model
+        ? ValueTask.FromResult<AgentDecision>(new StaySilent("Initiative model authority is unavailable.", CountsTowardSilentCap: false))
+        : InitiativeEvaluator.EvaluateAsync(
+            model,
             builder,
             context,
             responseId,

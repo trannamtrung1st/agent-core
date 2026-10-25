@@ -46,6 +46,8 @@ public sealed partial class AgentRun
         {
             throw new ArgumentException("Model pin is required.", nameof(pinnedModel));
         }
+        if (pinnedModel.Binding is { } binding && owner.TenantId != binding.Route.TenantId)
+            throw new ArgumentException("The model route must belong to the admitted Run tenant.", nameof(pinnedModel));
 
         if (sideEffect is null)
         {

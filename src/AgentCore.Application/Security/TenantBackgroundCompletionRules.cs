@@ -24,7 +24,7 @@ public static class TenantBackgroundCompletionRules
         var resolved = new ResolvedAgentRunConfiguration(configuration, report.PinnedPersona, report.PinnedSkillCatalog, agent.Instance.ExecutionBudgets);
         var model = report.PinnedModel;
         var expected = TenantBackgroundCompletionFactory.Create(source, resolved,
-            new(model.CatalogKey, model.ProviderAlias, model.ModelId, ModelSelectionSource.Host, model.ReasoningEffort),
+            new(model.OfferingId, model.ConnectionId, model.ExternalModelId, ModelSelectionSource.Host, model.ReasoningEffort, Binding: model.Binding),
             report.ActivationId, report.AgentRunId, report.ResponseId.Value, report.CreatedAtUtc);
         if (JsonSerializer.Serialize(expected.Admission) != JsonSerializer.Serialize(report.Admission))
             throw new AccessDeniedException("completion_admission_mismatch");

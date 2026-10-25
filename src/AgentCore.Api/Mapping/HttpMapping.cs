@@ -332,23 +332,23 @@ public static partial class HttpMapping
             return null;
         }
 
-        var display = catalog?.Get(selection.CatalogKey)?.DisplayName ?? selection.CatalogKey;
+        var display = selection.Binding?.ModelLabel ?? catalog?.Get(selection.OfferingId)?.DisplayName ?? selection.OfferingId;
         return new SessionModelSelectionResponse(
-            selection.CatalogKey,
+            selection.OfferingId,
             display,
             SessionModelBinder.ToWire(selection.SelectionSource),
             selection.ReasoningEffort,
-            selection.ModelId);
+            selection.ExternalModelId, selection.ConnectionId, selection.Binding?.ConnectionLabel ?? catalog?.Get(selection.OfferingId)?.ConnectionLabel);
     }
 
     public static ModelCatalogResponse ToCatalog(IModelCatalog catalog) =>
         new(
-            catalog.DefaultKey,
-            catalog.Models.Select(ToDescriptor).ToArray());
+            string.IsNullOrEmpty(catalog.DefaultOfferingId) ? null : catalog.DefaultOfferingId,
+            catalog.Models.Select(ToDescriptor).ToArray(), catalog.DefaultReasoningEffort, SessionModelBinder.ToWire(catalog.DefaultSelectionSource));
 
     public static ModelDescriptorResponse ToDescriptor(ModelDescriptor model) =>
         new(
-            model.Key,
+            model.OfferingId,
             model.DisplayName,
             model.Tools,
             model.Vision,
@@ -357,7 +357,7 @@ public static partial class HttpMapping
             model.SupportedReasoningEfforts,
             model.DefaultReasoningEffort,
             model.ContextCategory,
-            model.CostCategory);
+            model.CostCategory, model.ConnectionId, model.ConnectionLabel, model.ExternalModelId);
 
     public static string Format(DateTimeOffset value) =>
         value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);

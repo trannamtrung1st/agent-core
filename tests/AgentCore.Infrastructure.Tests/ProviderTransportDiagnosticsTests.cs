@@ -65,7 +65,7 @@ public sealed class ProviderTransportDiagnosticsTests
     }
 
     [Fact]
-    public async Task Production_model_factory_uses_the_registered_diagnostic_source()
+    public async Task Compatible_adapter_uses_the_explicit_diagnostic_source()
     {
         var id = Guid.NewGuid();
         var logs = new DiagnosticLogCapture<ProviderTransportDiagnosticsTests>();
@@ -75,8 +75,10 @@ public sealed class ProviderTransportDiagnosticsTests
         services.AddLogging(builder => builder.AddProvider(new CaptureProvider(logs)));
         services.AddHttpClient(OpenAICompatibleLanguageModel.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new FailingHandler());
         using var provider = services.BuildServiceProvider();
-        var model = LanguageModelFactory.Create(provider, "Real",
-            new LanguageModelProviderOptions { Adapter = "OpenAICompatible", BaseUrl = "https://example.test/v1/", ApiKey = "private-key", DefaultModel = "fixture" });
+        var model = new OpenAICompatibleLanguageModel(provider.GetRequiredService<IHttpClientFactory>().CreateClient(OpenAICompatibleLanguageModel.HttpClientName),
+            new LanguageModelProviderOptions { BaseUrl = "https://example.test/v1/", ApiKey = "private-key", DefaultModel = "fixture" },
+            provider.GetRequiredService<TimeProvider>(), logger: provider.GetRequiredService<ILoggerFactory>().CreateLogger<OpenAICompatibleLanguageModel>(),
+            diagnostics: provider.GetRequiredService<AgentCore.Application.Ports.IDiagnosticIdSource>());
         await foreach (var item in model.GenerateAsync(new(Guid.NewGuid(), [new(ModelRole.User, "private")])))
             Assert.Equal(id, Assert.IsType<ModelFailed>(item).DiagnosticId);
         AssertDiagnostic(logs.Entries.Where(entry => entry.Level == LogLevel.Warning), "llm.setup", id);

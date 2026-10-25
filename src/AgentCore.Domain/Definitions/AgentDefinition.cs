@@ -97,10 +97,11 @@ public sealed record InitiativePolicy(
 
 public sealed record VoiceConfiguration(bool Enabled, string VoiceId, double SpeakingRate);
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ProviderPreferences(
-    string LanguageModel,
     string? SpeechRecognizer,
     string? SpeechSynthesizer,
     string InterruptionClassifier = "heuristic");
 
-public sealed record AgentModelDefaults(string? CatalogKey, string? ReasoningEffort);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record AgentModelDefaults(string? OfferingId, string? ReasoningEffort);

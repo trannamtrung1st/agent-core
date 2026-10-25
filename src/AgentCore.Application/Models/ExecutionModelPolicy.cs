@@ -16,10 +16,10 @@ public static class ExecutionModelPolicy
     public const string UnavailableCode = "model-unavailable";
     public const string CapabilityCode = "model-capability-unsupported";
 
-    public static void RequireSelectable(IModelCatalog catalog, string? catalogKey, string? reasoningEffort)
+    public static void RequireSelectable(IModelCatalog catalog, string? offeringId, string? reasoningEffort)
     {
         ArgumentNullException.ThrowIfNull(catalog);
-        if (string.IsNullOrWhiteSpace(catalogKey))
+        if (offeringId is null)
         {
             if (!string.IsNullOrWhiteSpace(reasoningEffort))
             {
@@ -29,8 +29,11 @@ public static class ExecutionModelPolicy
             return;
         }
 
-        var descriptor = catalog.Get(catalogKey.Trim());
-        if (descriptor is null || !descriptor.DeveloperRoleSupport || !Enum.IsDefined(descriptor.Transport))
+        if (!Guid.TryParseExact(offeringId, "D", out var id) || id == Guid.Empty || id.ToString("D") != offeringId)
+            throw AgentCoreErrors.Validation("The selected model must be a canonical offering UUID.");
+
+        var descriptor = catalog.Get(offeringId.Trim());
+        if (descriptor is null || !descriptor.SupportsInstructionHierarchy || !Enum.IsDefined(descriptor.Transport))
         {
             throw AgentCoreErrors.Validation("The selected model is not available.");
         }
@@ -57,22 +60,22 @@ public static class ExecutionModelPolicy
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(instance);
 
-        if (!string.IsNullOrWhiteSpace(registration?.ModelOverrideCatalogKey))
+        if (!string.IsNullOrWhiteSpace(registration?.ModelOverrideOfferingId))
         {
             return Bind(
                 catalog,
-                registration.ModelOverrideCatalogKey,
+                registration.ModelOverrideOfferingId,
                 registration.ModelOverrideReasoningEffort,
                 ExecutionModelSource.TriggerOverride,
                 definition,
                 registration);
         }
 
-        if (!string.IsNullOrWhiteSpace(instance.UnattendedModelCatalogKey))
+        if (!string.IsNullOrWhiteSpace(instance.UnattendedOfferingId))
         {
             return Bind(
                 catalog,
-                instance.UnattendedModelCatalogKey,
+                instance.UnattendedOfferingId,
                 instance.UnattendedReasoningEffort,
                 ExecutionModelSource.UnattendedDefault,
                 definition,
@@ -85,11 +88,11 @@ public static class ExecutionModelPolicy
             return Admit(
                 catalog,
                 new ExecutionModelPin(
-                    selection.CatalogKey,
-                    selection.ProviderAlias,
-                    selection.ModelId,
+                    selection.OfferingId,
+                    selection.ConnectionId,
+                    selection.ExternalModelId,
                     selection.ReasoningEffort,
-                    ExecutionModelSource.ConversationDefault),
+                    ExecutionModelSource.ConversationDefault, selection.Binding),
                 definition,
                 registration);
         }
@@ -118,13 +121,14 @@ public static class ExecutionModelPolicy
 
     public static bool Matches(IModelCatalog catalog, ExecutionModelPin pin, out ModelDescriptor? descriptor)
     {
-        descriptor = catalog.Get(pin.CatalogKey);
-        if (descriptor is null || !descriptor.DeveloperRoleSupport || !Enum.IsDefined(descriptor.Transport)
-            || !string.Equals(descriptor.ProviderAlias, pin.ProviderAlias, StringComparison.Ordinal)
-            || !string.Equals(descriptor.ModelId, pin.ModelId, StringComparison.Ordinal))
+        descriptor = catalog.Get(pin.OfferingId);
+        if (descriptor is null || !descriptor.SupportsInstructionHierarchy || !Enum.IsDefined(descriptor.Transport)
+            || !string.Equals(descriptor.ConnectionId, pin.ConnectionId, StringComparison.Ordinal)
+            || !string.Equals(descriptor.ExternalModelId, pin.ExternalModelId, StringComparison.Ordinal))
         {
             return false;
         }
+        if (descriptor.Route != pin.Binding?.Route) return false;
 
         if (string.IsNullOrWhiteSpace(pin.ReasoningEffort))
         {
@@ -137,14 +141,14 @@ public static class ExecutionModelPolicy
 
     private static ExecutionModelDecision Bind(
         IModelCatalog catalog,
-        string catalogKey,
+        string offeringId,
         string? effort,
         ExecutionModelSource source,
         AgentDefinition definition,
         Automation? registration)
     {
-        var descriptor = catalog.Get(catalogKey);
-        if (descriptor is null || !descriptor.DeveloperRoleSupport || !Enum.IsDefined(descriptor.Transport))
+        var descriptor = catalog.Get(offeringId);
+        if (descriptor is null || !descriptor.SupportsInstructionHierarchy || !Enum.IsDefined(descriptor.Transport))
         {
             return new ExecutionModelDecision(null, UnavailableCode);
         }
@@ -162,11 +166,11 @@ public static class ExecutionModelPolicy
         return Admit(
             catalog,
             new ExecutionModelPin(
-                selection.CatalogKey,
-                selection.ProviderAlias,
-                selection.ModelId,
+                selection.OfferingId,
+                selection.ConnectionId,
+                selection.ExternalModelId,
                 selection.ReasoningEffort,
-                source),
+                source, selection.Binding),
             definition,
             registration);
     }
@@ -177,8 +181,8 @@ public static class ExecutionModelPolicy
         AgentDefinition definition,
         Automation? registration)
     {
-        var descriptor = catalog.Get(pin.CatalogKey);
-        if (descriptor is null || !descriptor.DeveloperRoleSupport || !Enum.IsDefined(descriptor.Transport))
+        var descriptor = catalog.Get(pin.OfferingId);
+        if (descriptor is null || !descriptor.SupportsInstructionHierarchy || !Enum.IsDefined(descriptor.Transport))
         {
             return new ExecutionModelDecision(pin, UnavailableCode);
         }

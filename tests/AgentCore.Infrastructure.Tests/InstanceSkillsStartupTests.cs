@@ -69,7 +69,7 @@ public sealed class InstanceSkillsStartupTests
         new AgentIdentity("Alex", "Examiner", "Help", "Calm"), ["Help"], "Help",
         new BehaviorPolicy("acknowledgeThenContinue", true, true),
         new ConversationPolicy("concise", true, "en", 256), new InitiativePolicy(false, 30000, 60000, 1, []),
-        new VoiceConfiguration(false, "default", 1), new ProviderPreferences("primary-llm", null, null), new Dictionary<string, string>());
+        new VoiceConfiguration(false, "default", 1), new ProviderPreferences(null, null), new Dictionary<string, string>());
 
     private sealed class ContextFactory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
     {

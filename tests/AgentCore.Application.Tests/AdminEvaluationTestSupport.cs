@@ -10,7 +10,6 @@ internal static class AdminEvaluationTestSupport
         new(
             new SyntheticDefinitionDraftBehaviorEvaluator(
                 new DefinitionDraftSyntheticOfflineLanguageModel(),
-                TestModelCatalogs.Synthetic(),
                 ToolConfigurationGates.AllowAll),
             ToolConfigurationGates.AllowAll);
 }

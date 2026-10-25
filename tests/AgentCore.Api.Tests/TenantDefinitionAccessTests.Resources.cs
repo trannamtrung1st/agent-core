@@ -33,7 +33,7 @@ public sealed partial class TenantDefinitionAccessTests
         Assert.Equal(HttpStatusCode.BadRequest, missingEvidence.StatusCode); Assert.Equal("evaluation_required", (await Json(missingEvidence)).GetProperty("reasonCode").GetString());
         var runResponse = await owner.PostAsJsonAsync(path + "/evaluation-scenarios/no-email/run", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 3 });
         Assert.Equal(HttpStatusCode.OK, runResponse.StatusCode); var run = await Json(runResponse);
-        Assert.True(run.GetProperty("passed").GetBoolean()); Assert.Equal("synthetic-offline", run.GetProperty("runtimeKind").GetString());
+        Assert.True(run.GetProperty("passed").GetBoolean()); Assert.Equal("dca20000-0000-4000-8000-000000000001", run.GetProperty("runtimeKind").GetString());
         Assert.True(run.GetProperty("commitRevision").GetInt64() > 0);
         var renamed = await owner.PostAsJsonAsync(path + "/resources/batch", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 3,
             items = new[] { new { resourceId = firstId, logicalPath = "second.txt", kind = 2, mediaType = "text/plain" }, new { resourceId = secondId, logicalPath = "first.txt", kind = 2, mediaType = "text/plain" } } });

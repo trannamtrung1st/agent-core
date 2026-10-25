@@ -41,6 +41,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly SemaphoreSlim _wake = new(0);
 
     private readonly ILanguageModelResolver _models;
+    private readonly ILanguageModel? _fixtureModel;
     private readonly IModelCatalog? _catalog;
     private readonly IAgentBrain _brain;
     private readonly IInterruptionClassifier _classifier;
@@ -180,7 +181,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     public SessionRuntime(
         SessionSnapshot snapshot,
-        ILanguageModel languageModel,
+        ILanguageModel? languageModel,
         IAgentBrain brain,
         IMemoryStore store,
         ISessionOutput output,
@@ -217,11 +218,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (runtimeOwner is { } tenantOwner)
         {
             AgentCore.Application.Security.TenantRuntimeRules.RequireOwner(tenantOwner);
+            if (modelResolver is null) throw new InvalidOperationException("Tenant Runtime requires an explicit per-Run model resolver.");
             if (snapshot.ProfileId is not null || snapshot.AgentInstanceId != tenantOwner.AgentInstanceId || runAuthority is not ITenantRunContext)
                 throw new InvalidOperationException("Tenant Runtime requires its owned snapshot and current execution authority.");
         }
         _runAuthority = runAuthority;
-        _models = modelResolver ?? new StaticLanguageModelResolver(languageModel);
+        _fixtureModel = languageModel;
+        _models = modelResolver ?? new StaticLanguageModelResolver(languageModel ?? throw new InvalidOperationException("An explicit model resolver is required."));
         _catalog = catalog;
         _brain = brain;
         _classifier = classifier ?? new HeuristicInterruptionClassifier();
@@ -558,7 +561,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     }
 
     public async Task<bool> RequestModelSettingsAsync(
-        string? modelKey,
+        string? offeringId,
         string? reasoningEffort,
         ModelSelectionSource source,
         CancellationToken cancellationToken = default)
@@ -566,7 +569,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var persisted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = NewContext();
         BeginWork();
-        if (!Enqueue(new ModelSelectionReceived(context, modelKey, reasoningEffort, source, persisted), urgent: true))
+        if (!Enqueue(new ModelSelectionReceived(context, offeringId, reasoningEffort, source, persisted), urgent: true))
         {
             persisted.TrySetResult(false);
             return false;
@@ -1932,6 +1935,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private void LaunchCompletionEvaluation(EventContext cause)
     {
+        if (_runtimeOwner is not null && _boundAgentRun is not { Status: AgentRunStatus.Running, Claim: not null }) return;
         if (_deactivated
             || _headlessTransportDetached
             || _activeResponseId is not null
@@ -2314,9 +2318,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 executionDefinition = await ProjectionDefinitionAsync(executionDefinition, capturedRun, capturedSnapshot.AgentInstanceId, evaluationToken).ConfigureAwait(false);
                 var persona = boundPersona ?? resolved!.Persona;
                 var selection = capturedSnapshot.ModelSelection;
-                if (capturedRun is not null) selection = new(capturedRun.PinnedModel.CatalogKey, capturedRun.PinnedModel.ProviderAlias, capturedRun.PinnedModel.ModelId, ModelSelectionSource.Host, capturedRun.PinnedModel.ReasoningEffort);
+                if (capturedRun is not null) selection = new(capturedRun.PinnedModel.OfferingId, capturedRun.PinnedModel.ConnectionId, capturedRun.PinnedModel.ExternalModelId, ModelSelectionSource.Host, capturedRun.PinnedModel.ReasoningEffort, Binding: capturedRun.PinnedModel.Binding);
                 else if (_catalog is not null && selection?.SelectionSource is not (ModelSelectionSource.User or ModelSelectionSource.Host)) selection = AgentCore.Application.Models.SessionModelBinder.RefreshDefault(_catalog, executionDefinition, selection);
-                var model = selection is null ? ResolveTurnModel(trigger.Kind) : _models.Resolve(selection, capturedRun is not null || trigger.Kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
+                var model = selection is null ? ResolveTurnModel(trigger.Kind) : ResolveModel(selection,
+                    capturedRun is not null || trigger.Kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative, capturedRun);
                 model = TestDecorateLanguageModel?.Invoke(model) ?? model;
                 var tenantFiles = capturedRun?.Owner.TenantId is not null
                     ? await (_tenantAttachments ?? throw new InvalidOperationException("Tenant attachment context binding is required."))
@@ -2527,9 +2532,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var started = Stopwatch.GetTimestamp();
         using var activity = RuntimeTelemetry.Activity.StartActivity("model");
         using var modelScope = _logger.BeginScope(
-            "SessionId={SessionId} ResponseId={ResponseId} CorrelationId={CorrelationId} AgentInstanceId={AgentInstanceId} AgentRunId={AgentRunId} ProviderAlias={ProviderAlias}",
+            "SessionId={SessionId} ResponseId={ResponseId} CorrelationId={CorrelationId} AgentInstanceId={AgentInstanceId} AgentRunId={AgentRunId} ConnectionId={ConnectionId}",
             SessionId, request.ResponseId, cause.CorrelationId, _snapshot.AgentInstanceId, _boundAgentRun?.AgentRunId,
-            FailureReference.IsSafeToken(_snapshot.ModelSelection?.ProviderAlias) ? _snapshot.ModelSelection?.ProviderAlias : null);
+            FailureReference.IsSafeToken(_snapshot.ModelSelection?.ConnectionId) ? _snapshot.ModelSelection?.ConnectionId : null);
         var checkpoint = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun.Checkpoint : null;
         AgentRunToolCallCheckpoint.EnsureCurrentContextContract(checkpoint, request.ResponseId);
         AgentRunToolCallCheckpoint.EnsureCurrentBrowserContract(checkpoint);
@@ -2843,7 +2848,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
                         overallDeadline, generateToken, repairReason, ActiveExecutionMs(), State()).ConfigureAwait(false);
                 var projectionModel = _boundAgentRun is { } binding && binding.ResponseId == request.ResponseId
-                    ? binding.PinnedModel.CatalogKey : _snapshot.ModelSelection?.CatalogKey;
+                    ? binding.PinnedModel.OfferingId : _snapshot.ModelSelection?.OfferingId;
                 CapabilityProjectionTelemetry.Record(ExecutionDefinition, projectionContext, _tools.ConfigurationGate, working.Tools, projectionModel, CapabilityLoadCountFor(request.ResponseId));
                 try
                 {
@@ -3635,7 +3640,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                                 HarnessSources: harnessSources.ToArray(),
                                                 OwnerTurnText: trigger.Kind == TriggerKind.UserTurn ? trigger.Text : null,
                                                 SupportsTools: model.Capabilities.Tools,
-                                                Model: _snapshot.ModelSelection is { } choice ? new AgentCore.Domain.Conversation.AgentRunModelPin(choice.CatalogKey, choice.ProviderAlias, choice.ModelId, choice.ReasoningEffort) : null,
+                                                Model: _snapshot.ModelSelection is { } choice ? new AgentCore.Domain.Conversation.AgentRunModelPin(choice.OfferingId, choice.ConnectionId, choice.ExternalModelId, choice.ReasoningEffort, choice.Binding) : null,
                                                 WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, AgentRunId: _boundAgentRun?.AgentRunId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings,
                                                 ConfigurationContinuationTarget: ContinuationTarget(_boundAgentRun), TenantId: _boundAgentRun?.Owner.TenantId, AgentRunGeneration: _boundAgentRun?.Claim?.Generation))
                                         .ConfigureAwait(false);
@@ -4676,7 +4681,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 AgentInstanceId: _snapshot.AgentInstanceId,
                 ErrorCategory: category,
                 ErrorCode: code,
-                ProviderAlias: _snapshot.ModelSelection?.ProviderAlias,
+                OfferingId: _snapshot.ModelSelection?.OfferingId,
+                ConnectionId: _snapshot.ModelSelection?.ConnectionId,
                 FailureReason: failureReason,
                 ProviderResponseChannel: providerResponseChannel));
 
@@ -5988,22 +5994,30 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private ILanguageModel ResolveSessionModel(ModelPurpose purpose)
     {
-        var selection = _snapshot.ModelSelection
-            ?? new SessionModelSelection(
-                "unspecified",
-                "primary-llm",
-                "unspecified",
-                ModelSelectionSource.SystemDefault,
-                null);
-        var resolved = _models.Resolve(selection, purpose);
+        var run = _boundAgentRun;
+        var selection = run is null ? _snapshot.ModelSelection : new SessionModelSelection(run.PinnedModel.OfferingId,
+            run.PinnedModel.ConnectionId, run.PinnedModel.ExternalModelId, ModelSelectionSource.Host, run.PinnedModel.ReasoningEffort, Binding: run.PinnedModel.Binding);
+        if (selection is null)
+        {
+            if (_runtimeOwner is null && _fixtureModel is { } fixture) return fixture;
+            throw new AgentCoreException("ModelUnavailable", "No admitted model route is available.", 409);
+        }
+        var resolved = ResolveModel(selection, purpose, run);
         return TestDecorateLanguageModel?.Invoke(resolved) ?? resolved;
+    }
+
+    private ILanguageModel ResolveModel(SessionModelSelection selection, ModelPurpose purpose, AgentRun? run)
+    {
+        var invocation = run?.PinnedModel.Binding is { } binding
+            ? ModelInvocation.ForRun(run, binding.Route, _runAuthority ?? throw new AccessDeniedException("tenant_context_required")) : null;
+        return _models.Resolve(selection, purpose, invocation);
     }
 
     private ILanguageModel ResolveTurnModel(TriggerKind kind)
     {
         if (_boundAgentRun is { } run)
-            return ResolvePinnedModel(new ExecutionModelPin(run.PinnedModel.CatalogKey, run.PinnedModel.ProviderAlias,
-                run.PinnedModel.ModelId, run.PinnedModel.ReasoningEffort, ExecutionModelSource.ConversationDefault));
+            return ResolvePinnedModel(new ExecutionModelPin(run.PinnedModel.OfferingId, run.PinnedModel.ConnectionId,
+                run.PinnedModel.ExternalModelId, run.PinnedModel.ReasoningEffort, ExecutionModelSource.ConversationDefault, run.PinnedModel.Binding));
         return ResolveSessionModel(
             kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
     }
@@ -6013,18 +6027,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private ILanguageModel ResolvePinnedModel(ExecutionModelPin pin)
     {
-        if (_catalog is not null && !ExecutionModelPolicy.Matches(_catalog, pin, out _))
+        if (pin.Binding is null && _catalog is not null && !ExecutionModelPolicy.Matches(_catalog, pin, out _))
         {
             throw AgentCoreErrors.Validation("Pinned model is unavailable.");
         }
 
         var selection = new SessionModelSelection(
-            pin.CatalogKey,
-            pin.ProviderAlias,
-            pin.ModelId,
+            pin.OfferingId,
+            pin.ConnectionId,
+            pin.ExternalModelId,
             ModelSelectionSource.Host,
-            pin.ReasoningEffort);
-        var resolved = _models.Resolve(selection, ModelPurpose.Conversation);
+            pin.ReasoningEffort, Binding: pin.Binding);
+        var resolved = ResolveModel(selection, ModelPurpose.Conversation, _boundAgentRun);
         return TestDecorateLanguageModel?.Invoke(resolved) ?? resolved;
     }
 
@@ -6032,10 +6046,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         selection is null
             ? null
             : new ModelGenerationProvenance(
-                selection.CatalogKey,
-                selection.ProviderAlias,
-                selection.ModelId,
-                selection.ReasoningEffort);
+                selection.OfferingId,
+                selection.ConnectionId,
+                selection.ExternalModelId,
+                selection.ReasoningEffort, selection.Binding);
 
     private static void Signal(ref TaskCompletionSource source)
     {

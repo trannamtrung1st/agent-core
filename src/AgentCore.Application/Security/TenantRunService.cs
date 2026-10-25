@@ -13,7 +13,7 @@ public sealed record TenantRunReceipt(bool Created, Guid RunId, Guid EntryId, Gu
 public sealed record TenantRunMetadata(TrustedExecutionContext Context, Guid AgentInstanceId, AgentRunStatus Status, long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, Guid? ContinuationRunId = null, AgentRunOutcomeKind? OutcomeKind = null, bool CanCancel = false);
 
 public sealed class TenantRunService(IIamStore security, ITenantSessionStore sessions, ITenantRunStore runs,
-    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer authorizer, IModelCatalog models, IIdGenerator ids, TimeProvider time, TenantRunCancellationService? cancellations = null, ITenantRunControl? control = null, ITenantAttachmentStore? attachments = null, ITenantSessionInputControl? inputs = null,
+    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer authorizer, ITenantModelCatalogReader modelCatalogs, IIdGenerator ids, TimeProvider time, TenantRunCancellationService? cancellations = null, ITenantRunControl? control = null, ITenantAttachmentStore? attachments = null, ITenantSessionInputControl? inputs = null,
     ITenantRequestIsolationStore? requestIsolation = null, TenantComposerReferenceService? composer = null)
 {
     public async ValueTask<TenantRunReceipt> SubmitTextAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
@@ -93,6 +93,7 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
             $"human:{initiator.PrincipalId:D}:{messageId:D}", now, TenantInputInterruptionRules.Evidence(interruption));
         var context = new TrustedExecutionContext(tenant, agent.PrincipalId, initiator.PrincipalId, sessionId, runId, activationId, activationId, null, null, ExecutionOrigin.UserMessage);
         var definition = resolved.Configuration.Definition;
+        var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         var selected = SessionModelBinder.RefreshDefault(models, definition, session.Snapshot.ModelSelection)
             ?? throw AgentCoreErrors.Validation("A resolved model is required.");
         var composerInput = parts is null ? null : await composer!.PinAsync(agent.Instance.InstanceId, context, definition, resolved.Skills, parts, ct).ConfigureAwait(false);
@@ -101,7 +102,7 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         var run = AgentRun.Create(runId, AgentRunOwner.ForTenant(tenant, agent.Instance.InstanceId, agent.PrincipalId),
             new(activation, definition.Id, definition.Version, resolved.Persona, responseId, AgentRunOutputContract.ConversationResponse,
                 AgentRunAdmissionFactory.WithCleanupIntent(ExecutionBudgetResolver.Resolve(definition, resolved.InstanceBudgets, true), text), resolved.Configuration, composerInput, executionContext: context),
-            new(selected.CatalogKey, selected.ProviderAlias, selected.ModelId, selected.ReasoningEffort), AgentRunLimits.DefaultMaxAttempts, now,
+            new(selected.OfferingId, selected.ConnectionId, selected.ExternalModelId, selected.ReasoningEffort, selected.Binding), AgentRunLimits.DefaultMaxAttempts, now,
             resolved.Skills, active);
         var admission = new TenantHumanRunAdmission(run, input, expectedSessionRevision, agent.Instance.Revision, sources.Count == 0 ? null : sources.ToArray(), interruption, speech);
         var prepared = new TenantHumanInput(session.Owner, initiator, state.Tenant.Revision, TenantAttachmentBindingRules.Freeze(admission));

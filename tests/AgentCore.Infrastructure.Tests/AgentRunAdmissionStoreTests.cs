@@ -22,7 +22,7 @@ public sealed partial class AgentRunAdmissionStoreTests
         new AgentIdentity("Alex", "Examiner", "Practice", "Calm"), ["Practice"], "Instructions",
         new BehaviorPolicy("acknowledgeThenContinue", true, true), new ConversationPolicy("concise", true, "en", 256),
         new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]), new VoiceConfiguration(true, "default", 1),
-        new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>());
+        new ProviderPreferences("primary-stt", "primary-tts"), new Dictionary<string, string>());
     private const string Hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     [Theory]
@@ -51,7 +51,7 @@ public sealed partial class AgentRunAdmissionStoreTests
         var definition = Definition with { Voice = Definition.Voice with { Enabled = false },
             StateIsolationPolicy = new(ConversationContextScope.CurrentRequest) };
         var snapshot = Snapshot(Guid.NewGuid(), [entry]) with { Definition = definition,
-            ModelSelection = new("synthetic", "synthetic", "synthetic", ModelSelectionSource.SystemDefault, null) };
+            ModelSelection = new("synthetic", "synthetic", "synthetic", ModelSelectionSource.TenantDefault, null) };
         await f.Memory.SaveAsync(snapshot, 0);
         var configuration = new AgentRunConfiguration(definition, 0, 0, []);
         var run = AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), snapshot,
@@ -81,7 +81,7 @@ public sealed partial class AgentRunAdmissionStoreTests
         await using var f = await Fixture.CreateAsync(sqlite);
         var entry = new ConversationEntry(Guid.NewGuid(), 1, Guid.NewGuid(), ConversationRole.User, "Request", null,
             EntryStatus.Completed, SessionMode.Text, 0, 0, Now);
-        var snapshot = Snapshot(Guid.NewGuid(), [entry]) with { ModelSelection = new("synthetic", "synthetic", "synthetic", ModelSelectionSource.SystemDefault, null) };
+        var snapshot = Snapshot(Guid.NewGuid(), [entry]) with { ModelSelection = new("synthetic", "synthetic", "synthetic", ModelSelectionSource.TenantDefault, null) };
         await f.Memory.SaveAsync(snapshot, 0);
         var configuration = new AgentRunConfiguration(Definition, 0, 0, [], resolvedBrowserIsolation: BrowserIsolation.EphemeralSession);
         var shared = new AgentRunConfiguration(Definition, 0, 0, [], resolvedBrowserIsolation: BrowserIsolation.PersistentAgent);
@@ -132,7 +132,7 @@ public sealed partial class AgentRunAdmissionStoreTests
         UserMessagePart[] first = [new("invocation",InvocationKind:"skill",SkillKey:"definition:first"),new("text",Text:" Check A")];
         UserMessagePart[] second = [new("invocation",InvocationKind:"skill",SkillKey:"definition:second"),new("reference",Reference:new("session",SessionId:Guid.NewGuid()),Label:"Evidence")];
         var entries = new[]{first,second}.Select((parts,i)=>new ConversationEntry(Guid.NewGuid(),i+1,Guid.NewGuid(),ConversationRole.User,UserMessageContent.DisplayText(parts),null,EntryStatus.Completed,SessionMode.Text,0,0,Now,Parts:parts)).ToArray();
-        var snapshot = Snapshot(Guid.NewGuid(),entries) with {ModelSelection = new("synthetic", "synthetic", "synthetic", ModelSelectionSource.SystemDefault, null)};
+        var snapshot = Snapshot(Guid.NewGuid(),entries) with {ModelSelection = new("synthetic", "synthetic", "synthetic", ModelSelectionSource.TenantDefault, null)};
         await f.Memory.SaveAsync(snapshot,0);
         EffectiveSkill[] catalog = [new("definition:first",SkillOrigin.Definition,"first","First","First","FIRST_PROCEDURE",SkillProjection.OnDemand,[],[]),new("definition:second",SkillOrigin.Definition,"second","Second","Second","SECOND_PROCEDURE",SkillProjection.OnDemand,[],[])];
         var references = new[]{new ComposerReferenceEvidence(second[1].Reference!,"Evidence","valid","SOURCE_ONE",7,"hash")};
@@ -1687,7 +1687,7 @@ public sealed partial class AgentRunAdmissionStoreTests
         await using var f = await Fixture.CreateAsync(sqlite);
         await f.InsertContinuationOwnerAsync();
         var (snapshot, _) = UserTurn();
-        snapshot = snapshot with { ModelSelection = new("synthetic", "synthetic", "synthetic", ModelSelectionSource.SystemDefault, null) };
+        snapshot = snapshot with { ModelSelection = new("synthetic", "synthetic", "synthetic", ModelSelectionSource.TenantDefault, null) };
         var source = AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
             snapshot, snapshot.Entries, Now, []);
         await f.Runs.AdmitAsync(snapshot, 0, source);

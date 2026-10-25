@@ -127,6 +127,8 @@ public sealed partial class TenantCredentialAccessTests
     {
         private async ValueTask Before() { if (Interlocked.Exchange(ref factory.BeforeCommand, null) is { } hook) await hook(); }
         private async ValueTask After() { if (Interlocked.Exchange(ref factory.AfterCredentialRead, null) is { } hook) await hook(); }
+        public ValueTask<IReadOnlyDictionary<Guid, DateTimeOffset>> ReadTenantCredentialRotationsAsync(Guid tenant, IReadOnlyList<Guid> ids, CancellationToken ct = default)
+            => credentials.ReadTenantCredentialRotationsAsync(tenant, ids, ct);
         public async ValueTask<TenantCredential?> FindTenantCredentialAsync(Guid tenant, Guid id, CancellationToken ct = default)
         { var value = await credentials.FindTenantCredentialAsync(tenant, id, ct); await After(); return value; }
         public async ValueTask<TenantCredentialPage> ListTenantCredentialsAsync(Guid tenant, IReadOnlyList<Guid>? ids, int page, int size, CancellationToken ct = default)

@@ -105,6 +105,8 @@ public sealed partial class TenantCredentialAccessTests
         private ITenantCredentialBindingStore Bindings => (ITenantCredentialBindingStore)store;
         private ITenantCredentialOAuthStore OAuth => (ITenantCredentialOAuthStore)store;
         private ITenantConnectedAccountReadStore Reads => (ITenantConnectedAccountReadStore)store;
+        public ValueTask<IReadOnlyDictionary<Guid, DateTimeOffset>> ReadTenantCredentialRotationsAsync(Guid tenant, IReadOnlyList<Guid> ids, CancellationToken ct = default)
+            => Credentials.ReadTenantCredentialRotationsAsync(tenant, ids, ct);
         public async ValueTask<TenantCredential?> FindTenantCredentialAsync(Guid tenant, Guid id, CancellationToken ct = default)
         { var value = await Credentials.FindTenantCredentialAsync(tenant, id, ct); if (race.CredentialNext) { race.CredentialNext = false; await race.Captured(); } return value; }
         public ValueTask<TenantCredentialPage> ListTenantCredentialsAsync(Guid tenant, IReadOnlyList<Guid>? ids, int page, int size, CancellationToken ct = default) => Credentials.ListTenantCredentialsAsync(tenant, ids, page, size, ct);

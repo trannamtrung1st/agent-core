@@ -24,7 +24,7 @@ const manageHints = new Map<string, boolean>();
 function path(suffix: string) { if (!chatTenantId) throw new Error('Choose an organization before opening Chat.'); return tenantApi(chatTenantId, suffix); }
 export const tenantChatAccess = () => request<TenantContext>(path('/access/me'));
 export const tenantComposerChoices = (instance: string, params: URLSearchParams) => request<{ items: import('./messageParts').ComposerChoice[]; nextCursor: string | null }>(path(`/agents/${encodeURIComponent(instance)}/composer?${params}`));
-export const tenantChatModels = () => request<ModelCatalog>(path('/chat/models'));
+export const tenantChatModels = (instanceId?: string) => request<ModelCatalog>(path('/chat/models') + (instanceId ? `?instanceId=${encodeURIComponent(instanceId)}` : ''));
 export async function tenantSessionMetadata(id: string) {
   const value = await request<Metadata>(path(`/sessions/${encodeURIComponent(id)}`)); manageHints.set(id, value.canManage); return value;
 }
@@ -47,7 +47,7 @@ export async function createTenantChat(instanceId: string, model?: SessionModelC
   if (!selected || !createAllowed) throw new Error('Select an available agent before starting a conversation.');
   const access = await tenantChatAccess();
   const created = await request<Metadata>(path('/sessions'), { method: 'POST', body: { agentInstanceId: instanceId,
-    expectedRevision: access.revision, expectedInstanceRevision: selected.revision, mode: 'text', modelKey: model?.key, reasoningEffort: model?.reasoningEffort } });
+    expectedRevision: access.revision, expectedInstanceRevision: selected.revision, mode: 'text', offeringId: model?.offeringId === "default" ? null : model?.offeringId, reasoningEffort: model?.reasoningEffort } });
   return tenantSessionView(created.sessionId);
 }
 function catalogItem(row: Metadata): CatalogItem {
@@ -88,4 +88,11 @@ export async function tenantInterruptWitness(id: string, run: string) {
   const [view, saved, access] = await Promise.all([tenantSessionMetadata(id), request<{ revision: number; canCancel: boolean; context: { sessionId: string } }>(path(`/agent-runs/${encodeURIComponent(run)}`)), tenantChatAccess()]);
   if (!saved.canCancel || saved.context.sessionId !== id) throw new Error('This response can no longer be interrupted. Check the current conversation before trying again.');
   return { expectedRevision: access.revision, expectedSessionRevision: view.revision, interruptedRunId: run, expectedRunRevision: saved.revision };
+}
+
+export async function tenantSelectChatModel(id: string, offeringId: string | null, reasoningEffort: string | null) {
+  const witness = await tenantTextWitness(id);
+  return request<{ sessionId: string; revision: number; model: SessionResponse['model'] }>(path(`/sessions/${encodeURIComponent(id)}/model`), {
+    method: 'PUT', body: { ...witness, offeringId, reasoningEffort }
+  });
 }

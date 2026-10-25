@@ -269,9 +269,9 @@ public sealed partial class AgentRunDurabilityTests
             now,
             ModelSelection: new SessionModelSelection(
                 "synthetic-offline/scripted",
-                "primary-llm",
+                "dca20000-0000-4000-8000-000000000001",
                 "scripted",
-                ModelSelectionSource.SystemDefault,
+                ModelSelectionSource.TenantDefault,
                 null), AgentInstanceId: Guid.NewGuid());
         snapshot = RuntimeAgentRunStore.WithPins(snapshot);
         agentRuns.Bind(memory);

@@ -342,8 +342,9 @@ internal static class AgentRunStoreMapping
             throw AgentCoreErrors.Conflict("Occurrence routing revision is stale.");
         if (existing) return;
         var pin = occurrence.ModelPin;
-        if (pin is null || pin.CatalogKey != run.PinnedModel.CatalogKey || pin.ProviderAlias != run.PinnedModel.ProviderAlias
-            || pin.ModelId != run.PinnedModel.ModelId || pin.ReasoningEffort != run.PinnedModel.ReasoningEffort)
+        if (pin is null || pin.OfferingId != run.PinnedModel.OfferingId || pin.ConnectionId != run.PinnedModel.ConnectionId
+            || pin.ExternalModelId != run.PinnedModel.ExternalModelId || pin.ReasoningEffort != run.PinnedModel.ReasoningEffort
+            || !Equals(pin.Binding, run.PinnedModel.Binding))
             throw AgentCoreErrors.Validation("Child model must match its admitted occurrence pin.");
     }
 
@@ -355,8 +356,9 @@ internal static class AgentRunStoreMapping
             || run.Admission.Activation.SourceEventId != occurrence.OccurrenceId
             || run.Admission.Activation.DedupeKey != $"signal:{occurrence.OccurrenceId:D}"
             || occurrence.Owner.AgentInstanceId != run.AgentInstanceId || occurrence.Owner.ProfileId != run.ProfileId
-            || pin is null || pin.CatalogKey != run.PinnedModel.CatalogKey || pin.ProviderAlias != run.PinnedModel.ProviderAlias
-            || pin.ModelId != run.PinnedModel.ModelId || pin.ReasoningEffort != run.PinnedModel.ReasoningEffort
+            || pin is null || pin.OfferingId != run.PinnedModel.OfferingId || pin.ConnectionId != run.PinnedModel.ConnectionId
+            || pin.ExternalModelId != run.PinnedModel.ExternalModelId || pin.ReasoningEffort != run.PinnedModel.ReasoningEffort
+            || !Equals(pin.Binding, run.PinnedModel.Binding)
             || occurrence.SourceKind == TriggerSourceKind.Schedule && run.Admission.Activation.Kind != ActivationKind.ScheduledWork
             || occurrence.SourceKind == TriggerSourceKind.CoreEvent && run.Admission.Activation.Kind != ActivationKind.CoreEvent
             || occurrence.SourceKind == TriggerSourceKind.ApplicationEvent && run.Admission.Activation.Kind != ActivationKind.ApplicationEvent

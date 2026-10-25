@@ -19,7 +19,7 @@ public sealed partial class TenantCredentialIntegrationTests
             new((ITenantAuthorizationAuditStore)store, f.Ids, f.Clock));
         var local = new TenantApprovedOperationService(store, (ITenantRunStore)store, (ITenantAgentStore)store,
             (ITenantApprovalStore)store, (ITenantApprovedOperationStore)store, operations, f.RunConfiguration(), f.Ids, f.Clock,
-            ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default);
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(store), SyntheticProviderAliases.Default);
         return new((ITenantRunStore)store, (ITenantApprovalStore)store, local, f.Clock, (ITenantRuntimeStore)store, f.Ids, RuntimeChecks(f, verifier));
     }
 

@@ -75,7 +75,7 @@ public static class TenantActivityEndpoints
         return new { run.RunId, run.SessionId, run.AgentInstanceId, context = new { c.TenantId, c.AgentPrincipalId, c.OriginalInitiatorPrincipalId,
             c.RootActivationId, c.ActivationId, c.ParentRunId, c.ParentActivationId, origin = Camel(c.Origin.ToString()) },
             status = Camel(run.Status.ToString()), run.Revision, run.CreatedAt, run.UpdatedAt, activationKind = Camel(run.ActivationKind.ToString()),
-            outputContract = Camel(run.OutputContract.ToString()), run.ModelCatalogKey, run.AttemptCount, run.MaxAttempts, run.ProgressSummary, run.Objective, run.OutcomeText,
+            outputContract = Camel(run.OutputContract.ToString()), run.ModelOfferingId, run.AttemptCount, run.MaxAttempts, run.ProgressSummary, run.Objective, run.OutcomeText,
             outcomeKind = run.OutcomeKind is { } outcome ? Camel(outcome.ToString()) : null, run.FailureCode, run.FailureSummary, run.DiagnosticId, run.CancellationRequested, run.CanCancel };
     }
 }

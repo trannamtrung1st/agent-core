@@ -271,11 +271,13 @@ public static class SessionEventMapper
                     ["model"] = ready.ModelSelection is { } model
                         ? new Dictionary<string, object?>
                         {
-                            ["catalogKey"] = model.CatalogKey,
-                            ["displayName"] = catalog?.Get(model.CatalogKey)?.DisplayName ?? model.CatalogKey,
+                            ["offeringId"] = model.OfferingId,
+                            ["displayName"] = model.Binding?.ModelLabel ?? catalog?.Get(model.OfferingId)?.DisplayName ?? model.OfferingId,
                             ["selectionSource"] = SessionModelBinder.ToWire(model.SelectionSource),
                             ["reasoningEffort"] = model.ReasoningEffort,
-                            ["modelId"] = model.ModelId
+                            ["externalModelId"] = model.ExternalModelId,
+                            ["connectionId"] = model.ConnectionId,
+                            ["connectionLabel"] = model.Binding?.ConnectionLabel
                         }
                         : null
                 },

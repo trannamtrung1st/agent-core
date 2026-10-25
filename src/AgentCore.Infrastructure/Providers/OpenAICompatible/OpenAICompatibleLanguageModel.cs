@@ -46,8 +46,8 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
         _diagnostics = diagnostics;
         _http.Timeout = Timeout.InfiniteTimeSpan;
         _completions = options.Transport == ModelInferenceTransport.Responses
-            ? new Uri(JoinCompletions(options.BaseUrl), "../responses")
-            : JoinCompletions(options.BaseUrl);
+            ? new Uri(JoinCompletions(options.BaseUrl, options.PrepareDispatch is not null), "../responses")
+            : JoinCompletions(options.BaseUrl, options.PrepareDispatch is not null);
         Capabilities = new ModelCapabilities(
             StreamingText: true,
             Cancellation: true,
@@ -111,6 +111,7 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
         try
         {
             using var httpRequest = BuildRequest(request);
+            if (_options.PrepareDispatch is { } prepare) await prepare(httpRequest, setupCts.Token).ConfigureAwait(false);
             response = await _http.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, setupCts.Token)
                 .ConfigureAwait(false);
         }
@@ -999,7 +1000,9 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
         public static ProviderErrorDiagnostic Empty { get; } = new(string.Empty, string.Empty, string.Empty);
     }
 
-    public static Uri JoinCompletions(string? baseUrl)
+    public static Uri JoinCompletions(string? baseUrl) => JoinCompletions(baseUrl, false);
+
+    private static Uri JoinCompletions(string? baseUrl, bool guardedEndpoint)
     {
         if (string.IsNullOrWhiteSpace(baseUrl)
             || !Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
@@ -1008,7 +1011,7 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
             throw new ArgumentException("Language model BaseUrl is invalid.");
         }
 
-        if (uri.Scheme is not "https" && !(uri.Scheme == "http" && (uri.IsLoopback || uri.Host == "localhost")))
+        if (uri.Scheme is not "https" && !(uri.Scheme == "http" && (guardedEndpoint || uri.IsLoopback || uri.Host == "localhost")))
         {
             throw new ArgumentException("Language model BaseUrl must be https, or http for local demo endpoints.");
         }

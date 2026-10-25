@@ -10,20 +10,20 @@ export type AdminDefinitionInventoryItem = {
 };
 
 export type AdminAuthoringModelOption = {
-  key: string;
+  offeringId: string;
   displayName: string;
   supportedReasoningEfforts: string[];
   defaultReasoningEffort: string | null;
+  connectionId?: string | null;
+  connectionLabel?: string | null;
 };
 
 export type AdminAuthoringOptions = {
-  languageModelAliases: string[];
   speechRecognizerAliases: string[];
   speechSynthesizerAliases: string[];
-  defaultLanguageModelAlias: string | null;
   defaultSpeechRecognizerAlias: string | null;
   defaultSpeechSynthesizerAlias: string | null;
-  defaultModelKey: string;
+  defaultOfferingId: string;
   models: AdminAuthoringModelOption[];
   interruptionClassifiers: string[];
 };
@@ -64,17 +64,16 @@ export type AdminEffectiveConfiguration = {
   personaRevision: number;
   persona: { name: string; role: string; description: string; tone: string };
   providerPreferences: {
-    languageModel: string;
     speechRecognizer: string | null;
     speechSynthesizer: string | null;
     interruptionClassifier: string;
   };
   effectiveModel: {
-    catalogKey: string;
+    offeringId: string;
     displayName: string;
     selectionSource: string;
     reasoningEffort: string | null;
-    modelId: string | null;
+    externalModelId: string | null;
   };
   effectiveToolAllowlist: string[];
   harnessReferences: string[];
@@ -114,7 +113,7 @@ export type AdminEffectiveConfiguration = {
     allowsApplicationEventSource: boolean;
     canAcceptNewTriggeredWork: boolean;
   };
-  unattendedModelCatalogKey?: string | null;
+  unattendedOfferingId?: string | null;
   unattendedReasoningEffort?: string | null;
 };
 
@@ -233,7 +232,7 @@ export type AdminAgentInstance = {
   revision: number;
   personaRevision: number;
   persona?: { name: string; role: string; description: string; tone: string };
-  unattendedModelCatalogKey?: string | null;
+  unattendedOfferingId?: string | null;
   unattendedReasoningEffort?: string | null;
 };
 
@@ -324,11 +323,9 @@ export function friendlyAdminDetail(detail: string | undefined, fallback: string
   if (text.startsWith("Definition candidate body is invalid")) {
     return "A field in this draft could not be read. Check numbers and Advanced JSON, then try again.";
   }
-  const alias = text.match(/^(languageModel|speechRecognizer|speechSynthesizer) alias '([^']+)' is not configured\.$/);
+  const alias = text.match(/^(speechRecognizer|speechSynthesizer) alias '([^']+)' is not configured\.$/);
   if (alias) {
-    const label = alias[1] === "languageModel"
-      ? "language model"
-      : alias[1] === "speechRecognizer"
+    const label = alias[1] === "speechRecognizer"
         ? "speech recognizer"
         : "speech synthesizer";
     return `The ${label} “${alias[2]}” is not available on this server. Choose one that is configured.`;
@@ -378,7 +375,7 @@ export type AdminLearnedMemoryItem = {
 export type SystemCredential = {
   credentialId: string; displayName: string; kind: string; status: string;
   metadata: Record<string, string>; allowedOrigins: string[]; revision: number;
-  createdAtUtc: string; updatedAtUtc: string; bindingCount: number; purpose?: "General" | "EmailAccount" | "GoogleDriveAccount" | "ContainerRegistry"; emailAccount?: EmailAccountProfile | null; driveAccount?: import("./drive").DriveProfile | null; containerRegistry?:ContainerRegistryProfile|null;
+  createdAtUtc: string; updatedAtUtc: string; bindingCount: number; purpose?: "General" | "EmailAccount" | "GoogleDriveAccount" | "ContainerRegistry" | "ModelInference"; emailAccount?: EmailAccountProfile | null; driveAccount?: import("./drive").DriveProfile | null; containerRegistry?:ContainerRegistryProfile|null;
 };
 export type CredentialBinding = { bindingId: string; credentialId: string; reference: string; revision: number; credential: SystemCredential };
 export type CredentialInput = { displayName: string; kind: string; metadata: Record<string, string>; allowedOrigins: string[]; protectedValue: string };
@@ -406,7 +403,7 @@ export type ExperienceItem = {
   experienceId: string; sourceKind: "Session" | "AgentRun" | "Consolidation"; sourceId: string; throughCursor: number;
   sourceRunOutputContract?: "ConversationResponse" | "BackgroundOutcome" | "CompletionReport" | null;
   sourceAt: string; sourceCreatedAt?: string; checkpointAt?: string | null; definitionId: string; definitionVersion: number; generationAgentRunId: string;
-  modelKey: string; status: string; visibility: "Eligible" | "Suppressed" | "Superseded" | "Deleted"; revision: number;
+  offeringId: string; status: string; visibility: "Eligible" | "Suppressed" | "Superseded" | "Deleted"; revision: number;
   derivedFromExperienceIds?: string[]; maintenanceOrigin?: string | null;
   eligibleForContext: boolean; content: ExperienceContent | null; diagnosticId: string | null; failureSummary: string | null;
 };
@@ -430,11 +427,11 @@ export type CoreEventType = { key: string; eligible: boolean; reason: string | n
 export type AutomationPreset = { presetId: string; presetVersion: number; name: string; description: string; instructions: string; trigger: AutomationTrigger; eligible: boolean; prerequisites: string[] };
 export type FilterTestResult = { matched: boolean | null; status: "matched" | "notMatched" | "error"; code?: string | null };
 export type AutomationDraft = { presetId?: string | null; presetVersion?: number | null; requiresTools?: boolean; requiresVision?: boolean; executionTarget: AutomationTarget; completionDelivery: AutomationDelivery; expectedRevision: number; enabled: boolean; name: string; instructions: string; triggers: AutomationChild[];
-  modelKey: string | null; reasoningEffort: string | null };
+  offeringId: string | null; reasoningEffort: string | null };
 export type Automation = { presetId?: string | null; presetVersion?: number | null; requiresTools?: boolean; requiresVision?: boolean; executionTarget: AutomationTarget; completionDelivery: AutomationDelivery; suspensionReason?: string | null; automationId: string; revision: number; name: string; instructions: string; enabled: boolean; status: string;
   triggers: AutomationChild[]; authorizationOrigin: string; sourceSessionId: string | null; sourceEventId: string | null;
-  createdAt: string; nextRunAt: string | null; modelKey: string | null; reasoningEffort: string | null;
-  effectiveModelKey: string | null; lastAgentRunId: string | null; executionStatus: string | null; outcome: string | null };
+  createdAt: string; nextRunAt: string | null; offeringId: string | null; reasoningEffort: string | null;
+  effectiveOfferingId: string | null; lastAgentRunId: string | null; executionStatus: string | null; outcome: string | null };
 export type AutomationPolicy = { allowOneShot: boolean; allowDaily: boolean; allowWeekly: boolean; allowFixedInterval: boolean;
   allowIndefiniteRecurrence: boolean; oneShotHorizonDays: number; minRecurrenceDays: number; minFixedIntervalSeconds: number; maxActiveRegistrations: number; allowEvents?: boolean; allowCoreEvents?: boolean };
 export type AutomationReview = { items: Automation[]; policy?: AutomationPolicy | null };

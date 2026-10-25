@@ -1,5 +1,13 @@
 # System Architecture
 
+## Dynamic model management
+
+Model reference inspection is a current-human, read-only projection through `TenantModelManagementService` and the existing model store. It filters resource visibility before counting/paging and repeats the security revision fence; it grants no execution or mutation authority. Safe retirement retains model rows, assignments and captured Run/approval provenance. Physical model/connection deletion is not exposed. Configuration confirmation previews readable references, while the existing mutation transaction remains authoritative for default/credential references and current revisions.
+
+The owner-authorized 25 October proposal adds tenant-owned provider connections, model offerings and explicit tenant defaults, plus shared system presets. Protected inference credentials stay in the incumbent Credential owner and cannot be Agent tool bindings. Native adapters implement the existing language-model contract; Session Runtime and canonical Run/approval/checkpoint owners retain execution ownership. The cutover removes static Real routing and global inference injection. [Delivery ledger](reports/dynamic-model-management-delivery-2026-10-25.md#final-requirement-audit) records completed local integration, focused evidence and live-provider/CI limits.
+
+An idle human conversation's model preference changes through the existing tenant Session transaction, under the existing Runtime host's quiescent reservation. The command rechecks current human/Agent/model authority and refuses live Run or Voice ownership; both stores also refuse nonterminal Runs under their write transaction. It changes only the Session selection for future admission. Historical Run bindings and continuation identity remain immutable. Chat catalog defaults use the same inherited-choice policy as admission, scoped to the actual Agent Instance.
+
 This document owns the current responsibility model, dependency boundaries and invariants. Detailed application contracts belong to [Backend Interfaces](04-backend-interfaces.md), browser/wire contracts to [Protocol](14-api-and-realtime-protocol.md), and durable schema/configuration to [Persistence](15-persistence-and-configuration.md). Dated reports qualify their recorded versions; they are evidence, not alternative current interfaces.
 
 The Account/tenant successor has completed local implementation and Synthetic proposal acceptance. [Final delivery](reports/tenant-final-delivery-2026-10-24.md) and the [stabilization follow-up](reports/iam-stabilization-2026-10-24.md) distinguish that scope from deployment, live-provider/customer, physical-device and optional CI qualification.

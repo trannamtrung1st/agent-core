@@ -14,6 +14,6 @@ public static class TenantCredentialBindingRules
     public static void Bindable(Credential value)
     {
         if (value.Status != CredentialStatus.Active) throw new AccessDeniedException("credential_disabled");
-        if (value.Purpose == CredentialPurpose.ContainerRegistry) throw new AccessDeniedException("credential_not_bindable");
+        if (value.Purpose is CredentialPurpose.ContainerRegistry or CredentialPurpose.ModelInference) throw new AccessDeniedException("credential_not_bindable");
     }
 }

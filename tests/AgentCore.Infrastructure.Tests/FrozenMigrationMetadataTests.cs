@@ -102,11 +102,25 @@ public sealed class FrozenMigrationMetadataTests
                     ? guard.Value.Replace("'office.spreadsheet.edit')", "'office.spreadsheet.edit','web.download')", StringComparison.Ordinal) : guard.Value;
                 Assert.Equal(expected, downloads[guard.Key]);
             }
+            await migrator.MigrateAsync("20261025010000_TenantDynamicModels");
+            var modelPredecessor = await Schema(db);
+            foreach (var guard in downloads.Where(item => item.Key.StartsWith("trigger:", StringComparison.Ordinal)))
+                Assert.Equal(guard.Value, modelPredecessor[guard.Key]);
             await migrator.MigrateAsync();
             var current = await Schema(db);
-            Assert.Equal(138, current.Keys.Count(k => k.StartsWith("trigger:", StringComparison.Ordinal)));
-            foreach (var guard in downloads.Where(item => item.Key.StartsWith("trigger:", StringComparison.Ordinal)))
-                Assert.Equal(guard.Value, current[guard.Key]);
+            Assert.Equal(145, current.Keys.Count(k => k.StartsWith("trigger:", StringComparison.Ordinal)));
+            foreach (var guard in modelPredecessor.Where(item => item.Key.StartsWith("trigger:", StringComparison.Ordinal)))
+            {
+                // Canonical identity changes these four field references. The
+                // dedicated cutover fixture checks their new closed identities.
+                if (guard.Key is "trigger:TR_TenantApprovals_AutomationAdmission_INSERT" or "trigger:TR_TenantApprovals_ConfigurationRemedy_INSERT"
+                    or "trigger:TR_TenantApprovals_CredentialBinding_INSERT" or "trigger:TR_TenantOccurrences_Source_Update")
+                {
+                    Assert.NotEqual(guard.Value, current[guard.Key]);
+                    Assert.DoesNotContain("CatalogKey", current[guard.Key]); Assert.DoesNotContain("ProviderAlias", current[guard.Key]);
+                }
+                else Assert.Equal(guard.Value, current[guard.Key]);
+            }
             Assert.False(db.Database.HasPendingModelChanges());
             await migrator.MigrateAsync(historical);
             SameSchema(original, await Schema(db));

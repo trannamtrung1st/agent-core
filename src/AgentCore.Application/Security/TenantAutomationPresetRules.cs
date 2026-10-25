@@ -52,7 +52,7 @@ public static class TenantAutomationPresetRules
             if (p.TriggerKind == "coreEvent" ? !OccurrenceCompatibility.Allows(definition, TriggerSourceKind.CoreEvent)
                 : !TriggerDurableSchedulingPolicy.AllowsScheduledOccurrence(definition) || definition.TriggerPolicy?.AllowWeekly != true)
                 reasons.Add(p.TriggerKind == "coreEvent" ? "Allow Built-in events in the active Definition." : "Allow weekly scheduling in the active Definition.");
-            if (!model.Accepted || model.Pin is null || models.Get(model.Pin.CatalogKey)?.Tools != true) reasons.Add("Select an available tool-capable unattended model.");
+            if (!model.Accepted || model.Pin is null || models.Get(model.Pin.OfferingId)?.Tools != true) reasons.Add("Select an available tool-capable unattended model.");
             if (p.PresetId is "review-recent-work" or "consolidate-continuity" && !experience) reasons.Add("Enable eligible Experience for this Agent.");
             if (p.PresetId == "consolidate-continuity")
             {

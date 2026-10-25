@@ -52,7 +52,7 @@ public static class TenantAutomationMutationContract
         foreach (var field in root.EnumerateObject())
         {
             var value = field.Value; var shape = properties.GetProperty(field.Name);
-            var nullable = field.Name is "modelKey" or "reasoningEffort" or "filterExpression" or "endDate" or "startDate" or "endAtUtc" or "maxOccurrences";
+            var nullable = field.Name is "offeringId" or "reasoningEffort" or "filterExpression" or "endDate" or "startDate" or "endAtUtc" or "maxOccurrences";
             if (value.ValueKind == JsonValueKind.Null && nullable) continue;
             var type = shape.TryGetProperty("type", out var expected) && expected.ValueKind == JsonValueKind.String ? expected.GetString() : null;
             if (type == "string" && value.ValueKind != JsonValueKind.String || type == "integer" && (value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out _))

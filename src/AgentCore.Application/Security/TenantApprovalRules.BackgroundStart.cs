@@ -15,7 +15,7 @@ public static partial class TenantApprovalRules
             || value.Objective is not { Length: > 0 and <= AgentCore.Domain.Conversation.AgentRunLimits.MaxBackgroundObjectiveCharacters } || value.Objective != value.Objective.Trim()
             || value.Title is not { Length: > 0 and <= 80 } || value.Title != value.Title.Trim()
             || value.ConfigurationHash is not { Length: 64 } || value.ConfigurationHash.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f'))
-            || value.Model is null || string.IsNullOrWhiteSpace(value.Model.CatalogKey) || string.IsNullOrWhiteSpace(value.Model.ProviderAlias) || string.IsNullOrWhiteSpace(value.Model.ModelId))
+            || value.Model is null || string.IsNullOrWhiteSpace(value.Model.OfferingId) || string.IsNullOrWhiteSpace(value.Model.ConnectionId) || string.IsNullOrWhiteSpace(value.Model.ExternalModelId))
             throw new ArgumentException("Invalid exact background creation.");
         _ = value.Model.ToPin();
         var json = JsonSerializer.Serialize(new { operation = "background.start", permission = value.Permission, resourceType = "tenant", resourceId = value.TenantId.ToString("D"),

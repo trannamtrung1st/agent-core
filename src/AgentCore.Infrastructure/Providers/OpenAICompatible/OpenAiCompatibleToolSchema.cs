@@ -12,6 +12,25 @@ internal static class OpenAiCompatibleToolSchema
         return schema;
     }
 
+    // Anthropic's documented structured-output conversion retains these constraints as
+    // instructions; Core still validates the original semantic/tool schema before effects.
+    public static JsonNode? ForNative(string json, bool anthropic)
+    {
+        var node = Normalize(json);
+        if (anthropic) SimplifyAnthropic(node);
+        return node;
+    }
+    private static void SimplifyAnthropic(JsonNode? node)
+    {
+        if (node is JsonObject obj)
+        {
+            foreach (var name in new[] { "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "minLength", "maxLength", "minItems", "maxItems" })
+                if (obj.Remove(name, out var value)) obj["description"] = (obj["description"]?.GetValue<string>() ?? "") + $" Constraint: {name}={value?.ToJsonString()}.";
+            foreach (var value in obj.Select(p => p.Value).ToArray()) SimplifyAnthropic(value);
+        }
+        else if (node is JsonArray array) foreach (var item in array) SimplifyAnthropic(item);
+    }
+
     private static void NormalizeNodes(JsonNode? node)
     {
         if (node is JsonObject obj)

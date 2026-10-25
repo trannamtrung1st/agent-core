@@ -28,7 +28,7 @@ public sealed class TenantAutomationMutationContractTests
         var ids = new SystemIdGenerator(TimeProvider.System); var agent = new TenantAgent(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new(Guid.NewGuid(), definition.Id, definition.Version, definition.Identity, AgentInstanceLifecycle.Active, at, at));
         var args = TenantAutomationMutationContract.Parse(ToolCatalog.AutomationCreate, """{"enabled":false,"name":"Exact task","instructions":"Do the accepted task.","relativeDelaySeconds":3600,"executionTarget":"backgroundSession","timeZone":"Asia/Ho_Chi_Minh"}""");
         var change = TriggerScheduleCommands.NormalizeTenant(definition, null, args, Guid.NewGuid(), at, ids);
-        var proposed = TenantAutomationAuthoring.Build(agent, definition, null, change, new(TriggerAuthorizationOrigin.AgentTask, null, null, at.AddMinutes(2), at.AddMinutes(2)), at.AddMinutes(2), ModelCatalogFactory.Synthetic(), ids, null);
+        var proposed = TenantAutomationAuthoring.Build(agent, definition, null, change, new(TriggerAuthorizationOrigin.AgentTask, null, null, at.AddMinutes(2), at.AddMinutes(2)), at.AddMinutes(2), AgentCore.Infrastructure.Providers.Synthetic.SyntheticModelCatalog.Create(), ids, null);
         var once = Assert.IsType<OneShotSchedule>(proposed.Schedule); Assert.Equal(at.AddHours(1), once.AtUtc); Assert.NotNull(once.LocalDate); Assert.NotNull(once.LocalTime);
         var value = new PreparedAutomationMutation(Guid.NewGuid(), Guid.NewGuid(), args.Tool, args.Json, null, proposed, new string('a',64), false);
         var saved = JsonSerializer.Deserialize<PreparedAutomationMutation>(JsonSerializer.Serialize(value))!;
@@ -43,10 +43,10 @@ public sealed class TenantAutomationMutationContractTests
         var agent = new TenantAgent(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new(Guid.NewGuid(), definition.Id, definition.Version, definition.Identity, AgentInstanceLifecycle.Active, at, at));
         var change = new TenantAutomationChange(false, "Events", "Retain the task", null,
             Events: [new(null, new CoreEventTrigger("run.completed", null, new EventDispatch(EventDispatchMode.CoalesceLatest, 90)), false)], RequiresTools: false);
-        var current = TenantAutomationAuthoring.Build(agent, definition, null, change, new(TriggerAuthorizationOrigin.AgentTask, null, null, at, at), at, ModelCatalogFactory.Synthetic(), ids, null);
+        var current = TenantAutomationAuthoring.Build(agent, definition, null, change, new(TriggerAuthorizationOrigin.AgentTask, null, null, at, at), at, AgentCore.Infrastructure.Providers.Synthetic.SyntheticModelCatalog.Create(), ids, null);
         var arguments = TenantAutomationMutationContract.Parse(ToolCatalog.AutomationUpdate, JsonSerializer.Serialize(new { automationId = current.AutomationId, expectedRevision = 1, coreEventKey = "run.completed", name = "Renamed" }));
         var normalized = TriggerScheduleCommands.NormalizeTenant(definition, current, arguments, Guid.NewGuid(), at, ids);
-        var edited = TenantAutomationAuthoring.Build(agent, definition, current, normalized, current.Provenance.WithUpdated(at.AddMinutes(1)), at.AddMinutes(1), ModelCatalogFactory.Synthetic(), ids, null);
+        var edited = TenantAutomationAuthoring.Build(agent, definition, current, normalized, current.Provenance.WithUpdated(at.AddMinutes(1)), at.AddMinutes(1), AgentCore.Infrastructure.Providers.Synthetic.SyntheticModelCatalog.Create(), ids, null);
         var child = Assert.Single(edited.Triggers); Assert.Equal(current.Triggers[0].TriggerId, child.TriggerId); Assert.Equal(current.Triggers[0].Revision, child.Revision);
         Assert.False(child.Enabled); Assert.Equal(90, ((CoreEventTrigger)child.Configuration).Dispatch.WindowSeconds); Assert.Equal("Renamed", edited.Name);
     }

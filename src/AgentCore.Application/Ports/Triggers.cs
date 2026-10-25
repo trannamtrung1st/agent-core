@@ -171,7 +171,7 @@ public interface ITriggerStore
         TriggerOwner owner,
         Guid automationId,
         long expectedRevision,
-        string? catalogKey,
+        string? offeringId,
         string? reasoningEffort,
         DateTimeOffset updatedAt,
         CancellationToken cancellationToken = default) =>

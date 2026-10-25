@@ -20,7 +20,7 @@ public sealed partial class TenantBrowserApprovalTests
     {
         store ??= f.Iam;
         var local = new TenantApprovedOperationService(store, (ITenantRunStore)store, (ITenantAgentStore)store, (ITenantApprovalStore)store,
-            (ITenantApprovedOperationStore)store, Operations(f, store), f.RunConfiguration(), f.Ids, f.Clock, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default);
+            (ITenantApprovedOperationStore)store, Operations(f, store), f.RunConfiguration(), f.Ids, f.Clock, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(store), SyntheticProviderAliases.Default);
         return new((ITenantRunStore)store, (ITenantApprovalStore)store, local, f.Clock, (ITenantRuntimeStore)store, f.Ids,
             browserEffects: Effects(f, browser, store));
     }

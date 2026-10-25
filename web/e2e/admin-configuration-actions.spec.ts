@@ -41,7 +41,7 @@ test('one save persists persona, sparse settings, budgets, policy and unattended
   await page.getByRole('button', { name: 'Save configuration', exact: true }).click();
   await expect(page.getByRole('status', { name: 'Instance configuration status' })).toContainText('Configuration saved.');
   const effectiveResponse = await page.request.get(`/api/v2/admin/instances/${instanceId}/effective-config`, { headers }); expect(effectiveResponse.ok()).toBe(true); const effective = await effectiveResponse.json();
-  expect(effective.persona.name).toBe('Shared configuration save'); expect(effective.unattendedModelCatalogKey).toBe('scripted-beta');
+  expect(effective.persona.name).toBe('Shared configuration save'); expect(effective.unattendedOfferingId).toBe('dca30000-0000-4000-8000-000000000002');
   const settings = await (await page.request.get(api + '/settings', { headers })).json();
   expect(settings.find((s: { section: string }) => s.section === 'instructions').overrides).toEqual({ agentInstructions: 'Sparse retained instructions' });
   expect(settings.find((s: { section: string }) => s.section === 'conversationPolicy').overrides).toEqual({ language: 'fr-FR' });

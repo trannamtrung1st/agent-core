@@ -27,10 +27,10 @@ public sealed class UserTurnCapabilityValidatorTests
         await validator.ValidateAsync(
             session,
             new SessionModelSelection(
-                "scripted-alpha",
-                "primary-llm",
-                "scripted-alpha",
-                ModelSelectionSource.SystemDefault,
+                "dca30000-0000-4000-8000-000000000001",
+                "dca20000-0000-4000-8000-000000000001",
+                "dca30000-0000-4000-8000-000000000001",
+                ModelSelectionSource.TenantDefault,
                 "medium"),
             [uploaded.AttachmentId]);
     }
@@ -53,10 +53,10 @@ public sealed class UserTurnCapabilityValidatorTests
             validator.ValidateAsync(
                 session,
                 new SessionModelSelection(
-                    "scripted-alpha",
-                    "primary-llm",
-                    "scripted-alpha",
-                    ModelSelectionSource.SystemDefault,
+                    "dca30000-0000-4000-8000-000000000001",
+                    "dca20000-0000-4000-8000-000000000001",
+                    "dca30000-0000-4000-8000-000000000001",
+                    ModelSelectionSource.TenantDefault,
                     "medium"),
                 [uploaded.AttachmentId]).AsTask());
         Assert.Equal("ModelCapabilityUnsupported", ex.Code);
@@ -87,16 +87,16 @@ public sealed class UserTurnCapabilityValidatorTests
             validator.ValidateProcessedImages(
                 new SessionModelSelection(
                     "deepseek-v41-flash",
-                    "primary-llm",
+                    "dca20000-0000-4000-8000-000000000001",
                     "deepseek/deepseek-v4.1-flash",
-                    ModelSelectionSource.SystemDefault,
+                    ModelSelectionSource.TenantDefault,
                     "medium"),
                 results));
 
         validator.ValidateProcessedImages(
             new SessionModelSelection(
                 "gpt-4o-mini-2024-07-18",
-                "primary-llm",
+                "dca20000-0000-4000-8000-000000000001",
                 "openai/gpt-4o-mini-2024-07-18",
                 ModelSelectionSource.User,
                 null),

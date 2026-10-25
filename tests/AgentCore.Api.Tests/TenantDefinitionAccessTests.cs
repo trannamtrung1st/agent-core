@@ -27,7 +27,9 @@ public sealed partial class TenantDefinitionAccessTests
         Assert.Equal(0, (await Json(await owner.GetAsync($"/api/v2/tenants/{other}/agent-definitions"))).GetProperty("total").GetInt32());
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{other}/definition-drafts/{draftId}")).StatusCode);
         var invalidCandidate = JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
-        invalidCandidate["providerPreferences"]!["languageModel"] = "unconfigured-provider";
+        invalidCandidate["voice"]!["enabled"] = true;
+        invalidCandidate["providerPreferences"]!["speechRecognizer"] = "unconfigured-provider";
+        invalidCandidate["providerPreferences"]!["speechSynthesizer"] = "primary-tts";
         var invalid = await owner.PutAsJsonAsync($"/api/v2/tenants/{tenant}/definition-drafts/{draftId}", new { candidate = invalidCandidate, expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 1 });
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode); Assert.Equal("unknown_provider_alias", (await Json(invalid)).GetProperty("reasonCode").GetString());
         var candidate = JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;

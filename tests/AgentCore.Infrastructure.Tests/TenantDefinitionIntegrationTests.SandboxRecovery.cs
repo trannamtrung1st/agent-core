@@ -130,7 +130,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                 await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId, new AgentRunCommand.CommitCancellation(run.Revision, DateTimeOffset.UtcNow, frame.Generation, "Recovery cancellation"), f.Ids.NewId());
                 var current = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, frame.SessionId))!;
                 var sessionService = new TenantSessionService(f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam, f.Definitions,
-                    new SessionNoBuiltinFallback(), f.Identity, f.Authorizer, AgentCore.Infrastructure.Providers.ModelCatalogFactory.Synthetic(), new(), f.Ids, TimeProvider.System);
+                    new SessionNoBuiltinFallback(), f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), new(), f.Ids, TimeProvider.System);
                 await sessionService.ChangeAsync(s.Tenant, SandboxHuman(s), new(frame.SessionId, current.Snapshot.Revision, TenantSessionAction.Delete), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
             }
             var recovered = sqlite ? new AgentCore.Infrastructure.Security.SqliteIamStore(f.Contexts!, f.Content) : f.Iam;
@@ -175,9 +175,9 @@ public sealed partial class TenantDefinitionIntegrationTests
         var storage = (ITenantSandboxRuntimeStore)f.Iam;
         Assert.True(await storage.TryReserveTenantSandboxLeaseAsync(s.Write, s.Lease, 0, DateTimeOffset.UtcNow));
         var sessions = new TenantSessionService(f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam,
-            f.Definitions, new SessionNoBuiltinFallback(), f.Identity, f.Authorizer, AgentCore.Infrastructure.Providers.ModelCatalogFactory.Synthetic(), new(), f.Ids, TimeProvider.System);
+            f.Definitions, new SessionNoBuiltinFallback(), f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), new(), f.Ids, TimeProvider.System);
         var runs = new TenantRunService(f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam, s.Resolver, f.Identity, f.Authorizer,
-            AgentCore.Infrastructure.Providers.ModelCatalogFactory.Synthetic(), f.Ids, TimeProvider.System);
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), f.Ids, TimeProvider.System);
         var expected = new List<Guid> { s.Session.SessionId };
         for (var i = 0; i < 2; i++)
         {

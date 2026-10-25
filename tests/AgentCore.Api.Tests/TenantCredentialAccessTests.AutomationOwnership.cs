@@ -147,7 +147,7 @@ public sealed partial class TenantCredentialAccessTests
             var identity = factory.Services.GetRequiredService<IdentityService>(); var auth = (await identity.SignInAsync("owner@example.test", "explicit-synthetic-test-password"))!;
             var security = factory.Services.GetRequiredService<IIamStore>(); var state = (await security.ReadTenantAsync(tenant))!;
             var expiring = new Automation(id, saved.Owner, saved.Status, saved.Instructions, saved.Triggers, saved.NextOccurrenceAtUtc, clock.GetUtcNow().AddMinutes(10), saved.OccurrenceCount,
-                saved.Revision + 1, saved.TriggerRevision, saved.Provenance.WithUpdated(clock.GetUtcNow()), saved.SuspensionReason, saved.ModelOverrideCatalogKey, saved.ModelOverrideReasoningEffort,
+                saved.Revision + 1, saved.TriggerRevision, saved.Provenance.WithUpdated(clock.GetUtcNow()), saved.SuspensionReason, saved.ModelOverrideOfferingId, saved.ModelOverrideReasoningEffort,
                 saved.RequiresVision, saved.Name, saved.ExecutionTarget, saved.CompletionDelivery, saved.RequiresTools);
             Assert.True(await store.TrySaveTenantAutomationAsync(state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } }, state.Tenant.Revision, expiring, saved.Revision, agent.Instance.Revision,
                 new(auth.Account.AccountId, auth.Session.SessionId, human), "automations.update", new(Guid.NewGuid(), tenant, human, "automations.update", id.ToString("D"), "allowed", "automation_saved", clock.GetUtcNow())));

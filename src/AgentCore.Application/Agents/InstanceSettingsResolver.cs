@@ -19,11 +19,11 @@ public static class InstanceSettingsResolver
         "behaviorPolicy" => ["interruptionStyle", "acknowledgeInterruption", "avoidUnsupportedClaims"],
         "initiativePolicy" => ["enabled", "silenceThresholdMs", "cooldownMs", "maxPerSilencePeriod", "triggers", "maxConsecutiveProactiveTurns", "maxSilentEvaluations", "maxInactivityMs"],
         "voice" => ["enabled", "voiceId", "speakingRate"],
-        "modelDefaults" => ["catalogKey", "reasoningEffort"],
+        "modelDefaults" => ["offeringId", "reasoningEffort"],
         "memoryPolicy" => ["sessionMemory", "identityUserPromotion", "identityUserRetrieval", "userPromotion", "userRetrieval"],
         "capabilities" => ["selected", "always", "allowUnreadUnsupportedTypes"],
         "triggerPolicy" => ["enabled", "allowUserScheduling", "allowOneShot", "allowDaily", "allowWeekly", "allowIndefiniteRecurrence", "maxActiveRegistrations", "oneShotHorizonDays", "minRecurrenceDays", "allowedSourceKinds", "allowFixedInterval", "minFixedIntervalSeconds"],
-        "providerPreferences" => ["languageModel", "speechRecognizer", "speechSynthesizer", "interruptionClassifier"],
+        "providerPreferences" => ["speechRecognizer", "speechSynthesizer", "interruptionClassifier"],
         _ => throw AgentCoreErrors.Validation("Unknown settings section.")
     };
 
@@ -80,7 +80,7 @@ public static class InstanceSettingsResolver
                     ("voice", "enabled") => next with { VoiceEnabled = remove ? null : new(Read<bool>(set[field])) },
                     ("voice", "voiceId") => next with { VoiceId = remove ? null : new(Read<string>(set[field])) },
                     ("voice", "speakingRate") => next with { SpeakingRate = remove ? null : new(Read<double>(set[field])) },
-                    ("modelDefaults", "catalogKey") => next with { ModelCatalogKey = remove ? null : new(set[field].ValueKind == JsonValueKind.Null ? null : Read<string>(set[field])) },
+                    ("modelDefaults", "offeringId") => next with { ModelOfferingId = remove ? null : new(set[field].ValueKind == JsonValueKind.Null ? null : Read<string>(set[field])) },
                     ("modelDefaults", "reasoningEffort") => next with { ReasoningEffort = remove ? null : new(set[field].ValueKind == JsonValueKind.Null ? null : Read<string>(set[field])) },
                     ("memoryPolicy", "sessionMemory") => next with { MemorySessionMemory = remove ? null : new(Read<bool>(set[field])) },
                     ("memoryPolicy", "identityUserPromotion") => next with { MemoryIdentityUserPromotion = remove ? null : new(Read<bool>(set[field])) },
@@ -102,7 +102,6 @@ public static class InstanceSettingsResolver
                     ("triggerPolicy", "allowedSourceKinds") => next with { AllowedSourceKinds = remove ? null : new(Read<string[]>(set[field])) },
                     ("triggerPolicy", "allowFixedInterval") => next with { AllowFixedInterval = remove ? null : new(Read<bool>(set[field])) },
                     ("triggerPolicy", "minFixedIntervalSeconds") => next with { MinFixedIntervalSeconds = remove ? null : new(Read<int>(set[field])) },
-                    ("providerPreferences", "languageModel") => next with { ProviderLanguageModel = remove ? null : new(Read<string>(set[field])) },
                     ("providerPreferences", "speechRecognizer") => next with { ProviderSpeechRecognizer = remove ? null : new(set[field].ValueKind == JsonValueKind.Null ? null : Read<string>(set[field])) },
                     ("providerPreferences", "speechSynthesizer") => next with { ProviderSpeechSynthesizer = remove ? null : new(set[field].ValueKind == JsonValueKind.Null ? null : Read<string>(set[field])) },
                     ("providerPreferences", "interruptionClassifier") => next with { ProviderInterruptionClassifier = remove ? null : new(Read<string>(set[field])) },
@@ -271,14 +270,13 @@ public static class InstanceSettingsResolver
             },
             ProviderPreferences = baseline.ProviderPreferences with
             {
-                LanguageModel = o.ProviderLanguageModel is { } fieldProviderLanguageModel ? fieldProviderLanguageModel.Value : baseline.ProviderPreferences.LanguageModel,
                 SpeechRecognizer = o.ProviderSpeechRecognizer is { } fieldProviderSpeechRecognizer ? fieldProviderSpeechRecognizer.Value : baseline.ProviderPreferences.SpeechRecognizer,
                 SpeechSynthesizer = o.ProviderSpeechSynthesizer is { } fieldProviderSpeechSynthesizer ? fieldProviderSpeechSynthesizer.Value : baseline.ProviderPreferences.SpeechSynthesizer,
                 InterruptionClassifier = o.ProviderInterruptionClassifier is { } fieldProviderInterruptionClassifier ? fieldProviderInterruptionClassifier.Value : baseline.ProviderPreferences.InterruptionClassifier,
             },
             ModelDefaults = (baseline.ModelDefaults ?? new AgentModelDefaults(null, null)) with
             {
-                CatalogKey = o.ModelCatalogKey is { } modelCatalogKey ? modelCatalogKey.Value : (baseline.ModelDefaults ?? new AgentModelDefaults(null, null)).CatalogKey,
+                OfferingId = o.ModelOfferingId is { } modelOfferingId ? modelOfferingId.Value : (baseline.ModelDefaults ?? new AgentModelDefaults(null, null)).OfferingId,
                 ReasoningEffort = o.ReasoningEffort is { } reasoningEffort ? reasoningEffort.Value : (baseline.ModelDefaults ?? new AgentModelDefaults(null, null)).ReasoningEffort,
             },
             MemoryPolicy = (baseline.MemoryPolicy ?? MemoryPolicy.Disabled) with
@@ -375,7 +373,7 @@ public static class InstanceSettingsResolver
             ["speakingRate"] = d.Voice.SpeakingRate,
         },
         "modelDefaults" => new Dictionary<string, object?> {
-            ["catalogKey"] = d.ModelDefaults?.CatalogKey,
+            ["offeringId"] = d.ModelDefaults?.OfferingId,
             ["reasoningEffort"] = d.ModelDefaults?.ReasoningEffort,
         },
         "memoryPolicy" => new Dictionary<string, object?> {
@@ -405,7 +403,6 @@ public static class InstanceSettingsResolver
             ["minFixedIntervalSeconds"] = TriggerOf(d).MinFixedIntervalSeconds,
         },
         "providerPreferences" => new Dictionary<string, object?> {
-            ["languageModel"] = d.ProviderPreferences.LanguageModel,
             ["speechRecognizer"] = d.ProviderPreferences.SpeechRecognizer,
             ["speechSynthesizer"] = d.ProviderPreferences.SpeechSynthesizer,
             ["interruptionClassifier"] = d.ProviderPreferences.InterruptionClassifier,
@@ -469,7 +466,7 @@ public static class InstanceSettingsResolver
                 if (o.SpeakingRate is { } speakingRate) result["speakingRate"] = speakingRate.Value;
                 break;
             case "modelDefaults":
-                if (o.ModelCatalogKey is { } modelCatalogKey) result["catalogKey"] = modelCatalogKey.Value;
+                if (o.ModelOfferingId is { } modelOfferingId) result["offeringId"] = modelOfferingId.Value;
                 if (o.ReasoningEffort is { } reasoningEffort) result["reasoningEffort"] = reasoningEffort.Value;
                 break;
             case "memoryPolicy":
@@ -499,7 +496,6 @@ public static class InstanceSettingsResolver
                 if (o.MinFixedIntervalSeconds is { } overrideMinFixedIntervalSeconds) result["minFixedIntervalSeconds"] = overrideMinFixedIntervalSeconds.Value;
                 break;
             case "providerPreferences":
-                if (o.ProviderLanguageModel is { } overrideProviderLanguageModel) result["languageModel"] = overrideProviderLanguageModel.Value;
                 if (o.ProviderSpeechRecognizer is { } overrideProviderSpeechRecognizer) result["speechRecognizer"] = overrideProviderSpeechRecognizer.Value;
                 if (o.ProviderSpeechSynthesizer is { } overrideProviderSpeechSynthesizer) result["speechSynthesizer"] = overrideProviderSpeechSynthesizer.Value;
                 if (o.ProviderInterruptionClassifier is { } overrideProviderInterruptionClassifier) result["interruptionClassifier"] = overrideProviderInterruptionClassifier.Value;

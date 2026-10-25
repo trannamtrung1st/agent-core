@@ -69,7 +69,7 @@ public sealed class VisionCapabilityRuntimeTests
             resolver,
             new SessionModelSelection(
                 "gpt-4o-mini-2024-07-18",
-                "primary-llm",
+                "dca20000-0000-4000-8000-000000000001",
                 "openai/gpt-4o-mini-2024-07-18",
                 ModelSelectionSource.User,
                 null));
@@ -85,7 +85,7 @@ public sealed class VisionCapabilityRuntimeTests
         await output.WaitForAsync(item => item.Payload is TextDeltaOutput, cts.Token);
         await runtime.WaitUntilIdleAsync();
         Assert.NotEmpty(resolver.Resolves);
-        Assert.Equal("gpt-4o-mini-2024-07-18", resolver.Resolves[^1].Selection.CatalogKey);
+        Assert.Equal("gpt-4o-mini-2024-07-18", resolver.Resolves[^1].Selection.OfferingId);
     }
 
     private static SessionRuntime CreateRuntime(
@@ -120,10 +120,10 @@ public sealed class VisionCapabilityRuntimeTests
             time.GetUtcNow(),
             ModelSelection: selection
             ?? new SessionModelSelection(
-                "scripted-alpha",
-                "primary-llm",
-                "scripted-alpha",
-                ModelSelectionSource.SystemDefault,
+                "dca30000-0000-4000-8000-000000000001",
+                "dca20000-0000-4000-8000-000000000001",
+                "dca30000-0000-4000-8000-000000000001",
+                ModelSelectionSource.TenantDefault,
                 "medium"), AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return SessionRuntimeFixture.Create(
@@ -155,10 +155,10 @@ public sealed class VisionCapabilityRuntimeTests
     {
         public List<(SessionModelSelection Selection, ModelPurpose Purpose)> Resolves { get; } = [];
 
-        public ILanguageModel Resolve(SessionModelSelection selection, ModelPurpose purpose)
+        public ILanguageModel Resolve(SessionModelSelection selection, ModelPurpose purpose, ModelInvocation? invocation)
         {
             Resolves.Add((selection, purpose));
-            return inner.Resolve(selection, purpose);
+            return inner.Resolve(selection, purpose, invocation);
         }
     }
 }

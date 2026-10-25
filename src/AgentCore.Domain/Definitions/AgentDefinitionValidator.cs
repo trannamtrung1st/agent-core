@@ -115,11 +115,6 @@ public static class AgentDefinitionValidator
             throw new ArgumentException("speakingRate must be 0.5..2.0.");
         }
 
-        if (string.IsNullOrWhiteSpace(definition.ProviderPreferences.LanguageModel))
-        {
-            throw new ArgumentException("languageModel alias is required.");
-        }
-
         if (definition.Voice.Enabled)
         {
             if (string.IsNullOrWhiteSpace(definition.ProviderPreferences.SpeechRecognizer)
@@ -141,9 +136,9 @@ public static class AgentDefinitionValidator
 
         if (definition.ModelDefaults is { } modelDefaults)
         {
-            if (modelDefaults.CatalogKey is { Length: > 0 } key && !IdPattern.IsMatch(key))
+            if (modelDefaults.OfferingId is { } id && (!Guid.TryParseExact(id, "D", out var offering) || offering == Guid.Empty || offering.ToString("D") != id))
             {
-                throw new ArgumentException("modelDefaults.catalogKey must be lowercase [a-z0-9-] length 1..64.");
+                throw new ArgumentException("modelDefaults.offeringId must be a canonical nonempty UUID.");
             }
 
             if (modelDefaults.ReasoningEffort is { Length: > 0 } effort

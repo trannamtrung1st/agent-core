@@ -97,12 +97,6 @@ public sealed class FileAgentDefinitionStore : IBuiltInAgentDefinitionStore
 
     private static void ValidateAliases(AgentDefinition definition, ProviderAliasSet aliases)
     {
-        if (!aliases.LanguageModels.Contains(definition.ProviderPreferences.LanguageModel))
-        {
-            throw new ArgumentException(
-                $"languageModel alias '{definition.ProviderPreferences.LanguageModel}' is not configured.");
-        }
-
         if (definition.ProviderPreferences.SpeechRecognizer is { } stt
             && !aliases.SpeechRecognizers.Contains(stt))
         {

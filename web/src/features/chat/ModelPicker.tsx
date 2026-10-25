@@ -1,4 +1,5 @@
 import { reasoningEffortChoices } from "../models/reasoningEfforts";
+import { modelChoiceLabel } from "../models/modelLabels";
 import type { ComponentType } from "react";
 import { useEffect, useState } from "react";
 import { Button, Dropdown, Flex, Select, Slider, Tag, Tooltip, Typography, theme } from "antd";
@@ -11,10 +12,10 @@ import {
   ToolOutlined
 } from "@ant-design/icons";
 
-export const DEFAULT_MODEL_KEY = "default";
+export const INHERIT_MODEL = "default";
 
 export type ModelCatalogItem = {
-  key: string;
+  offeringId: string;
   displayName: string;
   tools: boolean;
   vision: boolean;
@@ -22,6 +23,7 @@ export type ModelCatalogItem = {
   reasoning: boolean;
   supportedReasoningEfforts: readonly string[];
   defaultReasoningEffort?: string | null;
+  connectionLabel?: string | null;
 };
 
 type CapabilityIcon = ComponentType<{ "aria-hidden"?: boolean }>;
@@ -71,44 +73,32 @@ export function modelSelectValue(
   sessionKey: string | null,
   pendingKey: string | null,
   inSession: boolean,
-  defaultKey: string | null = null
+  defaultOfferingId: string | null = null
 ): string {
-  const pending = !pendingKey || pendingKey === DEFAULT_MODEL_KEY ? null : pendingKey;
+  const pending = !pendingKey || pendingKey === INHERIT_MODEL ? null : pendingKey;
   if (!inSession) {
-    return pending ?? defaultKey ?? DEFAULT_MODEL_KEY;
+    return pending ?? INHERIT_MODEL;
   }
 
-  return sessionKey && sessionKey.length > 0 ? sessionKey : pending ?? defaultKey ?? DEFAULT_MODEL_KEY;
+  return sessionKey && sessionKey.length > 0 ? sessionKey : pending ?? defaultOfferingId ?? INHERIT_MODEL;
 }
 
 export function selectedCatalogModel(
   models: readonly ModelCatalogItem[],
   value: string,
-  defaultKey: string | null
+  defaultOfferingId: string | null
 ): ModelCatalogItem | null {
-  const key = value === DEFAULT_MODEL_KEY ? defaultKey : value;
-  return models.find((model) => model.key === key) ?? null;
-}
-
-export function wireModelSelectionKey(
-  catalogKey: string,
-  defaultKey: string | null,
-  inSession: boolean
-): string {
-  if (!inSession && defaultKey && catalogKey === defaultKey) {
-    return DEFAULT_MODEL_KEY;
-  }
-
-  return catalogKey;
+  const key = value === INHERIT_MODEL ? defaultOfferingId : value;
+  return models.find((model) => model.offeringId === key) ?? null;
 }
 
 export function nextEffortForModel(
   models: readonly ModelCatalogItem[],
   key: string,
-  defaultKey: string | null,
+  defaultOfferingId: string | null,
   currentEffort: string | null
 ): string | null {
-  const model = selectedCatalogModel(models, key, defaultKey);
+  const model = selectedCatalogModel(models, key, defaultOfferingId);
   if (!model?.reasoning) {
     return null;
   }
@@ -124,7 +114,8 @@ export function effortSelectValue(
   model: ModelCatalogItem | null,
   sessionEffort: string | null,
   pendingEffort: string | null,
-  inSession: boolean
+  inSession: boolean,
+  inheritedEffort: string | null = null
 ): string | null {
   if (!model?.reasoning) {
     return null;
@@ -135,7 +126,7 @@ export function effortSelectValue(
     return current;
   }
 
-  return model.defaultReasoningEffort ?? null;
+  return inheritedEffort && model.supportedReasoningEfforts.includes(inheritedEffort) ? inheritedEffort : model.defaultReasoningEffort ?? null;
 }
 
 export function formatEffortLabel(effort: string | null | undefined): string {
@@ -148,8 +139,11 @@ export function formatEffortLabel(effort: string | null | undefined): string {
 
 export function ModelPicker({
   models,
-  defaultKey,
+  defaultOfferingId,
+  defaultSource = "tenantDefault",
   modelValue,
+  inheritSelected = modelValue === INHERIT_MODEL,
+  unavailableLabel,
   effortValue,
   disabled,
   layout = "stack",
@@ -157,8 +151,11 @@ export function ModelPicker({
   onEffortChange
 }: {
   models: readonly ModelCatalogItem[];
-  defaultKey: string | null;
+  defaultOfferingId: string | null;
+  defaultSource?: "tenantDefault" | "agentDefault";
   modelValue: string;
+  inheritSelected?: boolean;
+  unavailableLabel?: string | null;
   effortValue: string | null;
   disabled?: boolean;
   layout?: "stack" | "row";
@@ -208,10 +205,10 @@ export function ModelPicker({
   const selectValue =
     models.length === 0
       ? modelValue
-      : modelValue === DEFAULT_MODEL_KEY
-        ? defaultKey ?? DEFAULT_MODEL_KEY
+      : modelValue === INHERIT_MODEL
+        ? defaultOfferingId ?? INHERIT_MODEL
         : modelValue;
-  const selected = models.length === 0 ? null : selectedCatalogModel(models, selectValue, defaultKey);
+  const selected = models.length === 0 ? null : selectedCatalogModel(models, selectValue, defaultOfferingId);
   const { levels: efforts, modes } = reasoningEffortChoices(selected?.supportedReasoningEfforts ?? []);
   const effortIndex = efforts.indexOf(effortValue ?? selected?.defaultReasoningEffort ?? "");
   const [effortPreviewIndex, setEffortPreviewIndex] = useState(effortIndex);
@@ -248,14 +245,23 @@ export function ModelPicker({
         Select model
       </Typography.Text>
       <Flex vertical role="listbox" aria-label="Model catalog">
+        <Button type="text" role="option" title={defaultSource === "agentDefault" ? "Use Agent default" : "Use organization default"}
+          aria-selected={inheritSelected} className="model-picker-option" disabled={disabled || !defaultOfferingId || !models.some(model => model.offeringId === defaultOfferingId)}
+          style={{ width: "100%", height: "auto", paddingInline: controlPadding, paddingBlock: controlPadding }}
+          onClick={() => { onModelChange(INHERIT_MODEL); closePicker(); }}>
+          <Flex align="center" justify="space-between" gap={token.paddingXS} style={{ width: "100%", minWidth: 0 }}>
+            <span className="model-picker-option-name">{defaultSource === "agentDefault" ? "Use Agent default" : "Use organization default"}</span>
+            <span className="model-picker-option-mark" aria-hidden>{inheritSelected ? <CheckOutlined /> : null}</span>
+          </Flex>
+        </Button>
         {models.map((model) => {
-          const isSelected = model.key === selectValue;
+          const isSelected = !inheritSelected && model.offeringId === selectValue;
           return (
             <Button
-              key={model.key}
+              key={model.offeringId}
               type="text"
               role="option"
-              title={model.displayName}
+              title={modelChoiceLabel(model)}
               aria-selected={isSelected}
               className="model-picker-option"
               disabled={disabled}
@@ -266,15 +272,15 @@ export function ModelPicker({
                 paddingBlock: controlPadding
               }}
               onClick={() => {
-                onModelChange(model.key);
+                onModelChange(model.offeringId);
                 closePicker();
               }}
             >
               <Flex align="center" justify="space-between" gap={token.paddingXS} style={{ width: "100%", minWidth: 0 }}>
-                <span className="model-picker-option-name">{model.displayName}</span>
+                <span className="model-picker-option-name">{modelChoiceLabel(model)}</span>
                 <Flex align="center" gap={token.paddingXS} className="model-picker-option-end">
                   <ModelOptionCapabilities model={model} />
-                  {model.key === defaultKey ? (
+                  {model.offeringId === defaultOfferingId ? (
                     <Tag variant="filled" style={{ marginInlineEnd: 0 }}>
                       Default
                     </Tag>
@@ -345,9 +351,9 @@ export function ModelPicker({
           openModels();
         }}
       >
-        <Flex align="center" gap={token.paddingXS}>
-          <span className="model-picker-name">{selected?.displayName ?? `${selectValue} (unavailable)`}</span>
-          {selectValue === defaultKey ? (
+        <Flex align="center" gap={token.paddingXS} style={{ minWidth: 0, flex: "1 1 auto" }}>
+          <span className="model-picker-name">{selected ? modelChoiceLabel(selected) : `${unavailableLabel ?? (selectValue === INHERIT_MODEL ? defaultSource === "agentDefault" ? "Agent default" : "Organization default" : selectValue)} · Unavailable`}</span>
+          {inheritSelected ? (
             <Tag variant="filled" style={{ marginInlineEnd: 0 }}>
               Default
             </Tag>
@@ -372,7 +378,7 @@ export function ModelPicker({
         trigger={["click"]}
         arrow={false}
         placement="topLeft"
-        autoAdjustOverflow={false}
+        align={{ overflow: { adjustX: true, adjustY: true, shiftX: true } }}
         open={open}
         onOpenChange={setOpen}
         getPopupContainer={() => document.body}

@@ -9,7 +9,7 @@ namespace AgentCore.Application.Security;
 public sealed record TenantPreferenceResult(OperationDecisionKind Decision, string ReasonCode, TenantOperationReceipt? Receipt = null);
 
 public sealed class TenantPreferenceOperationService(ITenantPreferenceOperationStore effects, TenantOperationAuthorizer operations,
-    TenantRunConfigurationResolver configuration, IModelCatalog models, ProviderAliasSet aliases, IIdGenerator ids, TimeProvider time, ITenantApprovalStore approvals)
+    TenantRunConfigurationResolver configuration, ITenantModelCatalogReader modelCatalogs, ProviderAliasSet aliases, IIdGenerator ids, TimeProvider time, ITenantApprovalStore approvals)
 {
     public async ValueTask<TenantPreferenceResult> ExecuteAsync(TenantRunReference reference, Guid generation, string callId, string arguments, CancellationToken ct = default, long? expectedInstanceRevision = null)
     {
@@ -56,6 +56,7 @@ public sealed class TenantPreferenceOperationService(ITenantPreferenceOperationS
             await RecordDenial(state, run, "management_unavailable", ct).ConfigureAwait(false);
             return new(OperationDecisionKind.Denied, "management_unavailable");
         }
+        var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         _ = InstanceSettingsRules.ResolvePatch(baseline, target.Instance.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear, models, aliases);
         var at = time.GetUtcNow();
         var commit = new TenantPreferenceCommit(prepared.OperationId, run.AgentRunId, generation, run.Revision, callId, patch.CanonicalArguments,

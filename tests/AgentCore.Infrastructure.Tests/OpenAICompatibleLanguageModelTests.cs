@@ -299,7 +299,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             new ConversationPolicy("concise", true, "en", 256),
             new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
             new VoiceConfiguration(true, "default", 1.0),
-            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+            new ProviderPreferences("primary-stt", "primary-tts"),
             new Dictionary<string, string>());
         var now = time.GetUtcNow();
         var snapshot = new SessionSnapshot(
@@ -716,57 +716,28 @@ public sealed class OpenAICompatibleLanguageModelTests
     }
 
     [Fact]
-    public void Synthetic_profile_keeps_scripted_when_compatible_options_are_present()
+    public void Synthetic_profile_resolves_only_its_explicit_scripted_fixture()
     {
-        using var provider = BuildInfrastructure(
-            "Synthetic",
-            new LanguageModelProviderOptions
-            {
-                DeveloperRoleSupport = true,
-                Adapter = "OpenAICompatible",
-                BaseUrl = "http://127.0.0.1/v1/",
-                DefaultModel = "local-model"
-            });
+        using var provider = BuildInfrastructure("Synthetic");
         Assert.IsType<Providers.Synthetic.ScriptedLanguageModel>(provider.GetRequiredService<ILanguageModel>());
     }
 
     [Fact]
-    public void Real_profile_resolves_compatible_adapter_from_http_client_factory()
+    public void Real_profile_registers_no_global_model_or_catalog()
     {
-        using var provider = BuildInfrastructure(
-            "Real",
-            new LanguageModelProviderOptions
-            {
-                DeveloperRoleSupport = true,
-                Adapter = "OpenAICompatible",
-                BaseUrl = "http://127.0.0.1/v1/",
-                DefaultModel = "local-model"
-            });
-        Assert.IsType<OpenAICompatibleLanguageModel>(provider.GetRequiredService<ILanguageModel>());
-        Assert.NotNull(provider.GetRequiredService<IHttpClientFactory>().CreateClient(OpenAICompatibleLanguageModel.HttpClientName));
+        using var provider = BuildInfrastructure("Real");
+        Assert.Null(provider.GetService<ILanguageModel>());
+        Assert.Null(provider.GetService<IModelCatalog>());
     }
 
     [Fact]
-    public void Default_model_in_committed_settings_is_not_openrouter_free()
+    public void Committed_settings_have_no_global_inference_configuration()
     {
-        var settings = File.ReadAllText(Path.Combine(FindRepoRoot(), "src/AgentCore.Api/appsettings.json"));
-        Assert.DoesNotContain("openrouter/free", settings, StringComparison.Ordinal);
-        Assert.Contains("\"Adapter\": \"Scripted\"", settings, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Live_smoke_skips_unless_opt_in_and_key_are_both_present()
-    {
-        var attr = new LiveProviderFactAttribute();
-        var optedIn = string.Equals(
-            Environment.GetEnvironmentVariable("AGENTCORE_LIVE_PROVIDER_TESTS"),
-            "1",
-            StringComparison.Ordinal);
-        var hasKey = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENROUTER_API_KEY"));
-        if (!(optedIn && hasKey))
-        {
-            Assert.False(string.IsNullOrEmpty(attr.Skip));
-        }
+        using var settings = JsonDocument.Parse(File.ReadAllText(Path.Combine(FindRepoRoot(), "src/AgentCore.Api/appsettings.json")));
+        var providers = settings.RootElement.GetProperty("Providers");
+        Assert.False(providers.TryGetProperty("LanguageModels", out _));
+        Assert.False(providers.TryGetProperty("ModelCatalog", out _));
+        Assert.True(providers.TryGetProperty("Speech", out _));
     }
 
     [Fact]
@@ -812,7 +783,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             new ConversationPolicy("concise", true, "en", 256),
             new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
             new VoiceConfiguration(true, "default", 1.0),
-            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+            new ProviderPreferences("primary-stt", "primary-tts"),
             new Dictionary<string, string>());
         var now = time.GetUtcNow();
         var snapshot = new SessionSnapshot(
@@ -832,291 +803,6 @@ public sealed class OpenAICompatibleLanguageModelTests
         await runtime.WaitUntilIdleAsync();
         Assert.Contains(output.TextDeltas, delta => delta.Text == "Hello");
         Assert.Equal(1, handler.PostCount);
-    }
-
-    [LiveProviderFact]
-    public async Task Gpt4oMini_historical_image_follow_up_is_opt_in_only()
-    {
-        var key = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY");
-        var logger = new ListLogger();
-        using var http = new HttpClient();
-        var model = new OpenAICompatibleLanguageModel(
-            http,
-            new LanguageModelProviderOptions
-            {
-                DeveloperRoleSupport = true,
-                Adapter = "OpenAICompatible",
-                BaseUrl = "https://openrouter.ai/api/v1/",
-                ApiKey = key,
-                DefaultModel = "openai/gpt-4o-mini-2024-07-18",
-                Vision = true,
-                Tools = true,
-                StructuredOutput = true,
-                Timeouts = new ProviderTimeoutOptions { SetupSeconds = 20, StreamIdleSeconds = 30, TotalSeconds = 60 }
-            },
-            logger: logger);
-        var png = Convert.FromBase64String(
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
-        var events = new List<ModelGenerationEvent>();
-        await foreach (var item in model.GenerateAsync(
-                           new ModelRequest(
-                               Guid.NewGuid(),
-                               [
-                                   new ModelMessage(ModelRole.User, "Review the image again."),
-                                   new ModelMessage(
-                                       ModelRole.Assistant,
-                                       string.Empty,
-                                       ToolCalls: [new ModelToolCall("call_img", ToolCatalog.AttachmentsRead, """{"attachmentId":"019944af-0001-7000-8000-000000000001"}""")]),
-                                   new ModelMessage(
-                                       ModelRole.Tool,
-                                       """{"kind":"image","contentProvided":true}""",
-                                       [new ModelImageContent("image/png", png, "pixel.png")],
-                                       ToolCallId: "call_img",
-                                       Name: ToolCatalog.AttachmentsRead)
-                               ],
-                               MaxOutputTokens: 128,
-                               Tools: [new ModelToolDefinition(ToolCatalog.AttachmentsRead, "Read one session attachment.", """{"type":"object"}""")],
-                               ResponseContract: new ModelResponseContract(false))))
-        {
-            events.Add(item);
-        }
-
-        var rejected = events.OfType<ModelFailed>()
-            .FirstOrDefault(item => item.Failure.Code == ProviderErrorCode.InvalidRequest);
-        Assert.True(
-            rejected is null,
-            (rejected?.Failure.SafeMessage ?? "rejected") + " " + string.Join(" | ", logger.Messages));
-        Assert.DoesNotContain(events, item => item is ModelToolCallEvent);
-        var completed = events.OfType<ModelCompleted>().LastOrDefault();
-        Assert.NotNull(completed);
-        Assert.NotEqual(ModelStopReason.ToolCalls, completed.Reason);
-        var visible = string.Concat(events.OfType<ModelTextDelta>().Select(delta => delta.Text));
-        Assert.False(string.IsNullOrWhiteSpace(visible));
-    }
-
-    [LiveProviderFact]
-    public async Task OpenRouter_free_smoke_is_opt_in_only()
-    {
-        var key = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY");
-        using var http = new HttpClient();
-        var model = new OpenAICompatibleLanguageModel(
-            http,
-            new LanguageModelProviderOptions
-            {
-                DeveloperRoleSupport = true,
-                Adapter = "OpenAICompatible",
-                BaseUrl = "https://openrouter.ai/api/v1/",
-                ApiKey = key,
-                DefaultModel = "openrouter/free",
-                Timeouts = new ProviderTimeoutOptions { SetupSeconds = 10, StreamIdleSeconds = 20, TotalSeconds = 45 }
-            });
-        var events = new List<ModelGenerationEvent>();
-        await foreach (var item in model.GenerateAsync(
-                           new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Reply with the word ok.")])))
-        {
-            events.Add(item);
-        }
-
-        Assert.DoesNotContain(events, item => item is ModelFailed failed && failed.Failure.Code == ProviderErrorCode.Authentication);
-        Assert.Contains(events, item => item is ModelTextDelta or ModelCompleted or ModelFailed);
-    }
-
-    [LiveProviderFact]
-    public async Task DeepSeek_v41_reasoning_probe_records_wire_field_presence()
-    {
-        var key = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY");
-        var diagnostics = new List<StreamChoiceDiagnostic>();
-        using var http = new HttpClient();
-        var model = new OpenAICompatibleLanguageModel(
-            http,
-            new LanguageModelProviderOptions
-            {
-                DeveloperRoleSupport = true,
-                Adapter = "OpenAICompatible",
-                BaseUrl = "https://openrouter.ai/api/v1/",
-                ApiKey = key,
-                DefaultModel = "deepseek/deepseek-v4.1-flash",
-                ReasoningObjectWire = true,
-                ExcludeVisibleReasoning = true,
-                StreamChoiceDiagnostic = diagnostics.Add,
-                Timeouts = new ProviderTimeoutOptions { SetupSeconds = 15, StreamIdleSeconds = 30, TotalSeconds = 60 }
-            });
-        var events = new List<ModelGenerationEvent>();
-        await foreach (var item in model.GenerateAsync(
-                           new ModelRequest(
-                               Guid.NewGuid(),
-                               [new ModelMessage(ModelRole.User, "Reply with one short sentence asking what city I grew up in.")],
-                               MaxOutputTokens: 256,
-                               ReasoningEffort: "medium")))
-        {
-            events.Add(item);
-        }
-
-        Assert.DoesNotContain(events, item => item is ModelFailed failed && failed.Failure.Code == ProviderErrorCode.Authentication);
-        Assert.Contains(events, item => item is ModelCompleted);
-        var reasoningDeltas = events.OfType<ModelReasoningDelta>().Count();
-        var textDeltas = events.OfType<ModelTextDelta>().Select(delta => delta.Text).ToArray();
-        var sawReasoningField = diagnostics.Any(item => item.Reasoning || item.ReasoningDetails);
-        var sawContentField = diagnostics.Any(item => item.Content);
-        Assert.True(
-            sawReasoningField || reasoningDeltas > 0 || sawContentField,
-            $"Probe saw no SSE choice fields. diagnostics={diagnostics.Count} reasoningDeltas={reasoningDeltas} textDeltas={textDeltas.Length}");
-        if (sawReasoningField || reasoningDeltas > 0)
-        {
-            Assert.True(
-                reasoningDeltas > 0,
-                "Provider sent separate reasoning fields on the wire; adapter must emit ModelReasoningDelta.");
-            Assert.DoesNotContain(textDeltas, text => text.Contains("reasoning_details", StringComparison.Ordinal));
-        }
-    }
-
-    [LiveProviderFact]
-    public async Task DeepSeek_v41_conversational_probe_keeps_reasoning_out_of_display_and_history()
-    {
-        var key = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY");
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
-        var general = (await store.GetAsync("general-assistant"))!;
-        var examiner = (await store.GetAsync("examiner"))!;
-
-        await ProbeAgent(general, "Hello");
-        await ProbeAgent(examiner, "Hi");
-
-        async Task ProbeAgent(AgentDefinition definition, string userText)
-        {
-            var diagnostics = new List<StreamChoiceDiagnostic>();
-            using var http = new HttpClient();
-            var model = new OpenAICompatibleLanguageModel(
-                http,
-                new LanguageModelProviderOptions
-                {
-                    DeveloperRoleSupport = true,
-                    Adapter = "OpenAICompatible",
-                    BaseUrl = "https://openrouter.ai/api/v1/",
-                    ApiKey = key,
-                    DefaultModel = "deepseek/deepseek-v4.1-flash",
-                    ReasoningEffort = "medium",
-                    ReasoningObjectWire = true,
-                    ExcludeVisibleReasoning = true,
-                    StreamChoiceDiagnostic = diagnostics.Add,
-                    Timeouts = new ProviderTimeoutOptions { SetupSeconds = 15, StreamIdleSeconds = 30, TotalSeconds = 90 }
-                });
-            var recording = new RecordingLanguageModel(model);
-            var output = new CapturingSessionOutput();
-            var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero));
-            var ids = new DeterministicIdGenerator(
-                Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
-                [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
-            var memory = new InMemoryMemoryStore();
-            var now = time.GetUtcNow();
-            var snapshot = new SessionSnapshot(
-                1, ids.NewSessionId(), 1, definition, SessionMode.Text, null,
-                SessionStatus.Created, [], string.Empty, 0, null, null, now, now,
-                ModelSelection: new SessionModelSelection(
-                    "deepseek-v41-flash",
-                    "primary-llm",
-                    "deepseek/deepseek-v4.1-flash",
-                    ModelSelectionSource.SystemDefault,
-                    "medium"), AgentInstanceId: Guid.NewGuid());
-            await memory.SaveAsync(snapshot, 0);
-            await using var runtime = SessionRuntimeFixture.Create(
-                snapshot,
-                recording,
-                new DefaultAgentBrain(new PromptContextBuilder()),
-                memory,
-                output,
-                ids,
-                time,
-                NullLogger<SessionRuntime>.Instance);
-
-            await runtime.SubmitUserTextAsync(userText);
-            await runtime.WaitUntilIdleAsync();
-
-            var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-            var displayText = string.Concat(output.TextDeltas.Select(delta => delta.Text));
-            var completed = output.Terminals.LastOrDefault();
-
-            Assert.NotNull(completed);
-            Assert.False(string.IsNullOrWhiteSpace(assistant.Text));
-            Assert.Equal(assistant.Text, displayText);
-            Assert.Null(assistant.Envelope?.SpeechText);
-
-            var sawReasoningField = diagnostics.Any(d => d.Reasoning || d.ReasoningDetails);
-            var sawContent = diagnostics.Any(d => d.Content);
-            Assert.True(sawReasoningField || sawContent, $"Probe for '{definition.Id}' saw no SSE choice fields.");
-            Assert.Contains(recording.Events, item => item is ModelCompleted);
-
-            // Reasoning channel text must never appear in public text, history, or speech projection.
-            foreach (var reasoning in recording.Events.OfType<ModelReasoningDelta>().Select(delta => delta.Text))
-            {
-                Assert.DoesNotContain(reasoning, assistant.Text, StringComparison.Ordinal);
-                Assert.DoesNotContain(reasoning, displayText, StringComparison.Ordinal);
-            }
-
-            // If the provider emitted planning inside delta.content, that is provider/model behavior;
-            // we do not classify it with heuristics. The wire diagnostic still records field presence.
-        }
-    }
-
-    private sealed class RecordingLanguageModel(ILanguageModel inner) : ILanguageModel
-    {
-        public List<ModelGenerationEvent> Events { get; } = [];
-
-        public ModelCapabilities Capabilities => inner.Capabilities;
-
-        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
-            ModelRequest request,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            await foreach (var item in inner.GenerateAsync(request, cancellationToken))
-            {
-                Events.Add(item);
-                yield return item;
-            }
-        }
-    }
-
-    [LiveProviderFact]
-    public async Task OpenRouter_deepseek_v41_default_accepts_tools_request()
-    {
-        var key = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY");
-        using var http = new HttpClient();
-        var model = new OpenAICompatibleLanguageModel(
-            http,
-            new LanguageModelProviderOptions
-            {
-                DeveloperRoleSupport = true,
-                Adapter = "OpenAICompatible",
-                BaseUrl = "https://openrouter.ai/api/v1/",
-                ApiKey = key,
-                DefaultModel = "deepseek/deepseek-v4.1-flash",
-                ReasoningEffort = "medium",
-                Tools = true,
-                Vision = false,
-                Timeouts = new ProviderTimeoutOptions { SetupSeconds = 15, StreamIdleSeconds = 30, TotalSeconds = 60 }
-            });
-        var tools = new[]
-        {
-            new ModelToolDefinition(
-                ToolCatalog.KnowledgeRetrieve,
-                "Retrieve approved knowledge by identity.",
-                """{"type":"object","properties":{"identity":{"type":"string"}},"required":["identity"]}""")
-        };
-        var events = new List<ModelGenerationEvent>();
-        await foreach (var item in model.GenerateAsync(
-                           new ModelRequest(
-                               Guid.NewGuid(),
-                               [new ModelMessage(ModelRole.User, "Call knowledge_retrieve with identity support-order-policy only.")],
-                               Tools: tools,
-                               ReasoningEffort: "medium")))
-        {
-            events.Add(item);
-        }
-
-        Assert.DoesNotContain(events, item => item is ModelFailed failed && failed.Failure.Code == ProviderErrorCode.Authentication);
-        Assert.True(
-            events.Any(item => item is ModelToolCallEvent)
-            || events.Any(item => item is ModelCompleted),
-            "Expected the pinned DeepSeek V4.1 model to accept the tools request and complete or tool-call.");
     }
 
     [Fact]
@@ -1742,11 +1428,11 @@ public sealed class OpenAICompatibleLanguageModelTests
     private static ModelRequest Request() =>
         new(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")]);
 
-    private static ServiceProvider BuildInfrastructure(string profile, LanguageModelProviderOptions options)
+    private static ServiceProvider BuildInfrastructure(string profile)
     {
         var services = new ServiceCollection();
         services.AddSingleton<Microsoft.Extensions.Logging.ILoggerFactory>(NullLoggerFactory.Instance);
-        services.AddAgentCoreInfrastructure(FindAgents(), profile, options);
+        services.AddAgentCoreInfrastructure(FindAgents(), profile);
         return services.BuildServiceProvider();
     }
 
@@ -1783,23 +1469,6 @@ public sealed class OpenAICompatibleLanguageModelTests
         return file is "AdminEventSummaryPolicy.cs"
             or "AgentDefinitionCandidateValidator.cs"
             or "DefinitionResourcePolicies.cs";
-    }
-}
-
-public sealed class LiveProviderFactAttribute : FactAttribute
-{
-    public LiveProviderFactAttribute()
-    {
-        var optIn = string.Equals(Environment.GetEnvironmentVariable("AGENTCORE_LIVE_PROVIDER_TESTS"), "1", StringComparison.Ordinal);
-        var key = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY");
-        if (!optIn)
-        {
-            Skip = "Opt-in AGENTCORE_LIVE_PROVIDER_TESTS=1 is required; default suites must not call OpenRouter.";
-        }
-        else if (string.IsNullOrWhiteSpace(key))
-        {
-            Skip = "OPENROUTER_API_KEY is missing.";
-        }
     }
 }
 

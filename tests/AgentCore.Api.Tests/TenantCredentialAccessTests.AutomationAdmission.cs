@@ -91,6 +91,9 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Equal(JsonValueKind.Null, detail.GetProperty("runId").ValueKind); Assert.Equal(JsonValueKind.Null, detail.GetProperty("sessionId").ValueKind);
         Assert.Equal("admit_automation_occurrence", detail.GetProperty("preparedAction").GetProperty("operation").GetString());
         Assert.True(detail.GetProperty("review").GetProperty("canDecide").GetBoolean());
+        var modelPreview = detail.GetProperty("review").GetProperty("changes").EnumerateArray().Single(c => c.GetProperty("field").GetString() == "admissionModel").GetProperty("after").GetString();
+        Assert.Contains("Scripted Alpha · Offline Synthetic", modelPreview);
+        Assert.Contains("low reasoning", modelPreview);
         if (sqlite)
         {
             await using var db = factory.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>().CreateDbContext();

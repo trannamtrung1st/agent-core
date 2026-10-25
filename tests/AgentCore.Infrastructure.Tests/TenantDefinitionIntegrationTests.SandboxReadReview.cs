@@ -27,9 +27,9 @@ public sealed partial class TenantDefinitionIntegrationTests
             operations, s.Resolver, (ITenantSandboxProfileStore)current, images ?? p.Images, p.Ready, TimeProvider.System,
             (ITenantApprovalStore)current, (ITenantApprovedOperationStore)current);
         var approvals = new TenantApprovalService(current, (ITenantApprovalStore)current, (ITenantAgentStore)current, operations, authorizer, f.Identity, f.Ids, TimeProvider.System,
-            s.Resolver, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)current, sandboxReads: reads);
+            s.Resolver, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(current), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)current, sandboxReads: reads);
         var effects = new TenantApprovedOperationService(current, (ITenantRunStore)current, (ITenantAgentStore)current, (ITenantApprovalStore)current, (ITenantApprovedOperationStore)current,
-            operations, s.Resolver, f.Ids, TimeProvider.System, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, sandboxReads: reads);
+            operations, s.Resolver, f.Ids, TimeProvider.System, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(current), SyntheticProviderAliases.Default, sandboxReads: reads);
         return (approvals, effects, reads, new((ITenantRunStore)current, (ITenantApprovalStore)current, effects, TimeProvider.System, (ITenantRuntimeStore)current, f.Ids));
     }
     private static async Task<RuntimeSandboxSetup> CheckpointSandboxRead(Fixture f, RuntimeSandboxSetup s, SandboxReadKind kind, Guid? execution = null, bool large = false)

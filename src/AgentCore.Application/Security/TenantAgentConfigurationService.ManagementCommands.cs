@@ -49,6 +49,7 @@ public sealed partial class TenantAgentConfigurationService
             definition = await PrepareSandboxPatch(actor, tenant, current, definition, set, clear, ct).ConfigureAwait(false);
         }
         if (aliases is null) throw Sessions.AgentCoreErrors.Validation("Configured provider choices are unavailable.");
+        var models = await ModelCatalogForAgentAsync(actor, tenant, current.InstanceId, ct).ConfigureAwait(false);
         var (next, effective) = InstanceSettingsRules.ResolvePatch(definition, current.SettingsOverrides ?? new(), section, set, clear, models, aliases);
         InstanceSettingsRules.ValidateBrowser(effective, browser);
         _ = EffectiveSkillCatalogResolver.Resolve(effective, snapshot.Skills);
@@ -68,9 +69,10 @@ public sealed partial class TenantAgentConfigurationService
                 args.GetProperty("clear").EnumerateArray().Select(p => p.GetString()!).ToArray(), ct).ConfigureAwait(false);
         if (arguments.Tool == "automation.preferences.patch")
         {
-            var model = args.GetProperty("catalogKey").GetString(); var effort = args.GetProperty("reasoningEffort").GetString();
+            var model = args.GetProperty("offeringId").GetString(); var effort = args.GetProperty("reasoningEffort").GetString();
+            var models = await modelCatalogs.ReadAsync(reader.Security, ct).ConfigureAwait(false);
             ExecutionModelPolicy.RequireSelectable(models, model, effort);
-            return new(owner.InstanceId, owner.Revision, SetUnattendedModel: true, UnattendedModelCatalogKey: model, UnattendedReasoningEffort: effort);
+            return new(owner.InstanceId, owner.Revision, SetUnattendedModel: true, UnattendedOfferingId: model, UnattendedReasoningEffort: effort);
         }
         if (arguments.Tool == "management.freeze")
             return new(owner.InstanceId, owner.Revision, HarnessManagement: HarnessManagementRules.PrepareFreeze(owner, reader.Baseline));

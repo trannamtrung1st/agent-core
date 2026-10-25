@@ -92,7 +92,7 @@ export function AgentRunDetails({ run, onChange, showContextProvenance = false, 
       </Flex>
     </section> : null}
     <Descriptions size="small" column={1} items={[
-      { key: "model", label: "Model", children: <Typography.Text className="background-work-progress">{run.modelCatalogKey}</Typography.Text> },
+      { key: "model", label: "Model", children: <Typography.Text className="background-work-progress">{run.modelOfferingId}</Typography.Text> },
       ...(run.configuration ? [
         { key: "configuration", label: "Run configuration", children: `Published Definition v${run.configuration.definitionVersion} · Instance revision ${run.configuration.instanceRevision} · Persona revision ${run.configuration.personaRevision}` },
         { key: "configurationHash", label: "Configuration SHA-256", children: <Typography.Text copyable style={{ overflowWrap: "anywhere" }}>{run.configuration.configurationHash}</Typography.Text> },

@@ -58,7 +58,7 @@ public sealed class AgentRunContractTests
         Assert.Equal(AgentRunStatus.Queued, item.Status);
         Assert.Equal(1, item.Revision);
         Assert.Equal(ActivationKind.ScheduledWork, item.Admission.Activation.Kind);
-        Assert.Equal("synthetic", item.PinnedModel.ProviderAlias);
+        Assert.Equal("synthetic", item.PinnedModel.ConnectionId);
         Assert.Throws<ArgumentException>(() => NewItem(maxAttempts: 0));
     }
 

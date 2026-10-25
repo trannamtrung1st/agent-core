@@ -10,14 +10,15 @@ public sealed record AutomationTriggerDto(string Kind, AutomationTiming? Schedul
 public sealed record AutomationExecutionTargetDto(string Kind, string? SessionId = null);
 public sealed record AutomationCompletionDeliveryDto(string Kind, string? SessionId = null);
 [method: System.Text.Json.Serialization.JsonConstructor]
+[System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
 public sealed record AutomationRequest(long ExpectedRevision, bool Enabled, string Name, string Instructions, IReadOnlyList<AutomationTriggerDto> Triggers,
-    string? ModelKey = null, string? ReasoningEffort = null, AutomationExecutionTargetDto? ExecutionTarget = null, AutomationCompletionDeliveryDto? CompletionDelivery = null, bool RequiresTools = false, bool RequiresVision = false, string? PresetId = null, int? PresetVersion = null)
+    string? OfferingId = null, string? ReasoningEffort = null, AutomationExecutionTargetDto? ExecutionTarget = null, AutomationCompletionDeliveryDto? CompletionDelivery = null, bool RequiresTools = false, bool RequiresVision = false, string? PresetId = null, int? PresetVersion = null)
 {
     // Construction helper for a single schedule or source; the wire always contains canonical children.
     public AutomationRequest(long ExpectedRevision, bool Enabled, string Name, string Instructions, AutomationTriggerDto Trigger,
-        string? ModelKey = null, string? ReasoningEffort = null, AutomationExecutionTargetDto? ExecutionTarget = null, AutomationCompletionDeliveryDto? CompletionDelivery = null,
+        string? OfferingId = null, string? ReasoningEffort = null, AutomationExecutionTargetDto? ExecutionTarget = null, AutomationCompletionDeliveryDto? CompletionDelivery = null,
         bool RequiresTools = false, bool RequiresVision = false, string? PresetId = null, int? PresetVersion = null)
-        : this(ExpectedRevision, Enabled, Name, Instructions, new[] { Canonical(Trigger) }, ModelKey, ReasoningEffort, ExecutionTarget, CompletionDelivery, RequiresTools, RequiresVision, PresetId, PresetVersion) { }
+        : this(ExpectedRevision, Enabled, Name, Instructions, new[] { Canonical(Trigger) }, OfferingId, ReasoningEffort, ExecutionTarget, CompletionDelivery, RequiresTools, RequiresVision, PresetId, PresetVersion) { }
     private static AutomationTriggerDto Canonical(AutomationTriggerDto t) => t with
     {
         TriggerId = t.TriggerId ?? Guid.NewGuid().ToString("D"),
@@ -28,7 +29,7 @@ public sealed record AutomationRequest(long ExpectedRevision, bool Enabled, stri
 }
 public sealed record AutomationResponse(string AutomationId, long Revision, string Name, string Instructions, bool Enabled, string Status,
     string AuthorizationOrigin, string? SourceSessionId, string? SourceEventId,
-    string CreatedAt, string? NextRunAt, string? ModelKey, string? ReasoningEffort, string? EffectiveModelKey,
+    string CreatedAt, string? NextRunAt, string? OfferingId, string? ReasoningEffort, string? EffectiveOfferingId,
     string? LastAgentRunId, string? ExecutionStatus, string? Outcome, AutomationExecutionTargetDto ExecutionTarget, AutomationCompletionDeliveryDto CompletionDelivery, string? SuspensionReason, bool RequiresTools, bool RequiresVision, string? PresetId = null, int? PresetVersion = null, IReadOnlyList<AutomationTriggerDto>? Triggers = null);
 public sealed record AutomationPolicy(bool AllowOneShot, bool AllowDaily, bool AllowWeekly, bool AllowFixedInterval,
     bool AllowIndefiniteRecurrence, int OneShotHorizonDays, int MinRecurrenceDays, int MinFixedIntervalSeconds, int MaxActiveRegistrations, bool AllowEvents = false, bool AllowCoreEvents = false);

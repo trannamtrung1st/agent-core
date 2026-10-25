@@ -9,6 +9,20 @@ namespace AgentCore.Application.Tests;
 
 public sealed class ModelTriggerCommandAuthorizerTests
 {
+    [Fact]
+    public async Task Tenant_classifier_without_server_owned_invocation_never_constructs_or_calls_a_provider()
+    {
+        var factory = new UnexpectedModelFactory();
+        var result = await new TenantTriggerCommandAuthorizer(factory, TimeProvider.System).AuthorizeAsync(Proposed());
+        Assert.Equal(TriggerCommandAuthorizationDecision.ClassifierUnavailable, result.Decision); Assert.Equal(0, factory.Calls);
+    }
+    private sealed class UnexpectedModelFactory : IModelProviderFactory
+    {
+        public int Calls { get; private set; }
+        public ILanguageModel Create(AgentCore.Domain.Models.ModelRoutePin route, AgentCore.Domain.Models.ModelCapabilityProfile capabilities,
+            ModelInvocation invocation, ModelPurpose purpose)
+        { Calls++; throw new InvalidOperationException("No provider may be created without trusted Run context."); }
+    }
     private static AutomationAuthorizationRequest Proposed(string text = "每周五上午九点复盘", string instructions = "Review experience")
     {
         var exact = JsonSerializer.SerializeToElement(new { tool = ToolCatalog.AutomationCreate, arguments = new { instructions, kind = "weekly", weekdays = new[] { "Friday" }, localTime = "09:00", timeZone = "Asia/Ho_Chi_Minh", executionTarget = "backgroundSession", reportBack = false } });

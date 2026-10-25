@@ -9,8 +9,8 @@ import {
 } from "./imageModelCompatibility";
 
 const models = [
-  { key: "scripted-alpha", vision: false },
-  { key: "scripted-vision", vision: true }
+  { offeringId: "dca30000-0000-4000-8000-000000000001", vision: false },
+  { offeringId: "dca30000-0000-4000-8000-000000000003", vision: true }
 ];
 
 function readyImage(): PendingAttachment {
@@ -30,7 +30,7 @@ describe("imageModelCompatibility", () => {
   it("allows unsupported images stored without extraction on text-only models", () => {
     const attachment = { ...readyImage(), contentType: "image/bmp", readable: false };
     expect(pendingAttachmentsIncludeImage([attachment])).toBe(false);
-    expect(imageModelCompatibility({ models, modelValue: "scripted-alpha", defaultKey: "scripted-alpha", pendingAttachments: [attachment], pendingSendQueue: [] }).incompatible).toBe(false);
+    expect(imageModelCompatibility({ models, modelValue: "dca30000-0000-4000-8000-000000000001", defaultOfferingId: "dca30000-0000-4000-8000-000000000001", pendingAttachments: [attachment], pendingSendQueue: [] }).incompatible).toBe(false);
   });
   it("detects image content types with parameters", () => {
     expect(isImageContentType("image/png; charset=binary")).toBe(true);
@@ -40,8 +40,8 @@ describe("imageModelCompatibility", () => {
   it("blocks image turns on non-vision models", () => {
     const result = imageModelCompatibility({
       models,
-      modelValue: "scripted-alpha",
-      defaultKey: "scripted-alpha",
+      modelValue: "dca30000-0000-4000-8000-000000000001",
+      defaultOfferingId: "dca30000-0000-4000-8000-000000000001",
       pendingAttachments: [readyImage()],
       pendingSendQueue: []
     });
@@ -53,8 +53,8 @@ describe("imageModelCompatibility", () => {
     expect(
       imageModelCompatibility({
         models,
-        modelValue: "scripted-vision",
-        defaultKey: "scripted-alpha",
+        modelValue: "dca30000-0000-4000-8000-000000000003",
+        defaultOfferingId: "dca30000-0000-4000-8000-000000000001",
         pendingAttachments: [readyImage()],
         pendingSendQueue: []
       }).incompatible
@@ -63,8 +63,8 @@ describe("imageModelCompatibility", () => {
     expect(
       imageModelCompatibility({
         models,
-        modelValue: "scripted-alpha",
-        defaultKey: "scripted-alpha",
+        modelValue: "dca30000-0000-4000-8000-000000000001",
+        defaultOfferingId: "dca30000-0000-4000-8000-000000000001",
         pendingAttachments: [],
         pendingSendQueue: []
       }).incompatible
@@ -83,8 +83,8 @@ describe("imageModelCompatibility", () => {
     expect(
       imageModelCompatibility({
         models,
-        modelValue: "scripted-alpha",
-        defaultKey: "scripted-alpha",
+        modelValue: "dca30000-0000-4000-8000-000000000001",
+        defaultOfferingId: "dca30000-0000-4000-8000-000000000001",
         pendingAttachments: [],
         pendingSendQueue: [queueItem]
       }).incompatible

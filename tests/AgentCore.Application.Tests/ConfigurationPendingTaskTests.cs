@@ -28,7 +28,7 @@ public sealed class ConfigurationPendingTaskTests
         var source = AgentRun.Create(id, AgentRunOwner.ForTenant(tenant, Guid.NewGuid(), executor),
             new(activation, SampleDefinitions.Examiner.Id, SampleDefinitions.Examiner.Version, SampleDefinitions.Examiner.Identity,
                 Guid.NewGuid(), AgentRunOutputContract.ConversationResponse, executionContext: context),
-            new("scripted-alpha", "primary-llm", "scripted-alpha", null), 3, now);
+            new("dca30000-0000-4000-8000-000000000001", "dca20000-0000-4000-8000-000000000001", "dca30000-0000-4000-8000-000000000001", null), 3, now);
         source = source.TakeClaim(Guid.NewGuid(), now, now.AddMinutes(5));
         var call = new ModelToolCall("source-read", ToolCatalog.RequestAuthorization,
             """{"operation":"inspect_workspace","read":{"tool":"workspace.read","arguments":{"path":"/working/source.txt"}}}""");

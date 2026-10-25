@@ -944,7 +944,8 @@ body,
   font-weight: 600 !important;
 }
 
-.agent-picker {
+.agent-picker,
+.new-chat-model-setup {
   width: min(100%, 22rem);
   min-width: 0;
   text-align: start;
@@ -2445,17 +2446,17 @@ body,
 .self-management-options .ant-checkbox { align-self: flex-start; margin-block-start: var(--self-management-checkbox-offset); }
 .harness-procedure { white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-approval .ant-modal-container,
-:is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog) .ant-modal-container {
+:is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-modal-container {
   display: flex;
   flex-direction: column;
   max-height: calc(100dvh - 2 * var(--ac-space-section));
 }
 .chat-approval .ant-modal-header,
 .chat-approval .ant-modal-footer,
-:is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog) .ant-modal-header,
-:is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog) .ant-modal-footer { flex-shrink: 0; }
-:is(.chat-approval, .isolation-preset-dialog) .ant-modal-title { padding-inline-end: calc(2 * var(--ac-space-section)); }
-:is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog) .ant-modal-body { min-height: 0; overflow-y: auto; }
+:is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-modal-header,
+:is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-modal-footer { flex-shrink: 0; }
+:is(.chat-approval, .isolation-preset-dialog, .model-impact-dialog) .ant-modal-title { padding-inline-end: calc(2 * var(--ac-space-section)); }
+:is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-modal-body { min-height: 0; overflow-y: auto; }
 .admin-config-form .credential-metadata-row { margin-block-end: 0; }
 .chat-approval .ant-modal-body {
   display: flex;
@@ -2555,12 +2556,12 @@ body,
 @media (max-width: 767px) {
   .self-management-options { grid-template-columns: minmax(0, 1fr); }
   .chat-approval .ant-modal-footer .ant-btn,
-  :is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog) .ant-btn,
-  :is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog) .ant-input:not(textarea),
-  :is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog) .ant-input-affix-wrapper,
-  :is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog) .ant-select { min-height: 40px; }
-  :is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog) .ant-btn-icon-only { min-width: 40px; }
-  :is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog) .ant-modal-close { width: 40px; height: 40px; }
+  :is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-btn,
+  :is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-input:not(textarea),
+  :is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-input-affix-wrapper,
+  :is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-select { min-height: 40px; }
+  :is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-btn-icon-only { min-width: 40px; }
+  :is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-modal-close { width: 40px; height: 40px; }
 }
 
 /* Collection layouts own outer spacing; only inventory cards need a search inset. */

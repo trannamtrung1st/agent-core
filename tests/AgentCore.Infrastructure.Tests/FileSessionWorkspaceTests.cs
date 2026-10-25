@@ -241,7 +241,7 @@ public sealed class FileSessionWorkspaceTests
         new ConversationPolicy("concise", true, "en", 256),
         new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
         new VoiceConfiguration(true, "default", 1.0),
-        new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+        new ProviderPreferences("primary-stt", "primary-tts"),
         new Dictionary<string, string> { ["scenario"] = "practice-exam" });
 
     private sealed class TempDir : IDisposable

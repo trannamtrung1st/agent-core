@@ -1,4 +1,6 @@
 using AgentCore.Application.Agents;
+using AgentCore.Application.Models;
+using AgentCore.Domain.Conversation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
@@ -13,8 +15,52 @@ public sealed record TenantChatAgentPage(IReadOnlyList<TenantChatAgent> Items, i
 
 // Public communication discovery is independent of administrative Instance/configuration reads.
 public sealed class TenantChatService(IIamStore security, ITenantAgentStore agents, ITenantDefinitionStore definitions,
-    IBuiltInAgentDefinitionStore builtIns, IdentityService identity, IamAuthorizer authorizer, VoiceAvailability? voice = null)
+    IBuiltInAgentDefinitionStore builtIns, IdentityService identity, IamAuthorizer authorizer, ITenantModelCatalogReader modelCatalogs, VoiceAvailability? voice = null)
 {
+    public async ValueTask<IModelCatalog> ModelsAsync(Guid tenant, TenantSessionInitiator human, Guid? instance = null, CancellationToken ct = default)
+    {
+        var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        AgentModelDefaults? defaults = null;
+        if (instance is { } id)
+        {
+            var agent = await agents.FindTenantAgentAsync(tenant, id, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+            TenantSessionRules.RequireExecutor(state, agent);
+            if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+            var allowed = await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("agents.chat"),
+                AccessScope.ForResource(tenant, "agent", id.ToString("D")), ct).ConfigureAwait(false);
+            if (!allowed.Allowed) throw new AccessDeniedException(allowed.ReasonCode);
+            var baseline = Guid.TryParse(agent.Instance.DefinitionId, out var definition)
+                ? (await definitions.FindDefinitionPublicationAsync(tenant, definition, agent.Instance.ActiveVersion, ct).ConfigureAwait(false))?.Payload
+                : await builtIns.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).ConfigureAwait(false);
+            if (baseline is null) throw new AccessDeniedException("definition_unavailable");
+            defaults = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides).ModelDefaults;
+        }
+        else if ((await ListAgentsAsync(tenant, human, 0, 1, ct).ConfigureAwait(false)).Items.Count == 0)
+            return new AgentCore.Application.Models.TenantModelCatalog(new(tenant, state.Tenant.Revision, new(tenant, null, null, 0), []));
+        var catalog = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
+        var current = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
+        return defaults is null ? catalog : new ChatDefaultCatalog(catalog, defaults);
+    }
+    // Public projection only. Admission still resolves the current owned Instance and catalog.
+    private sealed class ChatDefaultCatalog : IModelCatalog
+    {
+        private readonly IModelCatalog _catalog;
+        public ChatDefaultCatalog(IModelCatalog catalog, AgentModelDefaults defaults)
+        {
+            _catalog = catalog;
+            var choice = SessionModelBinder.InheritedChoice(catalog, defaults);
+            DefaultOfferingId = choice.OfferingId;
+            DefaultReasoningEffort = choice.Effort ?? catalog.Get(choice.OfferingId)?.DefaultReasoningEffort;
+            DefaultSelectionSource = choice.Source;
+        }
+        public string DefaultOfferingId { get; }
+        public string? DefaultReasoningEffort { get; }
+        public ModelSelectionSource DefaultSelectionSource { get; }
+        public IReadOnlyList<ModelDescriptor> Models => _catalog.Models;
+        public ModelDescriptor? Get(string key) => _catalog.Get(key);
+        public ModelDescriptor Default => Get(DefaultOfferingId) ?? throw new AgentCoreException("ModelUnavailable", "The Agent default model is unavailable. Choose an available model for new work.", 409);
+    }
     public async ValueTask RequireMemberAsync(Guid tenant, TenantSessionInitiator human, CancellationToken ct = default) =>
         _ = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
     public async ValueTask<TenantChatAgentPage> ListAgentsAsync(Guid tenant, TenantSessionInitiator human,

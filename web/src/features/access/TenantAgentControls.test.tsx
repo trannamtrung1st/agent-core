@@ -8,7 +8,7 @@ import { TenantAgentControls, type TenantControlPage } from './TenantAgentContro
 
 const context: TenantContext = { tenant: { tenantId: 'tenant', name: 'Controls organization', slug: 'controls' }, userId: 'user', principalId: 'viewer', permissions: [], roles: [], revision: 7 };
 const profile = { maxSteps: 48, durationSeconds: 360, perToolSeconds: 30, preset: 1, sandboxCommandSeconds: 120 };
-const controls = () => ({ agent: { principalId: 'principal', systemIdentityId: 'identity', instance: { instanceId: 'agent', persona: { name: 'Alex', role: 'Guide', description: 'Guide', tone: 'Calm' }, personaRevision: 1, revision: 4, activeVersion: 1, lifecycle: 'Active', unattendedModelCatalogKey: 'alpha', unattendedReasoningEffort: 'high' } }, securityRevision: 7, canUpdate: true,
+const controls = () => ({ agent: { principalId: 'principal', systemIdentityId: 'identity', instance: { instanceId: 'agent', persona: { name: 'Alex', role: 'Guide', description: 'Guide', tone: 'Calm' }, personaRevision: 1, revision: 4, activeVersion: 1, lifecycle: 'Active', unattendedOfferingId: 'alpha', unattendedReasoningEffort: 'high' } }, securityRevision: 7, canUpdate: true,
   budgets: { instanceRevision: 4, securityRevision: 7, overrides: { standard: profile }, definitionDefaults: null, hostLimits: { maxSteps: 144, durationSeconds: 900, perToolSeconds: 30, sandboxCommandSeconds: 180 } },
   management: { securityRevision: 7, policy: { instanceRevision: 4, policyRevision: 2, source: 'instance', effective: { ...defaultManagement, mode: 'Assisted', scopes: ['Settings'] }, definitionDefaults: defaultManagement, overrides: { mode: { value: 'Assisted' }, scopes: { value: ['Settings'] } } } }
 } as TenantAgentControlsView);
@@ -21,7 +21,7 @@ beforeEach(() => {
   fetchMock.mockImplementation(async (path, options) => {
     const url = String(path);
     if (url.endsWith('/csrf')) return response({ token: 'csrf' });
-    if (url.endsWith('/chat/models')) return catalogFailure ? response({}, 503) : response({ defaultKey: 'alpha', models: [{ key: 'alpha', displayName: 'Alpha', supportedReasoningEfforts: ['low', 'high'] }, { key: 'beta', displayName: 'Beta', supportedReasoningEfforts: [] }] });
+    if (url.endsWith('/chat/models')) return catalogFailure ? response({}, 503) : response({ defaultOfferingId: 'alpha', models: [{ key: 'alpha', displayName: 'Alpha', supportedReasoningEfforts: ['low', 'high'] }, { key: 'beta', displayName: 'Beta', supportedReasoningEfforts: [] }] });
     if (['PUT', 'POST'].includes(options?.method ?? '')) {
       if (stale) return response({ reasonCode: 'stale_revision' }, 409);
       const body = JSON.parse(String(options?.body)); current = structuredClone(current); current.securityRevision++; current.agent.instance.revision++;
@@ -79,7 +79,7 @@ it('fails closed on catalog errors, retries, and saves a current model without a
   catalogFailure = true; await open('unattended-model'); await screen.findByRole('alert'); expect(screen.getByRole('button', { name: 'Save Unattended model' })).toBeDisabled();
   catalogFailure = false; fireEvent.click(screen.getByRole('button', { name: 'Reload' })); await select('Unattended model', 'Beta');
   fireEvent.click(screen.getByRole('button', { name: 'Save Unattended model' })); await waitFor(() => expect(writes()).toHaveLength(1));
-  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ expectedRevision: 7, expectedInstanceRevision: 4, catalogKey: 'beta', reasoningEffort: null });
+  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ expectedRevision: 7, expectedInstanceRevision: 4, offeringId: 'beta', reasoningEffort: null });
 });
 it('renders an exact reader without write access or an IAM inspection request', async () => {
   current.canUpdate = false; await open('self-management'); await screen.findByText('Read-only configuration');

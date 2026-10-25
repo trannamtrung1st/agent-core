@@ -13,6 +13,8 @@ public interface ITenantCredentialStore
 {
     ValueTask<TenantCredential?> FindTenantCredentialAsync(Guid tenantId, Guid credentialId, CancellationToken ct = default);
     ValueTask<TenantCredentialPage> ListTenantCredentialsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default);
+    ValueTask<IReadOnlyDictionary<Guid, DateTimeOffset>> ReadTenantCredentialRotationsAsync(Guid tenantId,
+        IReadOnlyList<Guid> credentialIds, CancellationToken ct = default);
     ValueTask<bool> TrySaveTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision,
         TenantCredentialRoot owner, Credential value, long expectedRevision, long expectedSecretRevision,
         AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);

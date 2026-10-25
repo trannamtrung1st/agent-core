@@ -48,10 +48,10 @@ public static partial class TenantAutomationConversationRules
         if (selection?.SelectionSource is not (ModelSelectionSource.User or ModelSelectionSource.Host))
             selection = SessionModelBinder.RefreshDefault(models, definition, selection);
         selection ??= SessionModelBinder.PinDefault(models, definition);
-        if (value.ModelOverrideCatalogKey is { } key && key != selection.CatalogKey
+        if (value.ModelOverrideOfferingId is { } key && key != selection.OfferingId
             || value.ModelOverrideReasoningEffort is { } effort && effort != selection.ReasoningEffort)
             throw new AccessDeniedException("automation_conversation_model_conflict");
-        var pin = new ExecutionModelPin(selection.CatalogKey, selection.ProviderAlias, selection.ModelId, selection.ReasoningEffort, ExecutionModelSource.ConversationDefault);
+        var pin = new ExecutionModelPin(selection.OfferingId, selection.ConnectionId, selection.ExternalModelId, selection.ReasoningEffort, ExecutionModelSource.ConversationDefault, selection.Binding);
         if (!ExecutionModelPolicy.Matches(models, pin, out var descriptor)
             || value.RequiresTools && descriptor?.Tools != true || value.RequiresVision && descriptor?.Vision != true)
             throw new AccessDeniedException("automation_model_unavailable");
@@ -95,7 +95,7 @@ public static partial class TenantAutomationConversationRules
                 responseId, AgentRunOutputContract.ConversationResponse,
                 ExecutionBudgetResolver.Resolve(configuration.Configuration.Definition, configuration.InstanceBudgets, false), configuration.Configuration,
                 taskIntent: RunTaskIntents.FromOccurrence(occurrence), executionContext: context),
-            new(pin.CatalogKey, pin.ProviderAlias, pin.ModelId, pin.ReasoningEffort), AgentRunLimits.DefaultMaxAttempts, at,
+            new(pin.OfferingId, pin.ConnectionId, pin.ExternalModelId, pin.ReasoningEffort, pin.Binding), AgentRunLimits.DefaultMaxAttempts, at,
             configuration.Skills, configuration.Skills.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray());
     }
 }

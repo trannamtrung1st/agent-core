@@ -10,6 +10,14 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 public sealed partial class TenantRunExecutionAuthority
 {
+    public async ValueTask<SessionModelSelection> BindNewRunModelAsync(AgentRun source, AgentDefinition definition,
+        SessionModelSelection? selection, CancellationToken ct)
+    {
+        var current = await ResolveCurrentAsync(source, ct).ConfigureAwait(false);
+        var catalog = await (configurationModels ?? throw new AccessDeniedException("model_context_required"))
+            .ReadAsync(current.State, ct).ConfigureAwait(false);
+        return SessionModelBinder.RefreshDefault(catalog, definition, selection);
+    }
     // Prepared for the existing atomic response-outcome transaction, not a new worker or admission endpoint.
     public async ValueTask<TenantConfigurationContinuationAdmission?> PrepareConfigurationContinuationAsync(TenantRuntimeFrame frame,
         SessionSnapshot snapshot, AgentRunCommand.Complete completion, IIdGenerator ids, CancellationToken ct)
@@ -41,7 +49,8 @@ public sealed partial class TenantRunExecutionAuthority
             var definition = resolved.Configuration.Configuration.Definition;
             if (resolved.Agent.Instance.Revision != pending.Value.Task.InstanceRevision || definition.SelfManagement is not { } policy || !ManagementTools.Enabled(policy)
                 || !RolePermissions.AllowsTool(definition, pending.Value.Task.Target) || !configurationTools.IsConfigured(pending.Value.Task.Target)) return null;
-            var selected = SessionModelBinder.RefreshDefault(configurationModels, definition, snapshot.ModelSelection);
+            var models = await configurationModels.ReadAsync(current.State, ct).ConfigureAwait(false);
+            var selected = SessionModelBinder.RefreshDefault(models, definition, snapshot.ModelSelection);
             if (selected is null) return null;
             var next = AgentRunAdmissionFactory.ForConfigurationContinuation(ids.NewId(), ids.NewId(), ids.NewId(), snapshot with {
                 ModelSelection = selected, PinnedPersona = resolved.Configuration.Persona }, source, pending.Value.Task, time.GetUtcNow(), resolved.Configuration.Skills,
@@ -52,5 +61,7 @@ public sealed partial class TenantRunExecutionAuthority
         }
         catch (AccessDeniedException) { return null; }
         catch (SecurityConflictException) { return null; }
+        catch (Sessions.AgentCoreException error) when (error.Code is "ModelUnavailable" or "ModelRouteStale" or "ModelCapabilityUnsupported" or "ValidationError")
+        { return null; }
     }
 }

@@ -14,7 +14,7 @@ test("managed home survives deleted source, observes current files and delivers 
     expect(response.ok(), await response.text()).toBe(true); return (await response.json()).instanceId as string;
   }
   async function session(id: string) {
-    const response = await request.post("/api/v2/sessions", { headers, data: { agentInstanceId: id, mode: "text", modelCatalogKey: "scripted-alpha" } });
+    const response = await request.post("/api/v2/sessions", { headers, data: { agentInstanceId: id, mode: "text", modelOfferingId: "dca30000-0000-4000-8000-000000000001" } });
     expect(response.ok(), await response.text()).toBe(true); return (await response.json()).sessionId as string;
   }
   const a = await instance(); const b = await instance(); const a1 = await session(a);

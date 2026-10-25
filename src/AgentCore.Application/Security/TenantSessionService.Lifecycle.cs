@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
 
@@ -9,6 +10,8 @@ public sealed partial class TenantSessionService
     public async ValueTask<TenantSessionMetadata?> ChangeAsync(Guid tenant, TenantSessionInitiator initiator, TenantSessionChange change,
         long expectedSecurityRevision, CancellationToken ct = default)
     {
+        if (change.Action == TenantSessionAction.SelectModel)
+            throw AgentCoreErrors.Validation("Use the authorized model-selection command.");
         var current = await sessions.FindTenantSessionAsync(tenant, change.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         var state = await Human(tenant, initiator, ct).ConfigureAwait(false); var scope = TenantSessionRules.Scope(tenant, change.SessionId);
         await Require(state, initiator.PrincipalId, TenantSessionMutations.Permission(change.Action), scope, ct).ConfigureAwait(false);

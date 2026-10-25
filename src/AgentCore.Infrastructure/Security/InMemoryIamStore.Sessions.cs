@@ -10,6 +10,7 @@ public sealed partial class InMemoryIamStore
     public ValueTask<TenantSession?> TryChangeTenantSessionAsync(TenantSecurityState next, long expectedSecurityRevision,
         TenantSessionChange change, TenantSessionInitiator initiator, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
     {
+        TenantSessionRules.ValidateModelChange(next.Tenant.TenantId, change);
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
         if (next.Tenant.Revision != checked(expectedSecurityRevision + 1) || audit.TenantId != next.Tenant.TenantId || audit.ActorPrincipalId != initiator.PrincipalId
             || audit.Target != change.SessionId.ToString("D") || audit.Action != TenantSessionMutations.AuditAction(change.Action)) throw new ArgumentException("Invalid Session mutation transaction.");

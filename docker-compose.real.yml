@@ -3,17 +3,11 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.real.yml -f docker-compose.https.yml up --build -d
 #
-# Matches the native http-openrouter launch profile: hosted OpenRouter text + tools.
-# Copy `.env.example` to a gitignored `.env` and set OPENROUTER_API_KEY.
-# Also set AGENTCORE_TLS_CERTIFICATE_PATH (absolute private PFX readable by UID
-# 1654) and AGENTCORE_TLS_PASSWORD. Initialize a new volume explicitly before up;
-# see docs/17-observability-and-operations.md#docker-compose-integration-and-demo.
-# Compose loads `.env` from the repo root for interpolation. AGENTCORE_LLM_MODEL
-# sets primary-llm DefaultModel; when it matches a catalog ModelId the factory
-# retargets DefaultKey. Do not use openrouter/free as DefaultModel (it remains a
-# catalog option). Do not rewrite the DeepSeek catalog identity with that env
-# var. Hosted STT/TTS are not selected here; Real voice stays unavailable until
-# those adapters are resolved at startup. Never commit secrets.
+# Initialize IAM explicitly, then configure the tenant's protected model credential,
+# connection, offerings and default through AI models. Real boot needs no model key.
+# Set AGENTCORE_TLS_CERTIFICATE_PATH (absolute private PFX readable by UID 1654)
+# and AGENTCORE_TLS_PASSWORD. Speech adapters remain independently configured.
+# See docs/17-observability-and-operations.md for first-run setup.
 
 services:
   agent-core:
@@ -32,16 +26,3 @@ services:
       GoogleDriveOAuth__PublicAppUrl: ${GOOGLE_DRIVE_OAUTH_PUBLIC_APP_URL:-}
       Email__SendEnabled: ${AGENTCORE_EMAIL_SEND_ENABLED:-${AGENTCORE_EMAIL_SMTP_ENABLED:-true}}
       Email__SmtpEnabled: ${AGENTCORE_EMAIL_SMTP_ENABLED:-true}
-      Providers__LanguageModels__primary-llm__Adapter: OpenAICompatible
-      Providers__LanguageModels__primary-llm__BaseUrl: https://openrouter.ai/api/v1/
-      Providers__LanguageModels__primary-llm__DefaultModel: ${AGENTCORE_LLM_MODEL:-deepseek/deepseek-v4.1-flash}
-      Providers__LanguageModels__primary-llm__ReasoningEffort: ${AGENTCORE_LLM_REASONING_EFFORT:-low}
-      Providers__LanguageModels__primary-llm__ReasoningObjectWire: "true"
-      Providers__LanguageModels__primary-llm__ExcludeVisibleReasoning: "true"
-      Providers__LanguageModels__primary-llm__Vision: ${AGENTCORE_LLM_VISION:-true}
-      Providers__LanguageModels__primary-llm__Timeouts__SetupSeconds: "30"
-      Providers__LanguageModels__primary-llm__Timeouts__StreamIdleSeconds: "60"
-      Providers__LanguageModels__primary-llm__Timeouts__TotalSeconds: "120"
-      Providers__LanguageModels__primary-llm__Tools: ${AGENTCORE_LLM_TOOLS:-true}
-      Providers__ModelCatalog__DefaultKey: deepseek-v41-flash
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required for Real Compose}

@@ -762,14 +762,14 @@ describe("ChatApp model selection", () => {
         agents: [],
         selectedAgentId: "examiner",
         modelCatalog: [],
-        modelCatalogDefaultKey: null
+        modelCatalogDefaultOfferingId: null
       });
     });
   });
 
   const models = [
     {
-      key: "scripted-alpha",
+      offeringId: "dca30000-0000-4000-8000-000000000001",
       displayName: "Scripted Alpha",
       tools: true,
       vision: false,
@@ -779,7 +779,7 @@ describe("ChatApp model selection", () => {
       defaultReasoningEffort: "medium"
     },
     {
-      key: "scripted-beta",
+      offeringId: "dca30000-0000-4000-8000-000000000002",
       displayName: "Scripted Beta",
       tools: true,
       vision: false,
@@ -790,6 +790,39 @@ describe("ChatApp model selection", () => {
     }
   ];
 
+  const setupIdentity = { instanceId: 'empty-model-instance', definitionId: 'examiner', activeVersion: 1, name: 'Alex', role: 'Examiner', voiceAvailable: false, language: 'en' };
+  function emptyModelChat() {
+    useSessionStore.setState({ ...emptySession(), chatAgentInstances: [setupIdentity], newChatIdentityKey: 'managed:' + setupIdentity.instanceId,
+      chatAgentInstancesLoading: false, modelCatalogLoading: false, modelCatalog: [], modelCatalogDefaultOfferingId: null });
+  }
+
+  it('explains empty model setup and offers the current organization connection route to a manager', async () => {
+    act(emptyModelChat);
+    await act(async () => render(<ConfigProvider theme={antdTheme}><ChatApp tenantContext={{ ...context, permissions: ['model-connections.read', 'model-connections.manage'] }} /></ConfigProvider>));
+    expect(screen.getByText('No model is available for this identity')).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Connect a provider' })).toHaveAttribute('href', `/t/${fixtureTenant}/integrations/ai-models/connections`);
+    expect(screen.queryByRole('button', { name: 'Model' })).not.toBeInTheDocument();
+  });
+
+  it('keeps setup guidance read-only and clears it while a newly selected catalog is loading', async () => {
+    act(emptyModelChat);
+    await act(async () => renderChat());
+    expect(screen.getByText(/Ask an organization owner to configure an available model/)).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Connect a provider' })).not.toBeInTheDocument();
+    act(() => useSessionStore.setState({ modelCatalogLoading: true }));
+    expect(screen.queryByText('No model is available for this identity')).not.toBeInTheDocument();
+  });
+
+  it('distinguishes a missing inherited default from an explicit available choice', async () => {
+    act(emptyModelChat);
+    act(() => useSessionStore.setState({ modelCatalog: models }));
+    await act(async () => renderChat());
+    expect(screen.getByText('Choose a model for this chat')).toBeVisible();
+    act(() => useSessionStore.setState({ pendingOfferingId: models[0].offeringId }));
+    expect(screen.queryByText('Choose a model for this chat')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Scripted Alpha');
+  });
+
   it("starts a new chat on Default and restores a persisted session model", async () => {
     await act(async () => {
       useSessionStore.setState({
@@ -797,7 +830,7 @@ describe("ChatApp model selection", () => {
         agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
         selectedAgentId: "examiner",
         modelCatalog: models,
-        modelCatalogDefaultKey: "scripted-alpha"
+        modelCatalogDefaultOfferingId: "dca30000-0000-4000-8000-000000000001"
       });
     });
     const view = await act(async () => renderChat());
@@ -811,15 +844,15 @@ describe("ChatApp model selection", () => {
         connection: "ready",
         agentName: "Alex",
         agentRole: "Examiner",
-        sessionModelKey: "scripted-beta",
+        sessionOfferingId: "dca30000-0000-4000-8000-000000000002",
         sessionModelDisplayName: "Scripted Beta",
         sessionModelSource: "user",
         sessionModelEffort: null
       });
       rerenderChat(view);
     });
-    expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument();
-    expect(screen.getByText("Scripted Beta")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Model" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("Scripted Beta");
   });
 
   it("disables model editing while a response is running", async () => {
@@ -833,16 +866,16 @@ describe("ChatApp model selection", () => {
         liveResponseId: "r1",
         outputState: "agentGenerating",
         modelCatalog: models,
-        modelCatalogDefaultKey: "scripted-alpha",
-        sessionModelKey: "scripted-alpha",
+        modelCatalogDefaultOfferingId: "dca30000-0000-4000-8000-000000000001",
+        sessionOfferingId: "dca30000-0000-4000-8000-000000000001",
         sessionModelEffort: "medium",
         agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
         selectedAgentId: "examiner"
       });
     });
     await act(async () => renderChat());
-    expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument();
-    expect(screen.getByText("Scripted Alpha")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Model" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("Scripted Alpha");
   });
 
   it("hides model controls on a paused session", async () => {
@@ -856,8 +889,8 @@ describe("ChatApp model selection", () => {
         agentName: "Alex",
         agentRole: "Examiner",
         modelCatalog: models,
-        modelCatalogDefaultKey: "scripted-alpha",
-        sessionModelKey: "scripted-alpha",
+        modelCatalogDefaultOfferingId: "dca30000-0000-4000-8000-000000000001",
+        sessionOfferingId: "dca30000-0000-4000-8000-000000000001",
         sessionModelEffort: "medium",
         agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
         selectedAgentId: "examiner"
@@ -879,8 +912,8 @@ describe("ChatApp model selection", () => {
         agentName: "Alex",
         agentRole: "Examiner",
         modelCatalog: models,
-        modelCatalogDefaultKey: "scripted-alpha",
-        sessionModelKey: "scripted-alpha",
+        modelCatalogDefaultOfferingId: "dca30000-0000-4000-8000-000000000001",
+        sessionOfferingId: "dca30000-0000-4000-8000-000000000001",
         sessionModelEffort: "medium",
         agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
         selectedAgentId: "examiner"

@@ -17,10 +17,10 @@ public sealed class ExecutionModelPolicyTests
     {
         var catalog = Catalog();
         var definition = await LoadAsync("customer-support", 2);
-        var instance = Instance(definition, "scripted-vision", null);
+        var instance = Instance(definition, "dca30000-0000-4000-8000-000000000003", null);
         var unattended = ExecutionModelPolicy.Resolve(catalog, definition, instance, registration: null);
         Assert.True(unattended.Accepted);
-        Assert.Equal("scripted-vision", unattended.Pin!.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000003", unattended.Pin!.OfferingId);
         Assert.Equal(ExecutionModelSource.UnattendedDefault, unattended.Pin.Source);
         Assert.Null(unattended.Pin.ReasoningEffort);
 
@@ -28,15 +28,15 @@ public sealed class ExecutionModelPolicyTests
             catalog,
             definition,
             instance,
-            Registration("scripted-alpha", "low", requiresVision: false));
+            Registration("dca30000-0000-4000-8000-000000000001", "low", requiresVision: false));
         Assert.True(overridden.Accepted);
-        Assert.Equal("scripted-alpha", overridden.Pin!.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000001", overridden.Pin!.OfferingId);
         Assert.Equal("low", overridden.Pin.ReasoningEffort);
         Assert.Equal(ExecutionModelSource.TriggerOverride, overridden.Pin.Source);
 
         var conversation = ExecutionModelPolicy.Resolve(catalog, definition, Instance(definition, null, null), registration: null);
         Assert.True(conversation.Accepted);
-        Assert.Equal("scripted-alpha", conversation.Pin!.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000001", conversation.Pin!.OfferingId);
         Assert.Equal("medium", conversation.Pin.ReasoningEffort);
         Assert.Equal(ExecutionModelSource.ConversationDefault, conversation.Pin.Source);
     }
@@ -48,7 +48,7 @@ public sealed class ExecutionModelPolicyTests
         var decision = ExecutionModelPolicy.Resolve(
             Catalog(),
             definition,
-            Instance(definition, "scripted-vision", null),
+            Instance(definition, "dca30000-0000-4000-8000-000000000003", null),
             Registration("missing-model", null, requiresVision: false));
         Assert.Null(decision.Pin);
         Assert.Equal(ExecutionModelPolicy.UnavailableCode, decision.FailureCode);
@@ -61,9 +61,9 @@ public sealed class ExecutionModelPolicyTests
         var decision = ExecutionModelPolicy.Resolve(
             Catalog(),
             definition,
-            Instance(definition, "scripted-alpha", "medium"),
+            Instance(definition, "dca30000-0000-4000-8000-000000000001", "medium"),
             Registration(null, null, requiresVision: true));
-        Assert.Equal("scripted-alpha", decision.Pin!.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000001", decision.Pin!.OfferingId);
         Assert.Equal(ExecutionModelPolicy.CapabilityCode, decision.FailureCode);
         Assert.False(decision.Accepted);
     }
@@ -77,7 +77,7 @@ public sealed class ExecutionModelPolicyTests
             definition,
             Instance(definition, "text-only", null),
             registration: null);
-        Assert.Equal("text-only", decision.Pin!.ModelId);
+        Assert.Equal("text-only", decision.Pin!.ExternalModelId);
         Assert.Equal(ExecutionModelPolicy.CapabilityCode, decision.FailureCode);
     }
 
@@ -88,16 +88,16 @@ public sealed class ExecutionModelPolicyTests
         var decision = ExecutionModelPolicy.Resolve(
             Catalog(),
             definition,
-            Instance(definition, "scripted-alpha", "medium"),
+            Instance(definition, "dca30000-0000-4000-8000-000000000001", "medium"),
             registration: null);
         Assert.True(decision.Accepted);
-        Assert.Equal("scripted-alpha", decision.Pin!.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000001", decision.Pin!.OfferingId);
     }
 
     [Fact]
     public void Routing_update_keeps_the_occurrence_pin()
     {
-        var pin = new ExecutionModelPin("scripted-vision", "primary-llm", "scripted-vision", null, ExecutionModelSource.UnattendedDefault);
+        var pin = new ExecutionModelPin("dca30000-0000-4000-8000-000000000003", "dca20000-0000-4000-8000-000000000001", "dca30000-0000-4000-8000-000000000003", null, ExecutionModelSource.UnattendedDefault);
         var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
         var occurrence = new TriggerOccurrence(
             Guid.NewGuid(),
@@ -125,19 +125,19 @@ public sealed class ExecutionModelPolicyTests
             Now,
             null,
             null);
-        Assert.Equal(pin.CatalogKey, routed.ModelPin!.CatalogKey);
+        Assert.Equal(pin.OfferingId, routed.ModelPin!.OfferingId);
         Assert.Equal(pin.Source, routed.ModelPin.Source);
     }
 
     private static IModelCatalog Catalog() =>
         new ConfigurationModelCatalog(
-            "scripted-alpha",
+            "dca30000-0000-4000-8000-000000000001",
             [
                 new ModelDescriptor(
-                    "scripted-alpha",
+                    "dca30000-0000-4000-8000-000000000001",
                     "Scripted Alpha",
-                    "primary-llm",
-                    "scripted-alpha",
+                    "dca20000-0000-4000-8000-000000000001",
+                    "dca30000-0000-4000-8000-000000000001",
                     Tools: true,
                     Vision: false,
                     StructuredOutput: false,
@@ -145,10 +145,10 @@ public sealed class ExecutionModelPolicyTests
                     ["low", "medium", "high"],
                     "medium", DeveloperRoleSupport: true),
                 new ModelDescriptor(
-                    "scripted-vision",
+                    "dca30000-0000-4000-8000-000000000003",
                     "Scripted Vision",
-                    "primary-llm",
-                    "scripted-vision",
+                    "dca20000-0000-4000-8000-000000000001",
+                    "dca30000-0000-4000-8000-000000000003",
                     Tools: true,
                     Vision: true,
                     StructuredOutput: false,
@@ -158,7 +158,7 @@ public sealed class ExecutionModelPolicyTests
                 new ModelDescriptor(
                     "text-only",
                     "Text only",
-                    "primary-llm",
+                    "dca20000-0000-4000-8000-000000000001",
                     "text-only",
                     Tools: false,
                     Vision: false,
@@ -168,7 +168,7 @@ public sealed class ExecutionModelPolicyTests
                     null, DeveloperRoleSupport: true)
             ]);
 
-    private static AgentInstance Instance(AgentDefinition definition, string? catalogKey, string? effort) =>
+    private static AgentInstance Instance(AgentDefinition definition, string? offeringId, string? effort) =>
         new(
             Guid.Parse("019944af-00e1-7000-8000-000000000001"),
             definition.Id,
@@ -177,11 +177,11 @@ public sealed class ExecutionModelPolicyTests
             AgentInstanceLifecycle.Active,
             Now,
             Now,
-            UnattendedModelCatalogKey: catalogKey,
+            UnattendedOfferingId: offeringId,
             UnattendedReasoningEffort: effort);
 
     private static Automation Registration(
-        string? catalogKey,
+        string? offeringId,
         string? effort,
         bool requiresVision) =>
         new(
@@ -197,7 +197,7 @@ public sealed class ExecutionModelPolicyTests
             1,
             new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, null, null, Now, Now),
             null,
-            catalogKey,
+            offeringId,
             effort,
             requiresVision);
 

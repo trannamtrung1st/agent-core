@@ -48,7 +48,7 @@ public sealed class AutomationActivationDefaultTests
             definition.Identity, AgentInstanceLifecycle.Active, At, At));
         var seed = schedule ? new TenantAutomationChange(active, "Timing", "Retain the task.", new OneShotSchedule(At.AddHours(1), "UTC"), RequiresTools: false)
             : new TenantAutomationChange(active, "Events", "Retain the task.", null, Events: [new(null, new CoreEventTrigger("run.completed"), true)], RequiresTools: false);
-        var current = TenantAutomationAuthoring.Build(agent, definition, null, seed, new(TriggerAuthorizationOrigin.AgentTask, null, null, At, At), At, ModelCatalogFactory.Synthetic(), ids, null);
+        var current = TenantAutomationAuthoring.Build(agent, definition, null, seed, new(TriggerAuthorizationOrigin.AgentTask, null, null, At, At), At, AgentCore.Infrastructure.Providers.Synthetic.SyntheticModelCatalog.Create(), ids, null);
         var json = JsonSerializer.Serialize(new { automationId = current.AutomationId, expectedRevision = current.Revision, name = "Renamed" });
         var update = TriggerScheduleCommands.NormalizeTenant(definition, current, TenantAutomationMutationContract.Parse(ToolCatalog.AutomationUpdate, json), Guid.NewGuid(), At, ids);
         Assert.Equal(active, update.Enabled);

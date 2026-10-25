@@ -99,18 +99,18 @@ public sealed partial class TenantCredentialIntegrationTests
         public IMemoryStore Memory { get; private set; } = null!;
         public TenantSessionService Sessions => SessionService((ITenantSessionStore)Iam);
         public TenantChatService ChatService(ITenantAgentStore? agents = null) => new(Iam, agents ?? (ITenantAgentStore)Iam,
-            (ITenantDefinitionStore)Iam, BuiltIns, Identity, Authorizer);
+            (ITenantDefinitionStore)Iam, BuiltIns, Identity, Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(Iam));
         public TenantSessionService SessionService(ITenantSessionStore sessions) => new(Iam, (ITenantAgentStore)Iam, sessions, (ITenantRunStore)Iam, (ITenantDefinitionStore)Iam, BuiltIns,
-            Identity, Authorizer, ModelCatalogFactory.Create("Synthetic", null, null), new(), Ids, Clock, Artifacts as ITenantArtifactStore, Attachments as ITenantAttachmentStore);
+            Identity, Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(Iam), new(), Ids, Clock, Artifacts as ITenantArtifactStore, Attachments as ITenantAttachmentStore);
         public IAgentDefinitionResourceAdminStore Resources { get; private set; } = null!;
         public IDefinitionResourceContentStore RunContent { get; } = new InMemoryDefinitionResourceContentStore();
         public TenantRunService RunService(ITenantRunStore? runs = null, ITenantSessionInputControl? inputs = null) => new(Iam, (ITenantSessionStore)Iam, runs ?? (ITenantRunStore)Iam,
             RunConfiguration(),
-            Identity, Authorizer, ModelCatalogFactory.Synthetic(), Ids, Clock, attachments: Attachments as ITenantAttachmentStore, inputs: inputs);
+            Identity, Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(Iam), Ids, Clock, attachments: Attachments as ITenantAttachmentStore, inputs: inputs);
         public TenantRunConfigurationResolver RunConfiguration(IBuiltInAgentDefinitionStore? currentBuiltIns = null) =>
             new((ITenantAgentStore)Iam, (ITenantDefinitionStore)Iam, currentBuiltIns ?? BuiltIns, RunResourceCatalog(), (ITenantCredentialBindingStore)Iam);
-        public TenantAgentConfigurationService AgentConfiguration() => new(Iam, (ITenantAgentStore)Iam, (ITenantDefinitionStore)Iam,
-            BuiltIns, RunResourceCatalog(), Authorizer, ModelCatalogFactory.Synthetic(), AgentCore.Application.Tools.ToolConfigurationGates.AllowAll,
+        public TenantAgentConfigurationService AgentConfiguration(ITenantModelCatalogReader? modelCatalogs = null) => new(Iam, (ITenantAgentStore)Iam, (ITenantDefinitionStore)Iam,
+            BuiltIns, RunResourceCatalog(), Authorizer, modelCatalogs ?? new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(Iam), AgentCore.Application.Tools.ToolConfigurationGates.AllowAll,
             new(), Ids, Clock, content: RunContent, identity: Identity);
         public IIdGenerator Ids { get; } = new SystemIdGenerator(TimeProvider.System);
         public IIdentityTokens Tokens { get; } = new IdentityTokens();

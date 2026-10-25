@@ -154,7 +154,7 @@ public static class InitiativeEvaluator
             ContextSection.Runtime(ContextSectionId.Policies, ContextSourceKind.AgentRun,
                 PromptContextBuilder.BuildAgentPolicies(context.Definition) + "\nInitiative policy: " + JsonSerializer.Serialize(agent.initiativePolicy, Json), context.Configuration?.ConfigurationHash),
             ContextSection.Evidence(ContextSectionId.History, ContextSourceKind.Session, JsonSerializer.Serialize(payload, Json))
-        ], fieldSources: context.Configuration?.FieldSources), maxOutputTokens: 160, temperature: 0.2, reasoningEffort: context.ReasoningEffort);
+        ], fieldSources: context.Configuration?.FieldSources), maxOutputTokens: 160, reasoningEffort: context.ReasoningEffort);
     }
 
     private static async Task<(string Text, bool ProviderFailed)> CollectTextAsync(

@@ -83,7 +83,7 @@ Introduce first-class Environment entities and active Session environment contex
 
 ### 3. Dynamic Model & Provider Management
 
-Extend the existing provider abstraction and primarily file-based configuration into system/tenant model catalogs: built-in system defaults, admin-managed model/provider configurations, custom OpenAI-compatible endpoints, local LLMs, OpenRouter, enable/disable and tenant availability controls. Capture capabilities and metadata suitable for later intelligent routing. Existing model selection is a foundation; Decision Intelligence remains initiative 6.
+**Local implementation complete (25 October 2026).** Tenant-owned protected connections, selectable offerings, explicit defaults, five adapter kinds, native/compatible capabilities and canonical runtime/authoring/UI selection replace static Real inference configuration. The [delivery audit](docs/reports/dynamic-model-management-delivery-2026-10-25.md#final-requirement-audit) records focused SQLite/InMemory/API/Runtime/Synthetic browser evidence and migration/reset safety. Live-provider calls, physical devices, deployment and optional CI remain unrun; no application milestone acceptance is implied. Routing/Decision Intelligence remains initiative 6.
 
 ### 4. Self-Management & Admin Assistant
 

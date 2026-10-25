@@ -4,7 +4,7 @@ import { backgroundFixture, mockBackgroundSessions } from './support/background-
 
 test('long run outcomes scroll independently and remain usable across drawer widths', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-  const item = backgroundFixture(1, 'Review pending orders, customer requests and outstanding follow-ups before preparing the weekly operations report', { progress: 'Processing/' + 'unbroken-path'.repeat(35), modelCatalogKey: 'long-model-'.repeat(11), outcome: { kind: 'NeedsAttention',
+  const item = backgroundFixture(1, 'Review pending orders, customer requests and outstanding follow-ups before preparing the weekly operations report', { progress: 'Processing/' + 'unbroken-path'.repeat(35), modelOfferingId: 'long-model-'.repeat(11), outcome: { kind: 'NeedsAttention',
     summary: 'Sample hello!\n' + 'This is the owner-facing scheduled greeting.\n'.repeat(70), outcomeEntryId: 'result', attentionRequired: true } });
   item.origin.automationId = '90000000-0000-4000-8000-999999999998';
   await mockBackgroundSessions(page, [item]);

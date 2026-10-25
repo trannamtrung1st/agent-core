@@ -108,14 +108,12 @@ public interface IAgentBrain
 }
 
 public sealed record ProviderAliasSet(
-    IReadOnlySet<string> LanguageModels,
     IReadOnlySet<string> SpeechRecognizers,
     IReadOnlySet<string> SpeechSynthesizers);
 
 public static class SyntheticProviderAliases
 {
     public static ProviderAliasSet Default { get; } = new(
-        LanguageModels: new HashSet<string>(StringComparer.Ordinal) { "primary-llm" },
         SpeechRecognizers: new HashSet<string>(StringComparer.Ordinal) { "primary-stt" },
         SpeechSynthesizers: new HashSet<string>(StringComparer.Ordinal) { "primary-tts" });
 }

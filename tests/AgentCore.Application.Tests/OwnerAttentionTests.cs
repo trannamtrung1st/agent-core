@@ -83,7 +83,7 @@ public sealed class OwnerAttentionTests
             new ConversationPolicy("balanced", false, "en", 2048),
             new InitiativePolicy(false, 60_000, 120_000, 1, ["longSilence"], 0),
             new VoiceConfiguration(false, "default", 1.0),
-            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+            new ProviderPreferences("primary-stt", "primary-tts"),
             new Dictionary<string, string>(StringComparer.Ordinal),
             new RoleEnvironment(ToolAllowlist:
             [

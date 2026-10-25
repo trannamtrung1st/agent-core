@@ -38,7 +38,7 @@ export function TenantAgentSandbox({ context, id }: { context: TenantContext; id
         throw error;
       }
     },
-    models: async () => ({ defaultKey: '', models: [] })
+    models: async () => ({ defaultOfferingId: '', models: [] })
   }), [tenant, id]);
   const reloadSaved = () => { focusAfterRead.current = true; setRefresh(value => value + 1); };
   return <Flex ref={pane} tabIndex={-1} aria-label="Instance Sandbox configuration" vertical gap="var(--ac-space-section)" className="access-bounded-form">{guard.holder}

@@ -14,7 +14,7 @@
         "Security__Http__AllowedOrigins__1": "http://127.0.0.1:5173"
       }
     },
-    "http-openrouter": {
+    "http-real": {
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": false,
@@ -25,18 +25,6 @@
         "Security__Http__AllowInsecureLocalHttp": "true",
         "Security__Http__AllowedOrigins__0": "http://localhost:5173",
         "Security__Http__AllowedOrigins__1": "http://127.0.0.1:5173",
-        "Providers__LanguageModels__primary-llm__Adapter": "OpenAICompatible",
-        "Providers__LanguageModels__primary-llm__BaseUrl": "https://openrouter.ai/api/v1/",
-        "Providers__LanguageModels__primary-llm__DefaultModel": "deepseek/deepseek-v4.1-flash",
-        "Providers__LanguageModels__primary-llm__ReasoningEffort": "low",
-        "Providers__LanguageModels__primary-llm__ReasoningObjectWire": "true",
-        "Providers__LanguageModels__primary-llm__ExcludeVisibleReasoning": "true",
-        "Providers__LanguageModels__primary-llm__Vision": "true",
-        "Providers__LanguageModels__primary-llm__Tools": "true",
-        "Providers__LanguageModels__primary-llm__Timeouts__SetupSeconds": "30",
-        "Providers__LanguageModels__primary-llm__Timeouts__StreamIdleSeconds": "60",
-        "Providers__LanguageModels__primary-llm__Timeouts__TotalSeconds": "120",
-        "Providers__ModelCatalog__DefaultKey": "deepseek-v41-flash",
         "Persistence__Provider": "Sqlite",
         "Persistence__ConnectionString": "Data Source=data/agent-core.db",
         "Browser__PolicyMode": "OpenWeb",

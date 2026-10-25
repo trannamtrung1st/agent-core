@@ -8,7 +8,7 @@ using AgentCore.Domain.Conversation;
 namespace AgentCore.Application.Sessions;
 
 public sealed class SessionRuntimeFactory(
-    ILanguageModel languageModel,
+    ILanguageModelResolver models,
     IAgentBrain brain,
     IIdGenerator ids,
     TimeProvider time,
@@ -25,8 +25,8 @@ public sealed class SessionRuntimeFactory(
     TenantRunProfileService tenantProfiles,
     TenantMemoryService tenantMemory,
     TenantExperienceService tenantExperience,
-    ILanguageModelResolver? models = null,
-    IModelCatalog? catalog = null,
+    ILanguageModel? fixtureModel = null,
+    IModelCatalog? fixtureCatalog = null,
     IDiagnosticIdSource? diagnostics = null)
 {
     public SessionRuntime CreateTenant(SessionSnapshot snapshot, ISessionOutput output, TenantRuntimeFrame frame,
@@ -35,12 +35,12 @@ public sealed class SessionRuntimeFactory(
     {
         if (snapshot.SessionId != frame.SessionId || snapshot.AgentInstanceId != frame.Owner.AgentInstanceId || snapshot.ProfileId is not null)
             throw new AgentCore.Application.Security.AccessDeniedException("tenant_runtime_scope_mismatch");
-        return new(snapshot, languageModel, brain, new AgentCore.Application.Security.TenantRuntimeMemoryStore(runtimeStorage, frame, ids), output, ids, time,
+        return new(snapshot, fixtureModel, brain, new AgentCore.Application.Security.TenantRuntimeMemoryStore(runtimeStorage, frame, ids), output, ids, time,
             loggers.CreateLogger(typeof(SessionRuntime).FullName!), new AgentCore.Application.Security.TenantAgentRunStore(runtimeStorage, tenantRuns, ids, frame, authority),
             classifier, recognition: voice.EffectivePlan.RecognitionCapabilities ?? recognizer?.Capabilities,
             synthesizer: tenantVoice is null ? null : synthesizer, voice: tenantVoice is null ? null : voice,
             policy: policy, tools: new SessionToolExecutor(configurationGate: tools.ConfigurationGate, tenantAuthorization: tenantTools),
-            modelResolver: models, catalog: catalog, diagnostics: diagnostics, artifacts: tenantArtifacts.Bind(frame),
+            modelResolver: models, catalog: fixtureCatalog, diagnostics: diagnostics, artifacts: tenantArtifacts.Bind(frame),
             runAuthority: authority, runtimeOwner: frame.Owner,
             tenantContinuations: tenantContinuations,
             tenantAttachments: tenantAttachments, tenantVoice: tenantVoice,

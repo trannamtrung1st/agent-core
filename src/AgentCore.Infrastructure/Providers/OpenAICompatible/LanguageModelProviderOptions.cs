@@ -39,6 +39,9 @@ public sealed class LanguageModelProviderOptions
     public bool LogProviderErrorMessages { get; set; }
     public Dictionary<string, string> AdditionalHeaders { get; set; } = [];
     public ProviderTimeoutOptions Timeouts { get; set; } = new();
+    internal Func<HttpRequestMessage, CancellationToken, ValueTask>? PrepareDispatch { get; set; }
+    internal Func<string, string>? ProtectContinuation { get; set; }
+    internal Func<string, string>? UnprotectContinuation { get; set; }
 }
 
 public sealed class ProviderTimeoutOptions
@@ -50,7 +53,6 @@ public sealed class ProviderTimeoutOptions
 
 public sealed class ProvidersOptions
 {
-    public Dictionary<string, LanguageModelProviderOptions> LanguageModels { get; set; } = [];
     public Dictionary<string, SpeechRecognitionProviderOptions> SpeechRecognizers { get; set; } = [];
     public Dictionary<string, SpeechSynthesisProviderOptions> SpeechSynthesizers { get; set; } = [];
     public SpeechProvidersOptions Speech { get; set; } = new();

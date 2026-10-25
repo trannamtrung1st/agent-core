@@ -120,7 +120,7 @@ internal static class CoreEventPersistence
         }
         var changed = new List<string>();
         if (previous.Persona != current.Persona) changed.Add("persona");
-        if (previous.UnattendedModelCatalogKey != current.UnattendedModelCatalogKey || previous.UnattendedReasoningEffort != current.UnattendedReasoningEffort) changed.Add("unattendedModel");
+        if (previous.UnattendedOfferingId != current.UnattendedOfferingId || previous.UnattendedReasoningEffort != current.UnattendedReasoningEffort) changed.Add("unattendedModel");
         if (previous.ExecutionBudgets != current.ExecutionBudgets) changed.Add("executionBudgets");
         if (JsonSerializer.Serialize(new { previous.HarnessManagement?.Policy, previous.HarnessManagement?.Overrides }) != JsonSerializer.Serialize(new { current.HarnessManagement?.Policy, current.HarnessManagement?.Overrides })) changed.Add("harnessPolicy");
         if (changed.Count > 0)

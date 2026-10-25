@@ -40,7 +40,6 @@
     "speakingRate": 1.0
   },
   "providerPreferences": {
-    "languageModel": "primary-llm",
     "speechRecognizer": "primary-stt",
     "speechSynthesizer": "primary-tts",
     "interruptionClassifier": "heuristic"

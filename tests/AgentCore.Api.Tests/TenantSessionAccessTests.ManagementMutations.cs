@@ -83,7 +83,7 @@ public sealed partial class TenantSessionAccessTests
         "settings.patch" => JsonSerializer.Serialize(new { expectedInstanceRevision = 3, section = "instructions", set = new { agentInstructions = ManagementInstructions }, clear = Array.Empty<string>() }),
         "management.freeze" => """{"expectedInstanceRevision":3}""",
         "management.policy.update" => """{"expectedInstanceRevision":3,"mode":"Assisted","scopes":["Settings"],"managedAutoApply":[]}""",
-        "automation.preferences.patch" => JsonSerializer.Serialize(new { expectedInstanceRevision = 3, catalogKey = model, reasoningEffort = (string?)null }),
+        "automation.preferences.patch" => JsonSerializer.Serialize(new { expectedInstanceRevision = 3, offeringId = model, reasoningEffort = (string?)null }),
         _ => throw new ArgumentException()
     };
     [Theory]
@@ -106,7 +106,7 @@ public sealed partial class TenantSessionAccessTests
             using var owner = host.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
             var logs = new ManagementMutationLogs(); host.Services.GetRequiredService<ILoggerFactory>().AddProvider(logs);
             var (tenant, instance) = await SetupManagementMutation(host, owner); var api = $"/api/v2/tenants/{tenant}";
-            var key = host.Services.GetRequiredService<IModelCatalog>().DefaultKey; model.Arguments = ManagementCommand(tool, key);
+            var key = host.Services.GetRequiredService<IModelCatalog>().DefaultOfferingId; model.Arguments = ManagementCommand(tool, key);
             var created = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 })); var session = created.GetProperty("sessionId").GetGuid();
             var response = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Inspect then apply this exact Agent configuration through qualified consent.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, response.StatusCode); var runId = (await Json(response)).GetProperty("runId").GetGuid();
@@ -160,7 +160,7 @@ public sealed partial class TenantSessionAccessTests
                 if (tool == "settings.patch") Assert.Equal(ManagementInstructions, saved.SettingsOverrides!.AgentInstructions!.Value);
                 if (tool == "management.freeze") Assert.True(saved.HarnessManagement!.Policy.Frozen);
                 if (tool == "management.policy.update") Assert.Equal(AgentCore.Domain.Definitions.HarnessManagementMode.Assisted, saved.HarnessManagement!.Overrides!.Mode!.Value);
-                if (tool == "automation.preferences.patch") Assert.Equal(key, saved.UnattendedModelCatalogKey);
+                if (tool == "automation.preferences.patch") Assert.Equal(key, saved.UnattendedOfferingId);
                 await host.Services.GetRequiredService<ITenantManagementStore>().RequireTenantManagementReadSourcesAsync(new(tenant, final.AgentRunId), TenantManagementReadReferences.Read(final.Checkpoint), null);
                 var recorded = await Json(await owner.GetAsync(api + $"/approvals/{request.RequestId}"));
                 var current = Assert.Single(recorded.GetProperty("review").GetProperty("changes").EnumerateArray(), c => c.GetProperty("field").GetString() == "Current configuration");

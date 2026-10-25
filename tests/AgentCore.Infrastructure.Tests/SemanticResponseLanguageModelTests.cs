@@ -705,7 +705,7 @@ public sealed class SemanticResponseLanguageModelTests
     [Fact]
     public async Task Catalog_bound_scripted_native_json_becomes_semantic_ready()
     {
-        var inner = new CatalogBoundLanguageModel(
+        var inner = new AgentCore.Infrastructure.Providers.Synthetic.SyntheticCatalogLanguageModel(
             new ScriptedLanguageModel(),
             new ModelCapabilities(StreamingText: true, Cancellation: true, Tools: true, StructuredOutput: true));
         var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
@@ -719,7 +719,7 @@ public sealed class SemanticResponseLanguageModelTests
     [Fact]
     public async Task Catalog_bound_scripted_speech_none_omits_speech_text()
     {
-        var inner = new CatalogBoundLanguageModel(
+        var inner = new AgentCore.Infrastructure.Providers.Synthetic.SyntheticCatalogLanguageModel(
             new ScriptedLanguageModel(),
             new ModelCapabilities(StreamingText: true, Cancellation: true, Tools: true, StructuredOutput: true));
         var request = new ModelRequest(

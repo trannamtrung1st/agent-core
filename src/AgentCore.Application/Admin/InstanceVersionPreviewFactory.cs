@@ -22,7 +22,7 @@ public static class InstanceVersionPreviewFactory
         var preserved = InstanceSettingsResolver.Sections.SelectMany(section => InstanceSettingsResolver.Overrides(instance.SettingsOverrides ?? new(), section).Keys.Select(field => section + "." + field))
             .Concat(Enum.GetValues<ExecutionBudgetClass>().Where(kind => instance.ExecutionBudgets?.Get(kind) is not null).Select(kind => "executionBudgets." + kind))
             .Append("identity").Concat(ManagementOverrides(instance))
-            .Concat(instance.UnattendedModelCatalogKey is null && instance.UnattendedReasoningEffort is null ? [] : new[] { "unattendedModel" }).ToArray();
+            .Concat(instance.UnattendedOfferingId is null && instance.UnattendedReasoningEffort is null ? [] : new[] { "unattendedModel" }).ToArray();
         return new(instance.Revision, baseline.Version, target.Version, differences, preserved,
             target.SkillList.Where(s => !baseline.SkillList.Any(old => old.Id == s.Id)).Select(s => "definition:" + s.Id)
                 .Concat(newResources.Where(r => !oldResources.Any(old => old.ResourceId == r.ResourceId)).Select(r => "definition:" + r.ResourceId)).ToArray(),

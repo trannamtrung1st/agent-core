@@ -46,7 +46,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var store = reopened ?? f.Iam; var iam = new IamAuthorizer(store);
         return new(store, (ITenantApprovalStore)store, (ITenantAgentStore)store,
             new(store, (ITenantRunStore)store, (ITenantAgentStore)store, iam, new((ITenantAuthorizationAuditStore)store, f.Ids, f.Clock)), iam, f.Identity,
-            f.Ids, f.Clock, f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)store, accountReads: reads);
+            f.Ids, f.Clock, f.RunConfiguration(), new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(store), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)store, accountReads: reads);
     }
 
     [Theory] [MemberData(nameof(AgentAccountReadCases))]
@@ -92,7 +92,7 @@ public sealed partial class TenantCredentialIntegrationTests
             new AgentRunCommand.Claim(queued.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId());
         var effects = new TenantApprovedOperationService(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, (ITenantApprovalStore)f.Iam,
             (ITenantApprovedOperationStore)f.Iam, new(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock)),
-            f.RunConfiguration(), f.Ids, f.Clock, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, accountReads: reads);
+            f.RunConfiguration(), f.Ids, f.Clock, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), SyntheticProviderAliases.Default, accountReads: reads);
         var receipt = await effects.ExecuteAsync(new(s.Tenant, run.AgentRunId), request.RequestId, request.Operation.OperationId, run.Claim!.Generation, request.Operation.ActionHash);
         Assert.Equal(TenantAccountReadRules.Reason, receipt.ReasonCode); Assert.Equal(0, posts); Assert.Equal(0, gets);
         run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, run.AgentRunId))!;

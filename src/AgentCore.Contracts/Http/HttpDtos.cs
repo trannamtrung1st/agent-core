@@ -4,11 +4,9 @@ namespace AgentCore.Contracts.Http;
 
 public sealed record HealthResponse(string Status, string Profile, int ProtocolVersion, string? BuildVersion = null, SchedulerReadinessResponse? Scheduler = null);
 
-public sealed record CreateSessionRequest(
-    Guid? AgentInstanceId,
-    string? Mode,
-    string? SpeechLocale = null,
-    SessionModelChoiceRequest? Model = null);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record TenantSessionCreateRequest(Guid AgentInstanceId, long ExpectedRevision, long ExpectedInstanceRevision,
+    string Mode = "text", Guid? OfferingId = null, string? ReasoningEffort = null);
 
 /// <param name="Source">Ignored on all lifecycle routes; authority is fixed per route (user vs host).</param>
 public sealed record TransitionLifecycleRequest(string Target, string? Source = null, string? Reason = null);
@@ -22,15 +20,6 @@ public sealed record HostSessionCompletionPolicyRequest(
     string? AgentCompletion = null,
     bool? UserCompletionAllowed = null,
     bool? UserCancellationAllowed = null);
-
-public sealed record HostCreateSessionRequest(
-    Guid AgentInstanceId,
-    string? Mode,
-    string? SpeechLocale = null,
-    HostSessionPurposeRequest? Purpose = null,
-    HostSessionCompletionPolicyRequest? CompletionPolicy = null,
-    long? MaxDurationSeconds = null,
-    SessionModelChoiceRequest? Model = null);
 
 public sealed record HostSessionPurposeResponse(string Kind, string? Description, string? DeadlineAt);
 
@@ -65,21 +54,18 @@ public sealed record SetSpeechLocaleRequest(string? Locale);
 
 public sealed record SpeechLocaleResponse(string Effective, string Source, string? Override);
 
-public sealed record SessionModelChoiceRequest(string? Key = null, string? ReasoningEffort = null);
-
-public sealed record SetSessionModelRequest(string? Key = null, string? ReasoningEffort = null);
-
 public sealed record SessionModelSelectionResponse(
-    string CatalogKey,
+    string OfferingId,
     string DisplayName,
     string SelectionSource,
     string? ReasoningEffort,
-    string? ModelId = null);
+    string? ExternalModelId = null,
+    string? ConnectionId = null, string? ConnectionLabel = null);
 
 public sealed record ModelCapabilityResponse(bool Tools, bool Vision, bool StructuredOutput, bool Reasoning);
 
 public sealed record ModelDescriptorResponse(
-    string Key,
+    string OfferingId,
     string DisplayName,
     bool Tools,
     bool Vision,
@@ -88,9 +74,10 @@ public sealed record ModelDescriptorResponse(
     IReadOnlyList<string> SupportedReasoningEfforts,
     string? DefaultReasoningEffort,
     string? ContextCategory = null,
-    string? CostCategory = null);
+    string? CostCategory = null,
+    string? ConnectionId = null, string? ConnectionLabel = null, string? ExternalModelId = null);
 
-public sealed record ModelCatalogResponse(string DefaultKey, IReadOnlyList<ModelDescriptorResponse> Models);
+public sealed record ModelCatalogResponse(string? DefaultOfferingId, IReadOnlyList<ModelDescriptorResponse> Models, string? DefaultReasoningEffort = null, string DefaultSource = "tenantDefault");
 
 public sealed record SessionViewResponse(
     string SessionId,
@@ -293,3 +280,6 @@ public sealed record ChatAgentInstanceResponse(
 public sealed record ChatAgentInstanceListResponse(IReadOnlyList<ChatAgentInstanceResponse> Items);
 
 public sealed record SchedulerReadinessResponse(string Status, string? LastPassAt, string? LastSuccessAt);
+
+[System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
+public sealed record TenantSessionModelRequest(long ExpectedRevision, long ExpectedSessionRevision, Guid? OfferingId = null, string? ReasoningEffort = null);

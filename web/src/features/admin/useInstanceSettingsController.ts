@@ -19,8 +19,8 @@ export function useInstanceSettingsController(instanceId: string, archived: bool
   const [sections, setSections] = useState<SettingsSection[] | null>(null);
   const [drafts, setDrafts] = useState<Record<string, SettingsDraft>>({});
   const [loading, setLoading] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
-  const [models, setModels] = useState<{ key: string; displayName: string; supportedReasoningEfforts: string[] }[]>([]);
-  const [defaultModelKey, setDefaultModelKey] = useState<string | null>(null);
+  const [models, setModels] = useState<{ offeringId: string; displayName: string; supportedReasoningEfforts: string[] }[]>([]);
+  const [defaultOfferingId, setDefaultModelKey] = useState<string | null>(null);
   const [modelError, setModelError] = useState(false); const [modelAttempt, setModelAttempt] = useState(0);
   const epoch = useRef(0); const saving = useRef(false); const owner = useRef(instanceId); owner.current = instanceId;
   const scope = useRef(new AbortController()); const read = useRef<AbortController | null>(null);
@@ -34,7 +34,7 @@ export function useInstanceSettingsController(instanceId: string, archived: bool
   }, [instanceId, transport]);
   // A pending save owns its refresh; re-entering the tab must not supersede that read.
   useEffect(() => { if (active && !saving.current && !deferRefresh) void reload(); }, [reload, active, externalRevision, deferRefresh]);
-  useEffect(() => { const controller = new AbortController(); setModels([]); setDefaultModelKey(null); setModelError(false); transport.models(controller.signal).then(c => { if (!controller.signal.aborted) { setModels(c.models); setDefaultModelKey(c.defaultKey); } }).catch(() => { if (!controller.signal.aborted) setModelError(true); }); return () => controller.abort(); }, [transport, modelAttempt]);
+  useEffect(() => { const controller = new AbortController(); setModels([]); setDefaultModelKey(null); setModelError(false); transport.models(controller.signal).then(c => { if (!controller.signal.aborted) { setModels(c.models); setDefaultModelKey(c.defaultOfferingId); } }).catch(() => { if (!controller.signal.aborted) setModelError(true); }); return () => controller.abort(); }, [transport, modelAttempt]);
   function change(section: SettingsSection, field: string, value: SettingValue) {
     setDrafts(previous => {
       const draft = previous[section.section] ?? emptyDraft(); const set = { ...draft.set };
@@ -97,5 +97,5 @@ export function useInstanceSettingsController(instanceId: string, archived: bool
       throw new AdminRequestError(message, failure.diagnosticId);
     } finally { if (request === epoch.current) { saving.current = false; setBusy(false); setLoading(false); } }
   }
-  return { sections, drafts, setDrafts, loading, busy, error, models, defaultModelKey, modelError, reloadModels: () => setModelAttempt(value => value + 1), reload, change, inherit, save, saveAll };
+  return { sections, drafts, setDrafts, loading, busy, error, models, defaultOfferingId, modelError, reloadModels: () => setModelAttempt(value => value + 1), reload, change, inherit, save, saveAll };
 }

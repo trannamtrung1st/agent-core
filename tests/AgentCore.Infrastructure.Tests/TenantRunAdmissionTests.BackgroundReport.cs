@@ -16,9 +16,9 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantRunAdmissionTests
 {
-    private static TenantBackgroundReportTarget ReportTarget(Fixture f) => new((ITenantRuntimeStore)f.Iam, (ITenantRunStore)f.Iam, f.Iam, f.RunConfiguration(), f.Authorizer, ModelCatalogFactory.Synthetic(), ReportSourceReads(f));
+    private static TenantBackgroundReportTarget ReportTarget(Fixture f) => new((ITenantRuntimeStore)f.Iam, (ITenantRunStore)f.Iam, f.Iam, f.RunConfiguration(), f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), ReportSourceReads(f));
     private static TenantApprovalService ReportApprovals(Fixture f) => new(f.Iam, (ITenantApprovalStore)f.Iam, (ITenantAgentStore)f.Iam, AttachmentOperations(f), f.Authorizer,
-        f.Identity, f.Ids, f.Clock, f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)f.Iam,
+        f.Identity, f.Ids, f.Clock, f.RunConfiguration(), new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)f.Iam,
         backgroundReports: ReportTarget(f), reportRuntime: (ITenantRuntimeStore)f.Iam, reportSourceReads: ReportSourceReads(f));
     private static async Task<(BackgroundSetup Parent, TenantBackgroundCompletion Source, TenantApprovalRequest Request)> CompletedReportCase(Fixture f)
     {

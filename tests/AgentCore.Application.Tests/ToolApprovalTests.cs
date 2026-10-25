@@ -104,7 +104,7 @@ public sealed class ToolApprovalTests
             null,
             now,
             now, AgentInstanceId: Guid.NewGuid(), ModelSelection: agentRuns is null ? null : new SessionModelSelection(
-                "synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.SystemDefault, null));
+                "synthetic-offline/scripted", "dca20000-0000-4000-8000-000000000001", "scripted", ModelSelectionSource.TenantDefault, null));
         if (agentRuns is not null)
         {
             snapshot = RuntimeAgentRunStore.WithPins(snapshot);
@@ -134,7 +134,7 @@ public sealed class ToolApprovalTests
             new ConversationPolicy("balanced", false, "en", 2048),
             new InitiativePolicy(false, 60_000, 120_000, 1, ["longSilence"], 0),
             new VoiceConfiguration(false, "default", 1.0),
-            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+            new ProviderPreferences("primary-stt", "primary-tts"),
             new Dictionary<string, string>(StringComparer.Ordinal),
             new RoleEnvironment(ToolAllowlist: tools));
 

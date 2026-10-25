@@ -12,9 +12,6 @@ public sealed class HostingTopologyOptionsTests
     {
         var hosted = Build(new Dictionary<string, string?>
         {
-            ["Providers:LanguageModels:primary-llm:Adapter"] = "OpenAICompatible",
-            ["Providers:LanguageModels:primary-llm:BaseUrl"] = "https://openrouter.ai/api/v1/",
-            ["Providers:LanguageModels:primary-llm:DefaultModel"] = "operator-fixed-model",
             ["Providers:SpeechRecognizers:primary-stt:Adapter"] = "OpenAI",
             ["Providers:SpeechSynthesizers:primary-tts:Adapter"] = "OpenAI",
             ["Observability:TimelineCapacity"] = "64",
@@ -25,8 +22,6 @@ public sealed class HostingTopologyOptionsTests
         });
         var hybrid = Build(new Dictionary<string, string?>
         {
-            ["Providers:LanguageModels:primary-llm:Adapter"] = "OpenAICompatible",
-            ["Providers:LanguageModels:primary-llm:BaseUrl"] = "https://openrouter.ai/api/v1/",
             ["Providers:SpeechRecognizers:primary-stt:Adapter"] = "Local",
             ["Providers:SpeechRecognizers:primary-stt:BaseUrl"] = "http://127.0.0.1:9000/v1/",
             ["Providers:SpeechSynthesizers:primary-tts:Adapter"] = "Local",
@@ -34,19 +29,12 @@ public sealed class HostingTopologyOptionsTests
         });
         var onPrem = Build(new Dictionary<string, string?>
         {
-            ["Providers:LanguageModels:primary-llm:Adapter"] = "OpenAICompatible",
-            ["Providers:LanguageModels:primary-llm:BaseUrl"] = "http://127.0.0.1:8000/v1/",
-            ["Providers:LanguageModels:primary-llm:DefaultModel"] = "local-model",
             ["Providers:SpeechRecognizers:primary-stt:Adapter"] = "Local",
             ["Providers:SpeechSynthesizers:primary-tts:Adapter"] = "Local",
             ["Observability:OtlpEnabled"] = "false"
         });
 
-        Assert.Equal("OpenAICompatible", hosted.GetSection("Providers:LanguageModels:primary-llm").Get<LanguageModelProviderOptions>()!.Adapter);
-        Assert.Contains("openrouter.ai", hosted["Providers:LanguageModels:primary-llm:BaseUrl"], StringComparison.Ordinal);
         Assert.Equal("Local", hybrid["Providers:SpeechRecognizers:primary-stt:Adapter"]);
-        Assert.StartsWith("http://127.0.0.1:8000", onPrem["Providers:LanguageModels:primary-llm:BaseUrl"]);
-        Assert.Null(hosted["Providers:LanguageModels:primary-llm:ApiKey"]);
         var nestedSpeech = SpeechProviderBinder.Bind(Build(new Dictionary<string, string?>
         {
             ["Providers:Speech:Recognition:Adapter"] = "Browser",

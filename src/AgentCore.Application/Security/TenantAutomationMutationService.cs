@@ -10,13 +10,14 @@ namespace AgentCore.Application.Security;
 
 public sealed record TenantAutomationMutationPreparation(TenantAutomationMutationObservation Source, PreparedAutomationMutation Value);
 public sealed class TenantAutomationMutationService(ITenantAutomationMutationStore store, TenantOperationAuthorizer operations, IamAuthorizer iam,
-    ITenantApprovalStore approvals, ITriggerCommandAuthorizer semantic, IModelCatalog models, IIdGenerator ids, TimeProvider time, IEventFilterEvaluator? filters = null,
-    TenantRunConfigurationResolver? configurations = null)
+    ITenantApprovalStore approvals, ITriggerCommandAuthorizer semantic, ITenantModelCatalogReader modelCatalogs, IIdGenerator ids, TimeProvider time, IEventFilterEvaluator? filters = null,
+    TenantRunConfigurationResolver? configurations = null, TenantRunExecutionAuthority? runAuthority = null)
 {
     public async ValueTask<TenantAutomationMutationPreparation> PrepareAsync(TenantRunReference reference, Guid? generation, string tool, string arguments,
         CancellationToken ct, PreparedAutomationMutation? expected = null, Guid? human = null)
     {
         var source = await store.ObserveTenantAutomationMutationAsync(reference, generation, tool, arguments, expected, human, ct).ConfigureAwait(false);
+        var models = await modelCatalogs.ReadAsync(source.Reader.Security, ct).ConfigureAwait(false);
         var args = TenantAutomationMutationContract.Parse(tool, arguments); var at = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
         if (generation is not null && source.Reader.Run.Claim?.LeaseExpiresAtUtc <= time.GetUtcNow()) throw new SecurityConflictException("execution_claim_expired");
         if (expected is not null) { await CurrentAsync(source, expected, ct).ConfigureAwait(false); return new(source, expected); }
@@ -44,6 +45,7 @@ public sealed class TenantAutomationMutationService(ITenantAutomationMutationSto
     private async ValueTask CurrentAsync(TenantAutomationMutationObservation source, PreparedAutomationMutation value, CancellationToken ct)
     {
         await TenantAutomationMutationRules.RawAsync(source, value, iam, ct).ConfigureAwait(false);
+        var models = await modelCatalogs.ReadAsync(source.Reader.Security, ct).ConfigureAwait(false);
         if (value.ToolName == ToolCatalog.AutomationRun)
         {
             await TenantAutomationInvocationRules.RequesterAsync(source, iam, ct).ConfigureAwait(false);
@@ -98,7 +100,11 @@ public sealed class TenantAutomationMutationService(ITenantAutomationMutationSto
         if (System.Text.Encoding.UTF8.GetByteCount(action.GetRawText()) > 32768)
             return prepared with { Value = value with { SemanticReviewRequired = true } };
         var verdict = await semantic.AuthorizeAsync(new(source.IntentText, TriggerAuthorization.ActionForTool(value.ToolName), value.ToolName, action,
-            value.IntentHash, ConversationEvidenceJson: source.ConversationEvidenceJson, AdmittedTask: source.AdmittedTask), ct).ConfigureAwait(false);
+            value.IntentHash, ConversationEvidenceJson: source.ConversationEvidenceJson, AdmittedTask: source.AdmittedTask)
+        {
+            Invocation = runAuthority is not null && source.Reader.Run.PinnedModel.Binding is { } binding
+                ? ModelInvocation.ForRun(source.Reader.Run, binding.Route, runAuthority) : null
+        }, ct).ConfigureAwait(false);
         if (verdict.Decision is TriggerCommandAuthorizationDecision.Deny or TriggerCommandAuthorizationDecision.Ambiguous)
             throw new AccessDeniedException(verdict.Decision == TriggerCommandAuthorizationDecision.Deny ? "automation_intent_denied" : "automation_intent_ambiguous");
         return prepared with { Value = value with { SemanticReviewRequired = verdict.Decision != TriggerCommandAuthorizationDecision.Allow } };

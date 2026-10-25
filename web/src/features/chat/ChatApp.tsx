@@ -1,5 +1,5 @@
 import { MenuOutlined, PlusOutlined } from "@ant-design/icons";
-import { Alert, App as AntApp, Button, Drawer, Flex, Layout, Tooltip, Typography } from "antd";
+import { Alert, App as AntApp, Button, Drawer, Flex, Layout, Tooltip, Typography, theme } from "antd";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { appMessageConfig } from "../../app/appFeedback";
 import { followAppLink } from "../../app/appLink";
@@ -13,6 +13,7 @@ import { clientRecognitionSupported, clientSynthesisSupported } from "../../spee
 import { voiceControlEnabled } from "../../speech/voiceEnablement";
 import { isReadonlySession, isSessionModelBusy, useSessionStore } from "../../state/sessionStore";
 import { AccessError } from '../access/AccessFeedback';
+import { tenantModelsPath } from '../access/accessRoute';
 import { conversationStatusLabel, conversationStatusTone, mapAgentActivity, pausedSessionMessage } from "./activityState";
 import { AgentPicker } from "./AgentPicker";
 import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
@@ -22,7 +23,8 @@ import { messageTimestamp } from "./chatTime";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
 import { imageModelCompatibility } from "./imageModelCompatibility";
-import { ModelPicker, effortSelectValue, modelSelectValue, nextEffortForModel, selectedCatalogModel, wireModelSelectionKey } from "./ModelPicker";
+import { INHERIT_MODEL, ModelPicker, effortSelectValue, modelSelectValue, nextEffortForModel, selectedCatalogModel } from "./ModelPicker";
+import { modelChoiceLabel } from "../models/modelLabels";
 import { SessionFailureAlert } from "./SessionFailureAlert";
 import { terminalSessionNote } from "./sessionLifecycle";
 import { SessionRail } from "./SessionRail";
@@ -62,6 +64,7 @@ function useViewport() {
 
 export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantContext: TenantContext; tenantActions?: ReactNode; tenantError?: unknown }) {
   const state = useSessionStore();
+  const { token } = theme.useToken();
   const [runCanCancel, setRunCanCancel] = useState(false);
   useEffect(() => {
     if (!state.agentRunId || !state.liveResponseId) { setRunCanCancel(false); return; }
@@ -149,46 +152,52 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
   const readonly = isReadonlySession(state);
   const modelBusy = isSessionModelBusy(state);
   const modelValue = modelSelectValue(
-    state.sessionModelKey,
-    state.pendingModelKey,
+    state.sessionOfferingId,
+    state.pendingOfferingId,
     inSession,
-    state.modelCatalogDefaultKey
+    state.modelCatalogDefaultOfferingId
   );
   const imageIncompatibility = imageModelCompatibility({
     models: state.modelCatalog,
     modelValue,
-    defaultKey: state.modelCatalogDefaultKey,
+    defaultOfferingId: state.modelCatalogDefaultOfferingId,
     pendingAttachments: state.pendingAttachments,
     pendingSendQueue: state.pendingSendQueue
   });
-  const selectedModel = selectedCatalogModel(state.modelCatalog, modelValue, state.modelCatalogDefaultKey);
+  const selectedModel = selectedCatalogModel(state.modelCatalog, modelValue, state.modelCatalogDefaultOfferingId);
   const effortValue = effortSelectValue(
     selectedModel,
     state.sessionModelEffort,
     state.pendingReasoningEffort,
-    inSession
+    inSession,
+    !inSession && (!state.pendingOfferingId || state.pendingOfferingId === INHERIT_MODEL) ? state.modelCatalogDefaultEffort : null
   );
-  const modelDisabled = readonly || modelBusy;
+  const modelDisabled = readonly || modelBusy || state.mode !== "text" || inSession && state.connection !== "ready";
   const changeModel = (key: string) => {
+    const choice = key;
     void applySessionModel(
-      wireModelSelectionKey(key, state.modelCatalogDefaultKey, inSession),
-      nextEffortForModel(state.modelCatalog, key, state.modelCatalogDefaultKey, effortValue)
+      choice,
+      choice === INHERIT_MODEL ? null : nextEffortForModel(state.modelCatalog, key, state.modelCatalogDefaultOfferingId, effortValue)
     );
   };
+  const inheritedModel = inSession ? state.sessionModelSource === "tenantDefault" || state.sessionModelSource === "agentDefault" : modelValue === INHERIT_MODEL;
   const changeEffort = (effort: string | null) => {
     void applySessionModel(
-      wireModelSelectionKey(modelValue, state.modelCatalogDefaultKey, inSession),
+      inheritedModel ? INHERIT_MODEL : modelValue,
       effort
     );
   };
-  const modelPicker = inSession ? <Typography.Text type="secondary">{selectedModel?.displayName || state.sessionModelDisplayName || "Conversation model"}</Typography.Text> : (
+  const modelPicker = inSession && (!tenantMayManageSession(state.sessionId) || state.modelCatalog.length === 0) ? <Typography.Text type="secondary">{state.sessionModelDisplayName || (selectedModel ? modelChoiceLabel(selectedModel) : "Conversation model")}{!selectedModel && !state.modelCatalogLoading ? " · Unavailable" : ""}</Typography.Text> : (
     <ModelPicker
       layout="row"
       models={state.modelCatalog}
-      defaultKey={state.modelCatalogDefaultKey}
+      defaultOfferingId={state.modelCatalogDefaultOfferingId}
+      defaultSource={state.modelCatalogDefaultSource}
       modelValue={modelValue}
+      inheritSelected={inheritedModel}
+      unavailableLabel={state.sessionModelDisplayName}
       effortValue={effortValue}
-      disabled={inSession ? modelDisabled : false}
+      disabled={inSession ? modelDisabled : state.modelCatalogLoading || !bootstrapped || state.connection !== "idle"}
       onModelChange={changeModel}
       onEffortChange={changeEffort}
     />
@@ -197,6 +206,22 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
     state.newChatIdentityKey,
     state.chatAgentInstances
   );
+  const modelSetupReady = bootstrapped && !!newChatIdentity && !state.chatAgentInstancesLoading
+    && !state.modelCatalogLoading && !state.modelCatalogError;
+  const canConfigureConnection = tenantContext.permissions?.includes('model-connections.read')
+    && tenantContext.permissions.includes('model-connections.manage');
+  const canConfigureDefault = tenantContext.permissions?.includes('models.read') && tenantContext.permissions.includes('models.manage');
+  const modelSetup = !modelSetupReady ? null : state.modelCatalog.length === 0 ? {
+    title: 'No model is available for this identity',
+    description: canConfigureConnection ? 'Connect a provider, add an enabled model and choose an organization default. Starter presets contain no credentials.' : 'Ask an organization owner to configure an available model. Starter presets contain no credentials.',
+    href: canConfigureConnection ? tenantModelsPath(tenantContext.tenant.tenantId, 'connections') : null,
+    action: 'Connect a provider'
+  } : inheritedModel && !selectedModel ? {
+    title: 'Choose a model for this chat',
+    description: 'The inherited default is unavailable. Choose an available model in the composer, or ask an organization owner to set a default.',
+    href: canConfigureDefault ? tenantModelsPath(tenantContext.tenant.tenantId, 'defaults') : null,
+    action: 'Model defaults'
+  } : null;
   const liveAssistant = state.entries.find(
     (entry) => entry.responseId === state.liveResponseId && entry.role === "assistant"
   );
@@ -393,13 +418,18 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
                             hasMore={state.chatAgentHasMore}
                             managedInstances={state.chatAgentInstances}
                             identityKey={state.newChatIdentityKey}
-                            error={state.sessionError ?? state.error}
+                            error={state.modelCatalogError ?? state.sessionError ?? state.error}
 
                             managedInstancesError={state.chatAgentInstancesError}
                             managedInstancesLoading={state.chatAgentInstancesLoading || !bootstrapped}
                             onIdentityChange={selectChatIdentity}
                             onRetryManagedInstances={() => void reloadChatAgentInstances()}
                           />
+                          {modelSetup && <Alert type="info" showIcon className="new-chat-model-setup" title={modelSetup.title}
+                            description={<Flex vertical align="start" gap="var(--ac-space-default)">
+                              <Typography.Text>{modelSetup.description}</Typography.Text>
+                              {modelSetup.href && <Button href={modelSetup.href} style={{ minHeight: isNarrow ? token.controlHeightLG : undefined }} onClick={event => followAppLink(event)}>{modelSetup.action}</Button>}
+                            </Flex>} />}
                           {state.chatAgentInstances.length > 0 && !tenantCanCreateChat() && <Typography.Paragraph type="secondary">Ask an organization owner for permission to start a conversation.</Typography.Paragraph>}
                         </div>
                       )

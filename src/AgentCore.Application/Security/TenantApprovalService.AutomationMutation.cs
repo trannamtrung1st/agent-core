@@ -55,7 +55,7 @@ public sealed partial class TenantApprovalService
         var old = value.Current; var next = value.Proposed;
         IReadOnlyList<TenantApprovalFieldChange> changes = [new("Automation", old?.Name ?? "No existing Automation", next.Name), new("Instructions", old?.Instructions, next.Instructions),
             new("State", old?.Status.ToString(), next.Status.ToString()), new("Timing and sources", Timing(old), Timing(next)),
-            new("Model", old is null ? "No existing Automation" : old.ModelOverrideCatalogKey ?? "Agent default", next.ModelOverrideCatalogKey ?? "Agent default"),
+            new("Model", old is null ? "No existing Automation" : old.ModelOverrideOfferingId ?? "Agent default", next.ModelOverrideOfferingId ?? "Agent default"),
             new("Reasoning", old is null ? "No existing Automation" : old.ModelOverrideReasoningEffort ?? "Agent default", next.ModelOverrideReasoningEffort ?? "Agent default"),
             new("Requirements", old is null ? null : $"Tools: {old.RequiresTools} · Vision: {old.RequiresVision}", $"Tools: {next.RequiresTools} · Vision: {next.RequiresVision}"),
             new("Execution destination", old is null ? "No existing Automation" : old.ExecutionTarget.SessionId?.ToString("D") ?? "Independent Background work", next.ExecutionTarget.SessionId?.ToString("D") ?? "Independent Background work"),
@@ -64,7 +64,7 @@ public sealed partial class TenantApprovalService
             new("Semantic verification", null, value.SemanticReviewRequired ? "Human verification is required for this exact Before/After change." : "Aligned with the actual admitted request or task.", false)];
         return value.Invocation is { } invocation ? [
             new("Manual occurrence", "Not admitted", "Admit one exact manual occurrence. Admission is separate from execution completion."),
-            new("Occurrence model", null, invocation.Model.CatalogKey, false),
+            new("Occurrence model", null, CapturedModelLabel(invocation.Model.OfferingId, invocation.Model.ReasoningEffort, invocation.Model.Binding), false),
             .. changes] : changes;
     }
 }

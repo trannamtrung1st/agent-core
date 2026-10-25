@@ -15,7 +15,7 @@ public sealed class PreparedAutomationJsonConverter : JsonConverter<Automation>
     private sealed record Saved(Guid AutomationId, TriggerOwner Owner, AutomationStatus Status, string Name, string Instructions,
         Guid TriggerId, bool TriggerEnabled, long ChildRevision, Timing Timing, DateTimeOffset? NextOccurrenceAtUtc, DateTimeOffset? ExpiresAtUtc,
         int OccurrenceCount, long Revision, long TriggerRevision, TriggerProvenance Provenance, string? SuspensionReason,
-        string? ModelOverrideCatalogKey, string? ModelOverrideReasoningEffort, bool RequiresTools, bool RequiresVision);
+        string? ModelOverrideOfferingId, string? ModelOverrideReasoningEffort, bool RequiresTools, bool RequiresVision);
 
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     private sealed record SavedChild(Guid TriggerId, bool Enabled, long Revision, AutomationTriggerKind Kind,
@@ -24,7 +24,7 @@ public sealed class PreparedAutomationJsonConverter : JsonConverter<Automation>
     private sealed record SavedEvents(int SchemaVersion, Guid AutomationId, TriggerOwner Owner, AutomationStatus Status, string Name, string Instructions,
         IReadOnlyList<SavedChild> Triggers, DateTimeOffset? NextOccurrenceAtUtc, DateTimeOffset? ExpiresAtUtc, int OccurrenceCount,
         long Revision, long TriggerRevision, TriggerProvenance Provenance, string? SuspensionReason,
-        string? ModelOverrideCatalogKey, string? ModelOverrideReasoningEffort, bool RequiresTools, bool RequiresVision,
+        string? ModelOverrideOfferingId, string? ModelOverrideReasoningEffort, bool RequiresTools, bool RequiresVision,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ReportToSessionId = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? TargetSessionId = null);
 
@@ -88,7 +88,7 @@ public sealed class PreparedAutomationJsonConverter : JsonConverter<Automation>
                 throw new JsonException("Consent owner contains unknown fields.");
             var source = new Automation(events.AutomationId, events.Owner, events.Status, events.Instructions, events.Triggers.Select(Child).ToArray(),
                 events.NextOccurrenceAtUtc, events.ExpiresAtUtc, events.OccurrenceCount, events.Revision, events.TriggerRevision, events.Provenance,
-                events.SuspensionReason, events.ModelOverrideCatalogKey, events.ModelOverrideReasoningEffort, events.RequiresVision, events.Name,
+                events.SuspensionReason, events.ModelOverrideOfferingId, events.ModelOverrideReasoningEffort, events.RequiresVision, events.Name,
                 events.TargetSessionId is { } targetId ? AutomationExecutionTarget.Existing(targetId) : AutomationExecutionTarget.Background,
                 new AutomationCompletionDelivery(events.ReportToSessionId), events.RequiresTools);
             if (source.TriggerRevision != events.TriggerRevision) throw new JsonException("Automation consent trigger revision differs.");
@@ -99,7 +99,7 @@ public sealed class PreparedAutomationJsonConverter : JsonConverter<Automation>
         var value = new Automation(p.AutomationId, p.Owner, p.Status, p.Instructions,
             new[] { new AutomationTriggerRecord(p.TriggerId, new ScheduleTrigger(schedule), p.TriggerEnabled, p.ChildRevision) },
             p.NextOccurrenceAtUtc, p.ExpiresAtUtc, p.OccurrenceCount, p.Revision, p.TriggerRevision, p.Provenance, p.SuspensionReason,
-            p.ModelOverrideCatalogKey, p.ModelOverrideReasoningEffort, p.RequiresVision, p.Name, AutomationExecutionTarget.Background,
+            p.ModelOverrideOfferingId, p.ModelOverrideReasoningEffort, p.RequiresVision, p.Name, AutomationExecutionTarget.Background,
             AutomationCompletionDelivery.None, p.RequiresTools);
         if (value.TriggerRevision != p.TriggerRevision) throw new JsonException("Automation consent trigger revision differs.");
         return value;
@@ -134,7 +134,7 @@ public sealed class PreparedAutomationJsonConverter : JsonConverter<Automation>
                 _ => throw new JsonException("Unsupported consent trigger.") }).ToArray();
             JsonSerializer.Serialize(writer, new SavedEvents(target is not null ? 4 : report is not null ? 3 : 2, value.AutomationId, value.Owner, value.Status, value.Name, value.Instructions,
                 children, value.NextOccurrenceAtUtc, value.ExpiresAtUtc, value.OccurrenceCount, value.Revision, value.TriggerRevision, value.Provenance,
-                value.SuspensionReason, value.ModelOverrideCatalogKey, value.ModelOverrideReasoningEffort, value.RequiresTools, value.RequiresVision, report, target), options);
+                value.SuspensionReason, value.ModelOverrideOfferingId, value.ModelOverrideReasoningEffort, value.RequiresTools, value.RequiresVision, report, target), options);
             return;
         }
         // Preserve already-prepared one-Schedule consent bytes and their hashes.
@@ -142,7 +142,7 @@ public sealed class PreparedAutomationJsonConverter : JsonConverter<Automation>
         var child = value.Triggers[0];
         JsonSerializer.Serialize(writer, new Saved(value.AutomationId, value.Owner, value.Status, value.Name, value.Instructions,
             child.TriggerId, child.Enabled, child.Revision, timing, value.NextOccurrenceAtUtc, value.ExpiresAtUtc, value.OccurrenceCount,
-            value.Revision, value.TriggerRevision, value.Provenance, value.SuspensionReason, value.ModelOverrideCatalogKey,
+            value.Revision, value.TriggerRevision, value.Provenance, value.SuspensionReason, value.ModelOverrideOfferingId,
             value.ModelOverrideReasoningEffort, value.RequiresTools, value.RequiresVision), options);
     }
 }

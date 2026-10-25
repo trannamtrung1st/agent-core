@@ -17,7 +17,7 @@ public sealed class AgentRunCoordinatorTests
         new AgentIdentity("Alex", "Assistant", "Help", "Calm"), ["Help"], "Instructions",
         new BehaviorPolicy("acknowledgeThenContinue", true, true), new ConversationPolicy("concise", true, "en", 256),
         new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]), new VoiceConfiguration(false, "default", 1),
-        new ProviderPreferences("synthetic", null, null), new Dictionary<string, string>());
+        new ProviderPreferences(null, null), new Dictionary<string, string>());
 
     [Fact]
     public async Task Accepted_user_batch_commits_one_run_and_fresh_identity_replay_returns_the_original()
@@ -208,7 +208,7 @@ public sealed class AgentRunCoordinatorTests
             null, ConversationRole.User, text, null, EntryStatus.Completed, SessionMode.Text, 0, text.Length, Now)).ToArray();
         return new SessionSnapshot(1, Guid.NewGuid(), 1, Definition, SessionMode.Text, null, SessionStatus.Created,
             entries, "", 0, null, Owner.ProfileId, Now, Now, Owner.AgentInstanceId, PinnedPersona: Definition.Identity,
-            ModelSelection: new SessionModelSelection("synthetic", "synthetic", "scripted", ModelSelectionSource.SystemDefault, null));
+            ModelSelection: new SessionModelSelection("synthetic", "synthetic", "scripted", ModelSelectionSource.TenantDefault, null));
     }
 
     private static AgentRun Batch(SessionSnapshot snapshot, IReadOnlyList<ConversationEntry>? users = null) =>

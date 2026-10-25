@@ -19,7 +19,7 @@ public sealed partial class TenantBrowserApprovalTests
         var reads = new TenantCredentialRuntimeReadService(Operations(f, store), (ITenantRunStore)store, (ITenantSessionStore)store,
             (ITenantCredentialBindingStore)store, f.RunConfiguration(), store, new(store), f.Clock, (ITenantApprovalStore)store, (ITenantApprovedOperationStore)store);
         var effect = new TenantApprovedOperationService(store, (ITenantRunStore)store, (ITenantAgentStore)store, (ITenantApprovalStore)store,
-            (ITenantApprovedOperationStore)store, Operations(f, store), f.RunConfiguration(), f.Ids, f.Clock, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default,
+            (ITenantApprovedOperationStore)store, Operations(f, store), f.RunConfiguration(), f.Ids, f.Clock, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(store), SyntheticProviderAliases.Default,
             credentialReads: reads);
         return new((ITenantRunStore)store, (ITenantApprovalStore)store, effect, f.Clock, (ITenantRuntimeStore)store, f.Ids);
     }

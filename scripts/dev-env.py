@@ -45,7 +45,7 @@ def environment(root, path, inherited):
     explicit = {**inherited, **read_env(path)}
     defaults = {'ASPNETCORE_ENVIRONMENT': 'Development', 'AgentCore__Profile': 'Real'}
     if profile.exists():
-        selected = 'http' if explicit.get('AgentCore__Profile', 'Real').lower() == 'synthetic' else 'http-openrouter'
+        selected = 'http' if explicit.get('AgentCore__Profile', 'Real').lower() == 'synthetic' else 'http-real'
         defaults.update(json.loads(profile.read_text())['profiles'][selected]['environmentVariables'])
     # The optional aggregate data root derives the connection unless explicitly
     # overridden; the old launch-profile connection must not shadow that choice.

@@ -33,9 +33,10 @@ internal static class EffectiveConfigurationComposer
         var instanceActive = instance.Lifecycle == AgentInstanceLifecycle.Active;
         var scheduleAllowed = OccurrenceCompatibility.Allows(definition, TriggerSourceKind.Schedule);
         var applicationEventAllowed = OccurrenceCompatibility.Allows(definition, TriggerSourceKind.ApplicationEvent);
-        var model = SessionModelBinder.PinDefault(catalog, definition);
-        var descriptor = catalog.Get(model.CatalogKey)
-            ?? throw AgentCoreErrors.Validation($"Model '{model.CatalogKey}' is not in the catalog.");
+        Domain.Conversation.SessionModelSelection? model = null; ModelDescriptor? descriptor = null; string? unavailable = null;
+        try { model = SessionModelBinder.PinDefault(catalog, definition); descriptor = catalog.Get(model.OfferingId); }
+        catch (AgentCoreException error) when (error.Code is "ModelUnavailable" or "ModelRouteStale" or "ModelCapabilityUnsupported" or "ValidationError")
+        { unavailable = error.Code; }
         var adminContext = new AgentContext(
             definition,
             [],
@@ -46,8 +47,8 @@ internal static class EffectiveConfigurationComposer
             false,
             null,
             new AgentTrigger(Guid.Empty, TriggerKind.UserTurn, null),
-            ModelSupportsTools: descriptor.Tools,
-            ModelSupportsVision: descriptor.Vision,
+            ModelSupportsTools: descriptor?.Tools == true,
+            ModelSupportsVision: descriptor?.Vision == true,
             AgentWorkspaceAvailable: instanceActive);
         var offeredTools = (definition.Environment?.Capabilities is null ? ToolCatalog.For(definition, adminContext, configurationGate) : ToolCatalog.Eligible(definition, adminContext, configurationGate))
             .Select(item => item.Name)
@@ -66,11 +67,12 @@ internal static class EffectiveConfigurationComposer
             Persona: instance.Persona,
             ProviderPreferences: definition.ProviderPreferences,
             EffectiveModel: new AdminEffectiveModel(
-                model.CatalogKey,
-                descriptor.DisplayName,
-                SessionModelBinder.ToWire(model.SelectionSource),
-                model.ReasoningEffort,
-                model.ModelId),
+                model?.OfferingId ?? definition.ModelDefaults?.OfferingId ?? catalog.DefaultOfferingId,
+                descriptor?.DisplayName ?? "Model unavailable",
+                model is null ? SessionModelBinder.IsInheritedOffering(definition.ModelDefaults?.OfferingId) ? "tenantDefault" : "agentDefault" : SessionModelBinder.ToWire(model.SelectionSource),
+                model?.ReasoningEffort ?? definition.ModelDefaults?.ReasoningEffort,
+                model?.ExternalModelId, Available: model is not null && descriptor is not null,
+                UnavailableReason: unavailable),
             EffectiveToolAllowlist: offeredTools,
             HarnessReferences: environment.HarnessList.OrderBy(item => item, StringComparer.Ordinal).ToArray(),
             WorkspaceTemplateId: environment.WorkspacePolicy.TemplateId,
@@ -89,8 +91,8 @@ internal static class EffectiveConfigurationComposer
                 TriggerPolicyEnabled: trigger?.Enabled == true,
                 AllowsScheduleSource: scheduleAllowed,
                 AllowsApplicationEventSource: applicationEventAllowed,
-                CanAcceptNewTriggeredWork: instanceActive && (scheduleAllowed || applicationEventAllowed)),
-            UnattendedModelCatalogKey: instance.UnattendedModelCatalogKey,
+                CanAcceptNewTriggeredWork: instanceActive && descriptor?.Tools == true && (scheduleAllowed || applicationEventAllowed)),
+            UnattendedOfferingId: instance.UnattendedOfferingId,
             UnattendedReasoningEffort: instance.UnattendedReasoningEffort);
     }
 }

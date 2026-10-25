@@ -76,7 +76,7 @@ function CredentialInspector({ tenant, organization, id, onChanged, onClose }: {
         ...(item.allowedOrigins.length ? [{ label: 'Allowed origins', children: item.allowedOrigins.join(', ') }] : [])
       ]} />
       {item.emailAccount?.preset === 'Custom' && <Descriptions {...layout} column={1} size="small" items={(['imap', 'smtp'] as const).flatMap(protocol => [{ label: protocol.toUpperCase(), children: `${item.emailAccount![`${protocol}Endpoint`]?.host}:${item.emailAccount![`${protocol}Endpoint`]?.port} · ${item.emailAccount![`${protocol}Endpoint`]?.tlsMode === 'StartTls' ? 'Required STARTTLS' : 'Required implicit TLS'}` }, { label: `${protocol.toUpperCase()} username`, children: item.emailAccount![`${protocol}Username`] }])} />}
-      <Typography.Paragraph type="secondary">Protected values cannot be read back. Connections, agent bindings and permissions are managed separately.</Typography.Paragraph>
+      <Typography.Paragraph type="secondary">{item.purpose === 'ModelInference' ? 'Protected values cannot be read back. Use this key through an organization provider connection; it cannot be bound to agent tools.' : 'Protected values cannot be read back. Connections, agent bindings and permissions are managed separately.'}</Typography.Paragraph>
       <Flex wrap gap="var(--ac-space-compact)"><Button disabled={busy || monitoringDirty} onClick={reload}>Reload details</Button>{manage && <>
         <Button disabled={busy || monitoringDirty} onClick={() => setEditor('edit')}>Edit credential</Button>
         {!oauth && <Button disabled={busy || monitoringDirty} onClick={() => setEditor('replace')}>Replace protected value</Button>}

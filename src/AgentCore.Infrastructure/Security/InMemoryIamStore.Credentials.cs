@@ -18,6 +18,18 @@ public sealed partial class InMemoryIamStore
         if (tenantId == Guid.Empty || page < 0 || page > 100_000 || pageSize is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(page));
         lock (_gate) lock (instances.CredentialGate) return ValueTask.FromResult(CredentialBacking().ListTenantCredentials(tenantId, allowedIds, page, pageSize));
     }
+    public ValueTask<IReadOnlyDictionary<Guid, DateTimeOffset>> ReadTenantCredentialRotationsAsync(Guid tenantId,
+        IReadOnlyList<Guid> credentialIds, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (tenantId == Guid.Empty || credentialIds.Count > 100 || credentialIds.Contains(Guid.Empty)) throw new ArgumentException("Invalid credential metadata scope.");
+        lock (_gate) lock (instances.CredentialGate)
+        {
+            var ids = credentialIds.Where(id => CredentialBacking().ReadTenantCredential(tenantId, id) is not null).Select(id => id.ToString("D")).ToHashSet(StringComparer.Ordinal);
+            return ValueTask.FromResult<IReadOnlyDictionary<Guid, DateTimeOffset>>(_audit.Where(a => a.TenantId == tenantId && a.Action == "credentials.replace"
+                && a.Decision == "allowed" && ids.Contains(a.Target)).GroupBy(a => a.Target).ToDictionary(g => Guid.Parse(g.Key), g => g.Max(a => a.At)));
+        }
+    }
     public ValueTask<bool> TrySaveTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision, TenantCredentialRoot owner,
         Credential value, long expectedRevision, long expectedSecretRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
@@ -33,6 +45,7 @@ public sealed partial class InMemoryIamStore
         {
             if (next.Assignments.Any(a => a.Scope == TenantCredentialRules.Scope(next.Tenant.TenantId, credentialId)))
                 throw new ArgumentException("Deleting a credential must retire its direct assignments.");
+            if (modelConnections.Values.Any(c => c.TenantId == next.Tenant.TenantId && c.CredentialId == credentialId)) throw new SecurityConflictException("credential_in_use");
             return CredentialBacking().DeleteTenantCredential(next.Tenant.TenantId, credentialId, expectedRevision, expectedSecretRevision, at);
         }, ct, initiator));
     }

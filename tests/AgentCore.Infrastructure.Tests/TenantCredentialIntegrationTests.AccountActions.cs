@@ -37,12 +37,12 @@ public sealed partial class TenantCredentialIntegrationTests
         var target = new TenantAccountActionTarget(operations, (ITenantRunStore)store, store, (ITenantSessionStore)store,
             (ITenantCredentialBindingStore)store, f.RunConfiguration(), iam, reads, native, files, files, f.EmailDrafts, f.Ids, f.Clock);
         var approvals = new TenantApprovalService(store, (ITenantApprovalStore)store, (ITenantAgentStore)store, operations, iam, f.Identity, f.Ids, f.Clock,
-            f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)store, accountReads: reads, accountActions: target);
+            f.RunConfiguration(), new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(store), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)store, accountReads: reads, accountActions: target);
         var effects = new TenantAccountEffectService(store, (ITenantRunStore)store, (ITenantApprovalStore)store, (ITenantApprovedOperationStore)store,
             (ITenantAccountOperationStore)store, target, iam, operations, native,
             new(ledger, f.Clock), f.EmailDrafts, files, f.Ids, f.Clock);
         var local = new TenantApprovedOperationService(store, (ITenantRunStore)store, (ITenantAgentStore)store, (ITenantApprovalStore)store,
-            (ITenantApprovedOperationStore)store, operations, f.RunConfiguration(), f.Ids, f.Clock, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, accountReads: reads);
+            (ITenantApprovedOperationStore)store, operations, f.RunConfiguration(), f.Ids, f.Clock, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(store), SyntheticProviderAliases.Default, accountReads: reads);
         return new(approvals, effects, new((ITenantRunStore)store, (ITenantApprovalStore)store, local, f.Clock,
             (ITenantRuntimeStore)store, f.Ids, accountEffects: effects), files, reads, ledger);
     }

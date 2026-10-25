@@ -44,7 +44,7 @@ public static class TenantAutomationRules
     public static bool Same(Automation a, Automation b) => a.AutomationId == b.AutomationId && a.Owner == b.Owner && a.Status == b.Status
         && a.Revision == b.Revision && a.TriggerRevision == b.TriggerRevision && a.Name == b.Name && a.Instructions == b.Instructions
         && a.NextOccurrenceAtUtc == b.NextOccurrenceAtUtc && a.ExpiresAtUtc == b.ExpiresAtUtc && a.OccurrenceCount == b.OccurrenceCount
-        && a.ModelOverrideCatalogKey == b.ModelOverrideCatalogKey && a.ModelOverrideReasoningEffort == b.ModelOverrideReasoningEffort
+        && a.ModelOverrideOfferingId == b.ModelOverrideOfferingId && a.ModelOverrideReasoningEffort == b.ModelOverrideReasoningEffort
         && a.RequiresTools == b.RequiresTools && a.RequiresVision == b.RequiresVision && a.ExecutionTarget == b.ExecutionTarget && a.CompletionDelivery == b.CompletionDelivery
         && a.SuspensionReason == b.SuspensionReason && JsonSerializer.Serialize(a.Provenance) == JsonSerializer.Serialize(b.Provenance)
         && a.Triggers.Count == b.Triggers.Count && a.Triggers.Zip(b.Triggers).All(pair => pair.First.TriggerId == pair.Second.TriggerId

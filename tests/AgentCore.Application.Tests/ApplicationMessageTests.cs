@@ -195,7 +195,7 @@ public sealed class ApplicationMessageTests
         SampleDefinitions.Examiner with
         {
             Voice = new VoiceConfiguration(false, "default", 1),
-            ProviderPreferences = new ProviderPreferences("primary-llm", null, null),
+            ProviderPreferences = new ProviderPreferences(null, null),
             Skills = [],
             Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceRead])
         };

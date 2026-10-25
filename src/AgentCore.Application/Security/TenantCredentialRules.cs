@@ -32,6 +32,7 @@ public static class TenantCredentialRules
             || (value.Purpose == CredentialPurpose.ContainerRegistry) != (registry is not null)
             || email is not null && value.Kind != (email.AuthMethod == EmailAuthMethod.Password ? CredentialKind.Password : CredentialKind.Token)
             || drive is not null && value.Kind != CredentialKind.Token
+            || value.Purpose == CredentialPurpose.ModelInference && value.Kind != CredentialKind.ApiKey
             || registry is not null && value.Kind is not (CredentialKind.Password or CredentialKind.Token)
             || value.Purpose != CredentialPurpose.General && value.AllowedOrigins.Count != 0)
             throw new ArgumentException("Invalid credential purpose/profile.");

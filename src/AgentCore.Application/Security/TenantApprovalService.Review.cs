@@ -13,6 +13,12 @@ public sealed record TenantApprovalReview(string AgentName, string? RequesterNam
 
 public sealed partial class TenantApprovalService
 {
+    private static string CapturedModelLabel(string offeringId, string? effort, AgentCore.Domain.Models.ModelBinding? binding)
+    {
+        var label = binding is null ? offeringId : $"{binding.ModelLabel} · {binding.ConnectionLabel}";
+        return effort is null ? label : $"{label} · {effort} reasoning";
+    }
+
     // Presentation and action hints only. POST decisions and effects revalidate current authority and witnesses.
     private async ValueTask<TenantApprovalReview> ReviewAsync(TenantApprovalView view, TenantSecurityState state,
         TenantSessionInitiator human, CancellationToken ct)
@@ -287,10 +293,10 @@ public sealed partial class TenantApprovalService
         {
             var evidence = System.Text.Json.JsonSerializer.Deserialize<AgentCore.Application.Execution.AgentRunAdmissionFactory.SignalInput>(report.EvidenceJson)!;
             return [new("reportDestination", null, $"Exact saved conversation {report.ParentSessionId:D}", false),
-                new("reportContent", null, AgentCore.Application.Execution.BackgroundCompletionProjection.ReportText(evidence.Text!), false), new("reportModel", null, report.Model.CatalogKey, false)];
+                new("reportContent", null, AgentCore.Application.Execution.BackgroundCompletionProjection.ReportText(evidence.Text!), false), new("reportModel", null, CapturedModelLabel(report.Model.OfferingId, report.Model.ReasoningEffort, report.Model.Binding), false)];
         }
         if (op.BackgroundStart is { } task) return [new("backgroundObjective", null, task.Objective, false), new("backgroundTitle", null, task.Title, false),
-            new("backgroundReportCompletion", null, task.ReportCompletion, false), new("backgroundModel", null, task.Model.CatalogKey, false), new("backgroundPrimaryPermission", null, task.Permission, false)];
+            new("backgroundReportCompletion", null, task.ReportCompletion, false), new("backgroundModel", null, CapturedModelLabel(task.Model.OfferingId, task.Model.ReasoningEffort, task.Model.Binding), false), new("backgroundPrimaryPermission", null, task.Permission, false)];
         if (op.WorkspaceMutation is { } mutation)
             return [new("workspaceMutationTool", null, mutation.ToolName, false), new("workspaceMutationArguments", null, mutation.ArgumentsJson, false),
                 new("workspaceMutationDisclosure", null, "Authorize only these exact saved workspace changes once. Current source changes require fresh review. No role, file read, recipient download or later mutation authority is granted.", false),

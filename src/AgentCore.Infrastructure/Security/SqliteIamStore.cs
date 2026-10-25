@@ -199,6 +199,8 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
         foreach (var assignment in state.Assignments.Where(a => TenantSessionRules.TryId(a.Scope, out _)))
             if (!await OwnedSessions(db, state.Tenant.TenantId).AnyAsync(s => s.SessionId == assignment.Scope.ResourceId, ct).ConfigureAwait(false))
                 throw new ArgumentException("A Session assignment requires a current owned Session.");
+        foreach (var assignment in state.Assignments.Where(a => AgentCore.Application.Models.TenantModelRules.TryId(a.Scope, out _)))
+            if (!await OwnsModelResourceAsync(db, assignment.Scope, ct)) throw new ArgumentException("A model assignment requires a current owned resource.");
         foreach (var assignment in state.Assignments.Where(a => TenantCredentialRules.TryId(a.Scope, out _)))
             if (!await OwnedCredentials(db, state.Tenant.TenantId).AnyAsync(c => c.CredentialId == assignment.Scope.ResourceId, ct).ConfigureAwait(false))
                 throw new ArgumentException("A credential assignment requires a current owned credential.");

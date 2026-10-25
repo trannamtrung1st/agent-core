@@ -12,7 +12,7 @@ public sealed record TenantAutomationAdmissionState(TenantSecurityState State, T
     Automation Automation, TriggerOccurrence Occurrence, TenantSession? Conversation = null);
 
 public sealed class TenantAutomationOperationTarget(IIamStore security, ITenantAutomationStore store, TenantRunConfigurationResolver configuration,
-    IamAuthorizer iam, IModelCatalog models, ITenantEventStore? events = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null, ITenantSessionStore? sessions = null, TenantAutomationReadService? reads = null, TenantAutomationMutationService? mutations = null)
+    IamAuthorizer iam, ITenantModelCatalogReader modelCatalogs, ITenantEventStore? events = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null, ITenantSessionStore? sessions = null, TenantAutomationReadService? reads = null, TenantAutomationMutationService? mutations = null)
 {
     internal ITenantAutomationStore Store => store;
     internal TenantAutomationMutationService Mutations => mutations ?? throw new AccessDeniedException("tenant_effect_unavailable");
@@ -32,10 +32,11 @@ public sealed class TenantAutomationOperationTarget(IIamStore security, ITenantA
         if (TenantAutomationRules.Hash(current.Configuration) != p.ConfigurationHash) throw new SecurityConflictException("operation_witness_changed");
         var conversation = TenantAutomationConversationRules.Existing(p.Current)
             ? TenantAutomationConversationRules.Require(p.Current, sessions is null ? null : await sessions.FindTenantSessionAsync(p.TenantId, p.SessionId, ct), p.Conversation) : null;
+        var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         var model = conversation is null ? ExecutionModelPolicy.Resolve(models, current.Configuration.Configuration.Definition, current.Agent.Instance, p.Current)
             : new ExecutionModelDecision(TenantAutomationConversationRules.Model(p.Current, conversation, current.Configuration.Configuration.Definition, models), null);
-        if (!model.Accepted || model.Pin is null || model.Pin.CatalogKey != p.Model.CatalogKey || model.Pin.ProviderAlias != p.Model.ProviderAlias
-            || model.Pin.ModelId != p.Model.ModelId || model.Pin.ReasoningEffort != p.Model.ReasoningEffort) throw new AccessDeniedException("automation_model_unavailable");
+        if (!model.Accepted || model.Pin is null || model.Pin.OfferingId != p.Model.OfferingId || model.Pin.ConnectionId != p.Model.ConnectionId
+            || model.Pin.ExternalModelId != p.Model.ExternalModelId || model.Pin.ReasoningEffort != p.Model.ReasoningEffort || !Equals(model.Pin.Binding, p.Model.Binding)) throw new AccessDeniedException("automation_model_unavailable");
         await TenantAutomationAdmissionApprovalRules.ExecutorAsync(state, request, iam, ct).ConfigureAwait(false);
         if (p.EventSource is { } eventSource) await RequireEventAsync(p, eventSource, ct).ConfigureAwait(false);
         return new(state, current.Agent, current.Configuration, source, occurrence, conversation);

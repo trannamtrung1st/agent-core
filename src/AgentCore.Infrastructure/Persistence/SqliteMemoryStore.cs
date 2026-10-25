@@ -59,14 +59,21 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
         var migrations = db.Database.GetMigrations().ToArray();
         if (applied.Any(id => !migrations.Contains(id, StringComparer.Ordinal)))
             throw ResetRequired("data_reset_required: Installed schema predates the canonical filesystem baseline.");
-        if (!applied.SequenceEqual(migrations, StringComparer.Ordinal))
+        var isModelUpgrade = migrations.LastOrDefault() == "20261025020000_CanonicalModelIdentity"
+            && (applied.LastOrDefault() == "20261025010000_TenantDynamicModels"
+                && applied.SequenceEqual(migrations.Take(migrations.Length - 1), StringComparer.Ordinal)
+                || applied.LastOrDefault() == "20261023190000_TenantPublicHttp"
+                && applied.SequenceEqual(migrations.Take(migrations.Length - 2), StringComparer.Ordinal));
+        if (!applied.SequenceEqual(migrations, StringComparer.Ordinal) && !isModelUpgrade)
         {
             await using var existing = connection.CreateCommand();
             existing.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name <> '__EFMigrationsHistory' LIMIT 1";
             if (await existing.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null)
                 throw ResetRequired("data_reset_required: Existing untracked or incomplete schema cannot be adopted.");
         }
-        await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
+        try { await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false); }
+        catch (SqliteException error) when (error.Message.Contains("LegacyModelDataResetRequired", StringComparison.Ordinal))
+        { throw ResetRequired("data_reset_required: Installed model references cannot be converted automatically."); }
         await ValidateCanonicalSchemaAsync(db, cancellationToken).ConfigureAwait(false);
         await ContextCutover.ValidateAsync(db, cancellationToken).ConfigureAwait(false);
         await ValidateStoredSkillContractAsync(db, cancellationToken).ConfigureAwait(false);
@@ -706,10 +713,12 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
         row.Snapshot.SummarizedThroughEntrySequence = snapshot.SummarizedThroughEntrySequence;
         row.Snapshot.SummaryFormatVersion = snapshot.SummaryFormatVersion;
         row.Snapshot.SummaryGeneratedAtUtc = snapshot.SummaryGeneratedAt?.ToUnixTimeMilliseconds();
-        row.Snapshot.SummaryModelCatalogKey = snapshot.SummaryModel?.CatalogKey;
-        row.Snapshot.SummaryModelProviderAlias = snapshot.SummaryModel?.ProviderAlias;
-        row.Snapshot.SummaryModelId = snapshot.SummaryModel?.ModelId;
+        row.Snapshot.SummaryModelOfferingId = snapshot.SummaryModel?.OfferingId;
+        row.Snapshot.SummaryModelConnectionId = snapshot.SummaryModel?.ConnectionId;
+        row.Snapshot.SummaryExternalModelId = snapshot.SummaryModel?.ExternalModelId;
         row.Snapshot.SummaryModelReasoningEffort = snapshot.SummaryModel?.ReasoningEffort;
+        row.Snapshot.SummaryModelBindingJson = ModelBindingJson.Write(snapshot.SummaryModel?.Binding,
+            snapshot.SummaryModel?.OfferingId, snapshot.SummaryModel?.ConnectionId, snapshot.SummaryModel?.ExternalModelId);
         row.Snapshot.PendingTopic = snapshot.PendingTopic;
         row.Snapshot.ProfileId = snapshot.ProfileId?.ToString("D");
         row.Snapshot.LastEntrySequence = snapshot.DurableLastEntrySequence;
@@ -898,70 +907,75 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
 
     private static void ApplyModelSelection(SnapshotRecord row, SessionModelSelection? selection)
     {
-        row.ModelCatalogKey = selection?.CatalogKey;
-        row.ModelProviderAlias = selection?.ProviderAlias;
-        row.ModelId = selection?.ModelId;
+        row.ModelOfferingId = selection?.OfferingId;
+        row.ModelConnectionId = selection?.ConnectionId;
+        row.ExternalModelId = selection?.ExternalModelId;
         row.ModelSelectionSource = selection?.SelectionSource.ToString();
         row.ModelReasoningEffort = selection?.ReasoningEffort;
         row.ModelHasExplicitReasoningEffort = selection?.HasExplicitReasoningEffort ?? false;
+        row.ModelBindingJson = ModelBindingJson.Write(selection?.Binding, selection?.OfferingId, selection?.ConnectionId, selection?.ExternalModelId);
     }
 
     private static SessionModelSelection? ReadModelSelection(SnapshotRecord row)
     {
-        if (string.IsNullOrEmpty(row.ModelCatalogKey)
-            || string.IsNullOrEmpty(row.ModelProviderAlias)
-            || string.IsNullOrEmpty(row.ModelId)
+        if (string.IsNullOrEmpty(row.ModelOfferingId)
+            || string.IsNullOrEmpty(row.ModelConnectionId)
+            || string.IsNullOrEmpty(row.ExternalModelId)
             || string.IsNullOrEmpty(row.ModelSelectionSource))
         {
             return null;
         }
 
         return new SessionModelSelection(
-            row.ModelCatalogKey,
-            row.ModelProviderAlias,
-            row.ModelId,
+            row.ModelOfferingId,
+            row.ModelConnectionId,
+            row.ExternalModelId,
             Enum.Parse<ModelSelectionSource>(row.ModelSelectionSource),
-            row.ModelReasoningEffort, row.ModelHasExplicitReasoningEffort);
+            row.ModelReasoningEffort, row.ModelHasExplicitReasoningEffort,
+            ModelBindingJson.Read(row.ModelBindingJson, row.ModelOfferingId, row.ModelConnectionId, row.ExternalModelId));
     }
 
     private static ModelGenerationProvenance? ReadSummaryModel(SnapshotRecord row)
     {
-        if (string.IsNullOrEmpty(row.SummaryModelCatalogKey)
-            || string.IsNullOrEmpty(row.SummaryModelProviderAlias)
-            || string.IsNullOrEmpty(row.SummaryModelId))
+        if (string.IsNullOrEmpty(row.SummaryModelOfferingId)
+            || string.IsNullOrEmpty(row.SummaryModelConnectionId)
+            || string.IsNullOrEmpty(row.SummaryExternalModelId))
         {
             return null;
         }
 
         return new ModelGenerationProvenance(
-            row.SummaryModelCatalogKey,
-            row.SummaryModelProviderAlias,
-            row.SummaryModelId,
-            row.SummaryModelReasoningEffort);
+            row.SummaryModelOfferingId,
+            row.SummaryModelConnectionId,
+            row.SummaryExternalModelId,
+            row.SummaryModelReasoningEffort,
+            ModelBindingJson.Read(row.SummaryModelBindingJson, row.SummaryModelOfferingId, row.SummaryModelConnectionId, row.SummaryExternalModelId));
     }
 
     private static void ApplyModelProvenance(EntryRecord row, ModelGenerationProvenance? provenance)
     {
-        row.ModelCatalogKey = provenance?.CatalogKey;
-        row.ModelProviderAlias = provenance?.ProviderAlias;
-        row.ModelId = provenance?.ModelId;
+        row.ModelOfferingId = provenance?.OfferingId;
+        row.ModelConnectionId = provenance?.ConnectionId;
+        row.ExternalModelId = provenance?.ExternalModelId;
         row.ModelReasoningEffort = provenance?.ReasoningEffort;
+        row.ModelBindingJson = ModelBindingJson.Write(provenance?.Binding, provenance?.OfferingId, provenance?.ConnectionId, provenance?.ExternalModelId);
     }
 
     private static ModelGenerationProvenance? ReadModelProvenance(EntryRecord row)
     {
-        if (string.IsNullOrEmpty(row.ModelCatalogKey)
-            || string.IsNullOrEmpty(row.ModelProviderAlias)
-            || string.IsNullOrEmpty(row.ModelId))
+        if (string.IsNullOrEmpty(row.ModelOfferingId)
+            || string.IsNullOrEmpty(row.ModelConnectionId)
+            || string.IsNullOrEmpty(row.ExternalModelId))
         {
             return null;
         }
 
         return new ModelGenerationProvenance(
-            row.ModelCatalogKey,
-            row.ModelProviderAlias,
-            row.ModelId,
-            row.ModelReasoningEffort);
+            row.ModelOfferingId,
+            row.ModelConnectionId,
+            row.ExternalModelId,
+            row.ModelReasoningEffort,
+            ModelBindingJson.Read(row.ModelBindingJson, row.ModelOfferingId, row.ModelConnectionId, row.ExternalModelId));
     }
 
     private static TEnum? ParseEnumOrNull<TEnum>(string? value) where TEnum : struct, Enum =>

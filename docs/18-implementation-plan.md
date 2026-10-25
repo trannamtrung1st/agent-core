@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Dynamic model management (authorized 2026-10-25)
+
+The updated owner proposal requests one coherent tenant model-management and runtime cutover on baseline `6a71dd1`. Local implementation and the final requirement audit are complete; no new milestone acceptance or dependent initiative is started. [Delivery ledger and UI brief](reports/dynamic-model-management-delivery-2026-10-25.md) track canonical storage/IAM, provider adapters/discovery, all Run consumers, administration and final no-legacy verification. Earlier static-catalog reports remain historical; current runtime facts are owned by the canonical tenant cutover. Live-provider service qualification and optional CI remain unrun.
+
 The IAM successor has completed local implementation and Synthetic proposal acceptance in the final delivery. [Final delivery](reports/tenant-final-delivery-2026-10-24.md) owns the exact source/commit status, finite method/I/O/worker and UI acceptance, operating instructions and measured limits. The final 80-file scope is approved for direct commit to main. This does not imply deployment, live-provider/customer, physical-device or CI acceptance. Historical module reports below retain their original versions; earlier pending statements do not override their verified successors.
 
 The [IAM stabilization follow-up](reports/iam-stabilization-2026-10-24.md) owns subsequent launcher, Compose/HTTPS, canonical Playwright and approval-review integration evidence; earlier delivery fingerprints remain historical.
@@ -150,7 +154,7 @@ Closed/frozen on behavior `5fda69c47ec1b8274ef1f3cc4e3f7fce539281d5` (2026-10-09
 
 ## Activation, AgentRun and background Sessions cutover
 
-Accepted follow-on requirement reviewed against `bd44046896df6f3e0fc2e7d15d60dd479a5349cd` on 2026-10-08. This does not reopen historical freezes or start P10/P11. The approved target and migration policy are owned by [Architecture](03-system-architecture.md#accepted-activation-and-agentrun-cutover) and [Technology Decisions](10-technology-decisions.md#decision-unified-activation-agentrun-and-background-sessions).
+Accepted follow-on requirement reviewed against `bd44046896df6f3e0fc2e7d15d60dd479a5349cd` on 2026-10-08. This does not reopen historical freezes or start P10/P11. The approved target and migration policy are owned by [Architecture](03-system-architecture.md#session-activation-and-agentrun) and [Technology Decisions](10-technology-decisions.md#decision-unified-activation-agentrun-and-background-sessions).
 
 Execute in order: A domain/contract proof; B atomic input, Session, Activation, run and occurrence receipt persistence; C unified live/detached execution; D background creation and Automation intake; E trusted conditional report-back; F same-Session Continue in chat, APIs and UI; G old-engine deletion, bounded Impeccable, canonical documentation and exact-SHA closure.
 
@@ -220,6 +224,8 @@ The verified MVP generic UI is Ant Design v6 ([Technology Decisions](10-technolo
 - **Status:** Complete. Definitions load from `agents/examiner.json` and `agents/customer-support.json` (M2 gate). Shipped fixtures also include `agents/compliance.json` from post-MVP role environments and `agents/general-assistant.json` for open-ended harness checks. Speech/display remain runtime response capabilities, not definition instructions. `PromptContextBuilder` + `DefaultAgentBrain` drive the same `SessionRuntime` mailbox for both identities. See [Milestone 2 verification](reports/m02-verification.md).
 
 ## Milestone 3 — OpenAI-compatible streaming LLM and OpenRouter configuration
+
+The configuration and opt-in probe details below record the original milestone. The dynamic-model cutover supersedes its global key/alias/default and old live probe; current configuration and qualification use tenant-owned routes and the [canonical optional harness](16-testing-strategy.md#canonical-optional-model-harness).
 
 - **Goal:** Replace synthetic text capability with a real configurable HTTP adapter.
 - **Scope:** OpenAICompatibleLanguageModel configured for OpenRouter hosted text. Opt-in adapter smoke may use `openrouter/free`; Real/demo configuration uses a **fixed** operator-selected model ID. Configurable model aliases per identity, application/harness streaming text (browser integration follows Milestone 5), IHttpClientFactory, private SSE parser, normalized failures, headers/model configuration, explicit timeouts, circuit breaker and no blind POST retries. Read `OPENROUTER_API_KEY` from environment or `dotnet user-secrets` only.
@@ -515,7 +521,7 @@ General Assistant exit for this closure:
 
 ## Handoff rule
 
-Implementation begins with Milestone 1 in a separate task. Native realtime is not an implementation milestone, prerequisite or runtime branch anywhere in this MVP plan. If a provider cannot meet a capability, implement the specified degraded policy and report its measured trade-off; do not quietly change the architecture. Each implementation milestone should update run/test instructions to actual commands as its artifacts are introduced. Apply the [hosted-provider verification policy](10-technology-decisions.md#decision-default-verification-is-offline-live-providers-are-explicit-opt-in): default tests stay Synthetic/offline; OpenRouter opt-in adapter smoke may use `openrouter/free`; the Real/demo catalog default is the shipped fixed model ID `deepseek/deepseek-v4.1-flash`, and the same catalog offers fixed `openai/gpt-6-luna`, `anthropic/claude-haiku-5.5` and `openai/gpt-6.1-sol` choices; `openrouter/free` is ineligible for three-layer execution; OpenAI speech live checks may wait for `OPENAI_API_KEY`. Intended repository CI is GitHub Actions (`.github/workflows/synthetic.yml`).
+Implementation begins with Milestone 1 in a separate task. Native realtime is not an implementation milestone, prerequisite or runtime branch anywhere in this MVP plan. If a provider cannot meet a capability, implement the specified degraded policy and report its measured trade-off; do not quietly change the architecture. Each implementation milestone should update run/test instructions to actual commands as its artifacts are introduced. Apply the [hosted-provider verification policy](10-technology-decisions.md#decision-default-verification-is-offline-live-providers-are-explicit-opt-in): default tests stay Synthetic/offline. Real execution requires a protected tenant credential, owned enabled connection/offering and explicit effective default or pin. Shared presets provide metadata only. Optional native/compatible qualification uses the [canonical harness](16-testing-strategy.md#canonical-optional-model-harness); independent OpenAI speech checks may wait for `OPENAI_API_KEY`. Intended repository CI is GitHub Actions (`.github/workflows/synthetic.yml`).
 
 ## P9.7 — Agent-assisted / self-managed harness authoring
 

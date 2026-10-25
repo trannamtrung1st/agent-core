@@ -17,9 +17,9 @@ public sealed partial class TenantDefinitionIntegrationTests
             new((ITenantAuthorizationAuditStore)current, f.Ids, TimeProvider.System));
         var target = new TenantSandboxControlOperationTarget((ITenantSessionStore)current, (ITenantSandboxRuntimeStore)current, s.Resolver, current, authorizer);
         return (new(current, (ITenantApprovalStore)current, (ITenantAgentStore)current, operations, authorizer, f.Identity, f.Ids, TimeProvider.System,
-                s.Resolver, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)current, controlTargets: target),
+                s.Resolver, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(current), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)current, controlTargets: target),
             new(current, (ITenantRunStore)current, (ITenantAgentStore)current, (ITenantApprovalStore)current, (ITenantApprovedOperationStore)current,
-                operations, s.Resolver, f.Ids, TimeProvider.System, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, target));
+                operations, s.Resolver, f.Ids, TimeProvider.System, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(current), SyntheticProviderAliases.Default, target));
     }
     private static async Task GrantModelControl(Fixture f, RuntimeSandboxSetup s)
     {

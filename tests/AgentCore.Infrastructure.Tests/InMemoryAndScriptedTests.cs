@@ -274,7 +274,7 @@ public sealed class InMemoryAndScriptedTests
             new Domain.Definitions.ConversationPolicy("concise", true, "en", 256),
             new Domain.Definitions.InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
             new Domain.Definitions.VoiceConfiguration(false, "default", 1.0),
-            new Domain.Definitions.ProviderPreferences("primary-llm", null, null),
+            new Domain.Definitions.ProviderPreferences(null, null),
             new Dictionary<string, string>());
         return new SessionSnapshot(
             1,

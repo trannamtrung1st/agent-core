@@ -73,7 +73,7 @@ public sealed partial class InMemoryCredentialStore(InMemoryAgentInstanceStore i
             RequireActive(b.AgentInstanceId, expectedInstanceRevision);
             RequireLegacyCredential(b.CredentialId);
             if (!_credentials.TryGetValue(b.CredentialId,out var credential)) throw AgentCoreErrors.NotFound("Credential was not found.");
-            if (credential.Purpose == CredentialPurpose.ContainerRegistry) throw AgentCoreErrors.Forbidden("Registry credentials cannot be bound to agents.");
+            if (credential.Purpose is CredentialPurpose.ContainerRegistry or CredentialPurpose.ModelInference) throw AgentCoreErrors.Forbidden("Infrastructure credentials cannot be bound to agents.");
             if (_bindings.ContainsKey(b.BindingId) || _bindings.Values.Any(x => x.AgentInstanceId == b.AgentInstanceId && (x.Reference == b.Reference || x.CredentialId == b.CredentialId)))
                 throw AgentCoreErrors.Conflict("Credential or reference is already bound to this agent.");
             instances.UpdateWithExpectedRevisionAsync(new(b.AgentInstanceId, expectedInstanceRevision, History: instances.EventStore is null ? null : history), b.UpdatedAtUtc, ct).GetAwaiter().GetResult();

@@ -35,7 +35,7 @@ public sealed class BrowserEnvironmentJourneyTests
         var definition = new AgentDefinition(2, "inspection", 1, new("Inspection", "Role", "Description", "Tone"), [], "instructions",
             new("answerNewTurn", true, true), new("balanced", false, "en", 2048),
             new(false, 60_000, 120_000, 1, ["longSilence"], 0), new(false, "default", 1),
-            new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>(),
+            new("primary-stt", "primary-tts"), new Dictionary<string, string>(),
             new RoleEnvironment(ToolAllowlist: [ToolCatalog.BrowserConfiguration, ToolCatalog.BrowserNavigate]));
         var id = Guid.NewGuid();
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn);

@@ -13,7 +13,7 @@ public sealed record TenantAgentConfigurationChange(Guid InstanceId, long Expect
     IReadOnlyList<InstanceAutomationPolicyChange>? AutomationPolicyChanges = null,
     bool SetSettingsOverrides = false, InstanceSettingsOverrides? SettingsOverrides = null,
     bool SetExecutionBudgets = false, ExecutionBudgetPolicy? ExecutionBudgets = null,
-    bool SetUnattendedModel = false, string? UnattendedModelCatalogKey = null, string? UnattendedReasoningEffort = null,
+    bool SetUnattendedModel = false, string? UnattendedOfferingId = null, string? UnattendedReasoningEffort = null,
     HarnessManagementState? HarnessManagement = null, SkillMutation? Skill = null, InstanceResourceMutation? Resource = null,
     HumanSessionReference? Initiator = null, TenantIsolationMutation? Isolation = null, HarnessManagementState? HarnessAssessment = null,
     PreparedManagementBinding? Binding = null);

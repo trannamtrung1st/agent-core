@@ -54,18 +54,20 @@ public sealed class SnapshotRecord
     public string? LifecycleSource { get; set; }
     public long? LifecycleChangedAtUtc { get; set; }
     public string? SpeechLocaleOverride { get; set; }
-    public string? ModelCatalogKey { get; set; }
-    public string? ModelProviderAlias { get; set; }
-    public string? ModelId { get; set; }
+    public string? ModelOfferingId { get; set; }
+    public string? ModelConnectionId { get; set; }
+    public string? ExternalModelId { get; set; }
     public string? ModelSelectionSource { get; set; }
     public bool ModelHasExplicitReasoningEffort { get; set; }
+    public string? ModelBindingJson { get; set; }
     public string? ModelReasoningEffort { get; set; }
     public int SummaryFormatVersion { get; set; }
     public long? SummaryGeneratedAtUtc { get; set; }
-    public string? SummaryModelCatalogKey { get; set; }
-    public string? SummaryModelProviderAlias { get; set; }
-    public string? SummaryModelId { get; set; }
+    public string? SummaryModelOfferingId { get; set; }
+    public string? SummaryModelConnectionId { get; set; }
+    public string? SummaryExternalModelId { get; set; }
     public string? SummaryModelReasoningEffort { get; set; }
+    public string? SummaryModelBindingJson { get; set; }
     public SessionRecord Session { get; set; } = null!;
 }
 
@@ -87,13 +89,14 @@ public sealed class EntryRecord
     public string? AttachmentRefsJson { get; set; }
     public string? SourceAdmissionFingerprint { get; set; }
     public string? UserPartsJson { get; set; }
+    public string? ModelBindingJson { get; set; }
 
     public string? ApplicationMessageEffectKey { get; set; }
     public string? FinishReason { get; set; }
     public string? InterruptReason { get; set; }
-    public string? ModelCatalogKey { get; set; }
-    public string? ModelProviderAlias { get; set; }
-    public string? ModelId { get; set; }
+    public string? ModelOfferingId { get; set; }
+    public string? ModelConnectionId { get; set; }
+    public string? ExternalModelId { get; set; }
     public string? ModelReasoningEffort { get; set; }
     public long CreatedAtUtc { get; set; }
     public long? CompletedAtUtc { get; set; }
@@ -240,6 +243,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     {
         AgentCore.Infrastructure.Security.IamPersistenceModel.Configure(modelBuilder);
         WorkspaceEffectPersistence.Configure(modelBuilder);
+        ModelManagementPersistence.Configure(modelBuilder);
         modelBuilder.Entity<SandboxInstanceVerificationRow>(e => { e.ToTable("SandboxInstanceVerifications"); e.HasKey(r => new { r.InstanceId, r.InstanceRevision }); });
         AgentCore.Infrastructure.Security.TenantSandboxVerificationRecord.Configure(modelBuilder);
         modelBuilder.Entity<SandboxVerificationRow>(e => { e.ToTable("SandboxProfileVerifications", t => t.HasCheckConstraint("CK_SandboxVerification_TenantJson",
@@ -494,7 +498,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.DefinitionId).HasMaxLength(128).IsRequired();
             entity.Property(row => row.PersonaJson).IsRequired();
             entity.Property(row => row.Lifecycle).HasMaxLength(32).IsRequired();
-            entity.Property(row => row.UnattendedModelCatalogKey).HasMaxLength(128);
+            entity.Property(row => row.UnattendedOfferingId).HasMaxLength(128);
             entity.Property(row => row.UnattendedReasoningEffort).HasMaxLength(64);
             entity.Property(row => row.Revision).IsConcurrencyToken();
             entity.HasIndex(row => row.DefinitionId);
@@ -568,7 +572,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.SourceSessionId).HasMaxLength(36);
             entity.Property(row => row.SourceEventId).HasMaxLength(36);
             entity.Property(row => row.SuspensionReason).HasMaxLength(200);
-            entity.Property(row => row.ModelOverrideCatalogKey).HasMaxLength(128);
+            entity.Property(row => row.ModelOverrideOfferingId).HasMaxLength(128);
             entity.Property(row => row.ModelOverrideReasoningEffort).HasMaxLength(64);
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.Status });
             entity.HasIndex(row => new { row.Status, row.NextOccurrenceAtUtc, row.AutomationId });
@@ -668,9 +672,9 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.HasOne<SessionRecord>().WithMany().HasForeignKey(row => row.ExecutionSessionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<SessionRecord>().WithMany().HasForeignKey(row => row.LiveSessionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<AgentRunRecord>().WithMany().HasForeignKey(row => row.AcceptedAgentRunId).OnDelete(DeleteBehavior.Restrict);
-            entity.Property(row => row.ModelCatalogKey).HasMaxLength(128);
-            entity.Property(row => row.ModelProviderAlias).HasMaxLength(128);
-            entity.Property(row => row.ModelId).HasMaxLength(128);
+            entity.Property(row => row.ModelOfferingId).HasMaxLength(128);
+            entity.Property(row => row.ModelConnectionId).HasMaxLength(128);
+            entity.Property(row => row.ExternalModelId).HasMaxLength(255);
             entity.Property(row => row.ModelReasoningEffort).HasMaxLength(64);
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.DedupeKey }).IsUnique();
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.Disposition });

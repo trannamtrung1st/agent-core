@@ -14,6 +14,7 @@ public sealed partial class SqliteIamStore
     {
         if (audit.ActorPrincipalId != initiator.PrincipalId || audit.Target != change.SessionId.ToString("D")
             || audit.Action != TenantSessionMutations.AuditAction(change.Action)) throw new ArgumentException("Invalid Session mutation transaction.");
+        TenantSessionRules.ValidateModelChange(next.Tenant.TenantId, change);
         TenantSession? saved = null;
         var written = await WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
         {
@@ -61,7 +62,7 @@ public sealed partial class SqliteIamStore
     {
         entry.Text = ""; entry.UserPartsJson = null; entry.EnvelopeJson = null; entry.FailureReferenceJson = null; entry.AttachmentRefsJson = null;
         entry.SourceAdmissionFingerprint = null; entry.FinishReason = null; entry.InterruptReason = null;
-        entry.ModelCatalogKey = null; entry.ModelProviderAlias = null; entry.ModelId = null; entry.ModelReasoningEffort = null;
+        entry.ModelOfferingId = null; entry.ModelConnectionId = null; entry.ExternalModelId = null; entry.ModelReasoningEffort = null;
         entry.HeardTextEndExclusive = 0; entry.ReceivedTextEndExclusive = 0;
         if (entry.Status == nameof(EntryStatus.Streaming)) entry.Status = nameof(EntryStatus.Interrupted);
     }

@@ -1,3 +1,4 @@
+import { modelChoiceLabel } from "../features/models/modelLabels";
 import { snapshotParts, type MessagePart } from "../services/messageParts";
 import { create } from "zustand";
 import type {
@@ -132,15 +133,15 @@ export type SessionView = {
   speechLocaleSource: string | null;
   speechLocaleOverride: string | null;
   pendingSpeechLocale: string | null;
-  pendingModelKey: string | null;
+  pendingOfferingId: string | null;
   pendingReasoningEffort: string | null;
   modelMutationPending: boolean;
   modelMutationOwner: { sessionId: string; operationId: number } | null;
-  sessionModelKey: string | null;
+  sessionOfferingId: string | null;
   sessionModelDisplayName: string | null;
   sessionModelSource: string | null;
   sessionModelEffort: string | null;
-  sessionModelId: string | null;
+  sessionExternalModelId: string | null;
   sttTransport: "serverAudio" | "clientTranscript" | null;
   ttsTransport: "serverAudio" | "clientSpeech" | null;
   mode: "text" | "voice";
@@ -189,15 +190,15 @@ export const emptySession = (): SessionView => ({
   speechLocaleSource: null,
   speechLocaleOverride: null,
   pendingSpeechLocale: null,
-  pendingModelKey: "default",
+  pendingOfferingId: "default",
   pendingReasoningEffort: null,
   modelMutationPending: false,
   modelMutationOwner: null,
-  sessionModelKey: null,
+  sessionOfferingId: null,
   sessionModelDisplayName: null,
   sessionModelSource: null,
   sessionModelEffort: null,
-  sessionModelId: null,
+  sessionExternalModelId: null,
   sttTransport: null,
   ttsTransport: null,
   mode: "text",
@@ -308,7 +309,7 @@ function modelFieldsFromPayload(
   payload: Record<string, unknown>
 ): Pick<
   SessionView,
-  "sessionModelKey" | "sessionModelDisplayName" | "sessionModelSource" | "sessionModelEffort" | "sessionModelId"
+  "sessionOfferingId" | "sessionModelDisplayName" | "sessionModelSource" | "sessionModelEffort" | "sessionExternalModelId"
 > {
   const capabilities = (payload.capabilities ?? {}) as Record<string, unknown>;
   return modelFieldsFromRecord((capabilities.model ?? payload.model ?? {}) as Record<string, unknown>);
@@ -318,24 +319,24 @@ export function modelFieldsFromSelection(
   model: SessionModelSelection | null | undefined
 ): Pick<
   SessionView,
-  "sessionModelKey" | "sessionModelDisplayName" | "sessionModelSource" | "sessionModelEffort" | "sessionModelId"
+  "sessionOfferingId" | "sessionModelDisplayName" | "sessionModelSource" | "sessionModelEffort" | "sessionExternalModelId"
 > {
   if (!model) {
     return {
-      sessionModelKey: null,
+      sessionOfferingId: null,
       sessionModelDisplayName: null,
       sessionModelSource: null,
       sessionModelEffort: null,
-      sessionModelId: null
+      sessionExternalModelId: null
     };
   }
 
   return {
-    sessionModelKey: model.catalogKey,
-    sessionModelDisplayName: model.displayName,
+    sessionOfferingId: model.offeringId,
+    sessionModelDisplayName: modelChoiceLabel(model),
     sessionModelSource: model.selectionSource,
     sessionModelEffort: model.reasoningEffort ?? null,
-    sessionModelId: model.modelId ?? null
+    sessionExternalModelId: model.externalModelId ?? null
   };
 }
 
@@ -343,14 +344,14 @@ function modelFieldsFromRecord(
   model: Record<string, unknown>
 ): Pick<
   SessionView,
-  "sessionModelKey" | "sessionModelDisplayName" | "sessionModelSource" | "sessionModelEffort" | "sessionModelId"
+  "sessionOfferingId" | "sessionModelDisplayName" | "sessionModelSource" | "sessionModelEffort" | "sessionExternalModelId"
 > {
   return {
-    sessionModelKey: asString(model.catalogKey) || null,
-    sessionModelDisplayName: asString(model.displayName) || null,
+    sessionOfferingId: asString(model.offeringId) || null,
+    sessionModelDisplayName: asString(model.displayName) ? modelChoiceLabel({ displayName: asString(model.displayName), connectionLabel: asString(model.connectionLabel) }) : null,
     sessionModelSource: asString(model.selectionSource) || null,
     sessionModelEffort: asString(model.reasoningEffort) || null,
-    sessionModelId: asString(model.modelId) || null
+    sessionExternalModelId: asString(model.externalModelId) || null
   };
 }
 
@@ -1084,7 +1085,11 @@ export type SessionStore = SessionView & {
   newChatIdentityKey: string;
   selectedAgentId: string;
   modelCatalog: ModelDescriptor[];
-  modelCatalogDefaultKey: string | null;
+  modelCatalogDefaultOfferingId: string | null;
+  modelCatalogDefaultEffort: string | null;
+  modelCatalogDefaultSource: "tenantDefault" | "agentDefault";
+  modelCatalogLoading: boolean;
+  modelCatalogError: string | null;
   catalogItems: CatalogItem[];
   catalogNextCursor: string | null;
   catalogHasMore: boolean;
@@ -1125,7 +1130,11 @@ export const useSessionStore = create<SessionStore>(() => ({
   newChatIdentityKey: "",
   selectedAgentId: "examiner",
   modelCatalog: [],
-  modelCatalogDefaultKey: null,
+  modelCatalogDefaultOfferingId: null,
+  modelCatalogDefaultEffort: null,
+  modelCatalogDefaultSource: "tenantDefault",
+  modelCatalogLoading: false,
+  modelCatalogError: null,
   ...emptyCatalog()
 }));
 

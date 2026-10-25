@@ -15,8 +15,8 @@ public static class TenantAutomationAuthoring
     {
         if (agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
         if (current?.Status is AutomationStatus.Cancelled or AutomationStatus.Completed or AutomationStatus.Expired) throw new ArgumentException("A terminal Automation cannot be re-authored.");
-        if (change.Enabled || current is null || current.ModelOverrideCatalogKey != change.ModelKey || current.ModelOverrideReasoningEffort != change.ReasoningEffort)
-            ExecutionModelPolicy.RequireSelectable(models, change.ModelKey, change.ReasoningEffort);
+        if (change.Enabled || current is null || current.ModelOverrideOfferingId != change.OfferingId || current.ModelOverrideReasoningEffort != change.ReasoningEffort)
+            ExecutionModelPolicy.RequireSelectable(models, change.OfferingId, change.ReasoningEffort);
         if (current is not null) TenantAutomationRules.Owner(current, agent);
         var children = Children(current, change, ids, filters);
         var proposed = new Automation(current?.AutomationId ?? ids.NewId(), TriggerOwner.ForTenant(agent.TenantId, agent.Instance.InstanceId, agent.PrincipalId),
@@ -24,7 +24,7 @@ public static class TenantAutomationAuthoring
             children,
             NextOccurrence(current, children, change.Enabled, at), current?.ExpiresAtUtc, current?.OccurrenceCount ?? 0,
             (current?.Revision ?? 0) + 1, children.Max(t => t.Revision),
-            provenance, null, change.ModelKey, change.ReasoningEffort,
+            provenance, null, change.OfferingId, change.ReasoningEffort,
             change.RequiresVision, change.Name, change.TargetSessionId is { } targetId ? AutomationExecutionTarget.Existing(targetId) : AutomationExecutionTarget.Background, change.ReportToSessionId is { } destination ? AutomationCompletionDelivery.ToSession(destination) : AutomationCompletionDelivery.None, change.RequiresTools);
         ValidateTransition(current, proposed, current?.Revision ?? 0, current is null ? "automations.create" : "automations.update", at);
         TenantAutomationRules.Configuration(proposed, policy, at, current: current);

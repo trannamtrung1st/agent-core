@@ -4,6 +4,8 @@ The Account/tenant IAM successor has completed local implementation and Syntheti
 
 The [IAM stabilization follow-up](docs/reports/iam-stabilization-2026-10-24.md) owns subsequent launcher, Compose/HTTPS, canonical Playwright and approval-review integration evidence; earlier delivery fingerprints remain historical.
 
+Tenant-owned dynamic model management is implemented locally: five adapter kinds, protected provider connections, explicit offerings/defaults and canonical Chat/authoring/runtime selection. The [delivery audit](docs/reports/dynamic-model-management-delivery-2026-10-25.md#final-requirement-audit) records focused offline/Synthetic evidence, migration/reset policy and unrun live-provider/CI limits.
+
 Agent Core is a lightweight runtime for creating persistent AI identities capable of natural, real-time conversation.
 
 An agent can represent a customer service representative, examiner, tutor, friend, interviewer, receptionist, or another role. The goal of the MVP is not to build a general-purpose autonomous-agent platform. The goal is to prove that one reusable Agent Core can inhabit different identities and interact naturally through text and voice.

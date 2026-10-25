@@ -26,16 +26,10 @@ public sealed class AutomationAuthorizationProviderTests
         using var logs = new ClassifierLogs();
         var services = new ServiceCollection();
         services.AddLogging(builder => builder.AddProvider(logs));
-        services.AddSingleton<IHttpClientFactory>(new HttpFactory(http));
-        services.AddAgentCoreInfrastructure(FindAgents(), "Real", new()
-        {
-            Adapter = "OpenAICompatible", BaseUrl = "https://provider.example/v1/", ApiKey = "private-fixture-key", DefaultModel = "legacy-model"
-        });
-        var descriptor = ModelCatalogFactory.Real().Default with { Key = "custom", ModelId = "catalog-model", Transport = transport,
-            DefaultReasoningEffort = "high", SupportedReasoningEfforts = ["high", "low"] };
-        services.AddSingleton<IModelCatalog>(new ConfigurationModelCatalog("custom", [descriptor]));
         await using var provider = services.BuildServiceProvider();
-        var verdict = await provider.GetRequiredService<ITriggerCommandAuthorizer>().AuthorizeAsync(Proposed("I would like daily reflection on private-user-content at 9am"));
+        var descriptor = FixtureDescriptor(transport) with { DefaultReasoningEffort = "high", SupportedReasoningEfforts = ["high", "low"] };
+        var verdict = await IsolatedClassifier(http, descriptor, "low", "private-fixture-key", provider.GetRequiredService<ILogger<ModelTriggerCommandAuthorizer>>())
+            .AuthorizeAsync(Proposed("I would like daily reflection on private-user-content at 9am"));
         Assert.Equal(expected, verdict.Decision);
         if (outcome == "truncated") Assert.Equal(TriggerAuthorizationFailureReason.TruncatedOutput, verdict.FailureReason);
         Assert.Equal(2, handler.Payloads.Count);
@@ -64,22 +58,12 @@ public sealed class AutomationAuthorizationProviderTests
     [InlineData(ModelInferenceTransport.Responses, false)]
     [InlineData(ModelInferenceTransport.ChatCompletions, true)]
     [InlineData(ModelInferenceTransport.Responses, true)]
-    public async Task Authorization_binds_catalog_default_transport_and_effort_without_mutating_provider_options(ModelInferenceTransport transport, bool supportsNone)
+    public async Task Explicit_classifier_fixture_uses_captured_transport_and_effort(ModelInferenceTransport transport, bool supportsNone)
     {
         using var handler = new ClassifierHandler("allow", transport);
         using var http = new HttpClient(handler);
-        var primary = new LanguageModelProviderOptions
-        {
-            Adapter = "OpenAICompatible", BaseUrl = "https://provider.example/v1/", ApiKey = "offline-fixture", DefaultModel = "legacy-model"
-        };
-        var descriptor = ModelCatalogFactory.Real().Default with { Key = "custom", ModelId = "catalog-model", Transport = transport,
-            SupportedReasoningEfforts = supportsNone ? ["high", "none", "low"] : ["low", "high"] };
-        var services = new ServiceCollection();
-        services.AddSingleton<IHttpClientFactory>(new HttpFactory(http));
-        services.AddAgentCoreInfrastructure(FindAgents(), "Real", primary);
-        services.AddSingleton<IModelCatalog>(new ConfigurationModelCatalog("custom", [descriptor]));
-        await using var provider = services.BuildServiceProvider();
-        Assert.Equal(TriggerCommandAuthorizationDecision.Allow, (await provider.GetRequiredService<ITriggerCommandAuthorizer>()
+        var descriptor = FixtureDescriptor(transport) with { SupportedReasoningEfforts = supportsNone ? ["high", "none", "low"] : ["low", "high"] };
+        Assert.Equal(TriggerCommandAuthorizationDecision.Allow, (await IsolatedClassifier(http, descriptor, supportsNone ? "none" : "low", "offline-fixture")
             .AuthorizeAsync(Proposed("I would like daily reflection on your memory at 9am"))).Decision);
         using var body = JsonDocument.Parse(Assert.Single(handler.Payloads));
         Assert.Equal("catalog-model", body.RootElement.GetProperty("model").GetString());
@@ -89,10 +73,6 @@ public sealed class AutomationAuthorizationProviderTests
         Assert.Equal(supportsNone ? "none" : "low", transport == ModelInferenceTransport.Responses
             ? body.RootElement.GetProperty("reasoning").GetProperty("effort").GetString()
             : body.RootElement.GetProperty("reasoning_effort").GetString());
-        Assert.False(primary.DeveloperRoleSupport);
-        Assert.Equal("legacy-model", primary.DefaultModel);
-        Assert.Equal(ModelInferenceTransport.ChatCompletions, primary.Transport);
-        Assert.Null(primary.ReasoningEffort);
     }
 
     [Theory]
@@ -108,25 +88,18 @@ public sealed class AutomationAuthorizationProviderTests
     [InlineData("incomplete", TriggerCommandAuthorizationDecision.ClassifierUnavailable)]
     [InlineData("malformed-sse", TriggerCommandAuthorizationDecision.ClassifierUnavailable)]
     [InlineData("filtered", TriggerCommandAuthorizationDecision.ClassifierInvalidOutput)]
-    public async Task Real_authorization_uses_catalog_hierarchy_and_preserves_classifier_outcomes(
+    public async Task Isolated_wire_classifier_preserves_hierarchy_and_normalized_outcomes(
         string outcome, TriggerCommandAuthorizationDecision expected)
     {
         using var handler = new ClassifierHandler(outcome);
         using var http = new HttpClient(handler);
-        var services = new ServiceCollection();
-        services.AddSingleton<IHttpClientFactory>(new HttpFactory(http));
-        services.AddAgentCoreInfrastructure(FindAgents(), "Real", new LanguageModelProviderOptions
-        {
-            Adapter = "OpenAICompatible", BaseUrl = "https://provider.example/v1/", ApiKey = "offline-fixture",
-            DefaultModel = ModelCatalogFactory.DeepSeekV41FlashModelId
-            // Hierarchy/transport capabilities belong to the catalog, as in normal Real setup.
-        });
-        await using var provider = services.BuildServiceProvider();
-        var verdict = await provider.GetRequiredService<ITriggerCommandAuthorizer>().AuthorizeAsync(Proposed("I would like daily reflection on how you can consolidate your memory, experience at 9am"));
+        var descriptor = FixtureDescriptor(ModelInferenceTransport.ChatCompletions) with { ExternalModelId = "deepseek/deepseek-v4.1-flash" };
+        var verdict = await IsolatedClassifier(http, descriptor, "low", "offline-fixture")
+            .AuthorizeAsync(Proposed("I would like daily reflection on how you can consolidate your memory, experience at 9am"));
 
         Assert.Equal(expected, verdict.Decision);
         using var body = JsonDocument.Parse(Assert.Single(handler.Payloads));
-        Assert.Equal(ModelCatalogFactory.DeepSeekV41FlashModelId, body.RootElement.GetProperty("model").GetString());
+        Assert.Equal(descriptor.ExternalModelId, body.RootElement.GetProperty("model").GetString());
         var messages = body.RootElement.GetProperty("messages").EnumerateArray().ToArray();
         Assert.Contains(messages, message => message.GetProperty("role").GetString() == "system");
         Assert.Contains(messages, message => message.GetProperty("role").GetString() == "developer"
@@ -136,15 +109,20 @@ public sealed class AutomationAuthorizationProviderTests
             messages[^1].GetProperty("content").GetString());
     }
 
+    private static ModelDescriptor FixtureDescriptor(ModelInferenceTransport transport) => new("custom", "Fixture classifier", "fixture-connection", "catalog-model",
+        true, false, true, true, ["low", "high"], "high", Transport: transport, DeveloperRoleSupport: true);
+    // Isolated adapter fixture. Production classification is exercised with actual tenant Run authority elsewhere.
+    private static ModelTriggerCommandAuthorizer IsolatedClassifier(HttpClient http, ModelDescriptor descriptor, string effort, string key,
+        ILogger<ModelTriggerCommandAuthorizer>? logger = null) => new(new OpenAICompatibleLanguageModel(http, new()
+        {
+            BaseUrl = "https://provider.example/v1/", ApiKey = key, DefaultModel = descriptor.ExternalModelId, Transport = descriptor.Transport,
+            DeveloperRoleSupport = descriptor.DeveloperRoleSupport, Tools = descriptor.Tools, StructuredOutput = descriptor.StructuredOutput
+        }), effort, logger, descriptor);
+
     private static AutomationAuthorizationRequest Proposed(string text)
     {
         var action = JsonSerializer.SerializeToElement(new { tool = "automation.create", arguments = new { instructions = "Reflect on experience", kind = "daily", localTime = "09:00", timeZone = "Asia/Ho_Chi_Minh", executionTarget = "backgroundSession", reportBack = false } });
         return new(text, TriggerCommandAction.Create, "automation.create", action, AgentCore.Application.Tools.ToolActionHash.Compute("automation.create", action));
-    }
-
-    private sealed class HttpFactory(HttpClient client) : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name) => client;
     }
 
     private sealed class ClassifierHandler(string outcome, ModelInferenceTransport transport = ModelInferenceTransport.ChatCompletions, bool truncateFirst = false) : HttpMessageHandler
@@ -193,10 +171,4 @@ public sealed class AutomationAuthorizationProviderTests
         }
     }
 
-    private static string FindAgents()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "agents"))) directory = directory.Parent;
-        return Path.Combine(directory!.FullName, "agents");
-    }
 }

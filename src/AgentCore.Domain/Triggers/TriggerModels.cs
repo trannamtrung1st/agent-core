@@ -546,13 +546,13 @@ public sealed class Automation
         long triggerRevision,
         TriggerProvenance provenance,
         string? suspensionReason,
-        string? modelOverrideCatalogKey = null,
+        string? modelOverrideOfferingId = null,
         string? modelOverrideReasoningEffort = null,
         bool requiresVision = false,
         string? name = null,
         AutomationExecutionTarget? executionTarget = null,
         AutomationCompletionDelivery? completionDelivery = null, bool requiresTools = false)
- : this(automationId, owner, status, instructions, new[] { new AutomationTriggerRecord(automationId, trigger, revision: triggerRevision) }, nextOccurrenceAtUtc, expiresAtUtc, occurrenceCount, revision, triggerRevision, provenance, suspensionReason, modelOverrideCatalogKey, modelOverrideReasoningEffort, requiresVision, name, executionTarget, completionDelivery, requiresTools) { }
+ : this(automationId, owner, status, instructions, new[] { new AutomationTriggerRecord(automationId, trigger, revision: triggerRevision) }, nextOccurrenceAtUtc, expiresAtUtc, occurrenceCount, revision, triggerRevision, provenance, suspensionReason, modelOverrideOfferingId, modelOverrideReasoningEffort, requiresVision, name, executionTarget, completionDelivery, requiresTools) { }
 
     public Automation(
         Guid automationId,
@@ -567,7 +567,7 @@ public sealed class Automation
         long triggerRevision,
         TriggerProvenance provenance,
         string? suspensionReason,
-        string? modelOverrideCatalogKey = null,
+        string? modelOverrideOfferingId = null,
         string? modelOverrideReasoningEffort = null,
         bool requiresVision = false,
         string? name = null,
@@ -612,7 +612,7 @@ public sealed class Automation
             filterExpression = (t.Configuration as FilteredEventTrigger)?.FilterExpression,
             dispatch = (t.Configuration as FilteredEventTrigger)?.Dispatch,
             schedule = t.Configuration is ScheduleTrigger timing ? System.Text.Json.JsonSerializer.SerializeToElement(timing.Schedule, timing.Schedule.GetType()) : (System.Text.Json.JsonElement?)null }),
-            modelOverrideCatalogKey, modelOverrideReasoningEffort, executionTarget, completionDelivery });
+            modelOverrideOfferingId, modelOverrideReasoningEffort, executionTarget, completionDelivery });
         if (System.Text.Encoding.UTF8.GetByteCount(configuration) > TriggerLimits.MaxAutomationConfigurationBytes)
             throw new ArgumentException("Automation configuration exceeds the 64 KiB serialized budget.");
         Triggers = Array.AsReadOnly(triggers.ToArray());
@@ -625,7 +625,7 @@ public sealed class Automation
         TriggerRevision = Triggers.Max(t => t.Revision);
         Provenance = provenance ?? throw new ArgumentException("Provenance is required.", nameof(provenance));
         SuspensionReason = TriggerText.OptionalReason(suspensionReason);
-        ModelOverrideCatalogKey = OptionalModelToken(modelOverrideCatalogKey, AgentRunLimits.MaxModelFieldCharacters, "Model override");
+        ModelOverrideOfferingId = OptionalModelToken(modelOverrideOfferingId, AgentRunLimits.MaxModelFieldCharacters, "Model override");
         ModelOverrideReasoningEffort = OptionalModelToken(
             modelOverrideReasoningEffort,
             AgentRunLimits.MaxReasoningEffortCharacters,
@@ -670,7 +670,7 @@ public sealed class Automation
 
     public string? SuspensionReason { get; }
 
-    public string? ModelOverrideCatalogKey { get; }
+    public string? ModelOverrideOfferingId { get; }
 
     public string? ModelOverrideReasoningEffort { get; }
 
@@ -704,7 +704,7 @@ public sealed class Automation
             triggerRevision,
             Provenance.WithUpdated(updatedAt),
             SuspensionReason,
-            ModelOverrideCatalogKey,
+            ModelOverrideOfferingId,
             ModelOverrideReasoningEffort,
             RequiresVision,
             Name, ExecutionTarget, CompletionDelivery, RequiresTools);
@@ -729,7 +729,7 @@ public sealed class Automation
             TriggerRevision,
             Provenance.WithUpdated(updatedAt),
             suspensionReason,
-            ModelOverrideCatalogKey,
+            ModelOverrideOfferingId,
             ModelOverrideReasoningEffort,
             RequiresVision,
             Name, ExecutionTarget, CompletionDelivery, RequiresTools);
@@ -748,13 +748,13 @@ public sealed class Automation
             TriggerRevision,
             Provenance.WithUpdated(cancelledAt),
             SuspensionReason,
-            ModelOverrideCatalogKey,
+            ModelOverrideOfferingId,
             ModelOverrideReasoningEffort,
             RequiresVision,
             Name, ExecutionTarget, CompletionDelivery, RequiresTools);
 
     public Automation WithModelOverride(
-        string? catalogKey,
+        string? offeringId,
         string? reasoningEffort,
         long revision,
         DateTimeOffset updatedAt) =>
@@ -771,7 +771,7 @@ public sealed class Automation
             TriggerRevision,
             Provenance.WithUpdated(updatedAt),
             SuspensionReason,
-            catalogKey,
+            offeringId,
             reasoningEffort,
             RequiresVision,
             Name, ExecutionTarget, CompletionDelivery, RequiresTools);

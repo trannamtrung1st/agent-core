@@ -24,8 +24,8 @@ internal static class BackgroundReportApprovalPersistence
         AND json_extract(PayloadJson, '$.Operation.BackgroundReport.ConfigurationHash') NOT GLOB '*[^0-9a-f]*'
         AND json_type(PayloadJson, '$.Operation.BackgroundReport.Model') IS 'object'
         AND length(CAST(PayloadJson AS BLOB)) <= 131072
-        """ + Ids + string.Concat(new[] { "CatalogKey", "ProviderAlias", "ModelId" }.Select(p =>
-            $" AND json_type(PayloadJson, '$.Operation.BackgroundReport.Model.{p}') IS 'text' AND length(json_extract(PayloadJson, '$.Operation.BackgroundReport.Model.{p}')) BETWEEN 1 AND 128"))
+        """ + Ids + string.Concat(new[] { "OfferingId", "ConnectionId", "ExternalModelId" }.Select(p =>
+            $" AND json_type(PayloadJson, '$.Operation.BackgroundReport.Model.{p}') IS 'text' AND length(json_extract(PayloadJson, '$.Operation.BackgroundReport.Model.{p}')) BETWEEN 1 AND {(p == "ExternalModelId" ? 255 : 128)}"))
         + string.Concat(new[] { "Persona", "Preferences", "CredentialCheck", "SandboxCommand", "SandboxControl", "SandboxRead", "BrowserCommand", "CredentialRead", "ArtifactPublication", "ArtifactVerification", "WorkspaceRead", "WorkspaceMutation", "AttachmentRead", "BackgroundStart" }
             .Select(p => $" AND json_extract(PayloadJson, '$.Operation.{p}') IS NULL"));
     private static string Ids

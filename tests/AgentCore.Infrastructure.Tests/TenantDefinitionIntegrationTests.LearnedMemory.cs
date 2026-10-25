@@ -36,10 +36,10 @@ public sealed partial class TenantDefinitionIntegrationTests
         var role = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Independent learned-memory rights", permissions, await Revision());
         var assignment = await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(owner.TenantId), await Revision());
         var sessions = new TenantSessionService(f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam, f.Definitions,
-            builtIns, f.Identity, f.Authorizer, ModelCatalogFactory.Synthetic(), new(), f.Ids, TimeProvider.System);
+            builtIns, f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), new(), f.Ids, TimeProvider.System);
         var runs = new TenantRunService(f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam,
             new((ITenantAgentStore)f.Iam, f.Definitions, builtIns, new(f.Resources, builtIns, new NoBuiltinKnowledge(), f.Content), (ITenantCredentialBindingStore)f.Iam),
-            f.Identity, f.Authorizer, ModelCatalogFactory.Synthetic(), f.Ids, TimeProvider.System);
+            f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), f.Ids, TimeProvider.System);
         return new(owner.TenantId, human, agent, role.RoleId, assignment.AssignmentId, Guid.Parse(publication.DefinitionId), sessions, runs);
     }
     private static async Task<MemoryTurn> MemoryClaim(Fixture f, MemorySetup owner, Guid? existing = null, HumanSessionReference? requester = null, TenantAgent? otherAgent = null)

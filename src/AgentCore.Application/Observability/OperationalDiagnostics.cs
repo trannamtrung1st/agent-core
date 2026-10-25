@@ -174,12 +174,12 @@ public static class OperationalDiagnostics
         RuntimeTelemetry.RecordDiagnostic(ResourceLimitInstrument, 0, safeReason);
     }
 
-    public static void RecordModelSelection(string? catalogKey, string? providerAlias)
+    public static void RecordModelSelection(string? offeringId, string? connectionId)
     {
         ModelSelection.Add(1, new TagList { { "result", "selected" } });
-        var key = string.IsNullOrWhiteSpace(catalogKey) ? "unspecified" : catalogKey.Trim();
-        var alias = string.IsNullOrWhiteSpace(providerAlias) ? "unspecified" : providerAlias.Trim();
-        var detail = SafeLogRedactor.Redact($"catalogKey={key};providerAlias={alias}");
+        var key = string.IsNullOrWhiteSpace(offeringId) ? "unspecified" : offeringId.Trim();
+        var connection = string.IsNullOrWhiteSpace(connectionId) ? "unspecified" : connectionId.Trim();
+        var detail = SafeLogRedactor.Redact($"offeringId={key};connectionId={connection}");
         RuntimeTelemetry.RecordDiagnostic(ModelSelectionInstrument, 0, detail);
     }
 

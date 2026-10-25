@@ -70,7 +70,7 @@ internal static class SessionRuntimeFixture
             snapshot = snapshot with { ProfileId = snapshot.ProfileId ?? ProfileId,
             PinnedPersona = snapshot.PinnedPersona ?? snapshot.Definition.Identity,
             ModelSelection = snapshot.ModelSelection ?? (catalog is null
-                ? new SessionModelSelection("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.SystemDefault, null) : null),
+                ? new SessionModelSelection("synthetic-offline/scripted", "dca20000-0000-4000-8000-000000000001", "scripted", ModelSelectionSource.TenantDefault, null) : null),
             PendingAgentInputIds = snapshot.PendingAgentInputIds.Count == 0
                 ? TrailingUserSuffix.Of(snapshot.Entries).Select(entry => entry.EntryId).ToArray() : snapshot.PendingAgentInputIds };
         }

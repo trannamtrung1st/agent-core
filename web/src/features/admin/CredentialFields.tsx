@@ -40,7 +40,7 @@ export function safeFields(values: CredentialFieldsValue) {
       .filter(Boolean),
   };
 }
-export function CredentialFields({ create }: { create: boolean }) {
+export function CredentialFields({ create, modelInference = false }: { create: boolean; modelInference?: boolean }) {
   const { token } = theme.useToken();
   return (
     <>
@@ -58,7 +58,7 @@ export function CredentialFields({ create }: { create: boolean }) {
           label="Kind"
           rules={[{ required: true }]}
         >
-          <Select options={kinds.map((value) => ({ value, label: value }))} />
+          <Select disabled={modelInference} options={(modelInference ? ['ApiKey'] : kinds).map((value) => ({ value, label: value }))} />
         </Form.Item>
       ) : (
         <Form.Item key="status" name="status" label="Status">
@@ -72,7 +72,7 @@ export function CredentialFields({ create }: { create: boolean }) {
       )}
       <Form.Item
         label="Metadata"
-        extra="Metadata is non-secret and visible to bound agents. It never grants permissions."
+        extra={modelInference ? "Metadata is non-secret. Never enter keys here." : "Metadata is non-secret and visible to bound agents. It never grants permissions."}
       >
         <Form.List name="metadata">
           {(fields, { add, remove }) => (
@@ -124,13 +124,13 @@ export function CredentialFields({ create }: { create: boolean }) {
           )}
         </Form.List>
       </Form.Item>
-      <Form.Item
+      {!modelInference && <Form.Item
         name="origins"
         label="Allowed origins"
         extra="One exact HTTP(S) origin per line. No paths or wildcards."
       >
         <Input.TextArea rows={3} autoComplete="off" />
-      </Form.Item>
+      </Form.Item>}
       {create && <ProtectedValueField />}
     </>
   );

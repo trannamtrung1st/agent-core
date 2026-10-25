@@ -19,7 +19,8 @@
     "test:e2e:tenant-instance-version": "playwright test --config playwright.tenant-instance-version.config.ts",
     "test:e2e:tenant-instance-skills": "playwright test --config playwright.tenant-instance-skills.config.ts",
     "test:e2e:tenant-instance-resources": "playwright test --config playwright.tenant-instance-resources.config.ts",
-    "test:e2e:tenant-file-reads": "playwright test --config playwright.tenant-file-reads.config.ts"
+    "test:e2e:tenant-file-reads": "playwright test --config playwright.tenant-file-reads.config.ts",
+    "test:e2e:tenant-models": "playwright test --config playwright.tenant-models.config.ts"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",

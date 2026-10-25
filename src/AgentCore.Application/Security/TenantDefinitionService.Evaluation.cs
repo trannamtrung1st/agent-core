@@ -43,7 +43,7 @@ public sealed partial class TenantDefinitionService
         await RequireReadWitness(actor, tenant, state.Tenant.Revision, initiator, ct).ConfigureAwait(false);
         var (passed, findings) = await evaluation.RunAsync(snapshot.Draft.Candidate, resourceSnapshots, scenario, ct).ConfigureAwait(false);
         var result = new DefinitionEvaluationResult(draftId, expectedDraftRevision, TenantDefinitionChildRules.Fingerprint(snapshot),
-            scenario.ScenarioId, scenario.ScenarioVersion, "synthetic-offline", passed, findings, time.GetUtcNow());
+            scenario.ScenarioId, scenario.ScenarioVersion, "dca20000-0000-4000-8000-000000000001", passed, findings, time.GetUtcNow());
         return await definitions.TrySaveDefinitionEvaluationAsync(Advance(state), expectedRevision, result,
             Audit(tenant, actor, "evaluations.run", id, result.RecordedAt), ct, initiator).ConfigureAwait(false) ?? throw new SecurityConflictException("stale_revision");
     }

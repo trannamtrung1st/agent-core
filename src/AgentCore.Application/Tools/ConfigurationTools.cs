@@ -56,7 +56,7 @@ public static class ConfigurationTools
             if (name == "credentials.binding.remove") { Field("bindingId", Text(36)); Field("expectedBindingRevision", Integer()); }
             if (name == "automation.preferences.patch")
             {
-                Field("catalogKey", new() { ["type"] = new JsonArray("string", "null"), ["maxLength"] = 128 });
+                Field("offeringId", new() { ["type"] = new JsonArray("string", "null"), ["maxLength"] = 128 });
                 Field("reasoningEffort", new() { ["type"] = new JsonArray("string", "null"), ["maxLength"] = 64 });
             }
             var schema = new JsonObject { ["type"] = "object", ["additionalProperties"] = false, ["properties"] = properties, ["required"] = required };
@@ -87,9 +87,9 @@ public static class ConfigurationTools
         if (field is "speakingRate") return new() { ["type"] = "number", ["minimum"] = 0.25, ["maximum"] = 4 };
         if (field.StartsWith("max", StringComparison.Ordinal) || field.EndsWith("Ms", StringComparison.Ordinal) || field.StartsWith("min", StringComparison.Ordinal) || field == "oneShotHorizonDays")
             return new() { ["type"] = field is "maxConsecutiveProactiveTurns" or "maxSilentEvaluations" or "maxInactivityMs" ? new JsonArray("integer", "null") : JsonValue.Create("integer") };
-        if (field is "agentInstructions" or "responseLength" or "language" or "interruptionStyle" or "voiceId" or "languageModel" or "interruptionClassifier")
+        if (field is "agentInstructions" or "responseLength" or "language" or "interruptionStyle" or "voiceId" or "interruptionClassifier")
             return new() { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = field == "agentInstructions" ? 8000 : 80 };
-        if (field is "catalogKey" or "reasoningEffort" or "speechRecognizer" or "speechSynthesizer")
+        if (field is "offeringId" or "reasoningEffort" or "speechRecognizer" or "speechSynthesizer")
             return new() { ["type"] = new JsonArray("string", "null"), ["maxLength"] = 80 };
         return new() { ["type"] = "boolean" };
     }

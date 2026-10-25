@@ -15,12 +15,12 @@ public sealed class SessionModelBinderTests
     public void Undeclared_or_unknown_hierarchy_route_is_ineligible_for_chat_and_background(bool supported, ModelInferenceTransport transport)
     {
         var descriptor = TestModelCatalogs.Synthetic().Models[0] with { DeveloperRoleSupport = supported, Transport = transport };
-        var catalog = new ConfigurationModelCatalog(descriptor.Key, [descriptor]);
+        var catalog = new ConfigurationModelCatalog(descriptor.OfferingId, [descriptor]);
         var error = Assert.Throws<AgentCoreException>(() => SessionModelBinder.PinDefault(catalog));
-        Assert.Contains("system", error.Message);
-        Assert.Contains("developer", error.Message);
-        Assert.Throws<AgentCoreException>(() => ExecutionModelPolicy.RequireSelectable(catalog, descriptor.Key, null));
-        Assert.False(ExecutionModelPolicy.Matches(catalog, new(descriptor.Key, descriptor.ProviderAlias, descriptor.ModelId,
+        Assert.Contains("Core", error.Message);
+        Assert.Contains("Runtime", error.Message);
+        Assert.Throws<AgentCoreException>(() => ExecutionModelPolicy.RequireSelectable(catalog, descriptor.OfferingId, null));
+        Assert.False(ExecutionModelPolicy.Matches(catalog, new(descriptor.OfferingId, descriptor.ConnectionId, descriptor.ExternalModelId,
             descriptor.DefaultReasoningEffort, AgentCore.Domain.Triggers.ExecutionModelSource.ConversationDefault), out _));
     }
 
@@ -30,52 +30,49 @@ public sealed class SessionModelBinderTests
         var catalog = TestModelCatalogs.Synthetic();
         var explicitEffort = SessionModelBinder.Bind(catalog, null, "high", ModelSelectionSource.User);
         Assert.True(explicitEffort.HasExplicitReasoningEffort);
-        Assert.Equal("high", SessionModelBinder.RefreshDefault(catalog, SampleDefinitions.Examiner with { ModelDefaults = new("scripted-alpha", "low") }, explicitEffort).ReasoningEffort);
+        Assert.Equal("high", SessionModelBinder.RefreshDefault(catalog, SampleDefinitions.Examiner with { ModelDefaults = new("dca30000-0000-4000-8000-000000000001", "low") }, explicitEffort).ReasoningEffort);
         var inherited = SessionModelBinder.PinDefault(catalog);
         Assert.False(inherited.HasExplicitReasoningEffort);
-        Assert.Equal("low", SessionModelBinder.RefreshDefault(catalog, SampleDefinitions.Examiner with { ModelDefaults = new("scripted-alpha", "low") }, inherited).ReasoningEffort);
+        Assert.Equal("low", SessionModelBinder.RefreshDefault(catalog, SampleDefinitions.Examiner with { ModelDefaults = new("dca30000-0000-4000-8000-000000000001", "low") }, inherited).ReasoningEffort);
     }
 
     [Fact]
-    public void Default_resolves_system_catalog_default()
+    public void Default_resolves_the_explicit_catalog_default()
     {
         var catalog = TestModelCatalogs.Synthetic();
         var selection = SessionModelBinder.Bind(
             catalog,
-            requestedKey: null,
+            requestedOfferingId: null,
             requestedEffort: null,
             ModelSelectionSource.User);
-        Assert.Equal("scripted-alpha", selection.CatalogKey);
-        Assert.Equal("primary-llm", selection.ProviderAlias);
-        Assert.Equal("scripted-alpha", selection.ModelId);
-        Assert.Equal(ModelSelectionSource.SystemDefault, selection.SelectionSource);
+        Assert.Equal("dca30000-0000-4000-8000-000000000001", selection.OfferingId);
+        Assert.Equal("dca20000-0000-4000-8000-000000000001", selection.ConnectionId);
+        Assert.Equal("dca30000-0000-4000-8000-000000000001", selection.ExternalModelId);
+        Assert.Equal(ModelSelectionSource.TenantDefault, selection.SelectionSource);
         Assert.Equal("medium", selection.ReasoningEffort);
     }
 
-    [Fact]
-    public void Explicit_default_key_still_pins_the_current_concrete_default()
+    [Theory]
+    [InlineData("default")]
+    [InlineData("primary-llm")]
+    [InlineData("scripted-alpha")]
+    [InlineData("")]
+    public void Retired_request_tokens_are_not_interpreted_as_inheritance(string token)
     {
         var catalog = TestModelCatalogs.Synthetic();
-        var selection = SessionModelBinder.Bind(
-            catalog,
-            "default",
-            "high",
-            ModelSelectionSource.User);
-        Assert.Equal("scripted-alpha", selection.CatalogKey);
-        Assert.Equal(ModelSelectionSource.SystemDefault, selection.SelectionSource);
-        Assert.Equal("high", selection.ReasoningEffort);
+        Assert.Throws<AgentCoreException>(() => SessionModelBinder.Bind(catalog, token, "high", ModelSelectionSource.User));
     }
 
     [Fact]
     public void Explicit_model_keeps_the_caller_source()
     {
         var catalog = TestModelCatalogs.Synthetic();
-        var user = SessionModelBinder.Bind(catalog, "scripted-beta", null, ModelSelectionSource.User);
-        Assert.Equal("scripted-beta", user.CatalogKey);
+        var user = SessionModelBinder.Bind(catalog, "dca30000-0000-4000-8000-000000000002", null, ModelSelectionSource.User);
+        Assert.Equal("dca30000-0000-4000-8000-000000000002", user.OfferingId);
         Assert.Equal(ModelSelectionSource.User, user.SelectionSource);
         Assert.Null(user.ReasoningEffort);
 
-        var host = SessionModelBinder.Bind(catalog, "scripted-alpha", "low", ModelSelectionSource.Host);
+        var host = SessionModelBinder.Bind(catalog, "dca30000-0000-4000-8000-000000000001", "low", ModelSelectionSource.Host);
         Assert.Equal(ModelSelectionSource.Host, host.SelectionSource);
         Assert.Equal("low", host.ReasoningEffort);
     }
@@ -86,11 +83,11 @@ public sealed class SessionModelBinderTests
         var catalog = TestModelCatalogs.Synthetic();
         var selection = SessionModelBinder.Bind(
             catalog,
-            requestedKey: null,
+            requestedOfferingId: null,
             requestedEffort: null,
             ModelSelectionSource.User,
-            new AgentModelDefaults("scripted-beta", null));
-        Assert.Equal("scripted-beta", selection.CatalogKey);
+            new AgentModelDefaults("dca30000-0000-4000-8000-000000000002", null));
+        Assert.Equal("dca30000-0000-4000-8000-000000000002", selection.OfferingId);
         Assert.Equal(ModelSelectionSource.AgentDefault, selection.SelectionSource);
         Assert.Null(selection.ReasoningEffort);
     }
@@ -112,11 +109,11 @@ public sealed class SessionModelBinderTests
     {
         var catalog = TestModelCatalogs.Synthetic();
         var unknown = Assert.Throws<AgentCoreException>(() =>
-            SessionModelBinder.Bind(catalog, "scripted-alpha", "ultra", ModelSelectionSource.User));
+            SessionModelBinder.Bind(catalog, "dca30000-0000-4000-8000-000000000001", "ultra", ModelSelectionSource.User));
         Assert.Equal("ValidationError", unknown.Code);
 
         var unsupported = Assert.Throws<AgentCoreException>(() =>
-            SessionModelBinder.Bind(catalog, "scripted-beta", "medium", ModelSelectionSource.User));
+            SessionModelBinder.Bind(catalog, "dca30000-0000-4000-8000-000000000002", "medium", ModelSelectionSource.User));
         Assert.Equal("ValidationError", unsupported.Code);
     }
 }
@@ -125,13 +122,13 @@ internal static class TestModelCatalogs
 {
     public static IModelCatalog Synthetic() =>
         new ConfigurationModelCatalog(
-            "scripted-alpha",
+            "dca30000-0000-4000-8000-000000000001",
             [
                 new ModelDescriptor(
-                    "scripted-alpha",
+                    "dca30000-0000-4000-8000-000000000001",
                     "Scripted Alpha",
-                    "primary-llm",
-                    "scripted-alpha",
+                    "dca20000-0000-4000-8000-000000000001",
+                    "dca30000-0000-4000-8000-000000000001",
                     Tools: true,
                     Vision: false,
                     StructuredOutput: false,
@@ -139,10 +136,10 @@ internal static class TestModelCatalogs
                     ["low", "medium", "high"],
                     "medium", DeveloperRoleSupport: true),
                 new ModelDescriptor(
-                    "scripted-beta",
+                    "dca30000-0000-4000-8000-000000000002",
                     "Scripted Beta",
-                    "primary-llm",
-                    "scripted-beta",
+                    "dca20000-0000-4000-8000-000000000001",
+                    "dca30000-0000-4000-8000-000000000002",
                     Tools: true,
                     Vision: false,
                     StructuredOutput: false,
@@ -161,7 +158,7 @@ internal static class TestModelCatalogs
                 new ModelDescriptor(
                     "deepseek-v41-flash",
                     "DeepSeek V4.1 Flash",
-                    "primary-llm",
+                    "dca20000-0000-4000-8000-000000000001",
                     "deepseek/deepseek-v4.1-flash",
                     Tools: true,
                     Vision: false,
@@ -172,7 +169,7 @@ internal static class TestModelCatalogs
                 new ModelDescriptor(
                     "gpt-4o-mini-2024-07-18",
                     "GPT-4o mini 2024-07-18",
-                    "primary-llm",
+                    "dca20000-0000-4000-8000-000000000001",
                     "openai/gpt-4o-mini-2024-07-18",
                     Tools: true,
                     Vision: true,

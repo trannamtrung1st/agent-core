@@ -112,7 +112,7 @@ public sealed class AgentDefinitionStoreTests
     }
 
     [Fact]
-    public void Missing_language_model_alias_is_rejected()
+    public void Unknown_speech_alias_is_rejected()
     {
         var directory = Directory.CreateTempSubdirectory("agent-core-defs");
         try
@@ -130,15 +130,15 @@ public sealed class AgentDefinitionStoreTests
                   "behaviorPolicy": {"interruptionStyle": "answerNewTurn", "acknowledgeInterruption": true, "avoidUnsupportedClaims": true},
                   "conversationPolicy": {"responseLength": "concise", "askOneQuestionAtATime": true, "language": "en", "maxOutputTokens": 256},
                   "initiativePolicy": {"enabled": false, "silenceThresholdMs": 8000, "cooldownMs": 30000, "maxPerSilencePeriod": 1, "triggers": ["longSilence"]},
-                  "voice": {"enabled": false, "voiceId": "default", "speakingRate": 1.0},
-                  "providerPreferences": {"languageModel": "missing-llm", "interruptionClassifier": "heuristic"},
+                  "voice": {"enabled": true, "voiceId": "default", "speakingRate": 1.0},
+                  "providerPreferences": {"speechRecognizer": "missing-stt", "speechSynthesizer": "primary-tts", "interruptionClassifier": "heuristic"},
                   "metadata": {}
                 }
                 """);
             var error = Assert.Throws<AgentCoreException>(() =>
                 new FileAgentDefinitionStore(directory.FullName, SyntheticProviderAliases.Default));
             Assert.Equal("ValidationError", error.Code);
-            Assert.Contains("missing-llm", error.Message, StringComparison.Ordinal);
+            Assert.Contains("missing-stt", error.Message, StringComparison.Ordinal);
         }
         finally
         {

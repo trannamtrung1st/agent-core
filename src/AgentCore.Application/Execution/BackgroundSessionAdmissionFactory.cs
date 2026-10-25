@@ -34,8 +34,8 @@ public static class BackgroundSessionAdmissionFactory
             Title: string.IsNullOrWhiteSpace(title) ? objective[..Math.Min(objective.Length, 80)] : title.Trim(),
             LastEntrySequence: 1, Purpose: SessionPurpose.OngoingDefault, CompletionPolicy: SessionCompletionPolicy.Default,
             LifecycleSource: LifecycleTransitionSource.System, LifecycleChangedAt: now,
-            ModelSelection: new(model.CatalogKey, model.ProviderAlias, model.ModelId,
-                parent.ModelSelection?.SelectionSource ?? ModelSelectionSource.Host, model.ReasoningEffort, parent.ModelSelection?.HasExplicitReasoningEffort == true), PinnedPersona: persona,
+            ModelSelection: new(model.OfferingId, model.ConnectionId, model.ExternalModelId,
+                parent.ModelSelection?.SelectionSource ?? ModelSelectionSource.Host, model.ReasoningEffort, parent.ModelSelection?.HasExplicitReasoningEffort == true, model.Binding), PinnedPersona: persona,
             PinnedPersonaRevision: configuration.PersonaRevision, Origin: origin, Surfaces: SessionSurface.BackgroundWork);
         return (session, run);
     }
@@ -51,7 +51,7 @@ public static class BackgroundSessionAdmissionFactory
             model, AgentRunLimits.DefaultMaxAttempts, now, skills, skills.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
         var session = new SessionSnapshot(1, sessionId, 1, definition, SessionMode.Text, null, SessionStatus.Created, [entry], "", 0, null,
             profileId, now, now, instance.InstanceId, Title: title, LastEntrySequence: 1, PinnedPersona: persona,
-            PinnedPersonaRevision: instance.PersonaRevision, ModelSelection: new(model.CatalogKey, model.ProviderAlias, model.ModelId, ModelSelectionSource.Host, model.ReasoningEffort),
+            PinnedPersonaRevision: instance.PersonaRevision, ModelSelection: new(model.OfferingId, model.ConnectionId, model.ExternalModelId, ModelSelectionSource.Host, model.ReasoningEffort, Binding: model.Binding),
             Origin: new(SessionOriginKind.ManualBackground, initialBackgroundAgentRunId: runId, initialTitle: title), Surfaces: SessionSurface.BackgroundWork);
         return (session, run);
     }
@@ -86,7 +86,7 @@ public static class BackgroundSessionAdmissionFactory
         var run = AgentRun.Create(agentRunId,
             trusted is null ? new AgentRunOwner(occurrence.Owner.AgentInstanceId, occurrence.Owner.ProfileId) : AgentRunOwner.ForTenant(trusted.TenantId, occurrence.Owner.AgentInstanceId, trusted.AgentPrincipalId),
             new AgentRunAdmission(activation, definition.Id, definition.Version, persona, responseId, AgentRunOutputContract.BackgroundOutcome, budget, configuration ?? new(definition, 0, personaRevision, []), taskIntent: RunTaskIntents.FromOccurrence(occurrence), executionContext: trusted),
-            new AgentRunModelPin(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort),
+            new AgentRunModelPin(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort, model.Binding),
             AgentRunLimits.DefaultMaxAttempts, admittedAtUtc, pinnedSkillCatalog: skills,
             activeSkillKeys: skills.Where(skill => skill.Projection == SkillProjection.Always)
                 .Select(skill => skill.Key).ToArray());
@@ -103,8 +103,8 @@ public static class BackgroundSessionAdmissionFactory
             LastEntrySequence: 1, Purpose: SessionPurpose.OngoingDefault,
             CompletionPolicy: SessionCompletionPolicy.Default, LifecycleSource: LifecycleTransitionSource.System,
             LifecycleChangedAt: admittedAtUtc,
-            ModelSelection: new SessionModelSelection(model.CatalogKey, model.ProviderAlias, model.ModelId,
-                ModelSelectionSource.Host, model.ReasoningEffort), PinnedPersona: persona,
+            ModelSelection: new SessionModelSelection(model.OfferingId, model.ConnectionId, model.ExternalModelId,
+                ModelSelectionSource.Host, model.ReasoningEffort, Binding: model.Binding), PinnedPersona: persona,
             PinnedPersonaRevision: personaRevision, Origin: origin, Surfaces: origin.InitialSurface);
         return (session, run);
     }

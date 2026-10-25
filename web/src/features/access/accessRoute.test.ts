@@ -1,8 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalAppUrl, parseAppRoute } from '../../app/appRoute';
-import { parseAccessRoute, tenantDefinitionPath, tenantDraftPath, tenantCredentialPath, tenantSandboxPath, tenantApprovalPath, tenantAgentPath, tenantAccessPath } from './accessRoute';
+import { parseAccessRoute, tenantDefinitionPath, tenantDraftPath, tenantCredentialPath, tenantSandboxPath, tenantApprovalPath, tenantAgentPath, tenantAccessPath, tenantModelsPath } from './accessRoute';
 const tenant = '11111111-1111-4111-8111-111111111111';
 describe('canonical access navigation', () => {
+  it('owns exact AI model administration routes and the separate system metadata catalog', () => {
+    for (const modelPage of ['connections', 'models', 'defaults'] as const) {
+      const path = tenantModelsPath(tenant, modelPage);
+      expect(parseAccessRoute(path)).toMatchObject({ view: 'tenant', tenantId: tenant, page: 'ai-models', modelPage });
+      expect(canonicalAppUrl(path)).toBe(path);
+      expect(parseAccessRoute(path + '/extra')?.view).toBe('not-found');
+    }
+    expect(parseAccessRoute(`/t/${tenant}/integrations/ai-models`)).toMatchObject({ page: 'ai-models', modelPage: 'connections' });
+    expect(tenantAccessPath(tenant, 'ai-models')).toBe(tenantModelsPath(tenant));
+    expect(parseAccessRoute('/system/model-presets')).toMatchObject({ view: 'system', page: 'model-presets' });
+    expect(parseAccessRoute('/system/model-presets/extra')?.view).toBe('not-found');
+  });
+
   it('pins webhook connections and the built-in catalog to the canonical organization Events route', () => {
     const path = tenantAccessPath(tenant, 'events'); expect(path).toBe(`/t/${tenant}/integrations/events`);
     expect(parseAppRoute(path)).toMatchObject({ area: 'access', view: 'tenant', page: 'events', tenantId: tenant }); expect(canonicalAppUrl(path)).toBe(path);

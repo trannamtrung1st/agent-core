@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Domain.Conversation;
@@ -8,6 +9,7 @@ public static class AgentRunLimits
     public const int MaxPersonaNameCharacters = 80;
     public const int MaxDefinitionIdCharacters = 128;
     public const int MaxModelFieldCharacters = 128;
+    public const int MaxExternalModelIdCharacters = 255;
     public const int MaxReasoningEffortCharacters = 64;
     public const int MaxEvidenceBytes = 8192;
     public const int MaxDedupeKeyCharacters = 200;
@@ -113,25 +115,31 @@ public readonly record struct AgentRunOwner
     public static AgentRunOwner ForTenant(Guid tenantId, Guid instanceId, Guid executorPrincipalId) => new(instanceId, null, tenantId, executorPrincipalId);
 }
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class AgentRunModelPin
 {
-    public AgentRunModelPin(string catalogKey, string providerAlias, string modelId, string? reasoningEffort)
+    public AgentRunModelPin(string offeringId, string connectionId, string externalModelId, string? reasoningEffort,
+        AgentCore.Domain.Models.ModelBinding? binding = null)
     {
-        CatalogKey = AgentRunText.RequireToken(catalogKey, AgentRunLimits.MaxModelFieldCharacters, "Model catalog key");
-        ProviderAlias = AgentRunText.RequireToken(providerAlias, AgentRunLimits.MaxModelFieldCharacters, "Model provider");
-        ModelId = AgentRunText.RequireToken(modelId, AgentRunLimits.MaxModelFieldCharacters, "Model");
+        OfferingId = AgentRunText.RequireToken(offeringId, AgentRunLimits.MaxModelFieldCharacters, "Model catalog key");
+        ConnectionId = AgentRunText.RequireToken(connectionId, AgentRunLimits.MaxModelFieldCharacters, "Model provider");
+        ExternalModelId = AgentRunText.RequireToken(externalModelId, AgentRunLimits.MaxExternalModelIdCharacters, "External model ID");
         ReasoningEffort = reasoningEffort is null
             ? null
             : AgentRunText.RequireToken(reasoningEffort, AgentRunLimits.MaxReasoningEffortCharacters, "Reasoning effort");
+        binding?.RequireIdentity(OfferingId, ConnectionId, ExternalModelId);
+        Binding = binding;
     }
 
-    public string CatalogKey { get; }
+    public string OfferingId { get; }
 
-    public string ProviderAlias { get; }
+    public string ConnectionId { get; }
 
-    public string ModelId { get; }
+    public string ExternalModelId { get; }
 
     public string? ReasoningEffort { get; }
+
+    public AgentCore.Domain.Models.ModelBinding? Binding { get; }
 }
 
 public sealed class AgentRunClaim

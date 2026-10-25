@@ -96,7 +96,7 @@ public sealed partial class TenantCredentialAccessTests
                 expectedProfileRevision = profile.GetProperty("profile").GetProperty("revision").GetInt64(), values = new { preferredName = "PRIVATE_AUTOMATION_CREATOR_PROFILE" } })).StatusCode);
         }
         var explicitModel = mode is "conversation-model" or "conflicting-model";
-        var destination = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, mode = "text", modelKey = explicitModel ? "scripted-beta" : null, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+        var destination = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, mode = "text", offeringId = explicitModel ? "dca30000-0000-4000-8000-000000000002" : null, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
         var sessions = factory.Services.GetRequiredService<ITenantSessionStore>(); var runs = factory.Services.GetRequiredService<ITenantRunStore>();
         var execution = factory.Services.GetRequiredService<ITenantRunExecution>();
         if (mode == "retirement")
@@ -134,7 +134,7 @@ public sealed partial class TenantCredentialAccessTests
         }
         var route = api + $"/agents/{instance}/automations";
         object Body(Guid target, Guid? report = null, long revision = 0) => new { enabled = true, name = "Use the exact conversation", instructions = "Return the bounded result in the selected conversation.", targetSessionId = target, reportToSessionId = report,
-            schedule = new { kind = "oneShot", timeZone = "UTC", atUtc = clock.GetUtcNow().AddMinutes(2).ToString("O") }, expectedRevision = Revision(owner, tenant).GetAwaiter().GetResult(), expectedInstanceRevision = 1, expectedAutomationRevision = revision, requiresTools = true, modelKey = mode == "conflicting-model" ? "scripted-alpha" : null };
+            schedule = new { kind = "oneShot", timeZone = "UTC", atUtc = clock.GetUtcNow().AddMinutes(2).ToString("O") }, expectedRevision = Revision(owner, tenant).GetAwaiter().GetResult(), expectedInstanceRevision = 1, expectedAutomationRevision = revision, requiresTools = true, offeringId = mode == "conflicting-model" ? "dca30000-0000-4000-8000-000000000001" : null };
         if (mode == "foreign")
         {
             var foreign = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
@@ -260,7 +260,7 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Equal(before.Owner, (await sessions.FindTenantSessionAsync(tenant, destination))!.Owner);
         Assert.Equal(before.Snapshot.Revision, (await sessions.FindTenantSessionAsync(tenant, destination))!.Snapshot.Revision);
         Assert.Equal(AgentRunOutputContract.ConversationResponse, run.Admission.OutputContract); Assert.Empty(run.Admission.Activation.SourceEntryIds);
-        if (explicitModel) Assert.Equal("scripted-beta", run.PinnedModel.CatalogKey);
+        if (explicitModel) Assert.Equal("dca30000-0000-4000-8000-000000000002", run.PinnedModel.OfferingId);
         Assert.Equal(mode == "scheduled" ? null : (Guid?)human, run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId);
         Assert.Equal(run.ActivationId, run.Admission.ExecutionContext.RootActivationId); Assert.Null(run.Admission.ExecutionContext.ParentRunId);
         Assert.Null(run.Admission.Activation.SourceSessionId); Assert.Null(run.Admission.Activation.SourceAgentRunId);

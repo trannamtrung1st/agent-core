@@ -36,7 +36,7 @@ public sealed class AgentDefinitionValidatorTests
             new ConversationPolicy("concise", true, "en", 256),
             new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
             new VoiceConfiguration(true, "default", 1.0),
-            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+            new ProviderPreferences("primary-stt", "primary-tts"),
             new Dictionary<string, string>());
         var error = Assert.Throws<ArgumentException>(() => AgentDefinitionValidator.Validate(definition));
         Assert.Contains("version", error.Message, StringComparison.OrdinalIgnoreCase);
@@ -60,7 +60,7 @@ public sealed class AgentDefinitionValidatorTests
             new ConversationPolicy("concise", true, "en", 256),
             policy,
             new VoiceConfiguration(true, "default", 1.0),
-            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+            new ProviderPreferences("primary-stt", "primary-tts"),
             new Dictionary<string, string>());
         AgentDefinitionValidator.Validate(definition);
     }
@@ -79,7 +79,7 @@ public sealed class AgentDefinitionValidatorTests
             new ConversationPolicy("concise", true, "potato!", 256),
             new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
             new VoiceConfiguration(true, "default", 1.0),
-            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+            new ProviderPreferences("primary-stt", "primary-tts"),
             new Dictionary<string, string>());
         var error = Assert.Throws<ArgumentException>(() => AgentDefinitionValidator.Validate(definition));
         Assert.Contains("language", error.Message, StringComparison.OrdinalIgnoreCase);
@@ -99,11 +99,11 @@ public sealed class AgentDefinitionValidatorTests
             new ConversationPolicy("concise", true, "en", 256),
             new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
             new VoiceConfiguration(true, "default", 1.0),
-            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+            new ProviderPreferences("primary-stt", "primary-tts"),
             new Dictionary<string, string>(),
             ModelDefaults: new AgentModelDefaults("Not Valid", "medium"));
         var error = Assert.Throws<ArgumentException>(() => AgentDefinitionValidator.Validate(definition));
-        Assert.Contains("modelDefaults.catalogKey", error.Message, StringComparison.Ordinal);
+        Assert.Contains("modelDefaults.offeringId", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public sealed class AgentDefinitionValidatorTests
             new ConversationPolicy("concise", true, "en", 256),
             new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
             new VoiceConfiguration(true, "default", 1.0),
-            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+            new ProviderPreferences("primary-stt", "primary-tts"),
             new Dictionary<string, string>(),
             new RoleEnvironment(ToolAllowlist: tools));
     }
@@ -201,7 +201,7 @@ public sealed class AgentDefinitionValidatorTests
             new ConversationPolicy("concise", true, "en", 256),
             new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
             new VoiceConfiguration(true, "default", 1.0),
-            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+            new ProviderPreferences("primary-stt", "primary-tts"),
             new Dictionary<string, string>(),
             Skills: skills);
 

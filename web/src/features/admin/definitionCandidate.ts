@@ -328,19 +328,19 @@ export function writeNullableString(
 
 export function writeModelDefault(
   candidate: DefinitionCandidate,
-  field: "catalogKey" | "reasoningEffort",
+  field: "offeringId" | "reasoningEffort",
   value: string
 ): DefinitionCandidate {
   const current = readRecord(candidate, ["modelDefaults"]);
   const next = {
-    catalogKey:
-      field === "catalogKey" ? blankToNull(value) : blankToNull(readString(current ?? {}, ["catalogKey"])),
+    offeringId:
+      field === "offeringId" ? blankToNull(value) : blankToNull(readString(current ?? {}, ["offeringId"])),
     reasoningEffort:
       field === "reasoningEffort"
         ? blankToNull(value)
         : blankToNull(readString(current ?? {}, ["reasoningEffort"]))
   };
-  if (next.catalogKey === null && next.reasoningEffort === null) {
+  if (next.offeringId === null && next.reasoningEffort === null) {
     return writePath(candidate, ["modelDefaults"], null);
   }
   return writePath(candidate, ["modelDefaults"], next);

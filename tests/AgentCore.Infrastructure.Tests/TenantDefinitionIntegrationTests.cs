@@ -162,11 +162,11 @@ public sealed partial class TenantDefinitionIntegrationTests
         public IamAuthorizer Authorizer => new(Iam);
         public IdentityService Identity => new(Iam, new AccountPasswordHasher(), Tokens, Ids, TimeProvider.System);
         public TenantAccessService Access => new(Iam, Authorizer, Identity, Tokens, Ids, TimeProvider.System);
-        public IDefinitionDraftSyntheticBehaviorEvaluator Evaluator => new AgentCore.Infrastructure.Admin.SyntheticDefinitionDraftBehaviorEvaluator(new AgentCore.Infrastructure.Admin.DefinitionDraftSyntheticOfflineLanguageModel(), ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll);
+        public IDefinitionDraftSyntheticBehaviorEvaluator Evaluator => new AgentCore.Infrastructure.Admin.SyntheticDefinitionDraftBehaviorEvaluator(new AgentCore.Infrastructure.Admin.DefinitionDraftSyntheticOfflineLanguageModel(), ToolConfigurationGates.AllowAll);
         private IBuiltInDefinitionTemplateSource? _shippedTemplates;
         public TenantDefinitionService Service => WithEvaluator(Evaluator);
         public TenantDefinitionService WithEvaluator(IDefinitionDraftSyntheticBehaviorEvaluator evaluator) => WithTemplates(_shippedTemplates ??= ShippedTemplates(), evaluator);
-        public TenantDefinitionService WithTemplates(IBuiltInDefinitionTemplateSource templates, IDefinitionDraftSyntheticBehaviorEvaluator? evaluator = null, IDefinitionResourceContentStore? resourceContent = null) => new(Iam, Definitions, Authorizer, SyntheticProviderAliases.Default, ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll, Ids, TimeProvider.System, resourceContent ?? Content, new(evaluator ?? Evaluator, ToolConfigurationGates.AllowAll), templates, Identity);
+        public TenantDefinitionService WithTemplates(IBuiltInDefinitionTemplateSource templates, IDefinitionDraftSyntheticBehaviorEvaluator? evaluator = null, IDefinitionResourceContentStore? resourceContent = null) => new(Iam, Definitions, Authorizer, SyntheticProviderAliases.Default, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(Iam), ToolConfigurationGates.AllowAll, Ids, TimeProvider.System, resourceContent ?? Content, new(evaluator ?? Evaluator, ToolConfigurationGates.AllowAll), templates, Identity);
         public static IBuiltInDefinitionTemplateSource ShippedTemplates()
         {
             var directory = new DirectoryInfo(AppContext.BaseDirectory);

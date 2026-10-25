@@ -1,5 +1,19 @@
 # Persistence and Configuration
 
+## Dynamic model persistence
+
+Administrative projections reuse existing persistence rather than adding tables. Preset summaries group retained `ModelOfferings.PresetId` references in the same read transaction as presets; tenant views receive no aggregate. Credential `LastRotatedAt` derives from the existing same-transaction `credentials.replace` authorization audit, restricted to requested currently owned nondeleted IDs. Renames/status changes are not rotations, and missing historical replacement evidence stays null. No migration, secret copy, execution-time audit query or secondary model registry is introduced.
+
+Reference inspection adds no schema or secondary registry. SQLite reads one exact owned target, the current security revision, a visibility-filtered count and a stable paged result in one read transaction using closed category SQL and bound parameters. InMemory uses its existing backing-store gates with the same visibility and ordering rules. Reference rows are projections of the existing settings, Definition drafts/publications, Instance preferences, explicit Automation overrides, conversation selection/provenance and admitted Run pins. Retirement retains all durable rows and historical bindings. Existing default and credential foreign-key/in-use guards continue to apply; model/connection physical deletion has no public operation.
+
+Canonical model tables are `ModelPresets`, `ProviderConnections`, `ModelOfferings` and `TenantModelSettings`. Composite owner/provider keys constrain offering connections, preset identity and same-tenant default references. Connections retain only a protected Credential reference. Credential deletion is blocked while referenced; model default references guard retirement/disable. Revisions and audit commit with existing tenant security CAS. Seeded presets carry no credentials, tenant offerings or implicit runtime default. Metadata refresh commits health/observation fields and new disabled offerings under tenant security CAS without changing existing configuration revisions or enablement. Failures and partial pages preserve the prior catalog. `Models:AllowedLocalOrigins` is an exact host-owned origin allowance for local compatible endpoints; metadata egress rejects redirects, ambient cookies/proxy, metadata addresses and disallowed resolved socket addresses. The forward schema migration and final runtime/configuration retirement are tracked in the [delivery ledger](reports/dynamic-model-management-delivery-2026-10-25.md).
+
+The forward migration also adds captured model-binding JSON to Session selections, summary/message provenance and occurrence pins; Run and approval payloads retain the same nonsecret binding through their existing serializers. The credential secret epoch starts at zero in the incumbent credential store and is preserved exactly. Binding includes offering/connection revisions, credential identity/revisions, provider kind, external model/transport, declared capabilities and safe labels, with no endpoint key or protected credential payload. SQLite reopen checks qualify selection/summary/history and actual tenant Run pins. The canonical identity migration retires the live alias columns and DTOs; the final repository/requirement audit is recorded in the [delivery ledger](reports/dynamic-model-management-delivery-2026-10-25.md#final-requirement-audit). Historical frozen migrations retain their original fields.
+
+`20261025020000_CanonicalModelIdentity` follows the model-aggregate migration. It renames the Session/summary/message/occurrence identity columns to offering/connection/external-model fields and the Instance/Automation preferences to offering references. Alias-bearing documents, existing pins or Runs refuse before schema mutation; null retired document fields also refuse because the new closed JSON contract cannot read them. Empty tracked predecessors can upgrade while retaining unrelated data. Downgrade refuses retained canonical references. No installed data is converted, reset or silently rebound.
+
+The forward identity migration freezes the actual predecessor approval table and all **145** guard bodies. Its explicit rebuild retains all **23** approval columns and **13** indexes, changes four guard field references, preserves the other 141 bodies, and checks foreign-key integrity before restoring normal operation. Historical migration sources/target models remain unchanged. Current approval metadata uses the frozen canonical field constraint. External model IDs retain the 255-character model-aggregate bound through Run/occurrence/background pins.
+
 ## Canonical approval semantic matching
 
 SQLite root lookup, local effect conflict checks and rolling operation quotas use the Domain's `PreparedTenantOperation.OperationFingerprint`, matching InMemory for every typed family. The incumbent tenant/root/executor index bounds lineage lookup; tenant/actor/root quotas are checked before loading the remaining recent operation candidates. The `TenantApprovalRequests.Fingerprint` column continues to store exact `ActionHash` for immutable foreign-key witnesses. No migration, column, index or permission/default changes accompany this consolidation. [Qualification and historical inventory cleanup](reports/multitenant-iam-delivery-2026-10-16.md#approval-semantic-matching-and-event-recovery).
@@ -629,7 +643,7 @@ EF Core 10 with SQLite is the MVP durable store, implemented behind IMemoryStore
 | --- | --- | --- |
 | Session | SessionId UUID string PK; required non-empty AgentInstanceId; AgentId, AgentVersion, DefinitionJson, Mode, PendingMode nullable, Status, PauseReason nullable, CreatedAtUtc, UpdatedAtUtc, Revision | Store validated creation Definition provenance; AgentRun admission owns execution configuration; terminal Ended is irreversible; PauseReason set when Status is Paused |
 | ConversationEntry | EntryId UUID PK; SessionId FK; EntrySequence; SourceEventId nullable; Role; Text (display); ResponseId nullable; Status; DeliveryMode; HeardTextEndExclusive (speech coordinate); ReceivedTextEndExclusive (display); EnvelopeJson nullable; AttachmentRefsJson nullable; FailureReferenceJson nullable; CreatedAtUtc | Unique (SessionId,EntrySequence); unique (SessionId,SourceEventId) when not null; response ID unique per assistant entry. `FailureReferenceJson` (`20260929121048_P7FailureReference`) stores one safe failure reference on a failed assistant row and stays null otherwise, including legacy failed rows |
-| SessionSnapshot | SessionId PK/FK; SchemaVersion=1; Summary; SummarizedThroughEntrySequence; SummaryFormatVersion; SummaryGeneratedAtUtc nullable; SummaryModelCatalogKey/ProviderAlias/ModelId/ReasoningEffort nullable; PendingTopic nullable; ProfileId nullable; LastEntrySequence; LastUserActivityAtUtc nullable; UpdatedAtUtc; additive LifecycleStatus/PurposeKind/PurposeDescription/DeadlineAtUtc/PurposeMetadataJson/AgentCompletion/UserCompletionAllowed/UserCancellationAllowed/LifecycleReason/LifecycleSource/LifecycleChangedAtUtc nullable | Persist coarse semantic continuity and last meaningful user activity for inactivity policy, never tasks/timers/active provider streams. Purpose metadata and completion policy are private. Protocol-v1 Session.Status stays compatible. Summary text and through-sequence stay canonical; missing summary metadata loads as format 0 and is not rewritten. |
+| SessionSnapshot | SessionId PK/FK; SchemaVersion=1; Summary; SummarizedThroughEntrySequence; SummaryFormatVersion; SummaryGeneratedAtUtc nullable; SummaryModelOfferingId/SummaryModelConnectionId/SummaryExternalModelId/SummaryModelReasoningEffort nullable; PendingTopic nullable; ProfileId nullable; LastEntrySequence; LastUserActivityAtUtc nullable; UpdatedAtUtc; additive LifecycleStatus/PurposeKind/PurposeDescription/DeadlineAtUtc/PurposeMetadataJson/AgentCompletion/UserCompletionAllowed/UserCancellationAllowed/LifecycleReason/LifecycleSource/LifecycleChangedAtUtc nullable | Persist coarse semantic continuity and last meaningful user activity for inactivity policy, never tasks/timers/active provider streams. Purpose metadata and completion policy are private. Protocol-v1 Session.Status stays compatible. Summary text and through-sequence stay canonical; missing summary metadata loads as format 0 and is not rewritten. |
 | UserProfile | ProfileId UUID PK; PreferencesJson; Revision; UpdatedAtUtc | <=16 allowlisted preferences, <=2,000 total characters; retained historical local-Profile data contract, not current tenant authority |
 
 A reopened snapshot loads the newest restore window, not every raw row. Older conversation rows stay in the store. A committed summary is the model-facing copy of the closed prefix; compaction does not delete or rewrite those rows. Current learned Memory uses [canonical tenant persistence](#canonical-learned-memory-persistence) and [human retention transactions](#human-learned-memory-retention-changes). The global `MemoryAdmission`/service pipeline and Profile-based promotion/loop-resolution path are retired. Shared `MemoryContentRules` validates content without selecting an owner or writing a store. Semantic proposals commit only with the current completed response; failure/cancellation cannot publish a learned fact or successful receipt.
@@ -752,7 +766,7 @@ The P7.5 audit is retained below with current execution owners and verification 
 | Physical bytes | Keep | `FileSessionWorkspace`, attachment blobs, artifact blobs, and definition-resource content stay in Infrastructure. Contracts keep logical ids. |
 | Separate stores | Keep | `IAttachmentStore`, `IArtifactStore`, `IAgentDefinitionResourceAdminStore`, and `ISessionWorkspace` stay separate. |
 | Sandbox and workers | SDK cutover | `OpenSandboxService` implements current tenant command/verification ports; `ISandboxService` retains native cleanup/reconciliation only. The raw unowned command/provisioning entry and global Run-authority registration are retired. There is no `ISandboxProvider`. `TriggerSchedulerHostedService` and `AgentRunHostedService` stay single-process; canonical tenant admission replaces the historical separate occurrence-intake worker. |
-| Secrets | Keep | Credentials stay in the environment, `dotnet user-secrets`, or the gitignored Compose `.env`. `ProviderPreferences` names aliases only. `Admin_responses_do_not_leak_secret_sentinels` rejects `OPENROUTER_SECRET_SENTINEL` on definition, inventory, and effective-config responses. |
+| Secrets | Keep | Model inference credentials stay in protected tenant-owned Credential records. Independent speech/search/OAuth configuration stays backend-only. `ProviderPreferences` names speech aliases and the interruption classifier only. `Admin_responses_do_not_leak_secret_sentinels` rejects `SPEECH_SECRET_SENTINEL` on definition, inventory, and effective-config responses. |
 
 ## Strongly typed options
 
@@ -761,7 +775,7 @@ Bind/validate on startup with standard .NET options and ValidateOnStart. These o
 | Options type/section | Fields and purpose |
 | --- | --- |
 | AgentCoreOptions / AgentCore | Profile (Synthetic default), definition directory, session limits (`MaxActiveSessions` counts in-memory runtimes only), reconnect grace, mailbox capacity, context budgets |
-| ProvidersOptions / Providers | LanguageModels map plus independent `Speech.Recognition` / `Speech.Synthesis` records (defaults Adapter=Synthetic). SpeechRecognizers / SpeechSynthesizers maps remain aliases: `primary-stt` / `primary-tts` bind when the nested Speech Adapter is unset. Recognition names after P1: Synthetic, Browser, OpenAI, OpenAICompatibleBatch. Synthesis: Synthetic, Browser, OpenAI. |
+| ProvidersOptions / Providers | Independent `Speech.Recognition` / `Speech.Synthesis` records (defaults Adapter=Synthetic). SpeechRecognizers / SpeechSynthesizers maps remain aliases: `primary-stt` / `primary-tts` bind when the nested Speech Adapter is unset. Recognition names after P1: Synthetic, Browser, OpenAI, OpenAICompatibleBatch. Synthesis: Synthetic, Browser, OpenAI. |
 | InteractionOptions / Interaction | Candidate thresholds, classifier deadline, ducking, degraded policy, `PendingVoiceTimeoutMs` (default 30000) |
 | VoiceOptions / Voice | Canonical format, frame size, queue budgets, utterance limit, playback progress |
 | PersistenceOptions / Persistence | Provider, connection string, checkpoint interval, busy timeout, attachment blob root (`data/attachments`), workspace root (`data/workspaces`), template root (`agents/templates`), artifact blob root (`data/artifacts`); never under `local/` |
@@ -780,36 +794,14 @@ Complete conceptual appsettings.json example, **Markdown only**:
     "MaxEntriesPerSession": 1000,
     "ReconnectGraceSeconds": 60,
     "MailboxCapacity": 256,
-    "Context": {"MaxHistoryEntries": 20, "MaxHistoryCharacters": 24000, "MaxSummaryCharacters": 2000, "MaxProfileCharacters": 2000}
+    "Context": {
+      "MaxHistoryEntries": 20,
+      "MaxHistoryCharacters": 24000,
+      "MaxSummaryCharacters": 2000,
+      "MaxProfileCharacters": 2000
+    }
   },
   "Providers": {
-    "LanguageModels": {
-      "primary-llm": {
-        "Adapter": "Scripted",
-        "BaseUrl": "https://provider.example/v1/",
-        "ApiKey": "",
-        "DefaultModel": "configured-model",
-        "AdditionalHeaders": {},
-        "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 60, "TotalSeconds": 120}
-      }
-    },
-    "ModelCatalog": {
-      "DefaultKey": "scripted-alpha",
-      "Models": [
-        {
-          "Key": "scripted-alpha",
-          "DisplayName": "Scripted Alpha",
-          "ProviderAlias": "primary-llm",
-          "ModelId": "scripted-alpha",
-          "Tools": true,
-          "Vision": false,
-          "StructuredOutput": false,
-          "Reasoning": true,
-          "SupportedReasoningEfforts": ["low", "medium", "high"],
-          "DefaultReasoningEffort": "low"
-        }
-      ]
-    },
     "Speech": {
       "Recognition": {
         "Adapter": "Synthetic",
@@ -817,7 +809,11 @@ Complete conceptual appsettings.json example, **Markdown only**:
         "ApiKey": "",
         "DefaultModel": "configured-stt-model",
         "AdditionalHeaders": {},
-        "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 60, "TotalSeconds": 120}
+        "Timeouts": {
+          "SetupSeconds": 10,
+          "StreamIdleSeconds": 60,
+          "TotalSeconds": 120
+        }
       },
       "Synthesis": {
         "Adapter": "Synthetic",
@@ -825,8 +821,15 @@ Complete conceptual appsettings.json example, **Markdown only**:
         "ApiKey": "",
         "DefaultModel": "configured-tts-model",
         "AdditionalHeaders": {},
-        "Voices": {"default": "configured-voice", "fr-FR": "nova"},
-        "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 60, "TotalSeconds": 120}
+        "Voices": {
+          "default": "configured-voice",
+          "fr-FR": "nova"
+        },
+        "Timeouts": {
+          "SetupSeconds": 10,
+          "StreamIdleSeconds": 60,
+          "TotalSeconds": 120
+        }
       }
     }
   },
@@ -848,145 +851,99 @@ Complete conceptual appsettings.json example, **Markdown only**:
     "PendingVoiceTimeoutMs": 30000
   },
   "Voice": {
-    "Encoding": "pcm_s16le", "SampleRateHz": 24000, "Channels": 1,
-    "FrameDurationMs": 20, "InputQueueMs": 500, "OutputQueueMs": 2000,
-    "PrebufferMs": 60, "MaxUtteranceSeconds": 120,
-    "PlaybackProgressMs": 100, "PlaybackAckTimeoutMs": 5000,
+    "Encoding": "pcm_s16le",
+    "SampleRateHz": 24000,
+    "Channels": 1,
+    "FrameDurationMs": 20,
+    "InputQueueMs": 500,
+    "OutputQueueMs": 2000,
+    "PrebufferMs": 60,
+    "MaxUtteranceSeconds": 120,
+    "PlaybackProgressMs": 100,
+    "PlaybackAckTimeoutMs": 5000,
     "Vad": {
-      "NoiseFloorAdapt": 0.05, "StartThreshold": 0.7, "StartHangFrames": 3,
-      "EndThreshold": 0.4, "EndHangFrames": 15, "MinActivityMs": 120,
+      "NoiseFloorAdapt": 0.05,
+      "StartThreshold": 0.7,
+      "StartHangFrames": 3,
+      "EndThreshold": 0.4,
+      "EndHangFrames": 15,
+      "MinActivityMs": 120,
       "ActivityScoreSmoothing": 0.3
     },
-    "Segmentation": {"MinCharacters": 20, "ClauseMinCharacters": 40, "MaxDelayMs": 300, "SoftMaxCharacters": 120, "HardMaxCharacters": 240, "MaxPendingSegments": 4}
-  },
-  "Persistence": {"Provider": "InMemory", "ConnectionString": "Data Source=data/agent-core.db", "CheckpointMs": 1000, "BusyTimeoutMs": 5000, "AttachmentRoot": "data/attachments", "WorkspaceRoot": "data/workspaces", "TemplateRoot": "agents/templates", "ArtifactRoot": "data/artifacts", "DefinitionResourceRoot": "data/definition-resources"},
-  "Observability": {"HttpErrorResponses": {"Enabled": true}, "LogLevel": "Information", "TimelineCapacity": 500, "LogConversationContent": false, "OtlpEnabled": false, "OtlpEndpoint": "http://localhost:4317"},
-  "Logging": {"LogLevel": {"Default": "Information", "Microsoft.AspNetCore": "Warning", "Microsoft.EntityFrameworkCore.Database.Command": "Warning"}},
-  "Hosting": {"BindUrl": "http://localhost:5080", "AllowedOrigins": ["http://localhost:5173"], "UseViteProxy": true, "TrustPublishedPortGateway": false}
-}
-```
-
-Language-model timeout defaults remain setup 10 / stream idle 60 / total 120 seconds. The native Real `http-openrouter` launch profile and Real Compose overlay explicitly use setup 30 / idle 60 / total 120; restart the host or recreate the Real container to apply the configuration change. Each provider call has its own total deadline; Session Runtime retries remain inside the existing overall execution budget. See [timeout and retry policy](12-backend-implementation-spec.md#timeouts-and-retry-policy).
-
-The browser realtime protocol is not a server option. `VITE_AGENTCORE_REALTIME_PROTOCOL=json` selects SignalR JSON for that frontend process; unset or any other value stays MessagePack. Vite reads it when the SPA starts or is built (`cd web` and `VITE_AGENTCORE_REALTIME_PROTOCOL=json pnpm dev`, or gitignored `web/.env.local`; not repo-root `.env`). Restart the Vite dev server after changing it; a browser refresh alone is not enough. Setting the same name on the ASP.NET process or a running container after the SPA is built does not switch the transport. A JSON diagnostic image requires the variable as a Docker build arg (`docker compose build --build-arg VITE_AGENTCORE_REALTIME_PROTOCOL=json` then `docker compose up`). It does not change `protocolVersion` or persistence.
-
-The shipped Synthetic catalog also includes `scripted-beta` with `StructuredOutput: true` (native envelope JSON) while `scripted-alpha` remains unstructured compatibility (`StructuredOutput: false`).
-
-Configuration fields for inactive adapters are ignored after structural validation; Synthetic must never attempt example URLs or require ApiKey. Bind operator secrets from environment or user-secrets only: `OPENROUTER_API_KEY` into the OpenRouter-configured language-model `ApiKey`, and `OPENAI_API_KEY` into the OpenAI STT and TTS `ApiKey` fields. Nested `Providers__...__ApiKey` remains valid. Neither variable is required for Profile=Synthetic, default tests, or application boot in synthetic mode. **P3 optional Real adapters:** `BRAVE_SEARCH_API_KEY` (or `BraveSearch:ApiKey`) enables Brave `web.search` when Profile=Real. Without that key the tool is hidden by the configuration gate; that is the expected configuration check, not a reason to scrape HTML search pages. `Providers:LanguageModels:primary-llm:LogProviderErrorMessages` (default false) adds a classified provider-failure reason to local logs. Raw provider-message excerpts and echoed user content are excluded even when enabled. Email uses Admin-managed protected account Credentials and existing Instance bindings; legacy `GMAIL_*` host settings never enable production email. Synthetic transports require explicit fake account/binding fixtures and no keys. Real profile requires an explicitly configured non-synthetic LLM. STT/TTS adapters are required only when a loaded definition has `Voice.Enabled`. Preferred **Real/demo** configuration: OpenAICompatibleLanguageModel (Adapter=OpenAICompatible) pointing at OpenRouter for text with a **fixed** catalog default `DefaultModel` (shipped `deepseek/deepseek-v4.1-flash`; operators may retarget `DefaultKey` by setting `AGENTCORE_LLM_MODEL` to another catalog `ModelId`); hosted STT via `OpenAICompatibleBatch` (no interim partials) until `OpenAiSpeechRecognizer` realtime transcription is implemented and selectable; OpenAiSpeechSynthesizer (Adapter=OpenAI) for TTS. Recognition Adapter=`OpenAI` remains unselectable while the realtime session is a no-op. `openrouter/free` remains an opt-in low-level adapter smoke target; the catalog marks it ineligible for three-layer execution, and it is not the shipped `DefaultKey` / `AGENTCORE_LLM_MODEL`. A Real **voice** process still needs speech keys when those adapters are selected; a Real **text** process needs only the OpenRouter key. Missing `OPENAI_API_KEY` must not fail synthetic/offline tests or block completing the text-conversation path. Browser STT/TTS need no backend speech key; they also do not make recognition or synthesis a guaranteed local/offline service. OpenAICompatibleSpeech is an optional compatible TTS adapter, not the primary streaming demonstration.
-
-**Effective capabilities** come from the selected adapter. Optional `RequiredCapabilities` lists flags that must be **true**. Optional `DisabledCapabilities` may turn off optional adapter features (for example disable partials to test `speechAndFinal`). Do not use `RequiredCapabilities: false` to describe a batch adapter; select `OpenAICompatibleBatch`, which reports streaming/partials as false. Do not use a configuration `Capabilities` object to make an adapter claim unimplemented behavior. Built-in `OpenAI`/`Synthetic`/`Scripted` adapters define their own capabilities (Synthetic may withhold partials via adapter-specific test options). Generic compatible/local adapters may document operator assertions validated by contract tests. `heuristic` is the built-in classifier alias. `MaxActiveSessions` applies to in-memory runtimes on attach/activation; durable Created/Paused/Ended rows do not consume a slot.
-
-AgentCore__Profile=Real selects hosted-oriented defaults. When `Persistence__Provider` is not set in the environment, the API host upgrades the base `InMemory` persistence entry to **Sqlite** so durable sessions survive restart; set `Persistence__Provider=InMemory` explicitly to keep ephemeral storage (for example Real Compose smoke). Example .NET environment overrides for OpenRouter text plus an **optional batch-STT degraded speech configuration** (operator supplies actual secrets later; these are placeholders):
-
-```text
-AgentCore__Profile=Real
-Persistence__Provider=Sqlite
-Persistence__ConnectionString=Data Source=data/agent-core.db
-Providers__LanguageModels__primary-llm__Adapter=OpenAICompatible
-Providers__LanguageModels__primary-llm__BaseUrl=https://openrouter.ai/api/v1/
-Providers__LanguageModels__primary-llm__DefaultModel=deepseek/deepseek-v4.1-flash
-OPENROUTER_API_KEY=<backend-secret>
-Providers__Speech__Recognition__Adapter=OpenAICompatibleBatch
-Providers__Speech__Synthesis__Adapter=OpenAI
-Providers__Speech__Synthesis__DisabledCapabilities__TimingMarks=true
-OPENAI_API_KEY=<backend-secret-when-using-openai-speech>
-Hosting__AllowedOrigins__0=http://localhost:5173
-```
-
-Operators must also set real speech BaseUrl/DefaultModel/voice mapping for their selected endpoints. Environment keys with hyphens are supported by .NET configuration but are not valid shell variable assignment names; the native `scripts/dev-real.sh` dotenv loader supports them directly in the private root `.env` and exports them without shell execution. Do not source that file in a shell. Direct hosts can alternatively use an environment map or quoted `env 'key=value'` arguments. Keep keys backend-only, never VITE_* or React bundles. Production same-origin serving needs no permissive CORS. Restrict development origins; do not combine wildcard origins with credentials.
-
-## Local personal workspace
-
-Repository root `local/` is gitignored scratch (personal notes, temp files). Nothing under `local/` is shared in git. [Repository Structure](11-repository-structure.md) records the folder.
-
-`local/` is **not** an application configuration source. Do not bind options from files in `local/`, do not load it with `IConfiguration`, and do not copy its contents into committed `appsettings*.json`. A gitignored root `.env` (copied from committed [`.env.example`](../.env.example)) supplies native development through `scripts/dev-real.sh` automatically and Compose through its documented interpolation aliases. The native launcher parses it as literal data, including hyphenated .NET keys, before computing its paths and ports, then starts the API with `--no-launch-profile`. Profile defaults are lower priority than inherited environment, and `.env` assignments have highest file/input priority. ASP.NET itself continues to bind normal environment configuration; it does not read `.env` or personal files directly. Native model/OAuth/speech keys and bootstrap values stay in the backend environment and are excluded from the Vite child. No `dotnet user-secrets` commands are required for this workflow; user-secrets remain optional for independently launched API processes. The complete option reference includes indexed/map-key examples; adding arbitrary provider aliases does not register a new provider. The optional Real `BRAVE_SEARCH_API_KEY` follows the same binding rules; mail passwords use protected Admin input. Never print keys in chat, logs, traces, docs, commits or shared command history. Missing hosted keys are not a test failure and must not block Synthetic/default suites.
-
-## Hosted and on-prem provider configurations
-
-Portable capability aliases live in Agent Definition/provider selection; concrete endpoints, model IDs, headers and secrets live only in backend Infrastructure options. Independent `Providers.Speech.Recognition` and `Providers.Speech.Synthesis` records are the primary speech selection. Keep LanguageModels plus optional SpeechRecognizers/SpeechSynthesizers maps: several text aliases can target different models for different identities, and `primary-stt`/`primary-tts` remain map fallbacks when nested Speech Adapter is unset. Do not replace them with one gateway-wide AI provider.
-
-Preferred hosted text override (merge into the synthetic example when Profile=Real; configure speech separately):
-
-```json
-{
-  "Providers": {
-    "LanguageModels": {
-      "primary-llm": {
-        "Adapter": "OpenAICompatible",
-        "BaseUrl": "https://openrouter.ai/api/v1/",
-        "ApiKey": "<OPENROUTER_API_KEY>",
-        "DefaultModel": "deepseek/deepseek-v4.1-flash",
-        "AdditionalHeaders": {},
-        "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 60, "TotalSeconds": 120}
-      }
+    "Segmentation": {
+      "MinCharacters": 20,
+      "ClauseMinCharacters": 40,
+      "MaxDelayMs": 300,
+      "SoftMaxCharacters": 120,
+      "HardMaxCharacters": 240,
+      "MaxPendingSegments": 4
     }
+  },
+  "Persistence": {
+    "Provider": "InMemory",
+    "ConnectionString": "Data Source=data/agent-core.db",
+    "CheckpointMs": 1000,
+    "BusyTimeoutMs": 5000,
+    "AttachmentRoot": "data/attachments",
+    "WorkspaceRoot": "data/workspaces",
+    "TemplateRoot": "agents/templates",
+    "ArtifactRoot": "data/artifacts",
+    "DefinitionResourceRoot": "data/definition-resources"
+  },
+  "Observability": {
+    "HttpErrorResponses": {
+      "Enabled": true
+    },
+    "LogLevel": "Information",
+    "TimelineCapacity": 500,
+    "LogConversationContent": false,
+    "OtlpEnabled": false,
+    "OtlpEndpoint": "http://localhost:4317"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "Microsoft.EntityFrameworkCore.Database.Command": "Warning"
+    }
+  },
+  "Hosting": {
+    "BindUrl": "http://localhost:5080",
+    "AllowedOrigins": [
+      "http://localhost:5173"
+    ],
+    "UseViteProxy": true,
+    "TrustPublishedPortGateway": false
   }
 }
 ```
 
-DefaultModel is the concrete model field; it is not copied into ModelRequest or public DTOs. Real/demo must use a **fixed** operator-selected OpenRouter model ID as the catalog default. The shipped development/demo default is `deepseek/deepseek-v4.1-flash`. Low-level opt-in adapter smoke may use `openrouter/free`, while the catalog option is ineligible for three-layer execution; do not assert quality or structured-output correctness of whatever free model is routed, and do not set it as `DefaultKey` / `AGENTCORE_LLM_MODEL`. To compare identities later, configure aliases `examiner-llm` and `support-llm` with different DefaultModel values, then select those aliases in each definition's ProviderPreferences.LanguageModel. No Agent Runtime condition branches on a provider/model name.
+Inference is configured in the canonical tenant model store, not host options. A fresh Real host starts with seven stable metadata-only presets, no connection, credential, offering or implicit default. Bootstrap IAM, create a protected API-key Credential with model-inference purpose, create a compatible tenant connection, test metadata access, explicitly adopt/register eligible offerings, then choose a tenant default. [Model-management contracts](14-api-and-realtime-protocol.md#dynamic-model-administration) and [operations](17-observability-and-operations.md#dynamic-model-management-first-run-and-disposable-reset) own the wire and setup flow. Canonical system preset and organization connection/model/default administration is implemented and locally qualified. The remaining identity/storage and conversation-selector cutover is recorded separately in the delivery ledger.
 
-To migrate text inference on-prem, retain Adapter=OpenAICompatible and replace BaseUrl with e.g. `http://localhost:8000/v1/`, DefaultModel with the served local model name, and ApiKey/AdditionalHeaders with the local server's requirements. A vLLM-compatible endpoint is an example, not mandatory infrastructure. Direct OpenAI can use `https://api.openai.com/v1/` with its own credentials/model and verified compatibility settings. OpenRouter remains a hosted gateway; changing its model ID does not make inference local.
+`Models:AllowedLocalOrigins` is a host-owned exact-origin allowance for custom compatible endpoints. Native kinds have code-owned origins; clients cannot override them. Custom endpoints use HTTPS unless explicitly allowed as local HTTP. Redirects, credential-bearing URLs, queries/fragments, unallowed private/metadata addresses and provider-supplied endpoints are refused. A no-credential connection is explicit and custom-only. A connection metadata test proves listing/authentication evidence; it does not certify inference capability.
 
-For hosted STT, select `OpenAICompatibleBatch` (no streaming input, no interim partials). Recognition Adapter=`OpenAI` (`OpenAiSpeechRecognizer` realtime transcription, recommended DefaultModel `gpt-live-transcribe`) remains unselectable while the live session is a no-op. For hosted TTS, select Adapter=`OpenAI` (`OpenAiSpeechSynthesizer`). Then independently replace the adapter alias, endpoint, model, credentials and required/disabled capability constraints as needed. Prefer streaming STT with partials and streaming TTS when a selectable adapter actually provides them; effective capabilities come from the adapter. Default automated tests keep Synthetic speech until `OPENAI_API_KEY` is supplied for a selected hosted speech adapter. Local speech may need a different concrete adapter if its protocol differs, but never changes ISpeechRecognizer/ISpeechSynthesizer or controller logic. All secrets/endpoints can be overridden using the same .NET double-underscore syntax, including:
+Real composition has no global language-model port or global catalog. `ILanguageModelResolver` requires the captured binding and server-owned invocation from the actual admitted Run. Each generation rechecks current claim/source, connection, offering, capabilities and credential epochs before dispatch and executable output. Disabling/rotating a credential never reroutes an existing Run. `LanguageModelProviderOptions` remains an internal compatible-adapter value assembled from that authorized route; it is not an operator-configured map. `ProviderPreferences` contains speech aliases and interruption classifier only; unknown retired LLM alias fields are rejected.
 
-```text
-Providers__Speech__Recognition__BaseUrl=<hosted-or-local-stt-endpoint>
-Providers__Speech__Recognition__DefaultModel=<stt-model>
-Providers__Speech__Recognition__ApiKey=<backend-secret-or-empty>
-Providers__Speech__Synthesis__BaseUrl=<hosted-or-local-tts-endpoint>
-Providers__Speech__Synthesis__DefaultModel=<tts-model>
-Providers__Speech__Synthesis__ApiKey=<backend-secret-or-empty>
-Providers__Speech__Synthesis__Voices__default=<tts-voice>
-```
-
-[Technology Decisions](10-technology-decisions.md) owns the provider rationale. No actual configuration files are created by this documentation update; React receives only safe effective capabilities, never credentials, model IDs or endpoints.
-
+The explicit Synthetic profile selects fixed offline fixtures and synthetic metadata. It never reads a model key or recovers a failing Real provider. These fixtures qualify application behavior, not external provider compatibility. Reasoning effort remains a validated per-selection value. The browser realtime protocol still uses `VITE_AGENTCORE_REALTIME_PROTOCOL=json` for diagnostic JSON; default is MessagePack. Set it before SPA startup/build and restart Vite after changing it.
 
 ## Provider selection and DI
 
-Bind strongly typed SpeechRecognitionProviderOptions and SpeechSynthesisProviderOptions on `Providers.Speech.Recognition` / `Providers.Speech.Synthesis`, and LanguageModelProviderOptions as the values of the LanguageModels map. SpeechRecognizers / SpeechSynthesizers maps still bind the same option types for `primary-stt` / `primary-tts` when nested Speech Adapter is unset. Infrastructure `SpeechFactory` resolves those Adapter names into an `EffectiveSpeechPlan` (input/output transports, resolvability, and effective capabilities) plus optional `ISpeechRecognizer`/`ISpeechSynthesizer`. `Synthetic` registers the synthetic ports and `serverAudio`. `Browser` is a client transport (`clientTranscript`/`clientSpeech`) with no backend port; the plan still carries explicit client capabilities (partials and speech-boundary events for Browser STT; cancellation, voice selection and speaking rate for Browser TTS). `OpenAI` realtime recognition is not selectable while the live session is deferred; it is not replaced by Synthetic or by batch STT. `OpenAICompatibleBatch` is the supported hosted STT path: it resolves `OpenAICompatibleBatchSpeechRecognizer` on `serverAudio` when Adapter=`OpenAICompatibleBatch` and a backend API key is present, with StreamingAudio=false and PartialTranscripts=false. A missing key stays not resolvable. `OpenAI` TTS resolves `OpenAiSpeechSynthesizer` on `serverAudio` when Adapter=`OpenAI` and a backend API key is present; a missing key stays not resolvable and is not replaced by Synthetic. Default Synthetic/Browser suites still start without `OPENAI_API_KEY`. Live OpenAI TTS HTTP remains opt-in (`AGENTCORE_LIVE_OPENAI_TTS`). Selected non-Synthetic adapters are not silently replaced by Synthetic. An unknown or uninstalled **speech** adapter, or a gated hosted adapter, must not abort Synthetic or Real **text-only** host startup. Language-model selection remains independent of speech.
-
-These are Markdown-only selection overrides merged with the existing full options example, not additional configuration schemas or actual files. Each selected adapter reports effective capabilities; optional RequiredCapabilities/DisabledCapabilities and timeouts/model/voice configuration still apply. Provider-specific model IDs and secrets stay in backend options.
-
-Initial hosted configuration:
+Speech remains independently configured through `Providers:Speech:Recognition` / `Providers:Speech:Synthesis`. The speech alias maps retain `primary-stt` / `primary-tts` fallback when nested Adapter is unset. `SpeechFactory` reports effective transports, capabilities and readiness. Synthetic uses synthetic server audio. Browser uses client transcript/speech with no backend speech port. `OpenAICompatibleBatch` is the supported hosted batch-STT path (no interim partials); OpenAI realtime recognition remains unselectable while deferred. OpenAI TTS requires its independently supplied speech key. Missing or unknown speech adapters make voice unavailable without blocking Real text setup and never silently substitute Synthetic.
 
 ```json
 {
   "Providers": {
-    "LanguageModels": {"primary-llm": {"Adapter": "OpenAICompatible", "BaseUrl": "https://openrouter.ai/api/v1/", "DefaultModel": "deepseek/deepseek-v4.1-flash", "ApiKey": "<OPENROUTER_API_KEY>"}},
     "Speech": {
-      "Recognition": {"Adapter": "OpenAICompatibleBatch", "BaseUrl": "https://api.openai.com/v1/", "DefaultModel": "<stt-model>", "ApiKey": "<OPENAI_API_KEY>"},
-      "Synthesis": {"Adapter": "OpenAI", "BaseUrl": "https://api.openai.com/v1/", "DefaultModel": "<tts-model>", "Voices": {"default": "<voice>"}, "ApiKey": "<OPENAI_API_KEY>"}
+      "Recognition": {"Adapter": "OpenAICompatibleBatch", "BaseUrl": "https://api.openai.com/v1/", "DefaultModel": "<stt-model>", "ApiKey": "<speech-key>"},
+      "Synthesis": {"Adapter": "OpenAI", "BaseUrl": "https://api.openai.com/v1/", "DefaultModel": "<tts-model>", "Voices": {"default": "<voice>"}, "ApiKey": "<speech-key>"}
     }
   }
 }
 ```
 
-Synthetic configuration (Profile=Synthetic; no keys or external calls):
+`OPENAI_API_KEY` and the documented `Providers__Speech__...` options remain backend-only speech configuration. Search uses `BRAVE_SEARCH_API_KEY`; OAuth retains its separate settings. Model inference credentials are never supplied by those aliases. Default verification stays key-free; live services require explicit opt-in. Native `http-real` and the Real Compose overlay choose the Real profile and storage/browser policy without selecting a model vendor. The tenant connection determines native OpenAI, Anthropic, Google, OpenRouter or custom-compatible dispatch. Local compatible services need the same explicit verified capability declaration and host origin policy.
 
-```json
-{
-  "Providers": {
-    "LanguageModels": {"primary-llm": {"Adapter": "Scripted"}},
-    "Speech": {"Recognition": {"Adapter": "Synthetic"}, "Synthesis": {"Adapter": "Synthetic"}}
-  }
-}
-```
-
-Future local configuration (service names illustrate a Compose network):
-
-```json
-{
-  "Providers": {
-    "SpeechRecognizers": {"primary-stt": {"Adapter": "Local", "BaseUrl": "http://local-stt:8000/", "DefaultModel": "<local-stt-model>"}},
-    "LanguageModels": {"primary-llm": {"Adapter": "OpenAICompatible", "BaseUrl": "http://local-llm:8000/v1/", "DefaultModel": "<local-text-model>"}},
-    "SpeechSynthesizers": {"primary-tts": {"Adapter": "Local", "BaseUrl": "http://local-tts:8000/", "DefaultModel": "<local-tts-model>", "Voices": {"default": "<local-voice>"}}}
-  }
-}
-```
-
-Use the documented double-underscore environment overrides for endpoints and secrets in native processes or Compose. [Operations](17-observability-and-operations.md#docker-compose-integration-and-demo) owns the Real overlay file (`docker-compose.real.yml`) that applies hosted OpenRouter text (the same shape as the `http-openrouter` launch profile); Compose interpolates `OPENROUTER_API_KEY` from the host, never from committed files. When moving local, explicitly clear/replace any inherited hosted ApiKey and headers; the examples do not imply a public unauthenticated local service. React never receives credentials. Updating configuration/DI bindings is not an Agent Runtime code change. A provider lacking partials or timing marks selects existing capability-based policies; it does not require a new controller design. A new protocol may require a new Infrastructure adapter only. `ISandboxService` is composed in Infrastructure as `OpenSandboxService`, using the same canonical `ISessionWorkspace` and Artifact path; the SDK never receives their host roots.
+`ISandboxService` remains composed through the existing OpenSandbox owner, canonical Workspace and Artifact paths. Provider changes do not create another Agent Runtime, controller or effect owner.
 
 ## System credentials and protection storage
 
@@ -1006,7 +963,7 @@ The P9.5 nopCommerce Application Connection was a bounded proving slice and is r
 
 ## P9 visible browser (observed)
 
-`Browser` is its own configuration section, separate from `Hosting:AllowedOrigins`. `PolicyMode` is `OpenWeb` for the local Real/demo process and `Restricted` for Synthetic and CI. OpenWeb allows ordinary `http`/`https` navigation, interaction, and page resources, including loopback, and does not start or advertise the Record Lookup fixture. It still denies `file`, `javascript`, credential user-info, and link-local metadata addresses such as `169.254.169.254`. The model cannot change `PolicyMode`. Restricted keeps exact `NavigationOrigins`, `InteractionOrigins`, and `ResourceOrigins`. Base `appsettings.json` and the `http` Synthetic launch profile stay `PolicyMode` `Restricted` with `FixtureEnabled` true, `FixturePort` 5091, and `NavigationOrigins` and `InteractionOrigins` `http://127.0.0.1:5091`. The `http-openrouter` Real launch profile sets `Browser__PolicyMode` `OpenWeb`, `Browser__ProfileMode` `PersistentAgent`, `Browser__Channel` `chrome`, `Browser__FixtureEnabled` false, `Browser__Headless` false, and `Browser__InteractionMode` `InteractiveDemo`. For the remaining unscoped Browser consumer, `PersistentAgent` stores the Instance profile under `ProfileRoot` (`data/browser-profiles/<agent-instance-id>` or the Real launch override); canonical tenant bindings use the separate tenant/Instance namespace above and never adopt this path. It is not the human user's Chrome profile. Cookies and site storage survive chats and process restarts. Exact tab/frame handles do not; direct targets re-resolve inside each owned context. `EphemeralSession` remains the Synthetic default: each session gets a disposable context. There is no profile branch in runtime code. In Restricted mode, add an exact origin such as `https://docs.nopcommerce.com` to `NavigationOrigins` to open that site, and to `InteractionOrigins` only when click, fill, select, press, check, or uncheck should be allowed there. OpenWeb does not need that list. `browser.*` is still hidden until Infrastructure confirms the configured launch target: Playwright Chromium when `Channel` is unset, or a successful launch probe of the configured `Channel` (for example `chrome`). The Docker image and Compose set `Browser__Enabled` false because that image does not install Chromium. `FixturePort` 0 binds an ephemeral port and retargets configured loopback origins to that assigned origin. A legacy `TargetOrigins` list, when set, is the navigation list. Tests and the Synthetic Playwright hosts set `Headless` true. No element registry or element-ref authority is stored in Session snapshots. EphemeralSession browser state is not written to SQLite. `PersistentAgent` site cookies and storage live only under `ProfileRoot`, not in the conversation store.
+`Browser` is its own configuration section, separate from `Hosting:AllowedOrigins`. `PolicyMode` is `OpenWeb` for the local Real/demo process and `Restricted` for Synthetic and CI. OpenWeb allows ordinary `http`/`https` navigation, interaction, and page resources, including loopback, and does not start or advertise the Record Lookup fixture. It still denies `file`, `javascript`, credential user-info, and link-local metadata addresses such as `169.254.169.254`. The model cannot change `PolicyMode`. Restricted keeps exact `NavigationOrigins`, `InteractionOrigins`, and `ResourceOrigins`. Base `appsettings.json` and the `http` Synthetic launch profile stay `PolicyMode` `Restricted` with `FixtureEnabled` true, `FixturePort` 5091, and `NavigationOrigins` and `InteractionOrigins` `http://127.0.0.1:5091`. The `http-real` Real launch profile sets `Browser__PolicyMode` `OpenWeb`, `Browser__ProfileMode` `PersistentAgent`, `Browser__Channel` `chrome`, `Browser__FixtureEnabled` false, `Browser__Headless` false, and `Browser__InteractionMode` `InteractiveDemo`. For the remaining unscoped Browser consumer, `PersistentAgent` stores the Instance profile under `ProfileRoot` (`data/browser-profiles/<agent-instance-id>` or the Real launch override); canonical tenant bindings use the separate tenant/Instance namespace above and never adopt this path. It is not the human user's Chrome profile. Cookies and site storage survive chats and process restarts. Exact tab/frame handles do not; direct targets re-resolve inside each owned context. `EphemeralSession` remains the Synthetic default: each session gets a disposable context. There is no profile branch in runtime code. In Restricted mode, add an exact origin such as `https://docs.nopcommerce.com` to `NavigationOrigins` to open that site, and to `InteractionOrigins` only when click, fill, select, press, check, or uncheck should be allowed there. OpenWeb does not need that list. `browser.*` is still hidden until Infrastructure confirms the configured launch target: Playwright Chromium when `Channel` is unset, or a successful launch probe of the configured `Channel` (for example `chrome`). The Docker image and Compose set `Browser__Enabled` false because that image does not install Chromium. `FixturePort` 0 binds an ephemeral port and retargets configured loopback origins to that assigned origin. A legacy `TargetOrigins` list, when set, is the navigation list. Tests and the Synthetic Playwright hosts set `Headless` true. No element registry or element-ref authority is stored in Session snapshots. EphemeralSession browser state is not written to SQLite. `PersistentAgent` site cookies and storage live only under `ProfileRoot`, not in the conversation store.
 
 ### Browser environment configuration
 
@@ -1112,27 +1069,25 @@ Additive migration `20261009160526_ExecutionBudgets` adds nullable `AgentInstanc
 
 ## Real model catalog
 
-`ModelCatalogFactory.Real()` is the single built-in catalog source. Real launch/Compose configure the primary endpoint and default, without copying catalog entries. An explicit `Providers:ModelCatalog:Models` override replaces the catalog; operators must specify the complete desired set and its verified capabilities/transport. `PreferResponseFunction` explicitly selects the existing schema-bearing response function for semantic replies; native JSON Schema capability remains separately advertised and available to direct adapter requests. Unknown configured primary defaults fail startup rather than silently switching models. Synthetic model identities and timing fixtures remain unchanged; reasoning-capable Alpha defaults to low.
+Real execution uses the tenant-owned connection/offering/default records described in the [dynamic model cutover](#dynamic-model-persistence). It has no startup model catalog, global language-model alias, environment-key inference fallback or implicit system default. Seven stable system presets supply metadata for explicit adoption:
 
-| Key | Model ID | Catalog effort default | Offered efforts, ascending | Transport |
+| Provider | External model ID | Transport | Preset reasoning default | Offered efforts |
 | --- | --- | --- | --- | --- |
-| `deepseek-v41-flash` | `deepseek/deepseek-v4.1-flash` | low | low, medium, high, max | Chat Completions |
-| `gpt-6-luna` | `openai/gpt-6-luna` | low | none, low, medium, high, xhigh, max | Responses |
-| `claude-haiku-5.5` | `anthropic/claude-haiku-5.5` | low | low, medium, high, xhigh, max | Chat Completions |
-| `gpt-6.1-sol` | `openai/gpt-6.1-sol` | low | low, medium, high, xhigh, max | Responses |
-| `openrouter-free` | `openrouter/free` | none | none offered | Chat Completions |
+| OpenAI | `gpt-6-luna` | Responses | medium | low, medium, high |
+| OpenAI | `gpt-6.1-sol` | Responses | medium | low, medium, high |
+| Anthropic | `claude-haiku-5-5` | Messages | medium | low, medium, high, xhigh, max |
+| Anthropic | `claude-sonnet-5-5` | Messages | high | low, medium, high, xhigh, max |
+| Google | `gemini-3.5-flash-lite` | Gemini Content | minimal | minimal, low, medium, high |
+| Google | `gemini-3.8-flash` | Gemini Content | medium | low, medium, high |
+| OpenRouter | `deepseek/deepseek-v4.1-flash` | Chat Completions | medium | low, medium, high |
 
-DeepSeek remains the system default. All four fixed models advertise tools, vision and JSON Schema outputs in the [OpenRouter catalog API](https://openrouter.ai/api/v1/models) checked 2026-10-09. These are metadata claims; [verification](reports/model-catalog-refresh-verification.md) distinguishes live evidence. Luna and Sol have 1,050,000 context / 128,000 output tokens; Haiku has 1,000,000 / 128,000; DeepSeek lists 1,048,576 context and provider-dependent output limits (up to 943,718, lower on some routes). Runtime output budgets remain independent of provider maxima. Free routing is variable; its metadata retains the conservative tools profile, with no image, structured-output or reasoning controls, but `DeveloperRoleSupport=false` makes it ineligible. Fixed built-in routes declare the separate-role contract; that declaration is not new live-model verification. Custom routes must explicitly declare verified `DeveloperRoleSupport=true` for their chosen transport.
+These are initial profiles in `BuiltinModelPresets`, not live-provider certification. Tenant adoption copies the profile; later system edits do not overwrite an offering. All seven declare tools and native structured semantic output; DeepSeek's initial profile does not declare vision. Anthropic and Google preserve ordered trusted Core then Runtime sections in their native instruction channel. Sonnet refuses required/named tool choice; unsupported modes never become Auto silently. Custom compatible registrations explicitly choose Chat Completions or Responses and a declared supported profile.
 
-Provider reasoning defaults are medium for Luna, Haiku and Sol, high for DeepSeek. Agent Core selects low for every shipped reasoning-capable model, including Synthetic Alpha. Catalog and primary-provider fallbacks also use low when no explicit default is configured. Explicit operator overrides and persisted Session/Run efforts remain unchanged. [DeepSeek documents medium as an accepted compatibility alias for high](https://api-docs.deepseek.com/guides/thinking_mode/); saved medium pins and requested provider values are unchanged. Haiku uses adaptive thinking internally; its five documented efforts are intensity levels, not an extra adaptive slider stop. Its OpenRouter endpoints currently advertise automatic tool choice only. Forced named/required choice fails visibly; the adapter never silently downgrades it. Omit non-default sampling values for Haiku.
+The admitted Run captures tenant, offering, connection, kind, external model, transport, configuration and credential epochs, capability profile, labels, reasoning and selection source. Current route/credential authority is rechecked at dispatch and before executable output. A changed or unavailable pin refuses; it does not select a replacement. Protected continuation is bounded and bound to this exact route; it stays outside user text, tool arguments, public protocol and logs. Existing checkpoint byte limits fail closed rather than discarding continuation. No automatic generation POST retry is introduced.
 
-The retired built-in keys `gpt-4o-mini-2024-07-18`, `gpt-4.1`, and `gpt-5.6-luna` are absent from new selection. Persisted concrete Session selections remain untouched. Resolution requires an exact provider/model match with a present catalog entry declaring the required hierarchy contract; a missing or changed route is rejected before HTTP instead of silently rewriting the pin. New selections/Definition validation reject absent keys; Automation/unattended admission reports `model-unavailable` for retired pins. Restore an explicit verified operator catalog entry to continue using a retired model, or deliberately choose a supported model through normal controls. No database reset, alias replacement, automatic routing or migration is performed.
+Synthetic is an explicitly selected offline profile. Its immutable selection projection includes fixed scripted choices and eligible saved tenant offerings. Before any tenant settings exist, its declared fixture default is available for credential-free tests. Once settings are saved, the explicit tenant default and effort govern; clearing or losing that default produces `ModelUnavailable` even while scripted choices remain available for deliberate selection. A captured tenant offering executes through the normal Run/route authority fences with scripted output, without a provider HTTP client or credential unprotection. Real never registers this reader or resolver.
 
-`Transport` is a trusted catalog setting (`ChatCompletions` by default, `Responses` explicitly). GPT-6.1 Sol requires Responses for tools; reasoning-enabled Luna does too, per [OpenAI deployment guidance](https://developers.openai.com/api/docs/guides/deployment-checklist). The adapter uses [OpenRouter's stateless Responses API](https://openrouter.ai/docs/api_reference/responses/overview): `store:false`, full input history, no `previous_response_id`. Opaque continuation tokens preserve model/transport-bound reasoning for tool rounds and durable checkpoints. Infrastructure owns encoding/decoding; Application stores opaque strings only. Tokens never appear in user text, tool arguments, public protocol or logs. Existing checkpoint byte limits continue to fail safely rather than dropping continuation state.
-
-DeepSeek sets `PreferResponseFunction:true` to preserve its established semantic execution path. Native schema plus tools passed a simple lookup but failed broader browser execution and a transient-tool-error trial; advertised native capability does not establish reliable simultaneous use. The response function retains the same validated semantic schema, reasoning effort, tool identities and usage; no model-name branching, capability downgrade or automatic fallback occurs. Other fixed models use native JSON Schema for semantic replies.
-
-Continuation decoding limits decoded UTF-8 bytes to 256 KiB and encoded text to the corresponding Base64 length. Mismatched model/transport state fails before an HTTP request instead of dropping reasoning. Responses input is serialized directly through its own path, without first interpreting continuation as Chat Completions state.
+The [delivery ledger](reports/dynamic-model-management-delivery-2026-10-25.md) distinguishes offline adapter, actual Runtime, administration/browser and remaining canonical identity/selector evidence. Historical static catalog reports are historical evidence only; their former model keys and global routing are retired.
 
 New budget admission JSON adds optional CleanupIntent (LogoutRequested/ClosureRequested) alongside RequestedCleanup. Existing nullable intent is unknown; historical Runs are readable without invented provenance. Both stores preserve the immutable structured pin through retry/reopen/reclaim. No new table/migration is required. Null Definition class profiles remove that explicit default through ordinary draft publication; adopting the new version changes inherited resolution, preserves Instance overrides and never revises existing Run pins.
 

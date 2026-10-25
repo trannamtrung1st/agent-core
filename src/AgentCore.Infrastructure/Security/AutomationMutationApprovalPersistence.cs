@@ -36,8 +36,8 @@ internal static class AutomationMutationApprovalPersistence
             AND {T("Invocation.RunId")} IS 'text' AND length({J("Invocation.RunId")})=36 AND {J("Invocation.RunId")}<>RunId
             AND {T("Invocation.ResponseId")} IS 'text' AND length({J("Invocation.ResponseId")})=36
             AND {T("Invocation.ConfigurationHash")} IS 'text' AND length({J("Invocation.ConfigurationHash")})=64 AND {J("Invocation.ConfigurationHash")} NOT GLOB '*[^0-9a-f]*'
-            AND {T("Invocation.Model")} IS 'object' AND {T("Invocation.Model.CatalogKey")} IS 'text'
-            AND {T("Invocation.Model.ProviderAlias")} IS 'text' AND {T("Invocation.Model.ModelId")} IS 'text'
+            AND {T("Invocation.Model")} IS 'object' AND {T("Invocation.Model.OfferingId")} IS 'text'
+            AND {T("Invocation.Model.ConnectionId")} IS 'text' AND {T("Invocation.Model.ExternalModelId")} IS 'text'
             AND (({J("Proposed.TargetSessionId")} IS NULL AND {J("Invocation.Conversation")} IS NULL)
                 OR ({J("Proposed.TargetSessionId")} IS {J("Invocation.SessionId")} AND {T("Invocation.Conversation")} IS 'object'
                     AND {J("Invocation.Conversation.SessionRevision")}>0 AND {J("Invocation.Conversation.InputBoundarySequence")}>=0)))

@@ -29,7 +29,9 @@ public sealed class DiagnosticLogTests
                 SessionId: SessionId,
                 ErrorCategory: "provider",
                 ErrorCode: "unavailable",
-                ProviderAlias: "bad\nalias"));
+                ProviderAlias: "bad\nalias",
+                OfferingId: "dca10000-0000-4000-8000-000000000001",
+                ConnectionId: "dca10000-0000-4000-8000-000000000002"));
 
         var entry = Assert.Single(logs.Entries);
         Assert.Equal(Microsoft.Extensions.Logging.LogLevel.Warning, entry.Level);
@@ -43,6 +45,8 @@ public sealed class DiagnosticLogTests
         Assert.Equal(activity.TraceId.ToHexString(), entry.Properties["TraceId"]);
         Assert.Equal("provider", entry.Properties["ErrorCategory"]);
         Assert.Equal("unavailable", entry.Properties["ErrorCode"]);
+        Assert.Equal("dca10000-0000-4000-8000-000000000001", entry.Properties["OfferingId"]);
+        Assert.Equal("dca10000-0000-4000-8000-000000000002", entry.Properties["ConnectionId"]);
         Assert.False(entry.Properties.ContainsKey("ProviderAlias"));
         Assert.False(entry.Properties.ContainsKey("ResponseId"));
         Assert.DoesNotContain("api_key", entry.Message, StringComparison.Ordinal);

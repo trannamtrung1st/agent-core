@@ -129,7 +129,7 @@ public sealed class ApplicationMessageToolOfferTests
             new ConversationPolicy("balanced", false, "en", 256),
             new InitiativePolicy(false, 60_000, 120_000, 1, ["longSilence"], 0),
             new VoiceConfiguration(false, "default", 1),
-            new ProviderPreferences("primary-llm", null, null),
+            new ProviderPreferences(null, null),
             new Dictionary<string, string>(StringComparer.Ordinal),
             new RoleEnvironment(ToolAllowlist: tools));
 }

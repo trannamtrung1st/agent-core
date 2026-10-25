@@ -20,6 +20,14 @@ public static class TenantSessionRules
         return scope.Kind == AccessScopeKind.Resource && scope.TenantId is { } tenant && tenant != Guid.Empty && scope.ResourceType == "session"
             && Guid.TryParseExact(scope.ResourceId, "D", out id) && id != Guid.Empty && scope.ResourceId == id.ToString("D");
     }
+    public static void ValidateModelChange(Guid tenant, TenantSessionChange change)
+    {
+        if (change.Action != TenantSessionAction.SelectModel) return;
+        if (change.Model is not { Binding: { } binding } model || binding.Route.TenantId != tenant
+            || model.SelectionSource is not (ModelSelectionSource.User or ModelSelectionSource.AgentDefault or ModelSelectionSource.TenantDefault))
+            throw new AccessDeniedException("model_context_required");
+        binding.RequireIdentity(model.OfferingId, model.ConnectionId, model.ExternalModelId);
+    }
     public static void ValidateCreation(TenantSessionRoot owner, SessionSnapshot snapshot, TenantAgent agent, TenantSessionInitiator initiator, AuthorizationAudit audit)
     {
         if (owner.TenantId != agent.TenantId || owner.SessionId == Guid.Empty || owner.SessionId != snapshot.SessionId

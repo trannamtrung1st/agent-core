@@ -66,7 +66,7 @@ public static class AutomationMutations
     public static Automation SetModelOverride(
         Automation current,
         long expectedRevision,
-        string? catalogKey,
+        string? offeringId,
         string? reasoningEffort,
         DateTimeOffset updatedAt)
     {
@@ -84,20 +84,20 @@ public static class AutomationMutations
         Automation updated;
         try
         {
-            updated = current.WithModelOverride(catalogKey, reasoningEffort, current.Revision, updatedAt);
+            updated = current.WithModelOverride(offeringId, reasoningEffort, current.Revision, updatedAt);
         }
         catch (ArgumentException exception)
         {
             throw AgentCoreErrors.Validation(exception.Message);
         }
 
-        if (string.Equals(updated.ModelOverrideCatalogKey, current.ModelOverrideCatalogKey, StringComparison.Ordinal)
+        if (string.Equals(updated.ModelOverrideOfferingId, current.ModelOverrideOfferingId, StringComparison.Ordinal)
             && string.Equals(updated.ModelOverrideReasoningEffort, current.ModelOverrideReasoningEffort, StringComparison.Ordinal))
         {
             return current;
         }
 
-        return current.WithModelOverride(catalogKey, reasoningEffort, current.Revision + 1, updatedAt);
+        return current.WithModelOverride(offeringId, reasoningEffort, current.Revision + 1, updatedAt);
     }
 
     public static Automation Cancel(

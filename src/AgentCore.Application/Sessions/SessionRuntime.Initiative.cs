@@ -214,7 +214,7 @@ public sealed partial class SessionRuntime
         {
             selection = SessionModelBinder.Bind(
                 _catalog,
-                input.ModelKey,
+                input.OfferingId,
                 input.ReasoningEffort,
                 input.Source,
                 ExecutionDefinition.ModelDefaults);
@@ -231,7 +231,7 @@ public sealed partial class SessionRuntime
             return;
         }
 
-        OperationalDiagnostics.RecordModelSelection(selection.CatalogKey, selection.ProviderAlias);
+        OperationalDiagnostics.RecordModelSelection(selection.OfferingId, selection.ConnectionId);
         var proposed = _snapshot with
         {
             ModelSelection = selection,

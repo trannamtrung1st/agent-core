@@ -22,9 +22,9 @@ public sealed partial class TenantDefinitionIntegrationTests
             new(f.Resources, builtIns, new NoBuiltinKnowledge(), f.Content), (ITenantCredentialBindingStore)current);
         var memory = new TenantMemoryOperationService((ITenantMemoryOperationStore)current, (ITenantLearnedMemoryStore)current, operations, iam, TimeProvider.System);
         var approvals = new TenantApprovalService(current, (ITenantApprovalStore)current, (ITenantAgentStore)current, operations, iam, f.Identity, f.Ids, TimeProvider.System,
-            config, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)current, memoryOperations: memory);
+            config, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(current), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)current, memoryOperations: memory);
         var effects = new TenantApprovedOperationService(current, runs, (ITenantAgentStore)current, (ITenantApprovalStore)current, (ITenantApprovedOperationStore)current, operations,
-            config, f.Ids, TimeProvider.System, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, memoryOperations: memory);
+            config, f.Ids, TimeProvider.System, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(current), SyntheticProviderAliases.Default, memoryOperations: memory);
         return (memory, approvals, effects, new(runs, (ITenantApprovalStore)current, effects, TimeProvider.System, (ITenantRuntimeStore)current, f.Ids));
     }
     private static async Task<(MemorySetup Owner, MemoryTurn Turn, TenantLearnedMemory[] Sources)> MemoryOperationFixture(Fixture f)

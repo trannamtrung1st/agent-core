@@ -27,7 +27,7 @@ public sealed class AutomationRecord
     public long CreatedAtUtc { get; set; }
     public long UpdatedAtUtc { get; set; }
     public string? SuspensionReason { get; set; }
-    public string? ModelOverrideCatalogKey { get; set; }
+    public string? ModelOverrideOfferingId { get; set; }
     public string? ModelOverrideReasoningEffort { get; set; }
     public bool RequiresVision { get; set; }
     public bool RequiresTools { get; set; }
@@ -63,11 +63,12 @@ public sealed class TriggerOccurrenceRecord
     public string? AcceptedAgentRunId { get; set; }
     public string? LiveSessionId { get; set; }
     public long? LiveEvaluationCompletedAtUtc { get; set; }
-    public string? ModelCatalogKey { get; set; }
-    public string? ModelProviderAlias { get; set; }
-    public string? ModelId { get; set; }
+    public string? ModelOfferingId { get; set; }
+    public string? ModelConnectionId { get; set; }
+    public string? ExternalModelId { get; set; }
     public string? ModelReasoningEffort { get; set; }
     public int? ModelSource { get; set; }
+    public string? ModelBindingJson { get; set; }
 }
 
 public sealed class AutomationTriggerRecordEntity

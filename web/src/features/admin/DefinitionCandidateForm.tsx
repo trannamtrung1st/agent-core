@@ -1,3 +1,4 @@
+import { modelChoiceOptions } from "../models/modelLabels";
 import { DeleteOutlined } from "@ant-design/icons";
 import { Alert,Button,Collapse,Flex,Input,InputNumber,Select,Switch,Typography,theme } from "antd";
 import { useId } from "react";
@@ -65,14 +66,13 @@ export function DefinitionCandidateForm({
   onCandidateChange: (candidate: DefinitionCandidate) => void;
 }) {
   const goals = readCandidateStringList(candidate, ["goals"]);
-  const modelKey = readString(candidate, ["modelDefaults", "catalogKey"]);
+  const offeringId = readString(candidate, ["modelDefaults", "offeringId"]);
   const reasoningEffort = readString(candidate, ["modelDefaults", "reasoningEffort"]);
-  const languageModel = readString(candidate, ["providerPreferences", "languageModel"]);
   const speechRecognizer = readString(candidate, ["providerPreferences", "speechRecognizer"]);
   const speechSynthesizer = readString(candidate, ["providerPreferences", "speechSynthesizer"]);
   const interruptionClassifier = readString(candidate, ["providerPreferences", "interruptionClassifier"]);
   const voiceOn = readBoolean(candidate, ["voice", "enabled"]);
-  const selectedModel = authoring?.models.find((item) => item.key === modelKey) ?? null;
+  const selectedModel = authoring?.models.find((item) => item.offeringId === offeringId) ?? null;
   const reasoningChoices = orderedReasoningEfforts(selectedModel
     ? selectedModel.supportedReasoningEfforts
     : authoring?.models.flatMap((item) => item.supportedReasoningEfforts) ?? []);
@@ -395,18 +395,15 @@ export function DefinitionCandidateForm({
                   <div className="admin-draft-field-grid admin-settings-field-grid">
                     <SelectField
                       label="Model"
-                      hint="Optional catalog model. Empty sets no model default."
+                      hint={offeringId && !selectedModel ? "The saved offering is unavailable. Choose an available model or clear this default." : "Optional catalog model. Empty sets no model default."}
                       allowClear
-                      value={modelKey}
-                      options={labeledOptions(
-                        (authoring?.models ?? []).map((item) => ({ value: item.key, label: item.displayName })),
-                        modelKey
-                      )}
+                      value={offeringId}
+                      options={modelChoiceOptions(authoring?.models ?? [], offeringId)}
                       disabled={busy || readOnly}
                       onChange={(value) => {
                         const key = typeof value === "string" ? value : "";
-                        let next = writeModelDefault(candidate, "catalogKey", key);
-                        const model = authoring?.models.find((item) => item.key === key);
+                        let next = writeModelDefault(candidate, "offeringId", key);
+                        const model = authoring?.models.find((item) => item.offeringId === key);
                         const allowed = model?.supportedReasoningEfforts ?? [];
                         const currentEffort = readString(next, ["modelDefaults", "reasoningEffort"]);
                         if (currentEffort.length > 0 && !allowed.includes(currentEffort)) {
@@ -417,7 +414,7 @@ export function DefinitionCandidateForm({
                     />
                     <SelectField
                       label="Reasoning"
-                      hint={selectedModel && selectedModel.supportedReasoningEfforts.length === 0
+                      hint={offeringId && !selectedModel ? "The saved model is unavailable. Its effort is retained until you choose an available model or clear the default." : selectedModel && selectedModel.supportedReasoningEfforts.length === 0
                         ? "This model has no reasoning effort."
                         : "Optional effort supported by the selected model."}
                       allowClear
@@ -426,7 +423,7 @@ export function DefinitionCandidateForm({
                         reasoningChoices.map((item) => ({ value: item, label: effortLabel(item) })),
                         reasoningEffort
                       )}
-                      disabled={busy || readOnly || (selectedModel !== null && selectedModel.supportedReasoningEfforts.length === 0)}
+                      disabled={busy || readOnly || !!offeringId && !selectedModel || (selectedModel !== null && selectedModel.supportedReasoningEfforts.length === 0)}
                       onChange={(value) =>
                         onCandidateChange(writeModelDefault(candidate, "reasoningEffort", typeof value === "string" ? value : ""))
                       }
@@ -568,23 +565,9 @@ export function DefinitionCandidateForm({
               key: "providerPreferences", label: "Provider preferences", children: (
                 <section className="admin-draft-form-section admin-settings-form" aria-label="Provider preferences">
                   <Typography.Text type="secondary" className="admin-draft-field-hint">
-                    Language-model provider is required. Speech aliases are required when voice is on and must stay empty when voice is off. If this server has one speech recognizer and one synthesizer, turning voice on selects them. Otherwise, select both. Advanced JSON does not gain aliases on save.
+                    Speech aliases are required when voice is on and must stay empty when voice is off. If this server has one speech recognizer and one synthesizer, turning voice on selects them. Otherwise, select both. Advanced JSON does not gain aliases on save.
                   </Typography.Text>
                   <div className="admin-draft-field-grid admin-settings-field-grid">
-                    <SelectField
-                      label="Language-model provider"
-                      value={languageModel}
-                      options={labeledOptions(
-                        (authoring?.languageModelAliases ?? []).map((item) => ({ value: item, label: item })),
-                        languageModel
-                      )}
-                      disabled={busy || readOnly}
-                      onChange={(value) =>
-                        onCandidateChange(patchRecord(candidate, ["providerPreferences"], {
-                          languageModel: typeof value === "string" ? value : ""
-                        }))
-                      }
-                    />
                     <SelectField
                       label="Speech recognizer"
                       allowClear

@@ -98,7 +98,7 @@ public static partial class TriggerScheduleCommands
         var enabled = input.Tool == ToolCatalog.AutomationEnable || input.Tool != ToolCatalog.AutomationDisable &&
             (args.TryGetProperty("enabled", out var enable) ? enable.GetBoolean() : current?.Status == AutomationStatus.Active || current is null && preset is null && schedule is not null);
         var target = ChatTarget(args, session, current); var delivery = ChatDelivery(args, session, current);
-        return new(enabled, name, instructions, schedule, Setting("modelKey", current?.ModelOverrideCatalogKey), Setting("reasoningEffort", current?.ModelOverrideReasoningEffort),
+        return new(enabled, name, instructions, schedule, Setting("offeringId", current?.ModelOverrideOfferingId), Setting("reasoningEffort", current?.ModelOverrideReasoningEffort),
             OptionalRequirement(args, "requiresTools") ?? current?.RequiresTools ?? true, OptionalRequirement(args, "requiresVision") ?? current?.RequiresVision ?? false,
             events, delivery.SessionId, target.SessionId, preset?.PresetId, preset?.PresetVersion);
     }

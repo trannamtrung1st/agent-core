@@ -8,7 +8,6 @@ public static class AgentDefinitionStarter
 {
     public static AgentDefinitionCandidate Create(string definitionId, ProviderAliasSet aliases)
     {
-        var languageModel = ChooseLanguageModel(aliases);
         return new AgentDefinitionCandidate(
             2,
             definitionId,
@@ -19,25 +18,8 @@ public static class AgentDefinitionStarter
             new ConversationPolicy("concise", true, "en", 512),
             new InitiativePolicy(false, 30_000, 60_000, 1, []),
             new VoiceConfiguration(false, "alloy", 1.0),
-            new ProviderPreferences(languageModel, null, null),
+            new ProviderPreferences(null, null),
             new Dictionary<string, string>());
     }
 
-    private static string ChooseLanguageModel(ProviderAliasSet aliases)
-    {
-        if (aliases.LanguageModels.Contains("primary-llm"))
-        {
-            return "primary-llm";
-        }
-
-        var configured = aliases.LanguageModels
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name));
-        if (configured is null)
-        {
-            throw AgentCoreErrors.Validation("No language model alias is configured for a new definition.");
-        }
-
-        return configured;
-    }
 }

@@ -31,7 +31,7 @@ public static class TenantManagementResourceRules
             || plan.Result.Deleted != (args.Tool == "resources.delete") || plan.CreateScope != Creates(args)
             || plan.TargetKey != (args.Value.TryGetProperty("key", out var selected) ? selected.GetString() : null)
             || value.Settings is not null || value.Management is not null || value.AutomationChanges is not null || value.Skill is not null
-            || value.UnattendedModelCatalogKey is not null || value.UnattendedReasoningEffort is not null
+            || value.UnattendedOfferingId is not null || value.UnattendedReasoningEffort is not null
             || value.Harness is { } harness && harness.Changed != plan.Changed
             || (args.Tool == "resources.copy") != (plan.CopiedSource is not null) || (args.Tool == "resources.upsert") != (plan.Source is not null)
             || plan.Changed != (new[] { plan.DefinitionState is not null, plan.InstanceResource is not null, plan.DeleteResourceId is not null }.Count(b => b) == 1)

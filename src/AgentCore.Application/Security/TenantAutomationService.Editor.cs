@@ -53,6 +53,7 @@ public sealed partial class TenantAutomationService
         }
         var create = await Can("automations.create", AccessScope.ForTenant(tenant));
         await Unchanged(state, human, ct);
+        var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         return new(agent, policy.TriggerPolicy, items, values.Total, values.Page, values.PageSize, state.Tenant.Revision, create, AgentCore.Application.Triggers.TriggerDurableSchedulingPolicy.AllowsScheduledOccurrence(policy),
             AgentCore.Application.Triggers.OccurrenceCompatibility.Allows(policy, TriggerSourceKind.CoreEvent),
             AgentCore.Application.Triggers.OccurrenceCompatibility.Allows(policy, TriggerSourceKind.ApplicationEvent),

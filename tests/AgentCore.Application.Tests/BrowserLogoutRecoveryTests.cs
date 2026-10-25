@@ -26,7 +26,7 @@ public sealed class BrowserLogoutRecoveryTests
         definition=definition with { Environment=definition.Environment! with { Projection=new(names) } };
         var id=Guid.NewGuid();var owner=Guid.NewGuid();var now=DateTimeOffset.UtcNow;
         var snapshot=RuntimeAgentRunStore.WithPins(new(1,id,1,definition,SessionMode.Text,null,SessionStatus.Created,[],"",0,null,null,now,now,AgentInstanceId:owner,
-            ModelSelection:modelSelection ?? new("synthetic-offline/scripted","primary-llm","scripted",ModelSelectionSource.SystemDefault,null)));
+            ModelSelection:modelSelection ?? new("synthetic-offline/scripted","dca20000-0000-4000-8000-000000000001","scripted",ModelSelectionSource.TenantDefault,null)));
         var memory=new InMemoryMemoryStore();await memory.SaveAsync(snapshot,0);
         var runs=new RuntimeAgentRunStore();runs.Bind(memory);
         var instances=new InMemoryAgentInstanceStore();await instances.InsertAsync(new(owner,definition.Id,definition.Version,definition.Identity,AgentInstanceLifecycle.Active,now,now));

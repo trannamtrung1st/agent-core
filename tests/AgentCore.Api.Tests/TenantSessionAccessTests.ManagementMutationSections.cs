@@ -28,11 +28,11 @@ public sealed partial class TenantSessionAccessTests
     [InlineData(false,"behaviorPolicy","avoidUnsupportedClaims")] [InlineData(true,"behaviorPolicy","avoidUnsupportedClaims")]
     [InlineData(false,"initiativePolicy","enabled")] [InlineData(true,"initiativePolicy","enabled")]
     [InlineData(false,"voice","speakingRate")] [InlineData(true,"voice","speakingRate")]
-    [InlineData(false,"modelDefaults","catalogKey")] [InlineData(true,"modelDefaults","catalogKey")]
+    [InlineData(false,"modelDefaults","offeringId")] [InlineData(true,"modelDefaults","offeringId")]
     [InlineData(false,"memoryPolicy","sessionMemory")] [InlineData(true,"memoryPolicy","sessionMemory")]
     [InlineData(false,"capabilities","selected")] [InlineData(true,"capabilities","selected")]
     [InlineData(false,"triggerPolicy","enabled")] [InlineData(true,"triggerPolicy","enabled")]
-    [InlineData(false,"providerPreferences","languageModel")] [InlineData(true,"providerPreferences","languageModel")]
+    [InlineData(false,"providerPreferences","interruptionClassifier")] [InlineData(true,"providerPreferences","interruptionClassifier")]
     [InlineData(false,"stateIsolationPolicy","homeAccess")] [InlineData(true,"stateIsolationPolicy","homeAccess")]
     public async Task Management_settings_sections_use_shared_constraints_and_exact_atomic_Automation_reconciliation(bool sqlite,string section,string field)
     {

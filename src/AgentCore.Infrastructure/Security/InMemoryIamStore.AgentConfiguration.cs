@@ -67,7 +67,7 @@ public sealed partial class InMemoryIamStore
                 DefinitionSkills: change.DefinitionSkills, AutomationPolicyChanges: change.AutomationPolicyChanges,
                 SetSettingsOverrides: change.SetSettingsOverrides, SettingsOverrides: change.SettingsOverrides,
                 SetExecutionBudgets: change.SetExecutionBudgets, ExecutionBudgets: change.ExecutionBudgets,
-                SetUnattendedModel: change.SetUnattendedModel, UnattendedModelCatalogKey: change.UnattendedModelCatalogKey,
+                SetUnattendedModel: change.SetUnattendedModel, UnattendedOfferingId: change.UnattendedOfferingId,
                 UnattendedReasoningEffort: change.UnattendedReasoningEffort, HarnessManagement: change.HarnessManagement), at, ct).Result;
             if (change.Isolation is { } mutation)
             {

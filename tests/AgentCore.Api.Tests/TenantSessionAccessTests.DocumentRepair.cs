@@ -31,7 +31,7 @@ public sealed partial class TenantSessionAccessTests
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, modelKey = responseFunction ? "scripted-alpha" : "scripted-beta", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, offeringId = responseFunction ? "dca30000-0000-4000-8000-000000000001" : "dca30000-0000-4000-8000-000000000002", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, tenant, null, "Owned document publication and independent reads", ["agents.read", "sessions.read", "workspaces.read", "workspaces.write", "artifacts.create", "artifacts.read"], await Revision(owner, tenant));
             await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
@@ -40,14 +40,14 @@ public sealed partial class TenantSessionAccessTests
             var firstId = await Submit("Write the substantial playbook and publish the exact saved bytes.", 1);
             var first = await AwaitBrowserRestartRun(runs, tenant, firstId, false);
             Assert.Equal(AgentRunStatus.Completed, first.Status);
-            Assert.Equal(responseFunction ? "scripted-alpha" : "scripted-beta", first.PinnedModel.CatalogKey);
+            Assert.Equal(responseFunction ? "dca30000-0000-4000-8000-000000000001" : "dca30000-0000-4000-8000-000000000002", first.PinnedModel.OfferingId);
             var artifact = Assert.Single((await Json(await owner.GetAsync(api + $"/sessions/{session}/artifacts"))).GetProperty("items").EnumerateArray());
             var id = artifact.GetProperty("artifactId").GetGuid();
             Assert.True(Encoding.UTF8.GetByteCount(OwnedDocumentRecoveryModel.Document) > 16 * 1024);
             Assert.Equal(OwnedDocumentRecoveryModel.Document, await owner.GetStringAsync(api + $"/sessions/{session}/artifacts/{id}/content"));
             var firstHistory = (await factory.Services.GetRequiredService<ITenantConversationStore>().ReadTenantConversationAsync(tenant, session, null, null, 100))!;
             var answer = firstHistory.History.Items.Single(e => e.Role == ConversationRole.Assistant);
-            Assert.True(answer.Envelope!.Blocks.Count == 1, $"status={answer.Status}; textLength={answer.Text.Length}; modelCalls={model.Requests.Count}; catalog={first.PinnedModel.CatalogKey}; lastTools={string.Join(",", model.Requests.Last().Tools?.Select(t => t.Name) ?? [])}");
+            Assert.True(answer.Envelope!.Blocks.Count == 1, $"status={answer.Status}; textLength={answer.Text.Length}; modelCalls={model.Requests.Count}; catalog={first.PinnedModel.OfferingId}; lastTools={string.Join(",", model.Requests.Last().Tools?.Select(t => t.Name) ?? [])}");
             Assert.Equal(id.ToString("D"), Assert.Single(answer.Envelope.Blocks).ArtifactId);
             var nextId = await Submit("Write the same document into notes.md first, then report the saved note.", firstHistory.SessionRevision);
             var next = await AwaitBrowserRestartRun(runs, tenant, nextId, false);

@@ -3,7 +3,7 @@ import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import { newChatPath, parseSessionIdFromPath, sameSessionId, syncBrowserSessionPath } from '../app/sessionRoute';
 import { capture } from "../audio/capture";
 import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio/outputAdmission";
-import { modelSelectValue } from "../features/chat/ModelPicker";
+import { INHERIT_MODEL, modelSelectValue } from "../features/chat/ModelPicker";
 import { defaultChatIdentityKey, isNewChatIdentityReady, parseChatIdentityKey, resolveNewChatIdentityPresentation } from "../features/chat/chatIdentity";
 import { IMAGE_MODEL_INCOMPATIBLE_MESSAGE, imageModelCompatibility, pendingAttachmentsIncludeImage, queuedSendIncludesImage, resolveModelVision } from "../features/chat/imageModelCompatibility";
 import { sessionErrorFromMessage, sessionErrorFromWire, type WireError } from "../features/chat/sessionError";
@@ -24,7 +24,7 @@ import { catalogShell, refreshCatalog } from "./catalog";
 import { hasTask, messageText, snapshotParts, wireParts, type MessagePart, type ResourceReference } from "./messageParts";
 import { applyReadyHistoryPaging, beginSessionHistory, loadNewestHistoryPage, loadOlderHistoryPage, reconcileOrphanedLiveConversation } from "./sessionHistory";
 import { requiresExplicitResume } from "./sessionPauseSemantics";
-import { chatTenantId, retireTenantChatRequests, tenantCanCreateChat, tenantCancelWitness, tenantChatCandidates, tenantInterruptWitness, tenantTextWitness } from './tenantChat';
+import { chatTenantId, retireTenantChatRequests, tenantCanCreateChat, tenantCancelWitness, tenantChatCandidates, tenantInterruptWitness, tenantSelectChatModel, tenantSessionMetadata, tenantTextWitness } from './tenantChat';
 
 let connection: HubConnection | null = null;
 let connectionEpoch = 0;
@@ -177,6 +177,7 @@ export function addResourceToDraft(reference: ResourceReference, label: string):
 
 export function selectChatIdentity(identityKey: string): void {
   useSessionStore.setState({ newChatIdentityKey: identityKey, draft: "", draftParts: null });
+  void loadChatModels();
 }
 
 function newChatVoiceAvailable(snapshot: ReturnType<typeof useSessionStore.getState>): boolean {
@@ -1816,6 +1817,8 @@ async function startConnection(
   }
   beginReconnectBudget();
   try {
+    const metadata = await tenantSessionMetadata(sessionId);
+    await loadChatModels(metadata.agentInstanceId);
     await connection.start();
     await attachWithBusyRetry();
     if (chatSurfaceVisible && navigationVoiceResetSessionId === sessionId
@@ -1925,6 +1928,7 @@ async function loadChatAgentInstances(query = '', more = false): Promise<void> {
         : !query && !before.newChatIdentityKey ? defaultChatIdentityKey(rows) : '';
       useSessionStore.setState({ chatAgentInstances: rows, chatAgentInstancesLoading: false, chatAgentPage: page.page,
         chatAgentQuery: query, chatAgentHasMore: (page.page + 1) * page.pageSize < page.total, newChatIdentityKey: selected });
+      if (!more) await loadChatModels();
     } catch (error) {
       if (epoch === candidateEpoch) useSessionStore.setState({ chatAgentInstancesLoading: false, chatAgentInstances: [],
         newChatIdentityKey: '', chatAgentInstancesError: error instanceof Error ? error.message : 'Unable to load agents.' });
@@ -1937,6 +1941,28 @@ export function reloadChatAgentInstances(): Promise<void> {
 }
 export function searchChatAgents(query: string): Promise<void> { return loadChatAgentInstances(query); }
 export function loadMoreChatAgents(): Promise<void> { return loadChatAgentInstances(useSessionStore.getState().chatAgentQuery, true); }
+
+let modelCatalogEpoch = 0;
+async function loadChatModels(instanceId?: string): Promise<void> {
+  const epoch = ++modelCatalogEpoch;
+  const key = useSessionStore.getState().newChatIdentityKey;
+  const session = useSessionStore.getState().sessionId;
+  const current = () => epoch === modelCatalogEpoch && (session ? sameSessionId(session, useSessionStore.getState().sessionId)
+    : !useSessionStore.getState().sessionId && useSessionStore.getState().newChatIdentityKey === key);
+  const identity = parseChatIdentityKey(key);
+  useSessionStore.setState({ modelCatalog: [], modelCatalogDefaultOfferingId: null,
+    modelCatalogDefaultEffort: null, modelCatalogDefaultSource: "tenantDefault", modelCatalogLoading: true, modelCatalogError: null });
+  try {
+    const models = await listModels(instanceId ?? identity?.instanceId);
+    if (!current()) return;
+    useSessionStore.setState({ modelCatalog: models.models, modelCatalogDefaultOfferingId: models.defaultOfferingId,
+      modelCatalogDefaultEffort: models.defaultReasoningEffort ?? null, modelCatalogDefaultSource: models.defaultSource ?? "tenantDefault",
+      modelCatalogLoading: false });
+  } catch (error) {
+    if (current())
+      useSessionStore.setState({ modelCatalogLoading: false, modelCatalogError: error instanceof Error ? error.message : "Unable to load models. Choose the Agent again to retry." });
+  }
+}
 
 async function bootstrapInner(): Promise<string> {
   if (!chatTenantId) throw new Error("Choose an organization before opening Chat.");
@@ -1952,7 +1978,7 @@ async function bootstrapInner(): Promise<string> {
     // Resolve a deep link before presenting a sendable default-identity chat.
     useSessionStore.setState({ connection: "connecting" });
   }
-  const [health, models] = await Promise.all([getHealth(), listModels()]);
+  const health = await getHealth();
   useSessionStore.setState({
     agents: [],
     chatAgentInstances: [],
@@ -1960,8 +1986,10 @@ async function bootstrapInner(): Promise<string> {
     chatAgentInstancesLoading: true,
     newChatIdentityKey: "",
     selectedAgentId: "",
-    modelCatalog: models.models,
-    modelCatalogDefaultKey: models.defaultKey
+    modelCatalog: [],
+    modelCatalogDefaultOfferingId: null,
+    modelCatalogDefaultEffort: null,
+    modelCatalogLoading: true
   });
   await loadChatAgentInstances();
   await refreshCatalog(true);
@@ -2086,6 +2114,7 @@ export async function startConversation(): Promise<boolean> {
       if (bootstrapTask) await bootstrapTask;
       if (tenantAtStart !== chatTenantId || !chatSurfaceVisible) return false;
       const snapshot = useSessionStore.getState();
+      if (snapshot.modelCatalogLoading || snapshot.modelCatalogError) return false;
       if (isReadonlySession(snapshot)) {
         return false;
       }
@@ -2110,7 +2139,7 @@ export async function startConversation(): Promise<boolean> {
         return false;
       }
       const modelChoice = {
-        key: snapshot.pendingModelKey,
+        offeringId: snapshot.pendingOfferingId === INHERIT_MODEL ? null : snapshot.pendingOfferingId,
         reasoningEffort: snapshot.pendingReasoningEffort
       };
       const created = await createSessionForInstance(identity.instanceId, modelChoice);
@@ -2164,8 +2193,30 @@ export function clearRouteNotice(): void {
 
 export async function applySessionModel(key: string, reasoningEffort: string | null): Promise<void> {
   const snapshot = useSessionStore.getState();
-  if (snapshot.sessionId || isReadonlySession(snapshot)) return;
-  useSessionStore.setState({ pendingModelKey: key, pendingReasoningEffort: reasoningEffort });
+  if (isReadonlySession(snapshot) || isSessionModelBusy(snapshot)) return;
+  if (!snapshot.sessionId) {
+    useSessionStore.setState({ pendingOfferingId: key, pendingReasoningEffort: reasoningEffort });
+    return;
+  }
+  if (snapshot.connection !== "ready" || snapshot.status === "paused" || snapshot.mode !== "text") return;
+  const session = snapshot.sessionId;
+  useSessionStore.setState({ modelMutationPending: true });
+  try {
+    const saved = await tenantSelectChatModel(session, key === INHERIT_MODEL ? null : key, reasoningEffort);
+    if (!sameSessionId(session, useSessionStore.getState().sessionId)) return;
+    useSessionStore.setState({ ...modelFieldsFromSelection(saved.model), modelMutationPending: false, sessionError: null, error: null, errorFatal: false });
+  } catch (error) {
+    if (!sameSessionId(session, useSessionStore.getState().sessionId)) return;
+    // Read current state after an uncertain/refused command. Never replay the change.
+    try {
+      const saved = await getSession(session);
+      if (sameSessionId(session, useSessionStore.getState().sessionId))
+        useSessionStore.setState({ ...modelFieldsFromSelection(saved.model) });
+    } catch { /* Keep the last known selection visible until an explicit reload succeeds. */ }
+    if (sameSessionId(session, useSessionStore.getState().sessionId))
+      useSessionStore.setState({ modelMutationPending: false,
+        ...sessionFailurePatch(error instanceof Error ? error.message : "The model could not be changed. Reload before trying again.") });
+  }
 }
 
 export type OpenSessionResult = "ready" | "ended" | "blocked" | "failed" | "paused";
@@ -2579,17 +2630,17 @@ function mergePendingAttachments(restored: PendingAttachment[]): PendingAttachme
 
 function composerModelValue(snapshot = useSessionStore.getState()): string {
   return modelSelectValue(
-    snapshot.sessionModelKey,
-    snapshot.pendingModelKey,
+    snapshot.sessionOfferingId,
+    snapshot.pendingOfferingId,
     snapshot.sessionId != null,
-    snapshot.modelCatalogDefaultKey);
+    snapshot.modelCatalogDefaultOfferingId);
 }
 
 function composerImageCompatibility(snapshot = useSessionStore.getState()) {
   return imageModelCompatibility({
     models: snapshot.modelCatalog,
     modelValue: composerModelValue(snapshot),
-    defaultKey: snapshot.modelCatalogDefaultKey,
+    defaultOfferingId: snapshot.modelCatalogDefaultOfferingId,
     pendingAttachments: snapshot.pendingAttachments,
     pendingSendQueue: snapshot.pendingSendQueue
   });
@@ -2609,7 +2660,7 @@ function outgoingImageTurnIncompatible(attachments: readonly PendingAttachment[]
   const vision = resolveModelVision(
     snapshot.modelCatalog,
     composerModelValue(snapshot),
-    snapshot.modelCatalogDefaultKey);
+    snapshot.modelCatalogDefaultOfferingId);
   return vision === false;
 }
 
@@ -2656,6 +2707,7 @@ function composerCanSend(
 export function composerSendEnabled(): boolean {
   if (chatTenantId && !useSessionStore.getState().sessionId && !tenantCanCreateChat()) return false;
   const snapshot = useSessionStore.getState();
+  if (snapshot.modelMutationPending || !snapshot.sessionId && (snapshot.modelCatalogLoading || snapshot.modelCatalogError)) return false;
   if (isReadonlySession(snapshot) || snapshot.status === "paused") {
     return false;
   }

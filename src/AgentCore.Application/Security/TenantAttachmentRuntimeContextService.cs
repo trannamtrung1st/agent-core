@@ -6,7 +6,7 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed partial class TenantAttachmentRuntimeContextService(TenantOperationAuthorizer operations, ITenantSessionStore sessions,
-    ITenantAttachmentStore files, TenantRunConfigurationResolver configurations, IamAuthorizer iam, IAttachmentProcessor processor, TimeProvider time, ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, IIdGenerator ids, IModelCatalog models, IOfficeProcessor officeReader)
+    ITenantAttachmentStore files, TenantRunConfigurationResolver configurations, IamAuthorizer iam, IAttachmentProcessor processor, TimeProvider time, ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, IIdGenerator ids, ITenantModelCatalogReader modelCatalogs, IOfficeProcessor officeReader)
 {
     private sealed record View(AgentRun Run, TenantSecurityState State, TenantSession Session, TenantAgent Agent);
     private async ValueTask<View> Load(TenantRuntimeFrame frame, CancellationToken ct, bool live = true)

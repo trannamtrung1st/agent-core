@@ -130,7 +130,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                         await runtime.ApplyTenantRuntimeCommandAsync(active.Owner, active.AgentRunId,
                             new AgentRunCommand.CommitCancellation(active.Revision, DateTimeOffset.UtcNow, active.Claim!.Generation, "SDK boundary cancellation"), f.Ids.NewId());
                         var sessions = new TenantSessionService(f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam,
-                            f.Definitions, new SessionNoBuiltinFallback(), f.Identity, f.Authorizer, AgentCore.Infrastructure.Providers.ModelCatalogFactory.Synthetic(), new(), f.Ids, TimeProvider.System);
+                            f.Definitions, new SessionNoBuiltinFallback(), f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), new(), f.Ids, TimeProvider.System);
                         var current = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Session.SessionId))!;
                         await sessions.ChangeAsync(s.Tenant, SandboxHuman(s), new(s.Session.SessionId, current.Snapshot.Revision, TenantSessionAction.Delete),
                             (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
@@ -186,7 +186,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                 (ITenantApprovedOperationStore)f.Iam, (ITenantRunStore)f.Iam, target, f.Authorizer, TimeProvider.System);
             var sdk = new OpenSandboxService(options,f.Sandbox,null!,f.SessionStore,TimeProvider.System,                tenantRuntime: storage,approvedSandbox: services.Execution,tenantExecutionAuthority: authority,tenantRuns: (ITenantRunStore)f.Iam);
             var local = new TenantApprovedOperationService(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, (ITenantApprovalStore)f.Iam,
-                (ITenantApprovedOperationStore)f.Iam, operations, s.Resolver, f.Ids, TimeProvider.System, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default);
+                (ITenantApprovedOperationStore)f.Iam, operations, s.Resolver, f.Ids, TimeProvider.System, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), SyntheticProviderAliases.Default);
             var continuation = new TenantRunContinuationService((ITenantRunStore)f.Iam, (ITenantApprovalStore)f.Iam, local, TimeProvider.System,
                 runtimeStore: (ITenantRuntimeStore)f.Iam, ids: f.Ids, sandboxCommands: sdk, sandboxResults: services.Execution);
             if (outcome == "checkpointMismatch")

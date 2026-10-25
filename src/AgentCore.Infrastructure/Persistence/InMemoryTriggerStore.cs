@@ -292,7 +292,7 @@ public sealed partial class InMemoryTriggerStore : ITriggerStore
         TriggerOwner owner,
         Guid automationId,
         long expectedRevision,
-        string? catalogKey,
+        string? offeringId,
         string? reasoningEffort,
         DateTimeOffset updatedAt,
         CancellationToken cancellationToken = default)
@@ -303,7 +303,7 @@ public sealed partial class InMemoryTriggerStore : ITriggerStore
             var updated = AutomationMutations.SetModelOverride(
                 current,
                 expectedRevision,
-                catalogKey,
+                offeringId,
                 reasoningEffort,
                 updatedAt);
             _state.Registrations[automationId] = updated;

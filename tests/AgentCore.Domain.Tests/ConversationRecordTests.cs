@@ -42,9 +42,9 @@ public sealed class ConversationRecordTests
             5,
             now,
             ModelProvenance: new ModelGenerationProvenance(
-                "scripted-alpha",
-                "primary-llm",
-                "scripted-alpha",
+                "dca30000-0000-4000-8000-000000000001",
+                "dca20000-0000-4000-8000-000000000001",
+                "dca30000-0000-4000-8000-000000000001",
                 "medium"));
         Assert.Equal(left, left with { });
         Assert.NotEqual(left, left with { ModelProvenance = null });
@@ -54,10 +54,10 @@ public sealed class ConversationRecordTests
     public void Session_model_selection_is_a_concrete_value()
     {
         var left = new SessionModelSelection(
-            "scripted-alpha",
-            "primary-llm",
-            "scripted-alpha",
-            ModelSelectionSource.SystemDefault,
+            "dca30000-0000-4000-8000-000000000001",
+            "dca20000-0000-4000-8000-000000000001",
+            "dca30000-0000-4000-8000-000000000001",
+            ModelSelectionSource.TenantDefault,
             "medium");
         Assert.Equal(left, left with { });
         Assert.NotEqual(left, left with { SelectionSource = ModelSelectionSource.User });

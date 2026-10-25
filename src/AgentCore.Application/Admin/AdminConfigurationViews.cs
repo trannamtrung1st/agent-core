@@ -10,11 +10,13 @@ public sealed record AdminKnowledgeSource(
     string ResolvedResourcePath);
 
 public sealed record AdminEffectiveModel(
-    string CatalogKey,
+    string OfferingId,
     string DisplayName,
     string SelectionSource,
     string? ReasoningEffort,
-    string? ModelId);
+    string? ExternalModelId,
+    bool Available = true,
+    string? UnavailableReason = null);
 
 public sealed record AdminDurableExecutionEligibility(
     bool InstanceActive,
@@ -43,7 +45,7 @@ public sealed record AdminEffectiveConfiguration(
     MemoryPolicy MemoryPolicy,
     TriggerPolicy? TriggerPolicy,
     AdminDurableExecutionEligibility DurableExecutionEligibility,
-    string? UnattendedModelCatalogKey = null,
+    string? UnattendedOfferingId = null,
     string? UnattendedReasoningEffort = null,
     BrowserEffectiveConfiguration? Browser = null);
 

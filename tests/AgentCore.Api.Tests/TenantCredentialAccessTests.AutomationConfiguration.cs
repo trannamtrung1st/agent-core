@@ -58,7 +58,7 @@ public sealed partial class TenantCredentialAccessTests
         await Json(await owner.PostAsJsonAsync(api + $"/definition-drafts/{draftId}/publish", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = saved.GetProperty("revision").GetInt64() }));
         var created = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = definition, version = 1, expectedRevision = await Revision(owner, tenant) }));
         var instance = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); var principal = created.GetProperty("principalId").GetGuid(); var path = api + $"/agents/{instance}";
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, modelKey = "scripted-alpha", reasoningEffort = "high",
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, offeringId = "dca30000-0000-4000-8000-000000000001", reasoningEffort = "high",
             expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
         var sessions = factory.Services.GetRequiredService<ITenantSessionStore>(); var original = (await sessions.FindTenantSessionAsync(tenant, session))!.Snapshot;
         Assert.Equal(HttpStatusCode.OK, (await owner.PatchAsJsonAsync(path + "/settings/conversationPolicy", new { set = new { maxOutputTokens = 2048 }, clear = Array.Empty<string>(), expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 })).StatusCode);

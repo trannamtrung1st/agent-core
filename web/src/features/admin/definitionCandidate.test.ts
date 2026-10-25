@@ -19,7 +19,7 @@ const sample = {
   schemaVersion: 2,
   definitionId: "examiner",
   identity: { name: "Alex", role: "Examiner", description: "Practice.", tone: "Calm" },
-  modelDefaults: { catalogKey: "scripted-alpha", reasoningEffort: "low" },
+  modelDefaults: { offeringId: "dca30000-0000-4000-8000-000000000001", reasoningEffort: "low" },
   metadata: { owner: "kept" },
   voice: { enabled: false, voiceId: "verse", speakingRate: 1 }
 };
@@ -78,7 +78,6 @@ describe("definitionCandidate", () => {
     const textOnly = {
       ...sample,
       providerPreferences: {
-        languageModel: "primary-llm",
         speechRecognizer: null,
         speechSynthesizer: null,
         interruptionClassifier: "heuristic"
@@ -89,7 +88,6 @@ describe("definitionCandidate", () => {
       speechSynthesizer: "primary-tts"
     });
     expect(voiced.providerPreferences).toEqual({
-      languageModel: "primary-llm",
       speechRecognizer: "primary-stt",
       speechSynthesizer: "primary-tts",
       interruptionClassifier: "heuristic"
@@ -115,7 +113,6 @@ describe("definitionCandidate", () => {
       speechSynthesizer: "primary-tts"
     });
     expect(silenced.providerPreferences).toMatchObject({
-      languageModel: "primary-llm",
       speechRecognizer: null,
       speechSynthesizer: null
     });
@@ -123,7 +120,6 @@ describe("definitionCandidate", () => {
     expect(candidateForPersistence({
       ...silenced,
       providerPreferences: {
-        languageModel: "primary-llm",
         speechRecognizer: "  ",
         speechSynthesizer: ""
       }
@@ -138,7 +134,6 @@ describe("definitionCandidate", () => {
       ...sample,
       voice: { enabled: true, voiceId: "verse", speakingRate: 1 },
       providerPreferences: {
-        languageModel: "primary-llm",
         speechRecognizer: "custom-stt",
         speechSynthesizer: "custom-tts"
       }
@@ -147,8 +142,8 @@ describe("definitionCandidate", () => {
   });
 
   it("clears model defaults only when both fields are blank", () => {
-    const clearedKey = writeModelDefault(sample, "catalogKey", " ");
-    expect(clearedKey.modelDefaults).toEqual({ catalogKey: null, reasoningEffort: "low" });
+    const clearedKey = writeModelDefault(sample, "offeringId", " ");
+    expect(clearedKey.modelDefaults).toEqual({ offeringId: null, reasoningEffort: "low" });
     const cleared = writeModelDefault(clearedKey, "reasoningEffort", "");
     expect(cleared.modelDefaults).toBeNull();
   });

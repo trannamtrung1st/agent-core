@@ -14,11 +14,11 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed partial class TenantRunAdmissionTests
 {
     private static TenantApprovalService AttachmentApprovals(Fixture f, TenantAttachmentRuntimeContextService reads) => new(f.Iam, (ITenantApprovalStore)f.Iam,
-        (ITenantAgentStore)f.Iam, AttachmentOperations(f), f.Authorizer, f.Identity, f.Ids, f.Clock, f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default,
+        (ITenantAgentStore)f.Iam, AttachmentOperations(f), f.Authorizer, f.Identity, f.Ids, f.Clock, f.RunConfiguration(), new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), SyntheticProviderAliases.Default,
         effects: (ITenantApprovedOperationStore)f.Iam, attachmentReads: reads);
     private static TenantApprovedOperationService AttachmentEffects(Fixture f, TenantAttachmentRuntimeContextService reads) => new(f.Iam, (ITenantRunStore)f.Iam,
         (ITenantAgentStore)f.Iam, (ITenantApprovalStore)f.Iam, (ITenantApprovedOperationStore)f.Iam, AttachmentOperations(f), f.RunConfiguration(), f.Ids, f.Clock,
-        ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, attachmentReads: reads);
+        new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), SyntheticProviderAliases.Default, attachmentReads: reads);
     [Theory] [InlineData(false, "attachments.read")] [InlineData(true, "attachments.read")]
     [InlineData(false, "sessions.read")] [InlineData(true, "sessions.read")]
     public async Task Tenant_attachment_read_Review_binds_exact_source_and_returns_one_authorized_body_without_a_grant(bool sqlite, string permission)

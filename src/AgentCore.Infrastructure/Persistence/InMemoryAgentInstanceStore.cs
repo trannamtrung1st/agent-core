@@ -621,9 +621,9 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
                 HarnessManagement = CopyManagement(update.HarnessManagement ?? instance.HarnessManagement),
                 ExecutionBudgets = update.SetExecutionBudgets ? update.ExecutionBudgets : instance.ExecutionBudgets,
                 SettingsOverrides = (update.SetSettingsOverrides ? update.SettingsOverrides : instance.SettingsOverrides)?.Copy(),
-                UnattendedModelCatalogKey = update.SetUnattendedModel
-                    ? NullIfBlank(update.UnattendedModelCatalogKey)
-                    : instance.UnattendedModelCatalogKey,
+                UnattendedOfferingId = update.SetUnattendedModel
+                    ? NullIfBlank(update.UnattendedOfferingId)
+                    : instance.UnattendedOfferingId,
                 UnattendedReasoningEffort = update.SetUnattendedModel
                     ? NullIfBlank(update.UnattendedReasoningEffort)
                     : instance.UnattendedReasoningEffort

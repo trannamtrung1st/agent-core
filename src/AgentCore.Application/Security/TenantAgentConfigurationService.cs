@@ -17,7 +17,7 @@ public sealed record TenantAgentEffectiveConfiguration(TenantAgent Agent, AgentD
 
 public sealed partial class TenantAgentConfigurationService(IIamStore security, ITenantAgentStore agents, ITenantDefinitionStore definitions,
     IBuiltInAgentDefinitionStore builtIns, InheritedDefinitionResourceCatalog inheritedResources, IamAuthorizer authorizer,
-    IModelCatalog models, IToolConfigurationGate tools, InstanceAutomationPolicy automationPolicy,
+    ITenantModelCatalogReader modelCatalogs, IToolConfigurationGate tools, InstanceAutomationPolicy automationPolicy,
     IIdGenerator ids, TimeProvider time, AdminLifecycleCoordinator? lifecycleGate = null, SandboxPolicyEnforcement? sandbox = null,
     ProviderAliasSet? aliases = null, IBrowser? browser = null, IDefinitionResourceContentStore? content = null, IdentityService? identity = null,
     ITenantSandboxProfileStore? sandboxProfiles = null, ISandboxImageAuthority? sandboxImages = null, ISandboxReadiness? sandboxReadiness = null)
@@ -42,6 +42,7 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
         var skillView = EffectiveSkillCatalogResolver.Resolve(effective, snapshot.Skills).Where(s => allowedSkills.Contains(s.Key)).ToArray();
         var visible = effective with { Skills = effective.SkillList.Where(s => allowedSkills.Contains("definition:" + s.Id)).ToArray(),
             Environment = readableResources.All ? effective.Environment : RoleEnvironments.Of(effective) with { KnowledgeSources = [] } };
+        var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         var overview = AdminEffectiveConfigurationResolver.Resolve(snapshot.Agent.Instance, baseline, models, tools,
             Guid.TryParse(baseline.Id, out _) ? "TenantPublication" : "BuiltIn", status);
         if (!readableResources.All) overview = overview with { KnowledgeSources = [] };
@@ -86,6 +87,13 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
         return await agents.TryChangeTenantAgentConfigurationAsync(next, state.Tenant.Revision, change, now,
             new(ids.NewId(), tenant, actor, action, change.InstanceId.ToString("D"), "allowed", "authorized", now), ct).ConfigureAwait(false)
             ?? throw new SecurityConflictException("stale_revision");
+    }
+    private async ValueTask<IModelCatalog> ModelCatalogForAgentAsync(Guid actor, Guid tenant, Guid instance, CancellationToken ct)
+    {
+        var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
+        var decision = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("agents.read"), Scope(tenant, instance), ct).ConfigureAwait(false);
+        if (!decision.Allowed) throw new AccessDeniedException(decision.ReasonCode);
+        return await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
     }
     private async ValueTask RequireOriginalHuman(Guid actor, Guid tenant, HumanSessionReference? initiator, CancellationToken ct)
     {

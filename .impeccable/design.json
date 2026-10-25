@@ -627,6 +627,344 @@
           1440
         ],
         "limits": "Scoped local presentation and interaction acceptance; no full WCAG, physical-device/audio, live-provider/customer or rollout claim. No .agents edits or launcher rerun; extraction date and historical records preserved."
+      },
+      "dynamicModelsDocumentationRefresh": {
+        "refreshedAt": "2026-10-25T07:54:31Z",
+        "scope": "User-required narrow actual design/context sync for model administration, offering selectors, readable references and existing-configuration impact confirmation. Ordinary Ant Design v6 dark Operate extension; no new world or normative token/preview changes. Current hashes apply only to this scoped record; historical inspection records and generatedAt are preserved.",
+        "snapshotKind": "scoped-documentation-refresh",
+        "sourceSha256": {
+          "web/src/features/chat/ModelPicker.tsx": "64133a40b266f2665a8104ddba0d7b762ad62ce2d14785419072156d4725b95e",
+          "web/src/features/access/ModelReferences.tsx": "dd0f5aa67e25f49bc048b6d9bae430320959ce86259513450bfd49235dddcae2",
+          "web/src/features/access/TenantModels.tsx": "d0faf4b0892f7b1d42b508e475789f4eaf9f8135423a5b8c27a56c4072624e56",
+          "web/src/features/access/ModelOfferingEditor.tsx": "98d8aca27eacda87cff8818599dd1d4880b1c751353db20cc84d5ad11a991762",
+          "web/src/features/access/ModelConnectionEditor.tsx": "d5d3063c5dbaa6c750a6ae1ed5eae5ceedc75db1c4f4ea4797c5f2465dc365ad",
+          "web/src/features/access/ModelDefaultEditor.tsx": "c7db391827f27e9aac8e58eb2cbed142b0db6eb0fefc193c9333054cd354f001",
+          "web/src/features/admin/DefinitionCandidateForm.tsx": "5a3cbeffa5ebf7111f31d2e9d4487ab60caee08ce90b17a499d6e35487e4e710",
+          "web/src/features/admin/InstanceSettingsSection.tsx": "987404807d096afae663b05679ddad65e38232a980b6c6836024a0a683ca2144",
+          "web/src/features/admin/ExecutionModelFields.tsx": "da6a406f897f5e3023dc19e37267bda4c877a48dbf318c1b918cc63d4a820b28",
+          "web/src/features/access/TenantAgentControls.tsx": "b5d48ae9c4718d34edabd326a771f2d426c4c4c63159c6d063c79d33013085a0",
+          "web/src/services/models.ts": "d48cf3a547d4ca6ed5fb63bdff69258e4ff6936b17dcc9ab5f7f1acd29ed7662",
+          "web/src/app.css": "49412d703c0dd731d0accd16c133a55f80fb3d53543b2e1bc1c71dbb753de99f",
+          "web/src/features/access/TenantAgentAutomations.tsx": "b60bbc2c55b197e2f8a75af1e9d4b5a5a545a6f867dc7c3f25cde4ef2dd7ca0d",
+          "web/src/features/access/SystemModelPresets.tsx": "279edd8dd86707743989f2955ff880f505d9f6a7916dfb5b08cb245b0a4b8e62",
+          "web/src/features/access/ModelCapabilityFields.tsx": "d20b708dfda5e4f2a080cbf6639993ab185f2ea6a0a48676286cadee62299cf5",
+          "web/src/features/admin/AdminShell.tsx": "45776c04135cbdcedb708e42ecf6119b94cc58057444c4377b54607c2e444b02",
+          "web/src/features/admin/AdminCollectionToolbar.tsx": "0fe5aba5f8dd821c2726d700fd7c1a80e8d4a6ff9dce5031c12ba536e01047e5",
+          "web/src/features/admin/useAdminDetailLayout.ts": "b0f7d9585d713164dd1cf79a44b3c427a9dade81fa6d8df58c2bee2e86593c71",
+          "web/src/features/models/modelLabels.ts": "12924d96fcef0cf2022e98f578db8549793180ba44c33b48a46562dda595887d",
+          "web/src/features/models/reasoningEfforts.ts": "1e5a9460f68df6e1b9a6103211b8f0ca6ff285932f76de4a2bc5cf888e74e53d",
+          "web/src/app/AppShell.tsx": "35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1",
+          "web/src/app/antdTheme.ts": "64f582375261f51bb82b2041b8fef9f872e13929b309ad3978011619f5ac2e66"
+        },
+        "documentationSha256": {
+          ".agents/context/DESIGN.md": "d863bf729192661fd4a8e39eb7d1e16ab689480f32ec03538da8d5e6d8734d4c",
+          ".agents/context/PRODUCT.md": "b6ce1cbdc32599988aa2c072d6e767e8486783b5428bad9860a360a522e30e16",
+          ".impeccable/review/model-final/design-comparison.md": "d6fb407c55806badc586931c9b259991d5b217e51a272e06fa49585d801b471b"
+        },
+        "evidenceSha256": {
+          ".impeccable/review/model-final/brief.md": "82bbd2789f78ef340347f79497e1afb3bd2512291a6dddbf2abe1f8daef5573f",
+          ".impeccable/review/model-final/captures.json": "657c051f724ae26f17729894c91462fda1df8be55b86a2a6da46bcfe0db7ab07",
+          ".impeccable/review/model-final/source-sha256.json": "543efd55613c38503efa1dd8cf81adbc158b738264007c1855bda2ce2cc78608",
+          ".impeccable/review/model-final/finish-review.md": "d18f456c8762337afd0ede923f879c2b5498070903dc96dd426839357c97cfdc",
+          ".impeccable/review/model-final/finish-verdict.md": "7713a69a581e248be3723f2475157ef09748949e8c2619027ff5ab4c975cd635"
+        },
+        "captureCount": 14,
+        "captures": [
+          {
+            "path": ".impeccable/review/model-final/automation-1440.png",
+            "width": 1440,
+            "height": 900,
+            "sha256": "9f04a78084b2217a27c6ead0a358ee9380a47ea8d0a8db14c1c1a01a62af079e"
+          },
+          {
+            "path": ".impeccable/review/model-final/automation-320.png",
+            "width": 320,
+            "height": 900,
+            "sha256": "16598b18631e86340e452d4bf3fba203b318bfdd162186995feabac4b49ae908"
+          },
+          {
+            "path": ".impeccable/review/model-final/impact-1440.png",
+            "width": 1440,
+            "height": 900,
+            "sha256": "23d74f20b90deb029cd3b434841032872cc3009a604f8a5fda99b751e0f958ed"
+          },
+          {
+            "path": ".impeccable/review/model-final/impact-320.png",
+            "width": 320,
+            "height": 900,
+            "sha256": "b759ffa96e9e7622805ea8eb72345e352f61c9da82aafd0061df270b5eff9032"
+          },
+          {
+            "path": ".impeccable/review/model-final/instance-1440.png",
+            "width": 1440,
+            "height": 900,
+            "sha256": "f6a10664f3b10649b80ac6e23ee432ba670bd4ba0a1196b08b70d59444331e0e"
+          },
+          {
+            "path": ".impeccable/review/model-final/instance-320.png",
+            "width": 320,
+            "height": 900,
+            "sha256": "c571520a8612c8149e32ea696e65464cebe18e405303222b0d94ea8b8b9fd935"
+          },
+          {
+            "path": ".impeccable/review/model-final/picker-1440.png",
+            "width": 1440,
+            "height": 900,
+            "sha256": "a53b44cf7cd52a27f8e45323a888b70b087796f01afab19768e9354e7ae708c0"
+          },
+          {
+            "path": ".impeccable/review/model-final/picker-320.png",
+            "width": 320,
+            "height": 900,
+            "sha256": "fa1e223fc3c1eaf4d19a5f730d35c16a02ab51dab869cd8b2c88f41edcc4e787"
+          },
+          {
+            "path": ".impeccable/review/model-final/picker-390.png",
+            "width": 390,
+            "height": 900,
+            "sha256": "400d38464530082a3f4b288a73681e3f0a4bd0d9d7143d484d1c4529e1d3e5da"
+          },
+          {
+            "path": ".impeccable/review/model-final/picker-768.png",
+            "width": 768,
+            "height": 900,
+            "sha256": "a376135f780b1a0fd341bd1f5cc346ec136f79f28d2375d1953888bb45139206"
+          },
+          {
+            "path": ".impeccable/review/model-final/references-1440.png",
+            "width": 1440,
+            "height": 900,
+            "sha256": "e3ff56d220a69f3c0dd9d71fd7eec55d34119ba7eff51f7a7fc169a7a2541050"
+          },
+          {
+            "path": ".impeccable/review/model-final/references-320.png",
+            "width": 320,
+            "height": 900,
+            "sha256": "6f3fef28f504126a15e8e1523eceaca626b0620e3e321f775fbe98d8a49c720c"
+          },
+          {
+            "path": ".impeccable/review/model-final/unattended-1440.png",
+            "width": 1440,
+            "height": 900,
+            "sha256": "b8ab826b01e85ae5da4f9c5286699817998a8c9987af0fe5cdf2f4d03c989a92"
+          },
+          {
+            "path": ".impeccable/review/model-final/unattended-320.png",
+            "width": 320,
+            "height": 900,
+            "sha256": "72da039f197a9c65f33e7da9676da9a0208b12706ae73abaffd1b82002a11c99"
+          }
+        ],
+        "evidenceRecords": [
+          ".impeccable/review/model-admin/design-comparison.md",
+          ".impeccable/review/model-admin/finish-review.md",
+          ".impeccable/review/model-admin/finish-verdict.md",
+          ".impeccable/review/model-final/design-comparison.md",
+          ".impeccable/review/model-final/finish-review.md",
+          ".impeccable/review/model-final/finish-verdict.md",
+          "docs/reports/dynamic-model-management-delivery-2026-10-25.md"
+        ],
+        "reviewDisposition": "Full final review identified one trigger-containment defect; one fix batch and four picker recaptures received SHIP for that scored fix only. Two invalid impact captures had previously been replaced with settled images. Full review limits remain; this record does not broaden the verdict.",
+        "documentationChecks": "Opened all 14 PNGs at original documentation sync. After the supported align.overflow API typing correction and four parent recaptures, rechecked all 14 current PNG dimensions/SHA256 and all 13 packet source hashes without reopening visual review. All 22 scoped source hashes match. No browser, server, application tests or detector run by documenter.",
+        "functionalEvidence": {
+          "parentReported": "10 administration component cases; 2 setup/privacy Synthetic journeys (45.8s); 2 earlier authoring/native unattended/gated-Automation journeys (36.9s). 26 focused picker/administration component cases predate the final one-line inner-Flex constraint. Final TypeScript/Vite build passed after the supported align.overflow correction (14.07s); documenter checked the log header/footer, with incumbent SignalR/chunk warnings only.",
+          "finalExpandedRegression": {
+            "log": "/private/tmp/agent-core-model-picker-resize-browser.log",
+            "logSha256": "90dc7b0e30baaa30dc6b653fcbc5ac419c7b08859baf38f147ce54926db60186",
+            "observedLogFooter": "1 passed (40.3s)",
+            "parentReportedScope": "Protected-key onboarding, actual Chat/tool/reload, open-picker resize 1440/768/390/320 with popup bounds plus trigger label/chevron containment, and reference/default-preview cancellation."
+          }
+        },
+        "limits": "No whole-design-system extraction or token/preview/font/theme change. Historical timestamps/fingerprints and pre-existing drift remain. Unpictured Definition lower fields, unsupported-effort/loading/error and other uncaptured states lack dedicated visual acceptance. No computed contrast, security/provider/physical-device, CI, full proposal or milestone certification.",
+        "metadataRecheckedAt": "2026-10-25T08:00:51Z",
+        "postReviewApiTypingCorrection": {
+          "scope": "Same overflow adjustment/shift settings moved to supported Dropdown align.overflow; public autoAdjustOverflow object type lacks shiftX. autoAdjustOverflow remains native true default; trigger inner-Flex containment unchanged. No new visual review or broader SHIP claim.",
+          "parentReportedRuntimeRecheck": "Four settled picker recaptures and MCP popup/trigger containment assertions at 1440/768/390/320.",
+          "buildLog": "/private/tmp/agent-core-model-final-web-build.log",
+          "buildLogSha256": "91271fa414a73dbb3e9ec565273985dfb0608bbc71889ebab038166345dd9fe0",
+          "observedBuildLog": "tsc --noEmit && vite build; built in 14.07s; incumbent SignalR annotation and large-chunk warnings."
+        }
+      },
+      "dynamicModelsCompletionDocumentationRefresh": {
+        "refreshedAt": "2026-10-25T09:06:55.345092Z",
+        "snapshotKind": "scoped-documentation-refresh",
+        "scope": "Owner-required actual DESIGN/PRODUCT successor sync for new-chat setup/missing inherited labels, native catalog filters/capabilities/provenance, system retained registration counts and safe audited credential replacement date. Existing Ant Design v6 dark Operate system; all old records remain historical.",
+        "sourceSha256": {
+          "web/src/features/chat/ChatApp.tsx": "fe070014be84a1470d45778ba4c0c4335f0b7514413a9f0223c3a4e889608fe5",
+          "web/src/features/chat/ModelPicker.tsx": "c53e555b65f92d3f5e848f732f54eb55403da58cd53f801915a71cd0d865b7bb",
+          "web/src/app.css": "e37c8e196b6b64eea6e3600e4ab51095fa6fe6d3a345aee7f22808f606f26676",
+          "web/src/features/access/ModelCatalogFilters.tsx": "fa7de3b930f068a93eec1f8122855f6fecc825052787747747176fb90ee46537",
+          "web/src/features/access/TenantModels.tsx": "7abebca40de2dd07ca832ec8b39f4c34d230924165346b0587399dcfcc217b52",
+          "web/src/features/access/SystemModelPresets.tsx": "b4955b35b77f3e408e2c397931ab76cca269e7ad2cd5a81af89191eed8825e42",
+          "web/src/features/access/ModelConnectionEditor.tsx": "37878d35503934473c978b2633fe0d53354d7428e52cc059fa668e36ea3be31f",
+          "web/src/services/models.ts": "d2b8350004540d4786e48eda6d383eb727bd1c0268d0e5f4153121ed871d87ae"
+        },
+        "documentationSha256": {
+          ".agents/context/DESIGN.md": "a500b6c35fd26b57d552170152e3f1f1b73cb5b1125578e109e1e88529a6e77a",
+          ".agents/context/PRODUCT.md": "1c9916b5442bffb6366ada0c733c79f21e5016c777e8555eb820f11c7a2bffda",
+          ".impeccable/review/model-completion/design-comparison.md": "87aec6bdf520acc193cea5d711892e24a8f1a82ab2acd466456090c138b21cc2",
+          "docs/13-frontend-implementation-spec.md": "a399f4f665bd3db8c8fd86c92b31872001cc08ee4d6fc0796aa52cf30f5ee102",
+          "docs/14-api-and-realtime-protocol.md": "e687c457320f41e82b63db258a96c462436e6367d1608bd02924e94f9d194ba1"
+        },
+        "evidenceSha256": {
+          ".impeccable/review/model-completion/brief.md": "8711c1699a31a61fb24e4cd4b2e7a53e634efc120e02268c69c4c6990be32330",
+          ".impeccable/review/model-completion/finish-review.md": "e408c24abba8f5552dc56a85e128970e66cf44a8694da70d4790e5d04d849ffd",
+          ".impeccable/review/model-completion/captures.json": "4fe55df20492d0794a27d87d224d858d20e188a848bbdf32daf5d16f5d37524c",
+          ".impeccable/review/model-completion/source-sha256.json": "3fc51af11d808c7f997307c30440c7a6a3ae9921d75af8e7241a87cabe5387bb",
+          "docs/reports/dynamic-model-management-delivery-2026-10-25.md": "c77d08cb7d8c68c688e08b45678b60859f90ea3af3ff776e3e6221ed4561c6ef"
+        },
+        "captureCount": 16,
+        "captures": [
+          {
+            "path": ".impeccable/review/model-completion/default-missing-1440.png",
+            "width": 1440,
+            "height": 900,
+            "sha256": "0a10b345593b6974f889195b927147cdea349e2cb165c8fd0001f58fb8b5f91d"
+          },
+          {
+            "path": ".impeccable/review/model-completion/default-missing-320.png",
+            "width": 320,
+            "height": 900,
+            "sha256": "83a9f4753937732350a9e0c035cc399b875b26acf4cb58e93bfa81b7fff70338"
+          },
+          {
+            "path": ".impeccable/review/model-completion/filters-1440.png",
+            "width": 1440,
+            "height": 900,
+            "sha256": "3dcfe5ed8fd1468c1ca7682cc4d7ca88ba79a4c029d68b6fc3c5020adb9e46b0"
+          },
+          {
+            "path": ".impeccable/review/model-completion/filters-320.png",
+            "width": 320,
+            "height": 900,
+            "sha256": "0366e3a9e6c684e27f780e34398b5fd1d8df4ff183d793db5476b67b72c6563c"
+          },
+          {
+            "path": ".impeccable/review/model-completion/filters-390.png",
+            "width": 390,
+            "height": 900,
+            "sha256": "73e0857c4608fdc9a45d1b83bd3f4ce7f58acfcffa9edb570466bc4735ab5c42"
+          },
+          {
+            "path": ".impeccable/review/model-completion/filters-768.png",
+            "width": 768,
+            "height": 900,
+            "sha256": "92fdd872d645342357622a2dbec8eb3dfbd72254cc0ad24a21ce085a003fde5d"
+          },
+          {
+            "path": ".impeccable/review/model-completion/onboarding-1440.png",
+            "width": 1440,
+            "height": 900,
+            "sha256": "a09a39e408f854f46c6526b44238ad7b8471197d83c53e80211bce8df4d81524"
+          },
+          {
+            "path": ".impeccable/review/model-completion/onboarding-320.png",
+            "width": 320,
+            "height": 900,
+            "sha256": "624aadfeef6e5a4efe4f193ca8b730891c80cbb43b0a77a89fcef5121f2096d5"
+          },
+          {
+            "path": ".impeccable/review/model-completion/onboarding-390.png",
+            "width": 390,
+            "height": 900,
+            "sha256": "3dccb0f4e32745ad52efb1c87600600a565891b2ffbb84c8a604c79bfb7159ba"
+          },
+          {
+            "path": ".impeccable/review/model-completion/onboarding-768.png",
+            "width": 768,
+            "height": 900,
+            "sha256": "c65ddd2f31c29b20b1b99025646381f83e72fac256930f376350f16e03c53d88"
+          },
+          {
+            "path": ".impeccable/review/model-completion/presets-1440.png",
+            "width": 1440,
+            "height": 900,
+            "sha256": "77acf31f489fb048b6616d02df93daf15a3351add8f327b67f7db9db92ced763"
+          },
+          {
+            "path": ".impeccable/review/model-completion/presets-320.png",
+            "width": 320,
+            "height": 900,
+            "sha256": "c1059ba60249553fc26b377fa496362caa6aec563de3d8e80b3ad4d15a234b7d"
+          },
+          {
+            "path": ".impeccable/review/model-completion/presets-390.png",
+            "width": 390,
+            "height": 900,
+            "sha256": "6d33fb30b01b6f1c1f3320f7797221c7d912b74a159f47eb8e78941e978c8953"
+          },
+          {
+            "path": ".impeccable/review/model-completion/presets-768.png",
+            "width": 768,
+            "height": 900,
+            "sha256": "e63ce1e6c596542d213c5f7c78cd0e37ecc90df87cb3240c197bb6004b7c27ef"
+          },
+          {
+            "path": ".impeccable/review/model-completion/rotation-1440.png",
+            "width": 1440,
+            "height": 900,
+            "sha256": "777baf2aa49a09f6daab833628ea17b5d4a82d1b96cf9270aff8c3219b3fc273"
+          },
+          {
+            "path": ".impeccable/review/model-completion/rotation-320.png",
+            "width": 320,
+            "height": 900,
+            "sha256": "cbbaaed33c8d59cbd55eceb0b62597cad60893df04e8e8a10010c5b6f3cb7596"
+          }
+        ],
+        "reviewDisposition": "Fresh full SHIP for the bounded completion packet; reviewer individually opened all 16 required PNGs. Other states and broader acceptance retain their stated limits.",
+        "documentationChecks": "All eight packet source SHA256 values and all 16 capture dimensions/SHA256 values matched. Documenter read the review and actual scoped sources/canonical owners; no independent image re-review, browser, server, test or detector. Existing log footers inspected.",
+        "functionalEvidence": {
+          "inspectedLogFooters": [
+            {
+              "path": "/private/tmp/agent-core-model-completion-web-tests.log",
+              "sha256": "c34171b32c083cbdc3934a90bbd74dca19eb1c39db8d502d15d661bb3c99dde5",
+              "observed": "4 files; 62 passed (37.61s)"
+            },
+            {
+              "path": "/private/tmp/agent-core-model-completion-web-build.log",
+              "sha256": "99413109282fa557d39b464185797cfc2611f009d61bd102306fa5a398aa6bf4",
+              "observed": "production build passed in 10.15s; incumbent chunk warning"
+            },
+            {
+              "path": "/private/tmp/agent-core-model-metadata-api-tests.log",
+              "sha256": "9dc77dd90cac917e1585c3d65c0c930462fe089eba470c3349e7be97cc86bad7",
+              "observed": "49 passed (3m32s)"
+            },
+            {
+              "path": "/private/tmp/agent-core-model-key-rotation-tests.log",
+              "sha256": "d6c9e53fe121b4b785edebeef06a563d36e8422f2786ee87dbfa87dd5f03d7ab",
+              "observed": "2 passed (12s)"
+            },
+            {
+              "path": "/private/tmp/agent-core-model-rotation-store-compatibility.log",
+              "sha256": "c14567c54cdc18c64b00dd2ae5544b0a78e22e87da35c1a9286441aae8cb32a7",
+              "observed": "2 passed (14s)"
+            },
+            {
+              "path": "/private/tmp/agent-core-model-completion-browser.log",
+              "sha256": "aac9d5383cf878cd2d1283cdb350b5702cfcaa8505db6c8758049d6c6dc91c0a",
+              "observed": "2 passed (53.0s)"
+            }
+          ],
+          "parentReportedMcp": "Native keyboard provider/connection/state/capability filters and All reset; system Luna count 2/Sonnet count 1; no tenant aggregate; fake-key replacement with millisecond-equal timestamp preserved after rename/read and no key in response/UI; unavailable inherited default and explicit-selection recovery.",
+          "captureFixture": "Disposable Real SQLite; fake protected credentials; metadata-only configuration; no provider inference, Session or Run started for this capture packet. Synthetic E2E separately exercised actual Chat."
+        },
+        "preservation": "Only this successor record was added. Existing generatedAt, root/extension metadata, components/previews, narrative and all prior inspection records/source/documentation hashes remain unchanged. DESIGN normative frontmatter unchanged. No drift repair.",
+        "limits": "No token/font/asset/palette/layout-system/preview change. Unpictured dropdown/expanded/lower-editor/permission/loading/error/stale states, motion, contrast, physical devices, provider/security qualification, CI, full-proposal and milestone acceptance remain outside this scope.",
+        "metadataRecheckedAt": "2026-10-25T09:09:36.198025Z",
+        "statusMetadataRefresh": {
+          "scope": "Final canonical local-completion status edits and context frontend-anchor repair; refreshed only successor documentation/evidence metadata and comparison note. No fresh visual review or runtime check.",
+          "updatedFingerprints": [
+            ".agents/context/DESIGN.md",
+            ".agents/context/PRODUCT.md",
+            ".impeccable/review/model-completion/design-comparison.md",
+            "docs/13-frontend-implementation-spec.md",
+            "docs/14-api-and-realtime-protocol.md"
+          ],
+          "addedEvidence": "docs/reports/dynamic-model-management-delivery-2026-10-25.md",
+          "preserved": "Original refreshedAt, all source/capture/log fingerprints, original finish disposition and every pre-existing inspection record remain unchanged."
+        }
       }
     }
   },

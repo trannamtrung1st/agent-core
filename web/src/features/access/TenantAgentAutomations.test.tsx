@@ -13,7 +13,7 @@ const presets: TenantAutomationPreset[] = [
 ];
 const fixture = (): TenantAutomationEditor => ({ agent: { principalId: 'executor', instance: { instanceId: 'agent', revision: 3, activeVersion: 32, lifecycle: 'Active', persona: { name: 'Alex' } } }, securityRevision: 8, canCreate: true, canSchedule: true, total: 1, page: 0, pageSize: 10,
   policy: { allowDaily: true, allowOneShot: true, allowWeekly: true, allowFixedInterval: true, allowIndefiniteRecurrence: true }, items: [{ canUpdate: true, canCancel: true, canRun: true,
-    automation: { automationId: 'schedule', name: 'Saved schedule', instructions: 'Exact saved instructions', status: 'active', revision: 6, triggerRevision: 2, occurrenceCount: 2, nextOccurrenceAtUtc: null, modelOverrideCatalogKey: null, modelOverrideReasoningEffort: null, requiresTools: true, requiresVision: false,
+    automation: { automationId: 'schedule', name: 'Saved schedule', instructions: 'Exact saved instructions', status: 'active', revision: 6, triggerRevision: 2, occurrenceCount: 2, nextOccurrenceAtUtc: null, modelOverrideOfferingId: null, modelOverrideReasoningEffort: null, requiresTools: true, requiresVision: false,
       executionTarget: 'backgroundSession', completionDelivery: 'none', triggers: [{ kind: 'schedule', schedule: { kind: 'daily', interval: 1, localTime: '09:00', timeZone: 'UTC', startDate: '2026-10-01', endDate: '2027-01-01', maxOccurrences: 10 } }] } }] } as TenantAutomationEditor);
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const fetchMock = vi.fn<typeof fetch>(); let current: TenantAutomationEditor; let stale = false, denied = false, unknown = false, invalidAck = false, catalogFailed = false, mismatchedPreset = false;
@@ -24,7 +24,7 @@ beforeEach(() => {
   fetchMock.mockImplementation(async (path, options) => {
     const url = String(path);
     if (url.endsWith('/csrf')) return response({ token: 'csrf' });
-    if (url.endsWith('/chat/models')) return catalogFailed ? response({ reasonCode: 'catalog_unavailable' }, 503) : response({ defaultKey: 'alpha', models: [{ key: 'alpha', displayName: 'Alpha', supportedReasoningEfforts: [] }] });
+    if (url.endsWith('/chat/models')) return catalogFailed ? response({ reasonCode: 'catalog_unavailable' }, 503) : response({ defaultOfferingId: 'alpha', models: [{ key: 'alpha', displayName: 'Alpha', supportedReasoningEfforts: [] }] });
     if (url.endsWith('/events/builtin')) return catalogFailed ? response({ reasonCode: 'catalog_unavailable' }, 503) : response({ items: [{ key: 'run.completed', description: 'Run finished.' }] });
     if (url.includes('/webhooks')) return catalogFailed ? response({ reasonCode: 'catalog_unavailable' }, 503) : response({ items: [], total: 0 });
     if (options?.method && options.method !== 'GET') {
@@ -146,7 +146,7 @@ it('opens a configured report for editing and can explicitly remove that destina
 });
 
 it('uses the shared picker for execution and clears separate reports and Automation model overrides', async () => {
-  current.items[0].automation.modelOverrideCatalogKey = 'alpha';
+  current.items[0].automation.modelOverrideOfferingId = 'alpha';
   current.items[0].automation.completionDelivery = 'toSession'; current.items[0].automation.reportToSessionId = 'prior-report';
   await open(); await edit();
   fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Automation execution destination' }));
@@ -157,7 +157,7 @@ it('uses the shared picker for execution and clears separate reports and Automat
   fireEvent.change(screen.getByRole('textbox', { name: 'Session ID' }), { target: { value: 'exact-execution-conversation' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save Automation' }));
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ targetSessionId: 'exact-execution-conversation', reportToSessionId: null, modelKey: null, reasoningEffort: null });
+  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ targetSessionId: 'exact-execution-conversation', reportToSessionId: null, offeringId: null, reasoningEffort: null });
 });
 it('opens an existing execution destination, retains a stale target draft and saves only after explicit reload', async () => {
   current.items[0].automation.executionTarget = 'existingSession'; current.items[0].automation.targetSessionId = 'saved-conversation';

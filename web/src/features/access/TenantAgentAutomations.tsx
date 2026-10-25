@@ -122,10 +122,10 @@ function TenantAutomationDrawer({ context, instance, selection, onClose, onReadL
   const allowed = !!view && (selection.id ? !!item?.canUpdate : view.canCreate);
   const disabled = !allowed || command.busy || replacing || attempted || unknown || command.requiresReload || state.loading || !!state.error;
   const existingMode = draft?.targetSessionId != null;
-  const model = models.data?.models.find(m => m.key === (draft?.modelKey || models.data?.defaultKey));
-  const retainedModel = !!value && draft?.modelKey === value.modelOverrideCatalogKey && draft?.reasoningEffort === value.modelOverrideReasoningEffort;
-  const modelValid = !draft?.enabled && (!draft?.modelKey && !draft?.reasoningEffort || retainedModel)
-    || existingMode || !!models.data && (!draft?.modelKey || !!model) && (!draft?.reasoningEffort || !!model?.supportedReasoningEfforts.includes(draft.reasoningEffort));
+  const model = models.data?.models.find(m => m.offeringId === (draft?.offeringId || models.data?.defaultOfferingId));
+  const retainedModel = !!value && draft?.offeringId === value.modelOverrideOfferingId && draft?.reasoningEffort === value.modelOverrideReasoningEffort;
+  const modelValid = !draft?.enabled && (!draft?.offeringId && !draft?.reasoningEffort || retainedModel)
+    || existingMode || !!models.data && (!draft?.offeringId || !!model) && (!draft?.reasoningEffort || !!model?.supportedReasoningEfforts.includes(draft.reasoningEffort));
   const policy = view?.policy; const timing = draft?.schedule;
   const scheduleAllowed = !!view?.canSchedule && !!policy && !!timing && ({ oneShot: policy.allowOneShot, daily: policy.allowDaily, weekly: policy.allowWeekly, fixedInterval: policy.allowFixedInterval })[timing.kind]
     && (timing.kind === 'oneShot' || policy.allowIndefiniteRecurrence || !!timing.maxOccurrences || !!timing.endDate || !!timing.endAtUtc);
@@ -176,7 +176,7 @@ function TenantAutomationDrawer({ context, instance, selection, onClose, onReadL
             <Typography.Title level={5} style={{ margin: 0 }}>Execution</Typography.Title>
             <Form.Item label="Run in"><Select aria-label="Automation execution destination" disabled={disabled} value={existingMode ? 'existingSession' : 'backgroundSession'}
               options={[{ value: 'backgroundSession', label: 'Separate Background work' }, { value: 'existingSession', label: 'Selected conversation' }]}
-              onChange={kind => update({ targetSessionId: kind === 'existingSession' ? '' : null, ...(kind === 'existingSession' ? { reportToSessionId: null, modelKey: null, reasoningEffort: null } : {}) })} /></Form.Item>
+              onChange={kind => update({ targetSessionId: kind === 'existingSession' ? '' : null, ...(kind === 'existingSession' ? { reportToSessionId: null, offeringId: null, reasoningEffort: null } : {}) })} /></Form.Item>
             {existingMode && <>
               <Typography.Text type="secondary">Replies in this conversation using its model. Each occurrence keeps its own Run and may need admission approval.</Typography.Text>
               <Form.Item label="Execution conversation" extra="Choose an active conversation for this instance. Current read and Chat access are checked again before work starts.">
@@ -195,8 +195,8 @@ function TenantAutomationDrawer({ context, instance, selection, onClose, onReadL
           </Flex>}
           <Collapse ghost items={[{ key: 'model', label: 'Execution options', children: <Flex vertical gap={token.padding}>
             {existingMode ? <Flex vertical gap={token.paddingXS}><Typography.Text type="secondary">The selected conversation controls its model and reasoning effort.</Typography.Text>
-              {(draft.modelKey || draft.reasoningEffort) && <Button disabled={disabled} onClick={() => update({ modelKey: null, reasoningEffort: null })}>Clear saved Automation model override</Button>}
-            </Flex> : models.loading ? <AccessLoading /> : models.error ? <AccessError error={models.error} retry={models.reload} /> : <ExecutionModelFields models={models.data?.models ?? []} modelKey={draft.modelKey ?? ''} reasoningEffort={draft.reasoningEffort ?? ''} modelLabel="Automation execution model" effortLabel="Automation reasoning effort" defaultLabel="Unattended default" disabled={disabled} onChange={(key, effort) => update({ modelKey: key || null, reasoningEffort: effort || null })} />}
+              {(draft.offeringId || draft.reasoningEffort) && <Button disabled={disabled} onClick={() => update({ offeringId: null, reasoningEffort: null })}>Clear saved Automation model override</Button>}
+            </Flex> : models.loading ? <AccessLoading /> : models.error ? <AccessError error={models.error} retry={models.reload} /> : <ExecutionModelFields models={models.data?.models ?? []} offeringId={draft.offeringId ?? ''} reasoningEffort={draft.reasoningEffort ?? ''} modelLabel="Automation execution model" effortLabel="Automation reasoning effort" defaultLabel="Unattended default" disabled={disabled} onChange={(key, effort) => update({ offeringId: key || null, reasoningEffort: effort || null })} />}
             {!modelValid && !models.loading && <Alert type="warning" showIcon title="Check the current execution model" description="Reload the model catalog, then select an available model and reasoning effort or use the unattended default." />}
             <Checkbox checked={draft.requiresTools} disabled={disabled} onChange={e => update({ requiresTools: e.target.checked })}>Task requires tools</Checkbox><Checkbox checked={draft.requiresVision} disabled={disabled} onChange={e => update({ requiresVision: e.target.checked })}>Task requires vision</Checkbox>
           </Flex> }]} />

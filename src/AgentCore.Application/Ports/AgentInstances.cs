@@ -69,7 +69,7 @@ public sealed record AgentInstanceRevisionUpdate(
     AgentInstanceLifecycle? Lifecycle = null,
     long? ExpectedPersonaRevision = null,
     bool SetUnattendedModel = false,
-    string? UnattendedModelCatalogKey = null,
+    string? UnattendedOfferingId = null,
     string? UnattendedReasoningEffort = null,
     HarnessManagementState? HarnessManagement = null,
     AdminEventAppend? History = null, IReadOnlyList<SkillSpec>? DefinitionSkills = null,

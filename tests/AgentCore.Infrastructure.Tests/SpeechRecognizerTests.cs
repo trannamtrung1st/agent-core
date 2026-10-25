@@ -98,7 +98,7 @@ public sealed class SpeechRecognizerTests
     {
         var services = new ServiceCollection();
         services.AddSingleton<Microsoft.Extensions.Logging.ILoggerFactory>(NullLoggerFactory.Instance);
-        services.AddAgentCoreInfrastructure(FindAgents(), "Synthetic", new LanguageModelProviderOptions { Adapter = "Scripted" });
+        services.AddAgentCoreInfrastructure(FindAgents(), "Synthetic");
         using var provider = services.BuildServiceProvider();
         Assert.IsType<SyntheticSpeechRecognizer>(provider.GetRequiredService<ISpeechRecognizer>());
         Assert.IsNotType<OpenAiSpeechRecognizer>(provider.GetRequiredService<ISpeechRecognizer>());

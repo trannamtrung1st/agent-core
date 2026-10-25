@@ -14,7 +14,7 @@ beforeEach(() => {
   fetchMock.mockImplementation(async (path, options) => {
     const url = String(path);
     if (url.endsWith('/csrf')) return response({ token: 'csrf' });
-    if (url.endsWith('/chat/models')) return response({ defaultKey: null, models: [] });
+    if (url.endsWith('/chat/models')) return response({ defaultOfferingId: null, models: [] });
     if (options?.method === 'PUT') return stale ? response({ reasonCode: 'stale_revision' }, 409) : response({ instance: { ...current.agent.instance, persona: JSON.parse(String(options.body)).persona, revision: 5, personaRevision: 3 } });
     if (url.endsWith('/editor')) return denied ? response({ reasonCode: 'permission_denied' }, 403) : response(current);
     throw new Error(`Unexpected request: ${url}`);

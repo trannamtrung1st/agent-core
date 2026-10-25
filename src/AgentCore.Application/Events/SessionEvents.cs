@@ -191,7 +191,7 @@ public sealed record SpeechLocaleReceived(
 
 public sealed record ModelSelectionReceived(
     EventContext Context,
-    string? ModelKey,
+    string? OfferingId,
     string? ReasoningEffort,
     ModelSelectionSource Source,
     TaskCompletionSource<bool> Persisted) : SessionInput(Context);

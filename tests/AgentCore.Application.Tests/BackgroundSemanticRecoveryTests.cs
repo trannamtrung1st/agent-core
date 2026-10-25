@@ -163,14 +163,14 @@ public sealed partial class AgentRunDurabilityTests
             EntryStatus.Completed, SessionMode.Text, 0, 24, now);
         var snapshot = RuntimeAgentRunStore.WithPins(new SessionSnapshot(1, sessionId, 1, SampleDefinitions.Examiner, SessionMode.Text,
             null, SessionStatus.Created, [input], "", 0, null, null, now, now, AgentInstanceId: Guid.NewGuid(),
-            ModelSelection: new("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.Host, null),
+            ModelSelection: new("synthetic-offline/scripted", "dca20000-0000-4000-8000-000000000001", "scripted", ModelSelectionSource.Host, null),
             Origin: new(SessionOriginKind.ManualBackground, initialBackgroundAgentRunId: runId), Surfaces: SessionSurface.BackgroundWork));
         var activation = Activation.Start(Guid.NewGuid(), sessionId, ActivationKind.ManualBackground, [input.EntryId], input.SourceEventId,
             null, null, null, "manual:semantic", now);
         var run = AgentRun.Create(runId, new(snapshot.AgentInstanceId, snapshot.ProfileId!.Value),
             new(activation, snapshot.Definition.Id, snapshot.Definition.Version, snapshot.PinnedPersona!, Guid.NewGuid(), AgentRunOutputContract.BackgroundOutcome,
                 configuration: new(snapshot.Definition, 0, snapshot.PinnedPersonaRevision ?? 0, [])),
-            new("synthetic-offline/scripted", "primary-llm", "scripted", null), 3, now);
+            new("synthetic-offline/scripted", "dca20000-0000-4000-8000-000000000001", "scripted", null), 3, now);
         await runs.AdmitAsync(snapshot, 0, run);
         run = await runs.ApplyAsync(run.Owner, runId, new AgentRunCommand.Claim(run.Revision, now, Guid.NewGuid(), now.AddMinutes(5)));
         var state = new ToolLoopExecutionState(recovery is null ? RunPhase.Work : RunPhase.Finalization,

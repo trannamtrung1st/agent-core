@@ -29,10 +29,10 @@ public static partial class TenantAgentEndpoints
             var human = new TenantSessionInitiator(actor.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
             return Results.Json(await service.ReadAsync(actor.TenantId, instanceId, human, audiencePage ?? 0, executionPage ?? 0, principalPage ?? 0, q, authorityScope ?? "agent", ct).ConfigureAwait(false));
         }));
-        group.MapGet("/chat/models", (HttpContext http, TenantChatService service, IModelCatalog catalog, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("/chat/models", (Guid? instanceId, HttpContext http, TenantChatService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
-            await service.RequireMemberAsync(actor.TenantId, new(actor.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId), ct).ConfigureAwait(false);
+            var catalog = await service.ModelsAsync(actor.TenantId, new(actor.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId), instanceId, ct).ConfigureAwait(false);
             return Results.Json(HttpMapping.ToCatalog(catalog));
         }));
         group.MapGet("/chat/agents", (int? page, int? pageSize, string? q, HttpContext http, TenantChatService service, CancellationToken ct) => IdentityHttp.Respond(async () =>

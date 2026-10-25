@@ -141,7 +141,7 @@ public sealed partial class MessagingSkillJourneyTests
         SampleDefinitions.Examiner with
         {
             Voice = new VoiceConfiguration(true, "default", 1),
-            ProviderPreferences = new ProviderPreferences("primary-llm", null, null),
+            ProviderPreferences = new ProviderPreferences(null, null),
             Skills = skills,
             Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceRead])
         };
@@ -180,9 +180,9 @@ public sealed partial class MessagingSkillJourneyTests
             now,
             ModelSelection: new SessionModelSelection(
                 "synthetic-offline/scripted",
-                "primary-llm",
+                "dca20000-0000-4000-8000-000000000001",
                 "scripted",
-                ModelSelectionSource.SystemDefault,
+                ModelSelectionSource.TenantDefault,
                 null), AgentInstanceId: Guid.NewGuid());
         snapshot = RuntimeAgentRunStore.WithPins(snapshot);
         turns.Bind(memory);

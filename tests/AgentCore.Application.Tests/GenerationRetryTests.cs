@@ -223,7 +223,7 @@ public sealed class GenerationRetryTests
             new ConversationPolicy("balanced", false, "en", 2048),
             new InitiativePolicy(false, 60_000, 120_000, 1, ["longSilence"], 0),
             new VoiceConfiguration(false, "default", 1.0),
-            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+            new ProviderPreferences("primary-stt", "primary-tts"),
             new Dictionary<string, string>(StringComparer.Ordinal),
             new RoleEnvironment(ToolAllowlist: tools));
         var snapshot = new SessionSnapshot(
@@ -243,9 +243,9 @@ public sealed class GenerationRetryTests
             now,
             ModelSelection: new SessionModelSelection(
                 "synthetic-offline/scripted",
-                "primary-llm",
+                "dca20000-0000-4000-8000-000000000001",
                 "scripted",
-                ModelSelectionSource.SystemDefault,
+                ModelSelectionSource.TenantDefault,
                 null), AgentInstanceId: Guid.NewGuid());
         var store = new InMemoryMemoryStore();
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();

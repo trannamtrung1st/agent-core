@@ -24,7 +24,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var persona = new AgentIdentity("Independent persona", "Tester", "Private publication", "Clear");
         var agent = await agents.CreateFromPublicationAsync(owner.OwnerPrincipalId, owner.TenantId, Guid.Parse(publication.DefinitionId), publication.Version, await Revision(), persona);
         var login = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;
-        var sessions = new TenantSessionService(f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam, f.Definitions, builtIns, f.Identity, f.Authorizer, ModelCatalogFactory.Synthetic(), new(), f.Ids, TimeProvider.System);
+        var sessions = new TenantSessionService(f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam, f.Definitions, builtIns, f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), new(), f.Ids, TimeProvider.System);
         var item = await sessions.CreateAsync(owner.TenantId, agent.Instance.InstanceId, new(owner.AccountId, login.SessionId, owner.OwnerPrincipalId), SessionMode.Text, await Revision(), 1);
         var snapshot = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(owner.TenantId, item.Owner.SessionId))!.Snapshot;
         Assert.DoesNotContain("Definition", System.Text.Json.JsonSerializer.Serialize(item));
@@ -36,7 +36,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var actor = new TenantSessionInitiator(owner.AccountId, login.SessionId, owner.OwnerPrincipalId);
         var runService = new TenantRunService(f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam,
             new((ITenantAgentStore)f.Iam, f.Definitions, builtIns, new(f.Resources, builtIns, new NoBuiltinKnowledge(), f.Content), (ITenantCredentialBindingStore)f.Iam),
-            f.Identity, f.Authorizer, ModelCatalogFactory.Synthetic(), f.Ids, TimeProvider.System);
+            f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), f.Ids, TimeProvider.System);
         var receipt = await runService.SubmitTextAsync(owner.TenantId, item.Owner.SessionId, actor, f.Ids.NewId(), "Owned publication request", await Revision(), 1);
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(owner.TenantId, receipt.RunId))!;
         Assert.Equal(publication.Payload.AgentInstructions, run.Admission.Configuration!.Definition.AgentInstructions);

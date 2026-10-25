@@ -20,12 +20,12 @@ internal static class BackgroundCreationApprovalPersistence
         AND length(json_extract(PayloadJson, '$.Operation.BackgroundStart.ConfigurationHash')) = 64
         AND json_extract(PayloadJson, '$.Operation.BackgroundStart.ConfigurationHash') NOT GLOB '*[^0-9a-f]*'
         AND json_type(PayloadJson, '$.Operation.BackgroundStart.Model') IS 'object'
-        AND json_type(PayloadJson, '$.Operation.BackgroundStart.Model.CatalogKey') IS 'text'
-        AND length(json_extract(PayloadJson, '$.Operation.BackgroundStart.Model.CatalogKey')) BETWEEN 1 AND 128
-        AND json_type(PayloadJson, '$.Operation.BackgroundStart.Model.ProviderAlias') IS 'text'
-        AND length(json_extract(PayloadJson, '$.Operation.BackgroundStart.Model.ProviderAlias')) BETWEEN 1 AND 128
-        AND json_type(PayloadJson, '$.Operation.BackgroundStart.Model.ModelId') IS 'text'
-        AND length(json_extract(PayloadJson, '$.Operation.BackgroundStart.Model.ModelId')) BETWEEN 1 AND 128
+        AND json_type(PayloadJson, '$.Operation.BackgroundStart.Model.OfferingId') IS 'text'
+        AND length(json_extract(PayloadJson, '$.Operation.BackgroundStart.Model.OfferingId')) BETWEEN 1 AND 128
+        AND json_type(PayloadJson, '$.Operation.BackgroundStart.Model.ConnectionId') IS 'text'
+        AND length(json_extract(PayloadJson, '$.Operation.BackgroundStart.Model.ConnectionId')) BETWEEN 1 AND 128
+        AND json_type(PayloadJson, '$.Operation.BackgroundStart.Model.ExternalModelId') IS 'text'
+        AND length(json_extract(PayloadJson, '$.Operation.BackgroundStart.Model.ExternalModelId')) BETWEEN 1 AND 255
         AND length(CAST(PayloadJson AS BLOB)) <= 131072
         """ + Ids + string.Concat(new[] { "Persona", "Preferences", "CredentialCheck", "SandboxCommand", "SandboxControl", "SandboxRead", "BrowserCommand", "CredentialRead", "ArtifactPublication", "ArtifactVerification", "WorkspaceRead", "WorkspaceMutation", "AttachmentRead" }
             .Select(p => $" AND json_extract(PayloadJson, '$.Operation.{p}') IS NULL"));

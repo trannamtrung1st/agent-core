@@ -455,8 +455,13 @@ public sealed partial class ScriptedLanguageModel : ILanguageModel
 
         if (HasSessionTools(request) && (_alwaysToolCall || ShouldScriptTools(request)))
         {
+            var nativeText = RequestsNativeJson(request) ? new List<string>() : null;
             await foreach (var item in GenerateToolScriptAsync(request, cancellationToken).ConfigureAwait(false))
             {
+                if (nativeText is not null && item is ModelTextDelta delta)
+                { nativeText.Add(delta.Text); continue; }
+                if (nativeText is not null && item is ModelCompleted { Reason: ModelStopReason.Completed })
+                    yield return new ModelTextDelta(ToNativeJson(SyntheticTaskContext.Text(request), nativeText, []));
                 yield return item;
             }
 

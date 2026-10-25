@@ -329,7 +329,7 @@ public sealed class SpeechFactoryTests
     {
         var services = new ServiceCollection();
         services.AddSingleton<Microsoft.Extensions.Logging.ILoggerFactory>(NullLoggerFactory.Instance);
-        services.AddAgentCoreInfrastructure(FindAgents(), "Synthetic", new LanguageModelProviderOptions { Adapter = "Scripted" }, speech: speech);
+        services.AddAgentCoreInfrastructure(FindAgents(), "Synthetic", speech: speech);
         return services.BuildServiceProvider();
     }
 

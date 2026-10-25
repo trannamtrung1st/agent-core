@@ -15,10 +15,10 @@ public sealed record TenantSessionMetadataPage(IReadOnlyList<TenantSessionMetada
 
 public sealed partial class TenantSessionService(IIamStore security, ITenantAgentStore agents, ITenantSessionStore sessions, ITenantRunStore runs,
     ITenantDefinitionStore definitions, IBuiltInAgentDefinitionStore builtIns, IdentityService identity, IamAuthorizer authorizer,
-    IModelCatalog models, VoiceAvailability voice, IIdGenerator ids, TimeProvider time, ITenantArtifactStore? artifacts = null, ITenantAttachmentStore? attachments = null, TenantBrowserRetirementService? browserRetirement = null)
+    ITenantModelCatalogReader modelCatalogs, VoiceAvailability voice, IIdGenerator ids, TimeProvider time, ITenantArtifactStore? artifacts = null, ITenantAttachmentStore? attachments = null, TenantBrowserRetirementService? browserRetirement = null)
 {
     public async ValueTask<TenantSessionMetadata> CreateAsync(Guid tenant, Guid instance, TenantSessionInitiator initiator, SessionMode mode,
-        long expectedSecurityRevision, long expectedInstanceRevision, string? modelKey = null, string? reasoningEffort = null, CancellationToken ct = default)
+        long expectedSecurityRevision, long expectedInstanceRevision, string? offeringId = null, string? reasoningEffort = null, CancellationToken ct = default)
     {
         var state = await Human(tenant, initiator, ct).ConfigureAwait(false);
         foreach (var key in new[] { "sessions.create", "sessions.read" }) await Require(state, initiator.PrincipalId, key, AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
@@ -34,11 +34,12 @@ public sealed partial class TenantSessionService(IIamStore security, ITenantAgen
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
         var definition = InstanceSettingsResolver.Resolve(baseline, parent.Instance.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, parent.Instance) };
         if (mode == SessionMode.Voice && !voice.IsAvailable(definition, definition.ConversationPolicy.Language)) throw AgentCoreErrors.VoiceUnavailable();
+        var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         var now = DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds()); var id = ids.NewSessionId();
         var snapshot = new SessionSnapshot(1, id, 1, definition, mode, null, SessionStatus.Created, [], "", 0, null, null, now, now, instance,
             LastUserActivityAt: now, Purpose: SessionPurpose.OngoingDefault, CompletionPolicy: SessionCompletionPolicy.Default,
             LifecycleSource: LifecycleTransitionSource.System, LifecycleChangedAt: now,
-            ModelSelection: SessionModelBinder.Bind(models, modelKey, reasoningEffort, ModelSelectionSource.User, definition.ModelDefaults),
+            ModelSelection: SessionModelBinder.Bind(models, offeringId, reasoningEffort, ModelSelectionSource.User, definition.ModelDefaults),
             PinnedPersona: parent.Instance.Persona, PinnedPersonaRevision: parent.Instance.PersonaRevision);
         var owner = new TenantSessionRoot(tenant, id, instance, parent.PrincipalId, initiator.PrincipalId, now);
         var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };

@@ -99,7 +99,7 @@ public static class TenantBackgroundReportRules
     {
         var p = request.Operation.BackgroundReport!;
         if (TenantBackgroundCreationRules.Hash(resolved) != p.ConfigurationHash) throw new AccessDeniedException("operation_witness_changed");
-        return TenantBackgroundCompletionFactory.Create(source, resolved, new(p.Model.CatalogKey, p.Model.ProviderAlias, p.Model.ModelId, ModelSelectionSource.Host, p.Model.ReasoningEffort),
+        return TenantBackgroundCompletionFactory.Create(source, resolved, new(p.Model.OfferingId, p.Model.ConnectionId, p.Model.ExternalModelId, ModelSelectionSource.Host, p.Model.ReasoningEffort, Binding: p.Model.Binding),
             p.ActivationId, p.RunId, p.ResponseId, request.CreatedAt);
     }
     public static void Report(TenantApprovalRequest request, TenantBackgroundCompletion source, AgentRun report, TenantAgent agent, DateTimeOffset now)

@@ -69,7 +69,7 @@ public sealed class UserTurnCapabilityValidator(IAttachmentStore attachments, IM
 
     private ModelDescriptor ResolveDescriptor(SessionModelSelection? selection)
     {
-        var key = selection?.CatalogKey;
+        var key = selection?.OfferingId;
         if (!string.IsNullOrWhiteSpace(key))
         {
             var match = catalog.Get(key);

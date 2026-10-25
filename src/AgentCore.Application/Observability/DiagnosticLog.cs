@@ -22,7 +22,9 @@ public readonly record struct DiagnosticContext(
     string? Operation = null,
     Guid? CredentialId = null,
     Guid? TenantId = null,
-    Guid? ActorPrincipalId = null)
+    Guid? ActorPrincipalId = null,
+    string? OfferingId = null,
+    string? ConnectionId = null)
 {
     public IReadOnlyList<KeyValuePair<string, object?>> ToFields(Guid diagnosticId, string? traceId)
     {
@@ -43,6 +45,8 @@ public readonly record struct DiagnosticContext(
         AddToken(items, "ErrorCategory", ErrorCategory);
         AddToken(items, "ErrorCode", ErrorCode);
         AddToken(items, "ProviderAlias", ProviderAlias);
+        AddToken(items, "OfferingId", OfferingId);
+        AddToken(items, "ConnectionId", ConnectionId);
         AddToken(items, "FailureReason", FailureReason);
         AddToken(items, "ProviderResponseChannel", ProviderResponseChannel);
         AddToken(items, "Operation", Operation);

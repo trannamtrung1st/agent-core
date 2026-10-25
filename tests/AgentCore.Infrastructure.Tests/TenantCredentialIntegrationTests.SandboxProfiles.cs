@@ -208,6 +208,8 @@ public sealed partial class TenantCredentialIntegrationTests
 
     private sealed class SandboxCredentialHook(ITenantCredentialStore inner, Func<Task> afterRead) : ITenantCredentialStore
     {
+        public ValueTask<IReadOnlyDictionary<Guid, DateTimeOffset>> ReadTenantCredentialRotationsAsync(Guid tenant, IReadOnlyList<Guid> ids, CancellationToken ct = default)
+            => inner.ReadTenantCredentialRotationsAsync(tenant, ids, ct);
         public async ValueTask<TenantCredential?> FindTenantCredentialAsync(Guid tenant, Guid id, CancellationToken ct = default)
         { var value = await inner.FindTenantCredentialAsync(tenant, id, ct); await afterRead(); return value; }
         public ValueTask<TenantCredentialPage> ListTenantCredentialsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default) => inner.ListTenantCredentialsAsync(tenantId, allowedIds, page, pageSize, ct);

@@ -13,8 +13,8 @@ public sealed class ManagementMutationContractTests
             new('a',64), new('b',64), new('c',64), "[]", Management: new(new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []), Overrides: new(Mode: new(HarnessManagementMode.Assisted)))),
         "management.freeze" => new(Guid.NewGuid(), Guid.NewGuid(), tool, TenantManagementMutationContract.Parse(tool, JsonSerializer.Serialize(new { expectedInstanceRevision = revision })).Json,
             new('a',64), new('b',64), new('c',64), "[]", Management: new(new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], [], Frozen: true))),
-        "automation.preferences.patch" => new(Guid.NewGuid(), Guid.NewGuid(), tool, TenantManagementMutationContract.Parse(tool, JsonSerializer.Serialize(new { expectedInstanceRevision = revision, catalogKey = "alpha", reasoningEffort = (string?)null })).Json,
-            new('a',64), new('b',64), new('c',64), "[]", UnattendedModelCatalogKey: "alpha"), _ => throw new ArgumentException()
+        "automation.preferences.patch" => new(Guid.NewGuid(), Guid.NewGuid(), tool, TenantManagementMutationContract.Parse(tool, JsonSerializer.Serialize(new { expectedInstanceRevision = revision, offeringId = "alpha", reasoningEffort = (string?)null })).Json,
+            new('a',64), new('b',64), new('c',64), "[]", UnattendedOfferingId: "alpha"), _ => throw new ArgumentException()
     };
     [Theory] [InlineData("settings.patch")] [InlineData("management.policy.update")] [InlineData("management.freeze")] [InlineData("automation.preferences.patch")]
     public void Saved_management_plan_roundtrip_preserves_value_equality_closed_payload_hash_and_exact_intent(string tool)
@@ -37,7 +37,7 @@ public sealed class ManagementMutationContractTests
     [InlineData("management.policy.update", "{\"expectedInstanceRevision\":3,\"mode\":\"Managed\",\"scopes\":[\"Settings\",\"Settings\"],\"managedAutoApply\":[]}")]
     [InlineData("settings.patch", "{\"expectedInstanceRevision\":3,\"section\":\"unknown\",\"set\":{},\"clear\":[]}")]
     [InlineData("settings.patch", "{\"expectedInstanceRevision\":3,\"section\":\"sandboxPolicy\",\"set\":{\"initializationScript\":\"shell text\"},\"clear\":[]}")]
-    [InlineData("automation.preferences.patch", "{\"expectedInstanceRevision\":3,\"catalogKey\":null,\"reasoningEffort\":null,\"runNow\":true}")]
+    [InlineData("automation.preferences.patch", "{\"expectedInstanceRevision\":3,\"offeringId\":null,\"reasoningEffort\":null,\"runNow\":true}")]
     public void Wider_duplicate_host_and_malformed_management_commands_are_rejected(string tool, string arguments) => Assert.ThrowsAny<ArgumentException>(() => TenantManagementMutationContract.Parse(tool, arguments));
     [Theory] [InlineData("conversationContextScope","Session")] [InlineData("homeAccess","ReadOnly")] [InlineData("workingCleanup","OnSessionDeletion")] [InlineData("browserIsolation","EphemeralSession")] [InlineData("agentStateVisibility","Off")]
     public void State_isolation_fields_use_the_existing_closed_enum_types_in_management_schemas(string field, string value)

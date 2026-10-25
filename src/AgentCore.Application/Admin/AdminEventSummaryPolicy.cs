@@ -235,7 +235,7 @@ public static class AdminEventSummaryPolicy
                     if (property.Name is not ("section" or "set" or "clear")) throw AgentCoreErrors.Validation("Unsupported settings history metadata.");
                 var section = document.RootElement.GetProperty("section").GetString()!;
                 var fields = section == IsolationConfigurationPlanner.AuditSection ? IsolationConfigurationPlanner.AuditFields
-                    : section == "automationPreferences" ? new[] { "catalogKey", "reasoningEffort" } : AgentCore.Application.Agents.InstanceSettingsResolver.Fields(section);
+                    : section == "automationPreferences" ? new[] { "offeringId", "reasoningEffort" } : AgentCore.Application.Agents.InstanceSettingsResolver.Fields(section);
                 foreach (var field in document.RootElement.GetProperty("set").EnumerateArray().Concat(document.RootElement.GetProperty("clear").EnumerateArray()))
                     if (!fields.Contains(field.GetString(), StringComparer.Ordinal)) throw AgentCoreErrors.Validation("Unsupported settings history field.");
                 return;
@@ -271,7 +271,7 @@ public static class AdminEventSummaryPolicy
             }
             if (append.Operation is AdminEventOperationKind.ExperienceChanged or AdminEventOperationKind.AutomationChanged)
             {
-                var allowed = new HashSet<string>(StringComparer.Ordinal) { "instanceId", "recordId", "operation", "revision", "enabled", "instructionsHash", "executionTarget", "completionDelivery", "modelKey" };
+                var allowed = new HashSet<string>(StringComparer.Ordinal) { "instanceId", "recordId", "operation", "revision", "enabled", "instructionsHash", "executionTarget", "completionDelivery", "offeringId" };
                 foreach (var property in document.RootElement.EnumerateObject())
                     if (!allowed.Contains(property.Name)) throw AgentCoreErrors.Validation("Unsupported continuity history metadata.");
                 RequireString(document.RootElement, "instanceId");

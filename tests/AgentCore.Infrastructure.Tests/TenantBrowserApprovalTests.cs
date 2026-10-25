@@ -88,7 +88,7 @@ public sealed partial class TenantBrowserApprovalTests
     {
         store ??= f.Iam;
         return new(store, (ITenantApprovalStore)store, (ITenantAgentStore)store, Operations(f, store), new(store), f.Identity, f.Ids, f.Clock,
-            f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)store,
+            f.RunConfiguration(), new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(store), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)store,
             browserTargets: new((ITenantSessionStore)store, f.RunConfiguration(), store, new(store), browser,
                 new((ITenantCredentialBindingStore)store, f.RunConfiguration(), f.Protector, (ITenantRunStore)store), f.Artifacts is ITenantArtifactStore files ? new(files) : null),
             credentialReads: new(Operations(f, store), (ITenantRunStore)store, (ITenantSessionStore)store, (ITenantCredentialBindingStore)store,
@@ -122,7 +122,7 @@ public sealed partial class TenantBrowserApprovalTests
         resumed = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(resumed.Owner, resumed.AgentRunId,
             new AgentRunCommand.Claim(resumed.Revision, at, f.Ids.NewId(), at.AddMinutes(5)), f.Ids.NewId());
         var effects = new TenantApprovedOperationService(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, (ITenantApprovalStore)f.Iam,
-            (ITenantApprovedOperationStore)f.Iam, Operations(f, f.Iam), f.RunConfiguration(), f.Ids, f.Clock, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default);
+            (ITenantApprovedOperationStore)f.Iam, Operations(f, f.Iam), f.RunConfiguration(), f.Ids, f.Clock, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), SyntheticProviderAliases.Default);
         Assert.Equal("tenant_effect_unavailable", (await Assert.ThrowsAsync<AccessDeniedException>(() => effects.ExecuteAsync(new(s.Tenant, resumed.AgentRunId), request.RequestId,
             request.Operation.OperationId, resumed.Claim!.Generation, request.Operation.ActionHash).AsTask())).ReasonCode);
         Assert.Null(await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(s.Tenant, request.Operation.OperationId));

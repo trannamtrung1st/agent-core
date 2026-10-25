@@ -11,7 +11,6 @@ namespace AgentCore.Infrastructure.Admin;
 
 public sealed class SyntheticDefinitionDraftBehaviorEvaluator(
     DefinitionDraftSyntheticOfflineLanguageModel offlineModel,
-    IModelCatalog catalog,
     IToolConfigurationGate configurationGate) : IDefinitionDraftSyntheticBehaviorEvaluator
 {
     private const int MaxToolRounds = 3;
@@ -23,8 +22,7 @@ public sealed class SyntheticDefinitionDraftBehaviorEvaluator(
         CancellationToken cancellationToken = default)
     {
         var definition = candidate.ToPublished(1);
-        var selection = SessionModelBinder.PinDefault(catalog, definition);
-        var modelSelection = $"synthetic-offline/scripted/{selection.CatalogKey}";
+        const string modelSelection = "synthetic-offline/scripted/scripted-alpha";
         var context = DefinitionEvaluationHarness.ToolContext(definition, scenario.Prompt);
         var tools = ToolCatalog.For(definition, context, configurationGate);
         var snapshot = new EffectiveContextSnapshot([
@@ -69,7 +67,7 @@ public sealed class SyntheticDefinitionDraftBehaviorEvaluator(
                         break;
                     case ModelFailed failed:
                         return new DefinitionDraftSyntheticBehaviorResult(
-                            "synthetic-offline",
+                            "dca20000-0000-4000-8000-000000000001",
                             modelSelection,
                             true,
                             toolObservations,
@@ -84,7 +82,7 @@ public sealed class SyntheticDefinitionDraftBehaviorEvaluator(
         }
 
         return new DefinitionDraftSyntheticBehaviorResult(
-            "synthetic-offline",
+            "dca20000-0000-4000-8000-000000000001",
             modelSelection,
             true,
             toolObservations,

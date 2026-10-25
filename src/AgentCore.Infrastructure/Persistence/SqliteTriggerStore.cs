@@ -257,7 +257,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         TriggerOwner owner,
         Guid automationId,
         long expectedRevision,
-        string? catalogKey,
+        string? offeringId,
         string? reasoningEffort,
         DateTimeOffset updatedAt,
         CancellationToken cancellationToken = default)
@@ -273,7 +273,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         var updated = AutomationMutations.SetModelOverride(
             current,
             expectedRevision,
-            catalogKey,
+            offeringId,
             reasoningEffort,
             updatedAt);
         if (updated.Revision == current.Revision)
@@ -292,7 +292,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
                 && row.Status == (int)AutomationStatus.Active)
             .ExecuteUpdateAsync(
                 setters => setters
-                    .SetProperty(row => row.ModelOverrideCatalogKey, updated.ModelOverrideCatalogKey)
+                    .SetProperty(row => row.ModelOverrideOfferingId, updated.ModelOverrideOfferingId)
                     .SetProperty(row => row.ModelOverrideReasoningEffort, updated.ModelOverrideReasoningEffort)
                     .SetProperty(row => row.Revision, updated.Revision)
                     .SetProperty(row => row.UpdatedAtUtc, updated.Provenance.UpdatedAt.ToUnixTimeMilliseconds()),
@@ -1015,16 +1015,17 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             return null;
         }
 
-        if (!string.IsNullOrWhiteSpace(row.ModelCatalogKey))
+        if (!string.IsNullOrWhiteSpace(row.ModelOfferingId))
         {
             return TriggerStoreMapping.ToOccurrence(row);
         }
 
-        row.ModelCatalogKey = pin.CatalogKey;
-        row.ModelProviderAlias = pin.ProviderAlias;
-        row.ModelId = pin.ModelId;
+        row.ModelOfferingId = pin.OfferingId;
+        row.ModelConnectionId = pin.ConnectionId;
+        row.ExternalModelId = pin.ExternalModelId;
         row.ModelReasoningEffort = pin.ReasoningEffort;
         row.ModelSource = (int)pin.Source;
+        row.ModelBindingJson = ModelBindingJson.Write(pin.Binding, pin.OfferingId, pin.ConnectionId, pin.ExternalModelId);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return TriggerStoreMapping.ToOccurrence(row);
     }
@@ -1102,7 +1103,7 @@ internal static class TriggerStoreMapping
         CreatedAtUtc = registration.Provenance.CreatedAt.ToUnixTimeMilliseconds(),
         UpdatedAtUtc = registration.Provenance.UpdatedAt.ToUnixTimeMilliseconds(),
         SuspensionReason = registration.SuspensionReason,
-        ModelOverrideCatalogKey = registration.ModelOverrideCatalogKey,
+        ModelOverrideOfferingId = registration.ModelOverrideOfferingId,
         ModelOverrideReasoningEffort = registration.ModelOverrideReasoningEffort,
         RequiresVision = registration.RequiresVision,
         RequiresTools = registration.RequiresTools,
@@ -1126,7 +1127,7 @@ internal static class TriggerStoreMapping
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
             DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc), row.PresetId, row.PresetVersion),
         row.SuspensionReason,
-        row.ModelOverrideCatalogKey,
+        row.ModelOverrideOfferingId,
         row.ModelOverrideReasoningEffort,
         row.RequiresVision,
         row.Name, new((AutomationExecutionTargetKind)row.ExecutionTargetKind, ParseOptional(row.TargetSessionId)),
@@ -1179,10 +1180,11 @@ internal static class TriggerStoreMapping
         AcceptedAgentRunId = occurrence.AcceptedAgentRunId?.ToString("D"),
         LiveSessionId = occurrence.LiveSessionId?.ToString("D"),
         LiveEvaluationCompletedAtUtc = occurrence.LiveEvaluationCompletedAtUtc?.ToUnixTimeMilliseconds(),
-        ModelCatalogKey = occurrence.ModelPin?.CatalogKey,
-        ModelProviderAlias = occurrence.ModelPin?.ProviderAlias,
-        ModelId = occurrence.ModelPin?.ModelId,
+        ModelOfferingId = occurrence.ModelPin?.OfferingId,
+        ModelConnectionId = occurrence.ModelPin?.ConnectionId,
+        ExternalModelId = occurrence.ModelPin?.ExternalModelId,
         ModelReasoningEffort = occurrence.ModelPin?.ReasoningEffort,
+        ModelBindingJson = ModelBindingJson.Write(occurrence.ModelPin?.Binding, occurrence.ModelPin?.OfferingId, occurrence.ModelPin?.ConnectionId, occurrence.ModelPin?.ExternalModelId),
         ModelSource = occurrence.ModelPin is null ? null : (int)occurrence.ModelPin.Source
     };
 
@@ -1223,9 +1225,9 @@ internal static class TriggerStoreMapping
 
     private static ExecutionModelPin? ReadModelPin(TriggerOccurrenceRecord row)
     {
-        if (string.IsNullOrWhiteSpace(row.ModelCatalogKey)
-            || string.IsNullOrWhiteSpace(row.ModelProviderAlias)
-            || string.IsNullOrWhiteSpace(row.ModelId)
+        if (string.IsNullOrWhiteSpace(row.ModelOfferingId)
+            || string.IsNullOrWhiteSpace(row.ModelConnectionId)
+            || string.IsNullOrWhiteSpace(row.ExternalModelId)
             || row.ModelSource is not int source
             || !Enum.IsDefined(typeof(ExecutionModelSource), source))
         {
@@ -1233,11 +1235,12 @@ internal static class TriggerStoreMapping
         }
 
         return new ExecutionModelPin(
-            row.ModelCatalogKey,
-            row.ModelProviderAlias,
-            row.ModelId,
+            row.ModelOfferingId,
+            row.ModelConnectionId,
+            row.ExternalModelId,
             row.ModelReasoningEffort,
-            (ExecutionModelSource)source);
+            (ExecutionModelSource)source,
+            ModelBindingJson.Read(row.ModelBindingJson, row.ModelOfferingId, row.ModelConnectionId, row.ExternalModelId));
     }
 
     private static DateTimeOffset? FromUnix(long? value) =>

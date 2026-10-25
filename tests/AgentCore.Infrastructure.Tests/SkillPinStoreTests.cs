@@ -18,7 +18,7 @@ public sealed class SkillPinStoreTests
     private static readonly AgentDefinition Definition = new(2, "skill-guide", 1,
         new("Guide", "Role", "Guidance", "Calm"), [], "Instructions", new("answerNewTurn", true, true),
         new("concise", false, "en", 256), new(false, 8000, 30000, 1, ["longSilence"]),
-        new(false, "default", 1), new("primary-llm", null, null), new Dictionary<string, string>());
+        new(false, "default", 1), new(null, null), new Dictionary<string, string>());
     private static readonly EffectiveSkill[] Catalog = [
         new("definition:refund.handle", SkillOrigin.Definition, "refund.handle", "Refund", "Guidance", "PINNED_REFUND",
             SkillProjection.OnDemand, [], []),

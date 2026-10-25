@@ -36,6 +36,12 @@ public static class PermissionCatalog
         Add("system.tenants", "tenant", "manage", PermissionApprovalClass.Mutation, true, true);
         Add("system.accounts", "account", "manage", PermissionApprovalClass.Mutation, true, true);
         Add("system.governance", "system", "manage", PermissionApprovalClass.Mutation, true, true);
+        Add("system.model-presets", "model-preset", "read", PermissionApprovalClass.ReadOnly, true, true);
+        Add("system.model-presets", "model-preset", "manage", PermissionApprovalClass.Mutation, true, true);
+        Add("models", "model-offering", "read", PermissionApprovalClass.ReadOnly);
+        Add("models", "model-offering", "manage", PermissionApprovalClass.Mutation, true);
+        Add("model-connections", "model-connection", "read", PermissionApprovalClass.ReadOnly, true);
+        Add("model-connections", "model-connection", "manage test", PermissionApprovalClass.Sensitive, true);
         Add("members", "member", "read", PermissionApprovalClass.ReadOnly);
         Add("members", "member", "invite update remove", PermissionApprovalClass.Mutation, true);
         Add("iam.roles", "role", "read", PermissionApprovalClass.ReadOnly);

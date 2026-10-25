@@ -141,6 +141,13 @@ public sealed partial class TenantSessionLiveDelivery
             { ack = Reject(command.EventId, ex.Code, "Voice is unavailable for this conversation. Continue in text.", "Speech"); }
             catch (AgentCoreException ex) when (ex.Code == "fresh_session_required")
             { ack = Reject(command.EventId, ex.Code, "Create a new Session for the next request.", "Session"); }
+            catch (AgentCoreException ex) when (ex.Code is "ModelUnavailable" or "ModelRouteStale" or "ModelCapabilityUnsupported")
+            { ack = Reject(command.EventId, ex.Code, ex.Code switch
+                {
+                    "ModelRouteStale" => "The selected model configuration changed. Reload before choosing a model for new work.",
+                    "ModelCapabilityUnsupported" => "The selected model does not support this request. Choose a compatible model for new work.",
+                    _ => "The selected model is unavailable. Restore its connection or choose an available model for new work."
+                }, "Model"); }
             catch (AgentCoreException ex) when (ex.Code is "ValidationError" or "Conflict" or "NotFound")
             { ack = Reject(command.EventId, ex.ValidationCode ?? ex.Code, "The command could not be admitted.", ex.Code == "ValidationError" ? "Validation" : "Session"); }
             subscription.LastCommand = command.Sequence;

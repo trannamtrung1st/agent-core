@@ -20,9 +20,9 @@ public sealed partial class TenantDefinitionIntegrationTests
         var experience = new TenantExperienceOperationService((ITenantExperienceStore)current, operations, iam, (ITenantApprovalStore)current, f.Ids, TimeProvider.System);
         var reads = new TenantContinuityReadService((ITenantContinuityStore)current, (ITenantLearnedMemoryStore)current, operations, iam, TimeProvider.System);
         var approvals = new TenantApprovalService(current, (ITenantApprovalStore)current, (ITenantAgentStore)current, operations, iam, f.Identity, f.Ids, TimeProvider.System,
-            configuration, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)current, experienceOperations: experience, continuityReads: reads);
+            configuration, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(current), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)current, experienceOperations: experience, continuityReads: reads);
         var effects = new TenantApprovedOperationService(current, runs, (ITenantAgentStore)current, (ITenantApprovalStore)current, (ITenantApprovedOperationStore)current, operations,
-            configuration, f.Ids, TimeProvider.System, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, experienceOperations: experience, continuityReads: reads);
+            configuration, f.Ids, TimeProvider.System, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(current), SyntheticProviderAliases.Default, experienceOperations: experience, continuityReads: reads);
         return (experience, reads, approvals, effects, new(runs, (ITenantApprovalStore)current, effects, TimeProvider.System, (ITenantRuntimeStore)current, f.Ids));
     }
     private static async Task<TenantApprovalRequest> PrepareExperienceReview(Fixture f, TenantRuntimeFrame frame, ModelToolCall call, TenantApprovalService approvals)

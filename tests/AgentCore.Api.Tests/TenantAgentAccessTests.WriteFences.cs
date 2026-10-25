@@ -52,7 +52,7 @@ public sealed partial class TenantAgentAccessTests
                 path += "/state-isolation/apply"; method = HttpMethod.Post; body["expected"] = isolation.GetProperty("plan").GetProperty("expected");
                 body["draft"] = isolation.GetProperty("plan").GetProperty("draft"); body["fingerprint"] = isolation.GetProperty("plan").GetProperty("fingerprint").GetString(); break;
             case "budgets": path += "/execution-budgets"; body["budgets"] = null; break;
-            case "model": path += "/unattended-model"; body["catalogKey"] = null; body["reasoningEffort"] = null; break;
+            case "model": path += "/unattended-model"; body["offeringId"] = null; body["reasoningEffort"] = null; break;
             case "management": path += "/self-management"; body["overrides"] = new { mode = new { value = "Assisted" }, scopes = new { value = new[] { "Settings" } } }; break;
             case "freeze": path += "/self-management/freeze"; method = HttpMethod.Post; break;
             case "skill": path += "/skills/commands"; method = HttpMethod.Post; body["operation"] = "create"; body["input"] = new { id = "human-check", name = "Human check", description = "Check a scoped change", procedure = "Review the current task.", projection = "OnDemand", enabled = true, requiredCapabilities = new[] { "chat.respond" } }; break;

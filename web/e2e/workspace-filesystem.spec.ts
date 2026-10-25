@@ -9,7 +9,7 @@ for (const scope of ["scratch", "home"]) test(`native ${scope} filesystem batche
   const headers = { "X-AgentCore-Owner-Capability": token! };
   const created = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 21 } });
   expect(created.ok(), await created.text()).toBe(true); const owner = (await created.json()).instanceId;
-  const opened = await page.request.post("/api/v2/sessions", { headers, data: { agentInstanceId: owner, mode: "text", modelCatalogKey: "scripted-alpha" } });
+  const opened = await page.request.post("/api/v2/sessions", { headers, data: { agentInstanceId: owner, mode: "text", modelOfferingId: "dca30000-0000-4000-8000-000000000001" } });
   expect(opened.ok()).toBe(true); const session = (await opened.json()).sessionId;
   const root = scope === "home" ? "/home" : "/working";
   const binary = Buffer.from([0, 255, 128, 13, 10]);

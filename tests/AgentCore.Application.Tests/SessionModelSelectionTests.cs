@@ -28,9 +28,9 @@ public sealed class SessionModelSelectionTests
         await using var runtime = CreateRuntime(output, time, store, snapshot, new ScriptedLanguageModel());
         await runtime.AttachAsync();
         await runtime.WaitUntilMailboxDrainedAsync();
-        Assert.Equal("scripted-alpha", runtime.Snapshot.ModelSelection!.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000001", runtime.Snapshot.ModelSelection!.OfferingId);
         var durable = await store.LoadAsync(snapshot.SessionId);
-        Assert.Equal("scripted-alpha", durable!.ModelSelection!.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000001", durable!.ModelSelection!.OfferingId);
         Assert.Equal("medium", durable.ModelSelection.ReasoningEffort);
     }
 
@@ -46,14 +46,14 @@ public sealed class SessionModelSelectionTests
         await runtime.AttachAsync();
         await runtime.WaitUntilMailboxDrainedAsync();
 
-        var first = runtime.RequestModelSettingsAsync("scripted-beta", null, ModelSelectionSource.User);
+        var first = runtime.RequestModelSettingsAsync("dca30000-0000-4000-8000-000000000002", null, ModelSelectionSource.User);
         await store.SaveStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
-            runtime.RequestModelSettingsAsync("scripted-beta", "high", ModelSelectionSource.User));
+            runtime.RequestModelSettingsAsync("dca30000-0000-4000-8000-000000000002", "high", ModelSelectionSource.User));
         Assert.Equal("SessionBusy", error.Code);
         gate.TrySetResult();
         Assert.True(await first);
-        Assert.Equal("scripted-beta", runtime.Snapshot.ModelSelection!.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000002", runtime.Snapshot.ModelSelection!.OfferingId);
     }
 
     [Fact]
@@ -67,14 +67,14 @@ public sealed class SessionModelSelectionTests
         await using var runtime = CreateRuntime(output, time, store, snapshot, new ScriptedLanguageModel());
         await runtime.AttachAsync();
         await runtime.WaitUntilMailboxDrainedAsync();
-        Assert.Equal("scripted-alpha", runtime.Snapshot.ModelSelection!.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000001", runtime.Snapshot.ModelSelection!.OfferingId);
 
-        var pending = runtime.RequestModelSettingsAsync("scripted-beta", null, ModelSelectionSource.User);
+        var pending = runtime.RequestModelSettingsAsync("dca30000-0000-4000-8000-000000000002", null, ModelSelectionSource.User);
         await store.SaveStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal("scripted-alpha", runtime.Snapshot.ModelSelection.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000001", runtime.Snapshot.ModelSelection.OfferingId);
         gate.TrySetResult();
         Assert.True(await pending);
-        Assert.Equal("scripted-beta", runtime.Snapshot.ModelSelection.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000002", runtime.Snapshot.ModelSelection.OfferingId);
         Assert.Equal(ModelSelectionSource.User, runtime.Snapshot.ModelSelection.SelectionSource);
     }
 
@@ -88,7 +88,7 @@ public sealed class SessionModelSelectionTests
         await using var runtime = CreateRuntime(output, time, store, snapshot, new ScriptedLanguageModel());
         await runtime.AttachAsync();
         await runtime.WaitUntilMailboxDrainedAsync();
-        var pending = runtime.RequestModelSettingsAsync("scripted-beta", null, ModelSelectionSource.User);
+        var pending = runtime.RequestModelSettingsAsync("dca30000-0000-4000-8000-000000000002", null, ModelSelectionSource.User);
         for (var attempt = 0; attempt < 12 && !pending.IsCompleted; attempt++)
         {
             time.Advance(TimeSpan.FromSeconds(1));
@@ -98,7 +98,7 @@ public sealed class SessionModelSelectionTests
         Assert.False(await pending.WaitAsync(TimeSpan.FromSeconds(2)));
         Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
         var durable = await store.Inner.LoadAsync(snapshot.SessionId);
-        Assert.Equal("scripted-alpha", durable!.ModelSelection!.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000001", durable!.ModelSelection!.OfferingId);
     }
 
     [Fact]
@@ -119,9 +119,9 @@ public sealed class SessionModelSelectionTests
         await runtime.SubmitUserTextAsync("Hello");
         await output.WaitForAsync(item => item.Payload is TextDeltaOutput);
         var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
-            runtime.RequestModelSettingsAsync("scripted-beta", null, ModelSelectionSource.User));
+            runtime.RequestModelSettingsAsync("dca30000-0000-4000-8000-000000000002", null, ModelSelectionSource.User));
         Assert.Equal("SessionBusy", error.Code);
-        Assert.Equal("scripted-alpha", runtime.Snapshot.ModelSelection!.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000001", runtime.Snapshot.ModelSelection!.OfferingId);
         release.TrySetResult();
         await runtime.WaitUntilIdleAsync();
     }
@@ -145,18 +145,18 @@ public sealed class SessionModelSelectionTests
         await runtime.SubmitUserTextAsync("Hello");
         await runtime.WaitUntilIdleAsync();
         var first = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal("scripted-alpha", first.ModelProvenance!.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000001", first.ModelProvenance!.OfferingId);
         Assert.Equal("medium", first.ModelProvenance.ReasoningEffort);
         Assert.Contains(resolver.Resolves, item => item.Purpose == ModelPurpose.Conversation);
 
-        Assert.True(await runtime.RequestModelSettingsAsync("scripted-beta", null, ModelSelectionSource.User));
+        Assert.True(await runtime.RequestModelSettingsAsync("dca30000-0000-4000-8000-000000000002", null, ModelSelectionSource.User));
         await runtime.SubmitUserTextAsync("Again");
         await runtime.WaitUntilIdleAsync();
         var second = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal("scripted-beta", second.ModelProvenance!.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000002", second.ModelProvenance!.OfferingId);
         Assert.Null(second.ModelProvenance.ReasoningEffort);
-        Assert.Equal("scripted-alpha", first.ModelProvenance.CatalogKey);
-        Assert.Equal("scripted-beta", resolver.Resolves.Last(item => item.Purpose == ModelPurpose.Conversation).Selection.CatalogKey);
+        Assert.Equal("dca30000-0000-4000-8000-000000000001", first.ModelProvenance.OfferingId);
+        Assert.Equal("dca30000-0000-4000-8000-000000000002", resolver.Resolves.Last(item => item.Purpose == ModelPurpose.Conversation).Selection.OfferingId);
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public sealed class SessionModelSelectionTests
         var created = await SessionRuntimeFixture.SeedAsync(store, SampleDefinitions.Examiner, time.GetUtcNow(),
             purpose: new SessionPurpose(SessionPurposeKind.Goal, "Collect a spoken sample"),
             policy: new SessionCompletionPolicy(AgentCompletionAuthority.Advisory, true, true),
-            selection: SessionModelBinder.Bind(TestModelCatalogs.Synthetic(), "scripted-alpha", null, ModelSelectionSource.User));
+            selection: SessionModelBinder.Bind(TestModelCatalogs.Synthetic(), "dca30000-0000-4000-8000-000000000001", null, ModelSelectionSource.User));
         await using var runtime = CreateRuntime(output, time, store, created, resolver.Conversation, resolver);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello");
@@ -181,7 +181,7 @@ public sealed class SessionModelSelectionTests
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Contains(resolver.Resolves, item => item.Purpose == ModelPurpose.Initiative);
-        Assert.All(resolver.Resolves, item => Assert.Equal("scripted-alpha", item.Selection.CatalogKey));
+        Assert.All(resolver.Resolves, item => Assert.Equal("dca30000-0000-4000-8000-000000000001", item.Selection.OfferingId));
     }
 
     private static Task<SessionSnapshot> CreateSnapshot(IMemoryStore store) =>
@@ -251,7 +251,7 @@ public sealed class SessionModelSelectionTests
 
         public List<(SessionModelSelection Selection, ModelPurpose Purpose)> Resolves { get; } = [];
 
-        public ILanguageModel Resolve(SessionModelSelection selection, ModelPurpose purpose)
+        public ILanguageModel Resolve(SessionModelSelection selection, ModelPurpose purpose, ModelInvocation? invocation)
         {
             Resolves.Add((selection, purpose));
             return Conversation;
@@ -268,7 +268,7 @@ public sealed class SessionModelSelectionTests
 
         public async ValueTask SaveAsync(SessionSnapshot snapshot, long expectedRevision, CancellationToken cancellationToken = default)
         {
-            if (snapshot.ModelSelection?.CatalogKey == "scripted-beta")
+            if (snapshot.ModelSelection?.OfferingId == "dca30000-0000-4000-8000-000000000002")
             {
                 SaveStarted.TrySetResult();
                 await gate.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -318,7 +318,7 @@ public sealed class SessionModelSelectionTests
 
         public ValueTask SaveAsync(SessionSnapshot snapshot, long expectedRevision, CancellationToken cancellationToken = default)
         {
-            if (snapshot.ModelSelection?.CatalogKey == "scripted-beta")
+            if (snapshot.ModelSelection?.OfferingId == "dca30000-0000-4000-8000-000000000002")
             {
                 throw AgentCoreErrors.Persistence("forced model persist failure");
             }

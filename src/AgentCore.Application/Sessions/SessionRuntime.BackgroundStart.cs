@@ -3,6 +3,7 @@ using AgentCore.Application.Events;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Security;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 
@@ -46,9 +47,12 @@ public sealed partial class SessionRuntime
             { input.Completed.TrySetResult(SkillLoadAdmission.Error("invalid", "Provide a bounded objective, optional title and completion preference.")); return; }
             var resolved = await _tools.ResolveRunConfigurationAsync(_snapshot, ct).ConfigureAwait(false);
             var selection = _snapshot.ModelSelection;
-            if (_catalog is not null && selection?.SelectionSource is not (ModelSelectionSource.User or ModelSelectionSource.Host))
+            if (source.Owner.TenantId is not null)
+                selection = await (_runAuthority as AgentCore.Application.Security.TenantRunExecutionAuthority ?? throw new AccessDeniedException("tenant_context_required"))
+                    .BindNewRunModelAsync(source, resolved.Configuration.Definition, selection, ct).ConfigureAwait(false);
+            else if (_catalog is not null && selection?.SelectionSource is not (ModelSelectionSource.User or ModelSelectionSource.Host))
                 selection = AgentCore.Application.Models.SessionModelBinder.RefreshDefault(_catalog, resolved.Configuration.Definition, selection);
-            var childModel = selection is null ? source.PinnedModel : new AgentRunModelPin(selection.CatalogKey, selection.ProviderAlias, selection.ModelId, selection.ReasoningEffort);
+            var childModel = selection is null ? source.PinnedModel : new AgentRunModelPin(selection.OfferingId, selection.ConnectionId, selection.ExternalModelId, selection.ReasoningEffort, selection.Binding);
             var proposal = BackgroundSessionAdmissionFactory.ForImmediate(_ids.NewSessionId(), _ids.NewId(), _ids.NewId(),
                 _ids.NewId(), _ids.NewId(), _snapshot, source, input.Call.Id, objective.GetString()!.Trim(),
                 title.ValueKind == JsonValueKind.String ? title.GetString() : null,

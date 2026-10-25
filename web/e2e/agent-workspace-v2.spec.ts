@@ -12,7 +12,7 @@ test("managed workspace uses durable cwd, explicit scratch, and downloads across
   expect(created.ok(), await created.text()).toBe(true);
   const owner = (await created.json()).instanceId;
   async function session() {
-    const opened = await page.request.post("/api/v2/sessions", { headers, data: { agentInstanceId: owner, mode: "text", modelCatalogKey: "scripted-alpha" } });
+    const opened = await page.request.post("/api/v2/sessions", { headers, data: { agentInstanceId: owner, mode: "text", modelOfferingId: "dca30000-0000-4000-8000-000000000001" } });
     expect(opened.ok(), await opened.text()).toBe(true);
     return (await opened.json()).sessionId as string;
   }

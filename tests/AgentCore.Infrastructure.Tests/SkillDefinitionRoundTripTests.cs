@@ -184,7 +184,7 @@ public sealed class SkillDefinitionRoundTripTests
             new ConversationPolicy("concise", true, "en", 512),
             new InitiativePolicy(false, 30_000, 60_000, 1, []),
             new VoiceConfiguration(false, "alloy", 1.0),
-            new ProviderPreferences("primary-llm", null, null),
+            new ProviderPreferences(null, null),
             new Dictionary<string, string>(),
             Skills: skills);
 
@@ -200,7 +200,7 @@ public sealed class SkillDefinitionRoundTripTests
             new ConversationPolicy("concise", true, "en", 256),
             new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
             new VoiceConfiguration(false, "default", 1.0),
-            new ProviderPreferences("primary-llm", null, null),
+            new ProviderPreferences(null, null),
             new Dictionary<string, string>());
 
     private static SessionSnapshot Snapshot() =>

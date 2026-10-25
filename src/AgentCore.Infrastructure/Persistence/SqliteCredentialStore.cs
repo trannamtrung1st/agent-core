@@ -67,7 +67,7 @@ public sealed class SqliteCredentialStore(IDbContextFactory<AgentCoreDbContext> 
         await RequireActive(db, b.AgentInstanceId, expectedInstanceRevision, ct);
         await RequireLegacyCredential(db, b.CredentialId, ct);
         var credential = await db.Credentials.AsNoTracking().SingleOrDefaultAsync(c => c.CredentialId == b.CredentialId.ToString("D"), ct) ?? throw AgentCoreErrors.NotFound("Credential was not found.");
-        if (credential.Purpose == "ContainerRegistry") throw AgentCoreErrors.Forbidden("Registry credentials cannot be bound to agents.");
+        if (credential.Purpose is "ContainerRegistry" or "ModelInference") throw AgentCoreErrors.Forbidden("Infrastructure credentials cannot be bound to agents.");
         db.AgentCredentialBindings.Add(new() { BindingId = b.BindingId.ToString("D"), AgentInstanceId = b.AgentInstanceId.ToString("D"), CredentialId = b.CredentialId.ToString("D"), Reference = b.Reference, Revision = b.Revision, CreatedAtUtc = b.CreatedAtUtc.ToUnixTimeMilliseconds(), UpdatedAtUtc = b.UpdatedAtUtc.ToUnixTimeMilliseconds() });
         if (history is not null) AdminEventPersistence.StageAppend(db, history, Guid.NewGuid());
         await Save(db, ct); await transaction.CommitAsync(ct);
