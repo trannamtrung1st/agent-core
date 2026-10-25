@@ -13,3 +13,7 @@ Mode: Operate. Ordinary code-led extension of the incumbent direct Ant Design v6
 **FIRST VIEWPORT:** Identity and a clearly named task precede native fields, inherited-source guidance and current read-only/frozen state. No dashboard, duplicate shell or new summary-card grid. Long identities, choices and feedback wrap through 320px.
 
 **FORM:** One bounded column, existing 8/12/16px rhythm, responsive wrapping budget rows and management choices. Native keyboard/focus, dirty-navigation confirmation and deliberate consequential lock confirmation supply the interaction craft. Limits/model failures are actionable and never silently fall back to global owner catalogs.
+
+## Completion refinement — 2026-10-26
+
+Keep saved mode and the Instance Frozen lock visible independently of draft values in one accessible status row. Show stored automatic-change choices in all modes with inherited/override source; explain that Off/Assisted suppress automatic use. Procedure choices are distinct from effective availability and link conceptually to Skills capability blockers. Shared `SelfManagementFields` owns mobile checkbox/procedure-label/Select/Button hit targets for both Instance and Definition surfaces; preserve the existing 8/12/16 rhythm and wrapping actions. Exact saved-policy lock confirmation retains unrelated drafts. Current evidence is in `docs/reports/agent-self-management-delivery-2026-10-26.md`.

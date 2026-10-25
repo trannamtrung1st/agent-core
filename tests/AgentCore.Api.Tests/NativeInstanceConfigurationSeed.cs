@@ -103,7 +103,7 @@ internal static class NativeInstanceConfigurationSeed
             throw new InvalidOperationException("Built-in mutation unexpectedly prepared.");
         }
         var view = HarnessManagementRules.View(owner, definition);
-        var overrides = view.Overrides ?? (view.Source == "instance" ? ManagementPolicyOverrides.FromLegacy(view.Effective) : new());
+        var overrides = view.Overrides ?? new();
         var choice = operation == "reset_enabled" ? null : new InstanceField<bool>(enabled!.Value);
         overrides = overrides with { ConfigurationAssistance = choice };
         await PolicyAsync(services, id, owner.Revision, overrides);

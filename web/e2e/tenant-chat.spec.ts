@@ -1,4 +1,4 @@
-import { canonicalFetch, signInTenant } from './support/tenant-auth';
+import { canonicalFetch, grantPrivateSpaceRead, signInTenant } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext, type Page, type WebSocketRoute } from '@playwright/test';
 
 // Public HTTP is fixture setup; all conversation commands below use visible product controls.
@@ -19,6 +19,7 @@ async function fixture() {
   const prefix = `/api/v2/tenants/${tenant.tenantId}`;
   const revision = async () => (await call<{ revision: number }>(api, `${prefix}/access/me`)).revision;
   const agent = await call<{ instance: { instanceId: string } }>(api, `${prefix}/agents`, { templateId: 'examiner', version: 1, expectedRevision: await revision() });
+  await grantPrivateSpaceRead(api, tenant.tenantId, agent.instance.instanceId);
   return { api, tenant: tenant.tenantId, name: `Chat ${nonce}`, prefix, revision, agent: agent.instance.instanceId, path: `/t/${tenant.tenantId}` };
 }
 async function send(page: Page, text: string) {
@@ -192,6 +193,7 @@ test('Chat-only member has no management controls and revoked Chat clears protec
     await call(page.request, '/api/v2/auth/register', { login: email, displayName: 'Chat member', password: secret, invitation: { tenantId: f.tenant, invitationId: invitation.invitationId, token: invitation.token } });
     const members = await call<{ items: { principalId: string; login: string }[] }>(f.api, `${f.prefix}/members`);
     const principalId = members.items.find(m => m.login.toLowerCase() === email)!.principalId;
+    await grantPrivateSpaceRead(f.api, f.tenant, f.agent, principalId);
     const chat = await call<{ roleId: string }>(f.api, `${f.prefix}/roles`, { name: `Exact agent Chat ${nonce}`, permissions: ['agents.chat'], expectedRevision: await f.revision() });
     const grant = await call<{ assignmentId: string }>(f.api, `${f.prefix}/role-assignments`, { principalId, roleId: chat.roleId, resourceType: 'agent', resourceId: f.agent, expectedRevision: await f.revision() });
     const observed = watch(page); await signIn(page, email, secret); await page.goto(f.path);
@@ -298,6 +300,8 @@ test('Chat permission permits Queue while Steer requires independent Run cancell
     const role = await call<{ roleId: string }>(f.api, `${f.prefix}/roles`, { name: `Chat without cancellation ${nonce}`, permissions: ['sessions.read', 'sessions.create', 'agents.chat'], expectedRevision: await f.revision() });
     const invitation = await call<{ invitationId: string; token: string }>(f.api, `${f.prefix}/members/invite`, { login: email, roleId: role.roleId, expectedRevision: await f.revision() });
     await call(page.request, '/api/v2/auth/register', { login: email, displayName: 'Chat reader', password: secret, invitation: { tenantId: f.tenant, invitationId: invitation.invitationId, token: invitation.token } });
+    const members = await call<{ items: { principalId: string; login: string }[] }>(f.api, `${f.prefix}/members`);
+    await grantPrivateSpaceRead(f.api, f.tenant, f.agent, members.items.find(member => member.login.toLowerCase() === email)!.principalId);
     const observed = watch(page); await signIn(page, email, secret); await page.goto(f.path);
     await send(page, '[test:durable-stream-long] Chat-only live objective');
     // Queue is available before admission finishes. Wait for the held response's

@@ -1,4 +1,4 @@
-import { canonicalFetch, signInTenant } from './support/tenant-auth';
+import { canonicalFetch, grantPrivateSpaceRead, signInTenant } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext } from '@playwright/test';
 const login = process.env.TENANT_MEMORY_LOGIN ?? 'tenant-chat-owner@example.test';
 const password = process.env.TENANT_MEMORY_PASSWORD ?? 'synthetic-tenant-chat-password';
@@ -29,10 +29,11 @@ for (const tool of ['settings.patch', 'management.policy.update', 'management.fr
     draft.candidate.executionPolicy = { harness: [], knowledgeSources: [], toolAllowlist: [], capabilities: { mode: 'Selected', resolvedCapabilities: ['management.inspect', 'settings.inspect', ...['settings.patch', 'management.policy.update', 'management.freeze', 'automation.preferences.patch']] }, projection: { alwaysCapabilities: [] } };
     draft.candidate.selfManagement = { mode: 'Managed', scopes: ['Settings', 'ManagementPolicy', 'AutomationPreferences'], sources: [], eligibleTools: [] };
     const oldInstructions = 'Saved literal <script>old configuration</script>.'; const nextInstructions = 'New literal <script>future configuration</script>.'; draft.candidate.agentInstructions = oldInstructions;
-    const options = await call<{ authoring: { models: { key: string }[] } }>(api, prefix + `/definition-authoring-options?definitionId=${draft.definitionId}`); const key = options.authoring.models[0].key;
+    const options = await call<{ authoring: { models: { offeringId: string }[] } }>(api, prefix + `/definition-authoring-options?definitionId=${draft.definitionId}`); const key = options.authoring.models[0].offeringId;
     const changed = await call<{ revision: number }>(api, prefix + `/definition-drafts/${draft.draftId}`, { candidate: draft.candidate, expectedRevision: await revision(), expectedDraftRevision: 1 }, 'PUT');
     await call(api, prefix + `/definition-drafts/${draft.draftId}/publish`, { expectedRevision: await revision(), expectedDraftRevision: changed.revision });
     const agent = await call<{ instance: { instanceId: string }; principalId: string }>(api, prefix + '/agents/from-publication', { definitionId: draft.definitionId, version: 1, expectedRevision: await revision() });
+    await grantPrivateSpaceRead(api, tenant, agent.instance.instanceId);
     const role = await call<{ roleId: string }>(api, prefix + '/roles', { name: 'Configuration editor', permissions: ['agents.chat', 'sessions.read', 'agents.read', 'agents.update'], expectedRevision: await revision() });
     await call(api, prefix + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await revision() });
     const arguments_ = tool === 'settings.patch' ? { expectedInstanceRevision: 1, section: 'instructions', set: { agentInstructions: nextInstructions }, clear: [] }
@@ -64,6 +65,17 @@ for (const tool of ['settings.patch', 'management.policy.update', 'management.fr
         if (tool === 'management.freeze') expect(management.policy.effective.frozen).toBe(true); else expect(management.policy.effective.mode).toBe('Assisted');
       }
       if (tool === 'automation.preferences.patch') expect(saved.instance.unattendedOfferingId).toBe(key);
+      if (tool === 'management.freeze') {
+        await input.fill('Continue ordinary conversation while management is frozen.');
+        await page.getByRole('button', { name: 'Send', exact: true }).click();
+        await expect(page.getByText('Hello from synthetic.', { exact: true })).toBeVisible();
+        const frozen = await call<{ policy: { overrides: unknown; effective: { mode: string; frozen: boolean } } }>(api, path + '/self-management');
+        expect(frozen.policy.effective).toMatchObject({ mode: 'Managed', frozen: true });
+        await call(api, path + '/self-management', { expectedRevision: await revision(), expectedInstanceRevision: saved.instance.revision,
+          overrides: frozen.policy.overrides, frozen: false }, 'PUT');
+        const restored = await call<{ policy: { effective: { mode: string; frozen: boolean } } }>(api, path + '/self-management');
+        expect(restored.policy.effective).toMatchObject({ mode: 'Managed', frozen: false });
+      }
     }
     expect(errors).toEqual([]);
   } finally { await api.dispose(); }

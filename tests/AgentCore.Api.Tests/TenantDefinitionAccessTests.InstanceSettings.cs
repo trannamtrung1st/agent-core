@@ -44,7 +44,7 @@ public sealed partial class TenantDefinitionAccessTests
         Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync($"{path}/execution-budgets", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = await InstanceRevision(), budgets = (object?)null })).StatusCode);
         Assert.NotEqual("instance", (await Json(await owner.GetAsync($"{path}/execution-budgets"))).GetProperty("effective").GetProperty("Standard").GetProperty("source").GetString());
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PutAsJsonAsync($"{path}/unattended-model", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = await InstanceRevision(), offeringId = "unavailable-model" })).StatusCode);
-        var model = (await Json(await owner.GetAsync($"{prefix}/definition-authoring-options?definitionId={definitionId}"))).GetProperty("authoring").GetProperty("models")[0].GetProperty("key").GetString();
+        var model = (await Json(await owner.GetAsync($"{prefix}/definition-authoring-options?definitionId={definitionId}"))).GetProperty("authoring").GetProperty("models")[0].GetProperty("offeringId").GetString();
         Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync($"{path}/unattended-model", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = await InstanceRevision(), offeringId = model, reasoningEffort = (string?)null })).StatusCode);
         Assert.Equal(model, (await Json(await owner.GetAsync(path))).GetProperty("instance").GetProperty("unattendedOfferingId").GetString());
         var policy = new { mode = new { value = "Assisted" }, scopes = new { value = new[] { "Settings" } }, configurationAssistance = new { value = false } };
@@ -52,6 +52,14 @@ public sealed partial class TenantDefinitionAccessTests
         var management = (await Json(await owner.GetAsync($"{path}/self-management"))).GetProperty("policy");
         Assert.Equal("Assisted", management.GetProperty("effective").GetProperty("mode").GetString());
         Assert.False(management.GetProperty("effective").GetProperty("builtInSkills").GetProperty("configurationAssistance").GetBoolean());
+        var beforeInvalid = await Revision(owner, tenant); var beforeInvalidInstance = await InstanceRevision();
+        foreach (var invalid in new[] { "{\"unknownArea\":true}", "{\"mode\":{\"value\":\"Managed\",\"unknown\":true}}", "{\"configurationAssistance\":{}}", "{\"scopes\":{\"value\":[\"Settings\",\"Settings\"]}}" })
+        {
+            using var parsed = JsonDocument.Parse(invalid);
+            Assert.Equal(HttpStatusCode.BadRequest, (await owner.PutAsJsonAsync($"{path}/self-management", new {
+                expectedRevision = beforeInvalid, expectedInstanceRevision = beforeInvalidInstance, overrides = parsed.RootElement })).StatusCode);
+            Assert.Equal(beforeInvalid, await Revision(owner, tenant)); Assert.Equal(beforeInvalidInstance, await InstanceRevision());
+        }
         Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync($"{path}/self-management/freeze", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = await InstanceRevision() })).StatusCode);
         Assert.True((await Json(await owner.GetAsync($"{path}/self-management"))).GetProperty("policy").GetProperty("effective").GetProperty("frozen").GetBoolean());
         Assert.True((await Json(await owner.GetAsync($"{path}/effective-config"))).GetProperty("definition").GetProperty("selfManagement").GetProperty("frozen").GetBoolean());

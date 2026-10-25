@@ -14,7 +14,7 @@ internal static class HarnessManagementRules
 
     internal static ManagementPolicyView View(AgentInstance owner, AgentDefinition definition) =>
         new(owner.Revision, owner.HarnessManagement?.PolicyRevision ?? 1,
-            owner.HarnessManagement is null || owner.HarnessManagement.Overrides is { Mode: null, Scopes: null, AutoApply: null, ConfigurationAssistance: null, HarnessAuthoring: null } ? "definition" : owner.HarnessManagement.Overrides is null ? "instance" : "per-field",
+            owner.HarnessManagement is null || owner.HarnessManagement.Overrides is { Mode: null, Scopes: null, AutoApply: null, ConfigurationAssistance: null, HarnessAuthoring: null } ? "definition" : "per-field",
             ManagementPolicyResolver.Resolve(definition, owner), definition.SelfManagement ?? HarnessManagementPolicy.Disabled,
             owner.HarnessManagement?.Overrides);
 
@@ -39,7 +39,7 @@ internal static class HarnessManagementRules
         if (!ManagementTools.Enabled(effective)) throw AgentCoreErrors.Forbidden("Self-management is disabled or frozen.");
         var old = owner.HarnessManagement ?? new(effective);
         return old with { Policy = effective with { Frozen = true }, PolicyRevision = checked(old.PolicyRevision + 1),
-            Overrides = owner.HarnessManagement is null ? new() : old.Overrides };
+            Overrides = old.Overrides ?? new() };
     }
 
     public static void Validate(ManagementPolicyOverrides overrides)

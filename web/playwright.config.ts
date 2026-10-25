@@ -10,7 +10,7 @@ export default defineConfig({
     { name: 'synthetic', testMatch: [
       'text-conversation.spec.ts', 'tenant-approval-independence.spec.ts',
       'tenant-auth-recovery.spec.ts',
-      'tenant-management-mutations.spec.ts', 'tenant-management-inspections.spec.ts',
+      'tenant-management-reads.spec.ts', 'tenant-management-mutations.spec.ts', 'tenant-management-inspections.spec.ts',
       'tenant-memory-management.spec.ts', 'memory-semantics.spec.ts',
       'tenant-automations.spec.ts', 'tenant-email-watches.spec.ts',
       'tenant-instance-editor.spec.ts', 'tenant-instance-controls.spec.ts',

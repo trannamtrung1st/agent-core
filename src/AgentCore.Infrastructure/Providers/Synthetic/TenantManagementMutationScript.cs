@@ -7,8 +7,9 @@ internal static class TenantManagementMutationScript
     internal static IReadOnlyList<ModelGenerationEvent>? Generate(ModelRequest request)
     {
         const string prefix = "synthetic-tenant-management-mutation: ";
-        var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User && m.Text.StartsWith(prefix, StringComparison.Ordinal))?.Text;
-        if (prompt is null) return null;
+        var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text;
+        // Historical management instructions never select the script for a new user task.
+        if (prompt?.StartsWith(prefix, StringComparison.Ordinal) != true) return null;
         using var command = JsonDocument.Parse(prompt[prefix.Length..]);
         var tool = command.RootElement.GetProperty("tool").GetString()!; var arguments = command.RootElement.GetProperty("arguments");
         var consent = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization);

@@ -10,6 +10,7 @@ public static partial class TenantAgentEndpoints
         IReadOnlyDictionary<string, JsonElement> Set, IReadOnlyList<string> Clear);
     public sealed record BudgetsRequest(long ExpectedRevision, long ExpectedInstanceRevision, ExecutionBudgetPolicy? Budgets);
     public sealed record UnattendedRequest(long ExpectedRevision, long ExpectedInstanceRevision, string? OfferingId, string? ReasoningEffort);
+    [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
     public sealed record ManagementRequest(long ExpectedRevision, long ExpectedInstanceRevision, ManagementPolicyOverrides Overrides, bool? Frozen = null);
     public sealed record FreezeRequest(long ExpectedRevision, long ExpectedInstanceRevision);
     private static void MapSettings(RouteGroupBuilder group)

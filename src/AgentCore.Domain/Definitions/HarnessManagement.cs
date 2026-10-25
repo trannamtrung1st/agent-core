@@ -8,18 +8,13 @@ public enum HarnessManagementScope { KnowledgeResources, Instructions, ToolSelec
 public enum ManagementAutoApply { ConversationPreferences, TextResources, SkillChanges }
 public sealed record ManagementSkillChoices(bool ConfigurationAssistance = true, bool HarnessAuthoring = true);
 /// <summary>Missing fields inherit the selected Definition. Freeze is an Instance-local lock.</summary>
+[System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
 public sealed record ManagementPolicyOverrides(
     InstanceField<HarnessManagementMode>? Mode = null,
     InstanceField<HarnessManagementScope[]>? Scopes = null,
     InstanceField<ManagementAutoApply[]>? AutoApply = null,
     InstanceField<bool>? ConfigurationAssistance = null,
-    InstanceField<bool>? HarnessAuthoring = null)
-{
-    // Only legacy full-policy records need materialization. Fresh records remain sparse.
-    public static ManagementPolicyOverrides FromLegacy(HarnessManagementPolicy policy) => new(
-        new(policy.Mode), new(policy.Scopes.ToArray()), new((policy.ManagedAutoApply ?? []).ToArray()),
-        new(policy.BuiltInSkills?.ConfigurationAssistance ?? true), new(policy.BuiltInSkills?.HarnessAuthoring ?? true));
-}
+    InstanceField<bool>? HarnessAuthoring = null);
 // Inert historical serialization only. The preparation/approval executor is retired.
 public enum HarnessPreparationStatus { Preparing, AwaitingApproval, Ready, Failed, Cancelled, Published }
 public enum HarnessEvidenceStatus { Verified, PartiallyVerified, CannotVerify, RequiresExternalEvidence, Failed }
@@ -114,8 +109,10 @@ public static class ManagementPolicyResolver
     {
         var defaults = definition.SelfManagement ?? HarnessManagementPolicy.Disabled;
         var state = instance.HarnessManagement;
-        // Existing non-null records retain precisely their legacy scopes. Newly introduced areas are never inferred.
-        if (state?.Overrides is not { } overrides) return state?.Policy ?? defaults with { Frozen = false };
+        if (state is null) return defaults with { Frozen = false };
+        // Installed full policies are normalized once by the forward migration, never at execution time.
+        var overrides = state.Overrides ?? throw new InvalidOperationException(
+            "SelfManagementNormalizationRequired: upgrade the stopped database before serving traffic.");
         return defaults with {
             Mode = overrides.Mode?.Value ?? defaults.Mode,
             Scopes = overrides.Scopes?.Value ?? defaults.Scopes,

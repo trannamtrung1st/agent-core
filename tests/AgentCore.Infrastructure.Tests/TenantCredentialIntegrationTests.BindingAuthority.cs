@@ -106,7 +106,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var before = await Revision();
         var disabled = await Assert.ThrowsAsync<AccessDeniedException>(() => f.BindingService.BindAsync(agent.PrincipalId, owner.TenantId, id, credential.Credential.CredentialId, "primary", before, 1, 1).AsTask());
         Assert.Equal("management_scope_denied", disabled.ReasonCode);
-        var policy = new HarnessManagementState(new(HarnessManagementMode.Assisted, [HarnessManagementScope.Connections], [], []));
+        var policy = new HarnessManagementState(new(HarnessManagementMode.Assisted, [HarnessManagementScope.Connections], [], []), Overrides: new(Mode: new(HarnessManagementMode.Assisted), Scopes: new([HarnessManagementScope.Connections])));
         var state = (await f.Iam.ReadTenantAsync(owner.TenantId))!;
         var changed = await ((ITenantAgentStore)f.Iam).TryChangeTenantAgentConfigurationAsync(state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } }, state.Tenant.Revision,
             new(id, 1, HarnessManagement: policy), DateTimeOffset.UtcNow, f.Audit(owner.TenantId, owner.OwnerPrincipalId, id));

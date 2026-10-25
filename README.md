@@ -8,6 +8,8 @@ Tenant-owned dynamic model management is implemented locally: five adapter kinds
 
 The [model and Space integration](docs/reports/model-space-main-integration-2026-10-25.md) records combined migration, authority and conversation verification after synchronizing main. Inference offerings remain tenant scoped; Space/Environment selection retains independent membership and IAM checks.
 
+Agent Self-Management completion uses ordinary tenant Instances and the existing IAM/configuration/approval owners. The [completion delivery](docs/reports/agent-self-management-delivery-2026-10-26.md) records the one-time sparse-policy migration, retained immutable history, UI refinement and current local verification limits. No special Admin Assistant feature is installed.
+
 Agent Core is a lightweight runtime for creating persistent AI identities capable of natural, real-time conversation.
 
 An agent can represent a customer service representative, examiner, tutor, friend, interviewer, receptionist, or another role. The goal of the MVP is not to build a general-purpose autonomous-agent platform. The goal is to prove that one reusable Agent Core can inhabit different identities and interact naturally through text and voice.

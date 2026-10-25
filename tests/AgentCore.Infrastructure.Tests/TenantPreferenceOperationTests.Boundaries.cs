@@ -169,7 +169,7 @@ public sealed partial class TenantPreferenceOperationTests
     {
         var state = (await f.Iam.ReadTenantAsync(setup.Tenant))!; var at = f.Clock.GetUtcNow();
         Assert.NotNull(await ((ITenantAgentStore)f.Iam).TryChangeTenantAgentConfigurationAsync(state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } }, state.Tenant.Revision,
-            new(setup.Agent.Instance.InstanceId, 2, HarnessManagement: new(policy, 3)), at,
+            new(setup.Agent.Instance.InstanceId, 2, HarnessManagement: new(policy, 3, Overrides: new(Mode: new(policy.Mode), Scopes: new(policy.Scopes.ToArray()), AutoApply: new((policy.ManagedAutoApply ?? []).ToArray())))), at,
             new(f.Ids.NewId(), setup.Tenant, setup.Owner.PrincipalId, "agents.self-management.update", setup.Agent.Instance.InstanceId.ToString("D"), "allowed", "configuration_updated", at)));
     }
 

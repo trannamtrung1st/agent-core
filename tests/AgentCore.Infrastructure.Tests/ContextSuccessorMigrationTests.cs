@@ -36,9 +36,9 @@ public sealed class ContextSuccessorMigrationTests
                 await using var command = db.Database.GetDbConnection().CreateCommand(); command.CommandText = "PRAGMA foreign_key_check";
                 await using var reader = await command.ExecuteReaderAsync(); Assert.False(await reader.ReadAsync());
             }
-            await migrator.MigrateAsync(); await AssertCurrent();
+            await migrator.MigrateAsync("20261025060000_ContextSuccessor"); await AssertCurrent();
             await migrator.MigrateAsync("20261025050000_SpaceAutomationPins"); Assert.Equal(previous, await Guards());
-            await migrator.MigrateAsync(); await AssertCurrent();
+            await migrator.MigrateAsync("20261025060000_ContextSuccessor"); await AssertCurrent();
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); File.Delete(path); File.Delete(path + "-wal"); File.Delete(path + "-shm"); }
     }

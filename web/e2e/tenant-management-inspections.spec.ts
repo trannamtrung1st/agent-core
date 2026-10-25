@@ -1,4 +1,4 @@
-import { canonicalFetch, signInTenant } from './support/tenant-auth';
+import { canonicalFetch, grantPrivateSpaceRead, signInTenant } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext } from '@playwright/test';
 const login = process.env.TENANT_MEMORY_LOGIN ?? 'tenant-chat-owner@example.test';
 const password = process.env.TENANT_MEMORY_PASSWORD ?? 'synthetic-tenant-chat-password';
@@ -38,6 +38,7 @@ for (const tool of ['harness', 'configuration', 'skills.list', 'skills.inspect',
     const savedResource = await call<{ resource: { key: string } }>(api, path + '/resources', { expectedRevision: await revision(), expectedInstanceRevision: 1, input: { logicalPath: 'private/metadata.txt', kind: 1, mediaType: 'text/plain', content: Buffer.from('PRIVATE-INSPECTION-RESOURCE-BYTES-SENTINEL').toString('base64') } });
     const credential = await call<{ credential: { credentialId: string } }>(api, root + '/credentials', { displayName: 'Readable credential <literal>', kind: 'Token', purpose: 'General', protectedValue: 'PRIVATE-INSPECTION-SECRET-SENTINEL', expectedRevision: await revision() });
     await call(api, path + '/credential-bindings', { credentialId: credential.credential.credentialId, reference: 'inspection-account', expectedRevision: await revision(), expectedInstanceRevision: 2, expectedCredentialRevision: 1 });
+    await grantPrivateSpaceRead(api, tenant, agent.instance.instanceId);
     const role = await call<{ roleId: string }>(api, root + '/roles', { name: 'Compound metadata reader', permissions: ['agents.chat', 'sessions.read', 'agents.read', 'skills.read', 'resources.read', 'credentials.read'], expectedRevision: await revision() });
     await call(api, root + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await revision() });
     await call(api, root + '/operation-policies/' + (tool.startsWith('resources.') ? 'resources.read' : 'skills.read'), { mode: 'always', independentReview: false, expectedRevision: await revision(), expectedPolicyRevision: 0 }, 'PUT');

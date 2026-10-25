@@ -28,10 +28,10 @@ internal static class TenantAgentSkillPreparation
             var existing = InstanceSkillRules.BuiltIns(definition, definition.SelfManagement!, owner).SingleOrDefault(s => s.Key == key)
                 ?? throw AgentCoreErrors.NotFound("Skill was not found.");
             if (existing.Revision != expectedRevision) throw new SecurityConflictException("stale_revision");
-            var overrides = owner.HarnessManagement is { } stored ? stored.Overrides ?? ManagementPolicyOverrides.FromLegacy(definition.SelfManagement!) : new();
+            var overrides = owner.HarnessManagement?.Overrides ?? new();
             bool? choice = operation == "reset_enabled" ? null : enabled ?? throw AgentCoreErrors.Validation("Enabled is required.");
             if (choice is { } selected && existing.EnabledOverride == selected
-                || choice is null && existing.EnabledOverride is null && (owner.HarnessManagement is null || owner.HarnessManagement.Overrides is not null))
+                || choice is null && existing.EnabledOverride is null)
                 return new(null, snapshot, existing, null);
             overrides = key switch {
                 ManagementBuiltInSkills.ConfigurationKey => overrides with { ConfigurationAssistance = choice is null ? null : new(choice.Value) },

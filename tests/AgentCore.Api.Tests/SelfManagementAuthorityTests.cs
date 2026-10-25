@@ -32,7 +32,7 @@ public sealed class SelfManagementAuthorityTests
             var instances = services.GetRequiredService<IAgentInstanceStore>();
             // Seed retained historical data; this fixture does not authorize a preparation or execute it.
             owner = await instances.UpdateWithExpectedRevisionAsync(new(owner.InstanceId, owner.Revision,
-                HarnessManagement: new(new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []), Preparation: history)),
+                HarnessManagement: new(new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []), Preparation: history, Overrides: new(Mode: new(HarnessManagementMode.Managed), Scopes: new([HarnessManagementScope.Settings])))),
                 services.GetRequiredService<TimeProvider>().GetUtcNow());
             var bytes = JsonSerializer.Serialize(owner.HarnessManagement!.Preparation);
             var policy = services;
@@ -65,7 +65,7 @@ public sealed class SelfManagementAuthorityTests
         Assert.False(effective.BuiltInSkills!.ConfigurationAssistance);
         Assert.True(effective.Frozen);
         Assert.False(effective.Allows(HarnessManagementScope.Settings));
-        owner = owner with { HarnessManagement = new(new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources], [], [])) };
+        owner = owner with { HarnessManagement = new(new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources], [], []), Overrides: new(Mode: new(HarnessManagementMode.Managed), Scopes: new([HarnessManagementScope.KnowledgeResources]))) };
         effective = ManagementPolicyResolver.Resolve(definition, owner);
         Assert.False(effective.Allows(HarnessManagementScope.Skills));
         Assert.False(effective.Allows(HarnessManagementScope.Settings));

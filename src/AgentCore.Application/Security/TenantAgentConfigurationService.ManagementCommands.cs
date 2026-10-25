@@ -77,7 +77,7 @@ public sealed partial class TenantAgentConfigurationService
         if (arguments.Tool == "management.freeze")
             return new(owner.InstanceId, owner.Revision, HarnessManagement: HarnessManagementRules.PrepareFreeze(owner, reader.Baseline));
         var view = HarnessManagementRules.View(owner, reader.Baseline);
-        var overrides = view.Overrides ?? (view.Source == "instance" ? ManagementPolicyOverrides.FromLegacy(view.Effective) : new());
+        var overrides = view.Overrides ?? new();
         overrides = overrides with { Mode = new(Enum.Parse<HarnessManagementMode>(args.GetProperty("mode").GetString()!, false)),
             Scopes = new(args.GetProperty("scopes").EnumerateArray().Select(a => Enum.Parse<HarnessManagementScope>(a.GetString()!, false)).ToArray()),
             AutoApply = new(args.GetProperty("managedAutoApply").EnumerateArray().Select(a => Enum.Parse<ManagementAutoApply>(a.GetString()!, false)).ToArray()) };

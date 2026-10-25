@@ -5,7 +5,7 @@ namespace AgentCore.Application.Tests;
 
 public sealed class PermissionApprovalFloorTests
 {
-    // Exact pre-refactor Core catalog: order, scope, principal eligibility and risk are policy.
+    // Exact integrated Core catalog: order, scope, principal eligibility and risk are policy.
     public static IEnumerable<object[]> ExpectedCatalog =>
     [
         ["system.tenants.create", "tenant", PermissionApprovalClass.Mutation, true, false, true],
@@ -13,6 +13,13 @@ public sealed class PermissionApprovalFloorTests
         ["system.tenants.manage", "tenant", PermissionApprovalClass.Mutation, true, false, true],
         ["system.accounts.manage", "account", PermissionApprovalClass.Mutation, true, false, true],
         ["system.governance.manage", "system", PermissionApprovalClass.Mutation, true, false, true],
+        ["system.model-presets.read", "model-preset", PermissionApprovalClass.ReadOnly, true, false, true],
+        ["system.model-presets.manage", "model-preset", PermissionApprovalClass.Mutation, true, false, true],
+        ["models.read", "model-offering", PermissionApprovalClass.ReadOnly, false, true, false],
+        ["models.manage", "model-offering", PermissionApprovalClass.Mutation, true, false, false],
+        ["model-connections.read", "model-connection", PermissionApprovalClass.ReadOnly, true, false, false],
+        ["model-connections.manage", "model-connection", PermissionApprovalClass.Sensitive, true, false, false],
+        ["model-connections.test", "model-connection", PermissionApprovalClass.Sensitive, true, false, false],
         ["members.read", "member", PermissionApprovalClass.ReadOnly, false, true, false],
         ["members.invite", "member", PermissionApprovalClass.Mutation, true, false, false],
         ["members.update", "member", PermissionApprovalClass.Mutation, true, false, false],
@@ -37,6 +44,21 @@ public sealed class PermissionApprovalFloorTests
         ["sessions.create", "session", PermissionApprovalClass.Mutation, false, true, false],
         ["sessions.manage", "session", PermissionApprovalClass.Mutation, false, true, false],
         ["sessions.delete", "session", PermissionApprovalClass.Sensitive, false, true, false],
+        ["environments.read", "space", PermissionApprovalClass.ReadOnly, false, true, false],
+        ["environments.manage", "space", PermissionApprovalClass.Mutation, false, true, false],
+        ["environments.activate", "space", PermissionApprovalClass.Mutation, false, true, false],
+        ["variables.read", "space", PermissionApprovalClass.ReadOnly, false, true, false],
+        ["variables.manage", "space", PermissionApprovalClass.Mutation, false, true, false],
+        ["variables.resolve", "space", PermissionApprovalClass.ReadOnly, false, true, false],
+        ["secrets.read", "secret", PermissionApprovalClass.ReadOnly, false, true, false],
+        ["secrets.manage", "secret", PermissionApprovalClass.Sensitive, false, true, false],
+        ["secrets.use", "secret", PermissionApprovalClass.Sensitive, false, true, false],
+        ["spaces.read", "space", PermissionApprovalClass.ReadOnly, false, true, false],
+        ["spaces.create", "space", PermissionApprovalClass.Mutation, false, true, false],
+        ["spaces.manage", "space", PermissionApprovalClass.Mutation, false, true, false],
+        ["spaces.delete", "space", PermissionApprovalClass.Sensitive, false, true, false],
+        ["space-memberships.read", "space", PermissionApprovalClass.ReadOnly, false, true, false],
+        ["space-memberships.manage", "space", PermissionApprovalClass.Mutation, false, true, false],
         ["credentials.read", "credential", PermissionApprovalClass.ReadOnly, false, true, false],
         ["credentials.bind", "credential", PermissionApprovalClass.Sensitive, false, true, false],
         ["credentials.use", "credential", PermissionApprovalClass.Sensitive, false, true, false],

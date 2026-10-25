@@ -53,7 +53,7 @@ public sealed partial class TenantSessionAccessTests
                     // Retained full-policy choices are configuration, not an alternate executor.
                     var baseline = (await host.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 32))!;
                     state["policy"] = JsonSerializer.SerializeToNode(ManagementPolicyResolver.Resolve(baseline, agent.Instance), new JsonSerializerOptions(JsonSerializerDefaults.Web));
-                    state["overrides"] = null;
+                    // Sparse choices stay canonical; retained preparation alone is historical.
                 }
                 state["preparation"] = JsonSerializer.SerializeToNode(preparation, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                 row.HarnessManagementJson = state.ToJsonString(); await db.SaveChangesAsync();

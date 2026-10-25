@@ -46,7 +46,7 @@ public sealed partial class TenantOperationAuthorizationTests
     private static async Task<EffectEnvironment> EffectSetup(Fixture f, bool review = false, bool independentGrantor = false, bool managementEnabled = true)
     {
         var setup = await Setup(f); var state = (await f.Iam.ReadTenantAsync(setup.Tenant))!; var at = f.Clock.GetUtcNow();
-        var policy = new HarnessManagementState(new(HarnessManagementMode.Assisted, [HarnessManagementScope.Settings], [], []), 2);
+        var policy = new HarnessManagementState(new(HarnessManagementMode.Assisted, [HarnessManagementScope.Settings], [], []), 2, Overrides: new(Mode: new(HarnessManagementMode.Assisted), Scopes: new([HarnessManagementScope.Settings])));
         var configured = managementEnabled ? await ((ITenantAgentStore)f.Iam).TryChangeTenantAgentConfigurationAsync(state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } },
             state.Tenant.Revision, new(setup.Agent.Instance.InstanceId, 1, HarnessManagement: policy), at,
             new(f.Ids.NewId(), setup.Tenant, setup.Owner.PrincipalId, "agents.management.update", setup.Agent.Instance.InstanceId.ToString("D"), "allowed", "configuration_updated", at)) : setup.Agent;
