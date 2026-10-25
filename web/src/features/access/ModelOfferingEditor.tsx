@@ -9,7 +9,7 @@ import { ModelCapabilityFields, validateCapabilities } from './ModelCapabilityFi
 import { useAccessDraftGuard } from './useAccessDraftGuard';
 import { useTenantCommand } from './useTenantCommand';
 
-type Fields = { connectionId: string; presetId?: string; externalModelId: string; label: string; transport: ModelTransport; capabilities: ModelCapabilities; enabled: boolean; retired: boolean };
+type Fields = { connectionId: string; presetId?: string; externalModelId: string; label: string; transport: ModelTransport; capabilities: ModelCapabilities; enabled: boolean; retired: boolean; restoreAvailability: boolean };
 export function ModelOfferingEditor({ context, catalog, offering, connectionId, presetId, close, saved, readLost }: {
   context: TenantContext; catalog: ModelAdmin; offering?: ModelOffering; connectionId?: string; presetId?: string;
   close: () => void; saved: () => void; readLost: () => void;
@@ -41,10 +41,10 @@ export function ModelOfferingEditor({ context, catalog, offering, connectionId, 
       readLost(); throw new IdentityError(403, 'resource_unavailable');
     }
     return next;
-  }, next => { setBaseline(next); setReadback(true); setFresh(true); setReferenceError(undefined); command.clearError(); });
+  }, next => { form.setFieldValue('restoreAvailability', false); setBaseline(next); setReadback(true); setFresh(true); setReferenceError(undefined); command.clearError(); });
   const save = (fields: Fields) => command.run(async signal => {
     try { return await identityRequest<ModelOffering>(modelApi(tenant, '/models' + (offering ? `/${offering.offeringId}` : '')), { method: offering ? 'PATCH' : 'POST', signal, body: {
-      ...fields, presetId: offering?.presetId ?? fields.presetId ?? null, enabled: fields.enabled === true, retired: fields.retired === true, capabilities: capabilityInput(fields.capabilities),
+      ...fields, presetId: offering?.presetId ?? fields.presetId ?? null, enabled: fields.enabled === true, retired: fields.retired === true, restoreAvailability: fields.restoreAvailability === true, capabilities: capabilityInput(fields.capabilities),
       expectedRevision: baseline.securityRevision, expectedOfferingRevision: current?.revision ?? 0
     } }); }
     catch (error) { setFresh(false); if (error instanceof IdentityError && [401, 403, 404].includes(error.status)) readLost(); throw error; }
@@ -64,8 +64,8 @@ export function ModelOfferingEditor({ context, catalog, offering, connectionId, 
       <Form form={form} id="model-offering-form" layout="vertical" disabled={busy} initialValues={{ connectionId: initialConnection, presetId: offering?.presetId ?? presetId,
         externalModelId: offering?.externalModelId ?? preset?.externalModelId ?? '', label: offering?.label ?? preset?.label ?? '',
         transport: offering?.transport ?? preset?.transport ?? transportsFor(catalog.connections.find(item => item.connectionId === initialConnection)?.kind ?? 'OpenAI')[0],
-        capabilities: capabilityInput(offering?.capabilities ?? preset?.capabilities ?? blankCapabilities()), enabled: offering?.enabled ?? !!preset, retired: offering?.retired ?? false }}
-        onValuesChange={() => setDirty(true)} onFinishFailed={failure => showAdminFormValidation(message, form, failure)} onFinish={fields => {
+        capabilities: capabilityInput(offering?.capabilities ?? preset?.capabilities ?? blankCapabilities()), enabled: offering?.enabled ?? !!preset, retired: offering?.retired ?? false, restoreAvailability: false }}
+        onValuesChange={changed => { setDirty(true); if (changed.enabled === false || changed.retired === true) form.setFieldValue('restoreAvailability', false); }} onFinishFailed={failure => showAdminFormValidation(message, form, failure)} onFinish={fields => {
           if (busy || !fresh) return;
           if (current) { setPending(structuredClone(fields)); return; }
           void save(fields);
@@ -79,6 +79,10 @@ export function ModelOfferingEditor({ context, catalog, offering, connectionId, 
         <Form.Item name="transport" label="Inference transport" rules={[{ required: true }]}><Select aria-label="Inference transport" disabled={busy || !offering && !!values?.presetId} options={(connection ? transportsFor(connection.kind) : []).map(value => ({ value, label: value }))} /></Form.Item>
         {values?.presetId && !offering && <Typography.Paragraph type="secondary">This adoption uses the saved preset declaration. After saving, deliberate model edits have administrator-declared provenance.</Typography.Paragraph>}
         <Form.Item name="capabilities" label="Capability declaration" rules={[{ validator: validateCapabilities }]}><ModelCapabilityFields disabled={busy || !!values?.presetId && !offering} /></Form.Item>
+        {current?.observation === 'NotReturned' && <>
+          <Alert type="warning" showIcon title="Model missing from provider listing" description="Discovery blocked this model, including inherited use as the organization default. If you have independently confirmed that the exact model is runnable, explicitly restore availability below. A later discovery can block it again; connection, credential and capability checks still apply." />
+          <Form.Item name="restoreAvailability" valuePropName="checked"><Checkbox disabled={busy || !values?.enabled || !!values?.retired}>Restore availability for this exact model</Checkbox></Form.Item>
+        </>}
         <Form.Item name="enabled" valuePropName="checked"><Checkbox disabled={busy || isDefault || !!values?.retired}>Model enabled</Checkbox></Form.Item>
         {offering && <Form.Item name="retired" valuePropName="checked"><Checkbox disabled={busy || isDefault || offering.retired} onChange={event => { if (event.target.checked) form.setFieldValue('enabled', false); }}>Retire this offering permanently</Checkbox></Form.Item>}
       </Form>
@@ -87,6 +91,7 @@ export function ModelOfferingEditor({ context, catalog, offering, connectionId, 
   </Drawer>{pending && current && <ModelImpactConfirmation tenant={tenant} target={{ kind: 'offering', id: current.offeringId, label: `${current.label} · ${connection?.label ?? 'Connection unavailable'}` }}
     revision={baseline.securityRevision} changes={[`Model name: ${current.label} → ${pending.label}`, `Enabled: ${current.enabled ? 'Yes' : 'No'} → ${pending.enabled ? 'Yes' : 'No'}`,
       `Retired: ${current.retired ? 'Yes' : 'No'} → ${pending.retired ? 'Yes' : 'No'}`, `Transport: ${current.transport} → ${pending.transport}`,
+      ...(pending.restoreAvailability ? ['Restore availability despite missing provider metadata; later discovery can block this model again.'] : []),
       `Before: ${capabilitySummary(current.capabilities)}`, `After: ${capabilitySummary(pending.capabilities)}`]} busy={command.busy} failed={reason => { setReferenceError(reason); setFresh(false); setPending(undefined); }} close={() => setPending(undefined)}
     confirm={() => { void save(pending).finally(() => setPending(undefined)); }} />}</>;
 }

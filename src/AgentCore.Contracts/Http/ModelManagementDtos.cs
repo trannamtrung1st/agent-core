@@ -16,7 +16,7 @@ public sealed record ModelConnectionRequest(string Kind, string Label, string? E
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ModelOfferingRequest(Guid ConnectionId, Guid? PresetId, string ExternalModelId, string Label, string Transport,
     ModelCapabilityInput Capabilities, [property: JsonRequired] bool Enabled, [property: JsonRequired] bool Retired,
-    [property: JsonRequired] long ExpectedRevision, [property: JsonRequired] long ExpectedOfferingRevision);
+    [property: JsonRequired] long ExpectedRevision, [property: JsonRequired] long ExpectedOfferingRevision, bool RestoreAvailability = false);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record TenantModelDefaultRequest([property: JsonRequired] Guid? OfferingId, string? ReasoningEffort,
     [property: JsonRequired] long ExpectedRevision, [property: JsonRequired] long ExpectedSettingsRevision);

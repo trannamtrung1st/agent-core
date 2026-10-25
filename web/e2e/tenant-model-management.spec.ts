@@ -246,7 +246,10 @@ test('unavailable explicit model refuses without a Run, retains the draft, and r
       connectionId: connection.connectionId, presetId: preset.presetId, externalModelId: preset.externalModelId, label: 'Native conversation', transport: preset.transport,
       capabilities, enabled: true, retired: false, expectedRevision: await f.revision(), expectedOfferingRevision: 0
     });
-    const agent = (await call<{ instance: { instanceId: string } }>(f.api, f.root + '/agents', { templateId: 'examiner', version: 1, expectedRevision: await f.revision() })).instance.instanceId;
+    const agentState = await call<{ principalId: string; instance: { instanceId: string } }>(f.api, f.root + '/agents', { templateId: 'examiner', version: 1, expectedRevision: await f.revision() });
+    const agent = agentState.instance.instanceId;
+    const contextRole = await call<{ roleId: string }>(f.api, f.root + '/roles', { name: 'Recovery fixture Space execution', permissions: ['spaces.read'], expectedRevision: await f.revision() });
+    await call(f.api, f.root + '/role-assignments', { principalId: agentState.principalId, roleId: contextRole.roleId, expectedRevision: await f.revision() });
     await signInTenant(page, login, password); await page.goto(`/t/${f.tenant}`);
     await page.getByRole('button', { name: 'Model', exact: true }).click();
     await page.getByTitle('Native conversation · Recovery', { exact: true }).click();
@@ -470,5 +473,66 @@ test('Definition defaults publish into Chat and sparse Instance model changes cl
     const overridden = await call<{ model: { offeringId: string; reasoningEffort: string | null; selectionSource: string } }>(f.api, f.root + `/sessions/${second}/conversation`);
     expect(overridden.model).toMatchObject({ offeringId: 'dca30000-0000-4000-8000-000000000002', reasoningEffort: null, selectionSource: 'agentDefault' });
     expect(first).not.toBe(second); expect(errors).toEqual([]);
+  } finally { await f.api.dispose(); }
+});
+
+test('omitted manual default requires explicit recovery and fresh confirmation after conflict', async ({ page }) => {
+  const f = await setup(); const errors: string[] = []; const failedRequests: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('requestfailed', request => { if (!request.failure()?.errorText.includes('ERR_ABORTED')) failedRequests.push(request.url()); });
+  try {
+    const key = await call<{ credential: { credentialId: string } }>(f.api, f.root + '/credentials', {
+      displayName: 'Recovery key', kind: 'ApiKey', purpose: 'ModelInference', protectedValue: 'synthetic-recovery-key', expectedRevision: await f.revision() });
+    const c = await call<{ connectionId: string }>(f.api, f.root + '/model-connections', {
+      kind: 'OpenAI', label: 'Recovery provider', credentialId: key.credential.credentialId, noCredential: false, enabled: true, expectedRevision: await f.revision(), expectedConnectionRevision: 0 });
+    const o = await call<{ offeringId: string }>(f.api, f.root + '/models', {
+      connectionId: c.connectionId, presetId: null, externalModelId: 'manual-unlisted-model', label: 'Manual unlisted model', transport: 'Responses',
+      capabilities: { tools: true, vision: false, hierarchy: 'NativeDeveloper', semanticMode: 'NativeStructuredOutput', structuredOutput: true, forcedToolChoice: true, reasoningEfforts: [], defaultReasoningEffort: null },
+      enabled: true, retired: false, expectedRevision: await f.revision(), expectedOfferingRevision: 0 });
+    await call(f.api, f.root + '/models/default', { offeringId: o.offeringId, reasoningEffort: null, expectedRevision: await f.revision(), expectedSettingsRevision: 0 }, 'PUT');
+    await signInTenant(page, login, password); await page.goto(f.path());
+    await page.getByRole('button', { name: 'Discover models Recovery provider' }).click();
+    await expect(page.getByText('Offline Synthetic metadata fixture', { exact: true })).toBeVisible();
+    await page.getByRole('tab', { name: 'Models', exact: true }).click();
+    const modelRow = page.getByRole('row').filter({ hasText: 'Manual unlisted model' });
+    await expect(modelRow).toContainText('Not returned by discovery');
+    await page.getByRole('button', { name: /^Edit model Manual unlisted model/ }).click();
+    const drawer = page.getByRole('dialog', { name: 'Edit model offering', exact: true });
+    const restore = drawer.getByRole('checkbox', { name: 'Restore availability for this exact model' });
+    await expect(restore).not.toBeChecked();
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(drawer.getByText('Model missing from provider listing', { exact: true })).toBeVisible();
+      expect(await drawer.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+      await expect(drawer.getByRole('button', { name: 'Save model', exact: true })).toBeInViewport();
+    }
+    await restore.focus(); await page.keyboard.press('Space'); await expect(restore).toBeChecked();
+    await drawer.getByLabel('Model name', { exact: true }).fill('Retained recovery draft');
+    // Concurrent discovery changes the security witness, never the draft or historical model identity.
+    await call(f.api, f.root + `/model-connections/${c.connectionId}/discover`, { expectedRevision: await f.revision(), expectedConnectionRevision: 1 });
+    await drawer.getByRole('button', { name: 'Save model', exact: true }).click();
+    await expect(drawer.getByText('Reload before saving again', { exact: true })).toBeVisible();
+    await drawer.getByRole('button', { name: 'Reload current configuration' }).click();
+    await expect(drawer.getByRole('button', { name: 'Save model', exact: true })).toBeEnabled();
+    await expect(restore).not.toBeChecked();
+    await expect(drawer.getByLabel('Model name', { exact: true })).toHaveValue('Retained recovery draft');
+    await restore.check(); await drawer.getByRole('button', { name: 'Save model', exact: true }).click();
+    const confirmation = page.getByRole('dialog', { name: 'Apply model configuration change?' });
+    await expect(confirmation.getByText('Restore availability despite missing provider metadata; later discovery can block this model again.', { exact: true })).toBeVisible();
+    await confirmation.getByRole('button', { name: 'Apply configuration change' }).click();
+    await expect(drawer).toHaveCount(0);
+    await expect(page.getByRole('row').filter({ hasText: 'Retained recovery draft' })).toContainText('Available for admission');
+    let catalog = await call<ModelAdmin>(f.api, f.root + '/models');
+    expect(catalog.settings.defaultOfferingId).toBe(o.offeringId);
+    expect(catalog.offerings.find(item => item.offeringId === o.offeringId)).toMatchObject({ externalModelId: 'manual-unlisted-model', observation: 'Unknown', revision: 2 });
+    await page.getByRole('tab', { name: 'Connections', exact: true }).click();
+    const [rediscovery] = await Promise.all([
+      page.waitForResponse(response => response.url().endsWith(`/model-connections/${c.connectionId}/discover`) && response.request().method() === 'POST'),
+      page.getByRole('button', { name: 'Discover models Recovery provider' }).click()
+    ]);
+    expect(rediscovery.ok()).toBe(true);
+    catalog = await call<ModelAdmin>(f.api, f.root + '/models');
+    expect(catalog.availability.find(item => item.offeringId === o.offeringId)?.reason).toBe('not_returned');
+    expect(errors).toEqual([]); expect(failedRequests).toEqual([]);
   } finally { await f.api.dispose(); }
 });

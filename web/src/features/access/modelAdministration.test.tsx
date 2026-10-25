@@ -21,6 +21,7 @@ beforeEach(() => {
     if (url.endsWith('/csrf')) return response({ token: 'csrf' });
     if (['POST', 'PATCH', 'PUT'].includes(options?.method ?? '')) {
       if (stale) return response({ reasonCode: 'stale_revision' }, 409);
+      if (url.endsWith('/test')) return response({ metadataAvailable: true, result: 'synthetic_metadata_available', modelsObserved: 0, testedAt: '2026-10-25T00:00:00Z' });
       if (url.endsWith('/discover')) {
         const discovered = { ...structuredClone(modelOffering), offeringId: '88888888-8888-4888-8888-888888888888', label: 'Unknown observed model', externalModelId: 'new-unknown-model', enabled: false, presetId: null, capabilities: { ...structuredClone(modelPreset.capabilities), source: 'Unknown', hierarchy: 'Unsupported' as const } };
         current.offerings.push(discovered); current.availability.push({ offeringId: discovered.offeringId, available: false, reason: 'disabled' }); current.securityRevision++;
@@ -45,6 +46,31 @@ async function confirmConfiguration() {
   fireEvent.click(apply);
 }
 describe('canonical model administration commands', () => {
+  it('keeps metadata testing available without tenant-wide model management while hiding discovery', async () => {
+    current.access.canCreateOffering = false; current.access.canManageDefault = false;
+    render(<App><TenantModels context={modelContext} page="connections" /></App>);
+    const test = await screen.findByRole('button', { name: `Test metadata ${modelConnection.label}` });
+    expect(test).toBeEnabled();
+    expect(screen.queryByRole('button', { name: `Discover models ${modelConnection.label}` })).not.toBeInTheDocument();
+    fireEvent.click(test);
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(String(writes()[0][0])).toContain('/test');
+  });
+
+  it('requires deliberate recovery confirmation for a model omitted by discovery', async () => {
+    const missing = { ...modelOffering, observation: 'NotReturned' as const };
+    current.offerings = [missing]; const saved = vi.fn();
+    render(<App><ModelOfferingEditor context={modelContext} catalog={current} offering={missing} close={vi.fn()} saved={saved} readLost={vi.fn()} /></App>);
+    expect(screen.getByRole('checkbox', { name: 'Restore availability for this exact model' })).not.toBeChecked();
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Restore availability for this exact model' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Restore availability for this exact model' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save model' }));
+    await screen.findByText('Restore availability despite missing provider metadata; later discovery can block this model again.');
+    await confirmConfiguration();
+    await waitFor(() => expect(saved).toHaveBeenCalled());
+    expect(body()).toMatchObject({ restoreAvailability: true, externalModelId: missing.externalModelId, expectedOfferingRevision: 1 });
+  });
+
   it('sends an explicit false no-credential flag for a native connection with no mounted credential-mode field', async () => {
     const saved = vi.fn();
     render(<App><ModelConnectionEditor context={modelContext} catalog={current} connection={modelConnection} close={vi.fn()} saved={saved} readLost={vi.fn()} /></App>);

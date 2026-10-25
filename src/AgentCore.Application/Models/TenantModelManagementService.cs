@@ -9,7 +9,7 @@ namespace AgentCore.Application.Models;
 public sealed record ProviderConnectionChange(ModelProviderKind Kind, string Label, string? Endpoint, Guid? CredentialId,
     bool NoCredential, bool Enabled);
 public sealed record ModelOfferingChange(Guid ConnectionId, Guid? PresetId, string ExternalModelId, string Label,
-    ModelTransport Transport, ModelCapabilityProfile Capabilities, bool Enabled, bool Retired);
+    ModelTransport Transport, ModelCapabilityProfile Capabilities, bool Enabled, bool Retired, bool RestoreAvailability = false);
 public sealed record ModelAdministrationAccess(bool CanCreateConnection, bool CanCreateOffering, bool CanManageDefault,
     IReadOnlyList<Guid> ManageConnectionIds, IReadOnlyList<Guid> TestConnectionIds, IReadOnlyList<Guid> ManageOfferingIds);
 public sealed record ModelOfferingAvailability(Guid OfferingId, bool Available, string Reason);
@@ -97,13 +97,15 @@ public sealed partial class TenantModelManagementService(IIamStore security, ITe
         await Require(state, human, "model-connections.read", TenantModelRules.Scope(tenant, connection.ConnectionId, true), ct);
         var preset = change.PresetId is { } presetId ? (await store.ReadModelPresetsAsync(ct)).SingleOrDefault(p => p.PresetId == presetId) : null;
         if (old is null && change.PresetId is not null && preset is not { Enabled: true, Archived: false }) throw AgentCoreErrors.Validation("Select an enabled model preset.");
+        if (change.RestoreAvailability && (old?.Observation != ModelObservation.NotReturned || !change.Enabled || change.Retired))
+            throw AgentCoreErrors.Validation("Availability recovery requires an existing enabled, non-retired offering not returned by discovery.");
         var capabilities = old is null && preset is not null ? preset.Capabilities : change.Capabilities with { Source = ModelMetadataSource.Manual, VerifiedAt = time.GetUtcNow() };
         var value = Validate(() => ModelManagementRules.Freeze(new ModelOffering(old?.OfferingId ?? ids.NewId(), tenant, connection.ConnectionId,
             connection.Kind, change.PresetId, change.ExternalModelId, change.Label, change.Transport, capabilities,
-            change.Enabled, change.Retired, checked(expectedRevision + 1), old?.Observation ?? ModelObservation.Unknown, old?.LastSeenAt)));
+            change.Enabled, change.Retired, checked(expectedRevision + 1), change.RestoreAvailability ? ModelObservation.Unknown : old?.Observation ?? ModelObservation.Unknown, old?.LastSeenAt)));
         TenantModelRules.OfferingChange(value, old, expectedRevision, connection, preset);
         if (!await store.TrySaveModelOfferingAsync(Advance(state), expectedSecurityRevision, value, expectedRevision, human,
-            Audit(human, tenant, "models.manage", value.OfferingId), ct)) throw new SecurityConflictException("stale_revision");
+            Audit(human, tenant, "models.manage", value.OfferingId) with { ReasonCode = change.RestoreAvailability ? "model_availability_restored" : "model_configuration_changed" }, ct)) throw new SecurityConflictException("stale_revision");
         return value;
     }
     public async ValueTask<TenantModelSettings> SaveDefaultAsync(HumanSessionReference human, Guid tenant, Guid? offering,

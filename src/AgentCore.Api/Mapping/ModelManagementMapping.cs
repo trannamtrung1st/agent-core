@@ -28,5 +28,5 @@ internal static class ModelManagementMapping
         v.Access.ManageConnectionIds, v.Access.TestConnectionIds, v.Access.ManageOfferingIds));
     internal static ModelMetadataTestDto Map(ModelMetadataTestView v) => new(v.MetadataAvailable, v.Result, v.ModelsObserved, v.TestedAt);
     internal static ProviderConnectionChange Input(ModelConnectionRequest c) => new(Parse<ModelProviderKind>(c.Kind), c.Label, c.Endpoint, c.CredentialId, c.NoCredential, c.Enabled);
-    internal static ModelOfferingChange Input(ModelOfferingRequest o) => new(o.ConnectionId, o.PresetId, o.ExternalModelId, o.Label, Parse<ModelTransport>(o.Transport), Input(o.Capabilities), o.Enabled, o.Retired);
+    internal static ModelOfferingChange Input(ModelOfferingRequest o) => new(o.ConnectionId, o.PresetId, o.ExternalModelId, o.Label, Parse<ModelTransport>(o.Transport), Input(o.Capabilities), o.Enabled, o.Retired, o.RestoreAvailability);
 }

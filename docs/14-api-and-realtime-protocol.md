@@ -2,6 +2,8 @@
 
 ## Dynamic model administration
 
+PATCH `/api/v2/tenants/{tenantId}/models/{offeringId}` accepts optional `restoreAvailability` (default false). True deliberately clears `NotReturned` to `Unknown` for an enabled, non-retired existing offering; other recovery states refuse with 400. Existing model-management authority, security/offering revision checks and default guards apply. This retains identity and last-observed time while advancing the offering revision, without rewriting historical Run pins. A later discovery can block the offering again. POST registration cannot request recovery. Metadata Test requires connection read/test; Discover additionally requires tenant-wide `models.manage`, represented by `access.canCreateOffering`.
+
 System preset list/detail adds nullable `offeringReferences`: the current count of all stored tenant offerings referencing that preset, including disabled/retired records. Only system-human preset reads return this aggregate. Tenant model administration's preset projection omits/nulls it; the count contains no tenant IDs, credentials, execution or billing usage.
 
 Canonical human credential responses retain the safe `{ tenantId, credential }` envelope and add nullable `lastRotatedAt`, the most recent allowed key-value replacement recorded by Agent Core for that readable credential. List queries are bounded to the returned readable page; final current-human checks still apply. Metadata rename/status edits retain the last replacement time; a new credential with no replacement returns null. No raw value or audit actor/details are projected. In-memory timestamps may retain finer precision than SQLite's millisecond storage; clients compare instants at stored precision.

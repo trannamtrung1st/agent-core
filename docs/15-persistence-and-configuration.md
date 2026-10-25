@@ -2,6 +2,8 @@
 
 ## Dynamic model persistence
 
+Explicit availability recovery reuses the offering/security/audit transaction in both stores: `NotReturned` becomes `Unknown`, `LastSeenAt` is retained, and the offering configuration revision advances. The existing default guards apply to the recovered declaration. No schema migration or historical Run/Session binding rewrite is required. Rediscovery remains authoritative for the next observation.
+
 Administrative projections reuse existing persistence rather than adding tables. Preset summaries group retained `ModelOfferings.PresetId` references in the same read transaction as presets; tenant views receive no aggregate. Credential `LastRotatedAt` derives from the existing same-transaction `credentials.replace` authorization audit, restricted to requested currently owned nondeleted IDs. Renames/status changes are not rotations, and missing historical replacement evidence stays null. No migration, secret copy, execution-time audit query or secondary model registry is introduced.
 
 Reference inspection adds no schema or secondary registry. SQLite reads one exact owned target, the current security revision, a visibility-filtered count and a stable paged result in one read transaction using closed category SQL and bound parameters. InMemory uses its existing backing-store gates with the same visibility and ordering rules. Reference rows are projections of the existing settings, Definition drafts/publications, Instance preferences, explicit Automation overrides, conversation selection/provenance and admitted Run pins. Retirement retains all durable rows and historical bindings. Existing default and credential foreign-key/in-use guards continue to apply; model/connection physical deletion has no public operation.
