@@ -19,6 +19,7 @@ public sealed partial class TenantApprovalService
             var target = await owner.ResolveAsync(run, kind, executionId, ct).ConfigureAwait(false);
             var value = TenantSandboxControlOperationRules.Parameters(kind, target.Session, target.Lease, target.Execution);
             var operation = TenantApprovalRules.PrepareSandboxControl(ids.NewId(), run.AgentInstanceId, value, target.Agent.Instance.Revision, target.Agent.Instance.PersonaRevision);
+            operation = TenantApprovalRules.ForRun(operation, run);
             var scope = AccessScope.ForResource(reference.TenantId, "agent", operation.ResourceId);
             var eligible = false;
             foreach (var human in state.Users.Where(u => u.Status == IdentityStatus.Active))

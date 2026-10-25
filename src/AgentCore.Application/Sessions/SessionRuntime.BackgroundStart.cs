@@ -44,7 +44,7 @@ public sealed partial class SessionRuntime
                 || args.TryGetProperty("title", out var title) && (title.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(title.GetString()) || title.GetString()!.Length > 80)
                 || args.TryGetProperty("reportCompletion", out var report) && report.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
             { input.Completed.TrySetResult(SkillLoadAdmission.Error("invalid", "Provide a bounded objective, optional title and completion preference.")); return; }
-            var resolved = await _tools.ResolveRunConfigurationAsync(_snapshot, ct).ConfigureAwait(false);
+            var resolved = await _tools.ResolveRunConfigurationAsync(_snapshot, ct, source).ConfigureAwait(false);
             var selection = _snapshot.ModelSelection;
             if (_catalog is not null && selection?.SelectionSource is not (ModelSelectionSource.User or ModelSelectionSource.Host))
                 selection = AgentCore.Application.Models.SessionModelBinder.RefreshDefault(_catalog, resolved.Configuration.Definition, selection);

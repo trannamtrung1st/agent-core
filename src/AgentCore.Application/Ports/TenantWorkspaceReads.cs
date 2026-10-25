@@ -2,11 +2,6 @@ using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Ports;
 
-public sealed record TenantWorkspaceReference(Guid TenantId, Guid InstanceId, Guid? SessionId = null)
-{
-    public string LogicalRoot => SessionId is null ? "/home" : "/working";
-}
-
 // Current filesystem observations, not persisted file identities or mutation/version tokens.
 // The adapter independently resolves the actual owner; no root is created on a read.
 public interface ITenantWorkspaceReadStore

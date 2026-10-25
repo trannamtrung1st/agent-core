@@ -1,3 +1,4 @@
+using AgentCore.Domain.Conversation;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -96,7 +97,7 @@ public sealed partial class TenantSessionAccessTests
         }
         void Configure(IServiceCollection services)
         {
-            services.Replace(ServiceDescriptor.Singleton<ITenantWorkspaceMutationStore>(p => new MaterializationWorkspaceHook((ITenantWorkspaceMutationStore)p.GetRequiredService<IAgentInstanceWorkspaceStore>(),
+            services.Replace(ServiceDescriptor.Singleton<ITenantWorkspaceMutationStore>(p => new MaterializationWorkspaceHook((ITenantWorkspaceMutationStore)p.GetRequiredService<FileSpaceWorkspaceStore>(),
                 async () => { attempts++; if (boundary == "before-logout") await Logout(); }, AfterWorkspace)));
             if (boundary.StartsWith("publication", StringComparison.Ordinal))
                 services.Replace(ServiceDescriptor.Singleton<ITenantAttachmentMutationStore>(p => new MaterializationPublicationHook((ITenantAttachmentMutationStore)p.GetRequiredService<IIamStore>(),

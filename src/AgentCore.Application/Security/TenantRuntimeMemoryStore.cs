@@ -4,7 +4,7 @@ using AgentCore.Domain.Conversation;
 namespace AgentCore.Application.Security;
 
 // The shared runtime storage port is bound to one actual tenant Run lease.
-public sealed class TenantRuntimeMemoryStore(ITenantRuntimeStore storage, TenantRuntimeFrame frame, IIdGenerator? ids = null) : IMemoryStore, ITenantRuntimeReceiptWriter, ITenantRuntimeForegroundWriter, ITenantRuntimeInputWriter
+public sealed class TenantRuntimeMemoryStore(ITenantRuntimeStore storage, TenantRuntimeFrame frame, IIdGenerator? ids = null) : IMemoryStore, ITenantRuntimeReceiptWriter, ITenantRuntimeForegroundWriter, ITenantRuntimeInputWriter, ITenantRuntimeContextWriter
 {
     private void Scope(Guid session) { TenantRuntimeRules.RequireOwner(frame.Owner); if (session != frame.SessionId) throw new AccessDeniedException("tenant_runtime_scope_mismatch"); }
     public ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default)
@@ -15,6 +15,8 @@ public sealed class TenantRuntimeMemoryStore(ITenantRuntimeStore storage, Tenant
     { Scope(snapshot.SessionId); return storage.SaveTenantRuntimeAsync(frame, snapshot, expectedRevision, cancellationToken); }
     public ValueTask SaveReceiptAsync(SessionSnapshot snapshot, long expectedRevision, TenantDeliveryReceipt receipt, CancellationToken ct)
     { Scope(snapshot.SessionId); return ((ITenantDeliveryReceiptStore)storage).SaveTenantRuntimeReceiptAsync(frame, snapshot, expectedRevision, receipt, ct); }
+    public ValueTask<TenantContextSwitchResult> SaveContextAsync(SessionSnapshot snapshot, long expectedRevision, TenantContextSwitch request, CancellationToken ct)
+    { Scope(snapshot.SessionId); return ((ITenantSessionContextStore)storage).SaveTenantRuntimeContextAsync(frame, snapshot, expectedRevision, request, (ids ?? throw new AccessDeniedException("tenant_runtime_unavailable")).NewId(), ct); }
     public ValueTask SaveForegroundAsync(SessionSnapshot snapshot, long expectedRevision, TenantSessionForeground request, CancellationToken ct)
     { Scope(snapshot.SessionId); return ((ITenantSessionForegroundStore)storage).SaveTenantRuntimeForegroundAsync(frame, snapshot, expectedRevision, request, (ids ?? throw new AccessDeniedException("tenant_runtime_unavailable")).NewId(), ct); }
     public ValueTask<TenantHumanInputCommit> SaveInputAsync(SessionSnapshot snapshot, long expectedRevision, TenantHumanInput input, CancellationToken ct)

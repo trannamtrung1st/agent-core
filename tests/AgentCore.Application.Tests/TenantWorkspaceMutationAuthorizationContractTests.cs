@@ -12,7 +12,7 @@ public sealed class TenantWorkspaceMutationAuthorizationContractTests
     {
         var definition = await CapabilityProjectionTests.Definition();
         definition = definition with { SelfManagement = AgentCore.Domain.Definitions.HarnessManagementPolicy.Disabled,
-            Environment = definition.Environment! with { Capabilities = null, ToolAllowlist = [ToolCatalog.WorkspaceWrite] } };
+            ExecutionPolicy = definition.ExecutionPolicy! with { Capabilities = null, ToolAllowlist = [ToolCatalog.WorkspaceWrite] } };
         var session = Guid.NewGuid(); var activation = Guid.NewGuid();
         var context = CapabilityProjectionTests.Context(definition) with { AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session,
             ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage) };

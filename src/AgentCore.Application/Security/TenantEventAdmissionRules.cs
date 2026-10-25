@@ -98,7 +98,7 @@ public static class TenantEventAdmissionRules
     public static TriggerOccurrence Initial(TriggerOccurrence source) => new(source.OccurrenceId, source.DedupeKey, source.AutomationId, source.Owner,
         source.SourceKind, source.ScheduledAtUtc, source.ObservedAtUtc, source.AdmittedAtUtc, source.EvidenceJson, source.SourceEventId, source.TriggerRevision,
         OccurrenceRoutingDisposition.Pending, null, 0, null, null, null, modelPin: source.ModelPin, executionTarget: source.ExecutionTarget,
-        completionDelivery: source.CompletionDelivery, triggerId: source.TriggerId);
+        completionDelivery: source.CompletionDelivery, triggerId: source.TriggerId, pinnedSpaceId: source.PinnedSpaceId, pinnedEnvironmentId: source.PinnedEnvironmentId);
     public static Automation Next(Automation current, DateTimeOffset at) => current.WithScheduleAdvance(current.Status, null,
         checked(current.OccurrenceCount + 1), checked(current.Revision + 1), at, null);
     public static TriggerOccurrence Occurrence(Automation current, TenantEventDelivery delivery, ExecutionModelPin model, DateTimeOffset at,
@@ -129,6 +129,7 @@ public static class TenantEventAdmissionRules
     {
         var child = current.Triggers.SingleOrDefault(t => t.TriggerId == saved.TriggerId);
         if (current.Owner != saved.Owner || current.AutomationId != saved.AutomationId || current.Status != AutomationStatus.Active
+            || current.PinnedSpaceId != saved.PinnedSpaceId || current.PinnedEnvironmentId != saved.PinnedEnvironmentId
             || child is not { Enabled: true } || child.Revision < saved.TriggerRevision || child.Configuration is not FilteredEventTrigger
             || saved.ExpressionVersion != "js-expression-v1"
             || AutomationRules.Source(child.Configuration) != saved.SourceKind
@@ -160,7 +161,7 @@ public static class TenantEventAdmissionRules
         DateTimeOffset occurredAt, DateTimeOffset at, string evidence, ExecutionModelPin model)
         => new(TriggerScheduleAdmission.OccurrenceId(source.DedupeKey), source.DedupeKey, current.AutomationId, current.Owner, source.SourceKind,
             null, occurredAt, at, evidence, source.SourceId, child.Revision, OccurrenceRoutingDisposition.Pending, null, 0, null, null, null,
-            modelPin: model, executionTarget: current.ExecutionTarget, completionDelivery: current.CompletionDelivery, triggerId: child.TriggerId);
+            modelPin: model, executionTarget: current.ExecutionTarget, completionDelivery: current.CompletionDelivery, triggerId: child.TriggerId, pinnedSpaceId: current.PinnedSpaceId, pinnedEnvironmentId: current.PinnedEnvironmentId);
     private static void RequireCausation(int depth, IReadOnlyList<Guid> visited, Guid automation)
     { if (depth is < 0 or >= 4 || visited.Contains(automation)) throw new AccessDeniedException("event_causal_loop"); }
 }

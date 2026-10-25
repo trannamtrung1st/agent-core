@@ -7,10 +7,11 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore
 {
-    private ValueTask RequireTenantExecutionSourcesAsync(AgentRun run, TenantSecurityState state, IamAuthorizer iam, ITenantRunStore runs, CancellationToken ct)
+    private async ValueTask RequireTenantExecutionSourcesAsync(AgentRun run, TenantSecurityState state, IamAuthorizer iam, ITenantRunStore runs, CancellationToken ct)
     {
+        await RequireSpaceExecutionSource(run, state, iam, ct).ConfigureAwait(false);
         RequireTenantEventRead(run, ct);
-        return TenantExecutionLineage.RequireRequesterAsync(run, state, iam, runs, ct);
+        await TenantExecutionLineage.RequireRequesterAsync(run, state, iam, runs, ct).ConfigureAwait(false);
     }
     private void RequireTenantEventRead(AgentRun run, CancellationToken ct)
     {

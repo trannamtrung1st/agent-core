@@ -153,7 +153,7 @@ public static class AgentDefinitionValidator
             }
         }
 
-        ValidateEnvironment(RoleEnvironments.Of(definition));
+        ValidateExecutionPolicy(DefinitionExecutionPolicies.Of(definition));
         ValidateTriggerPolicy(definition.TriggerPolicy);
         ValidateSkills(definition.Skills);
         definition.ExecutionBudgets?.Validate();
@@ -274,7 +274,7 @@ public static class AgentDefinitionValidator
         }
     }
 
-    private static void ValidateEnvironment(RoleEnvironment environment)
+    private static void ValidateExecutionPolicy(DefinitionExecutionPolicy environment)
     {
         if (environment.HarnessList.Count > 8
             || environment.HarnessList.Any(item => !IdPattern.IsMatch(item))

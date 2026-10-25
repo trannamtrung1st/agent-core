@@ -31,10 +31,19 @@ public static class TenantAutomationReadRules
     }
     public static TenantAutomationReadSource[] Sources(PreparedAutomationRead value) => JsonSerializer.Deserialize<TenantAutomationReadSource[]>(value.SourcesJson) ?? throw new ArgumentException("Use exact Automation sources.");
     public static TenantAutomationEventReadSource[] Events(PreparedAutomationRead value) => JsonSerializer.Deserialize<TenantAutomationEventReadSource[]>(value.EventSourcesJson) ?? throw new ArgumentException("Use exact event sources.");
-    public static string ConfigurationHash(Automation value) => TenantMemoryOperationRules.Hash(JsonSerializer.Serialize(new { value.AutomationId, value.Owner, value.Revision,
+    public static string ConfigurationHash(Automation value)
+    {
+        var json = JsonSerializer.Serialize(new { value.AutomationId, value.Owner, value.Revision,
         value.Name, value.Instructions, value.Status, value.ModelOverrideCatalogKey, value.ModelOverrideReasoningEffort, value.RequiresTools, value.RequiresVision,
         value.ExecutionTarget, value.CompletionDelivery, value.NextOccurrenceAtUtc, value.OccurrenceCount, value.ExpiresAtUtc, value.SuspensionReason, value.Provenance,
-        triggers = value.Triggers.Select(t => new { t.TriggerId, t.Revision, t.Enabled, configuration = JsonSerializer.SerializeToElement(t.Configuration, t.Configuration.GetType()) }) }));
+        triggers = value.Triggers.Select(t => new { t.TriggerId, t.Revision, t.Enabled, configuration = JsonSerializer.SerializeToElement(t.Configuration, t.Configuration.GetType()) }) });
+        if (value.PinnedSpaceId is null) return TenantMemoryOperationRules.Hash(json);
+        var context = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+        context["PinnedSpaceId"] = value.PinnedSpaceId.Value;
+        if (value.PinnedEnvironmentId is { } environment) context["PinnedEnvironmentId"] = environment;
+        return TenantMemoryOperationRules.Hash(context.ToJsonString());
+    }
+
     public static string EventHash(TenantEventDelivery delivery) => TenantMemoryOperationRules.Hash(JsonSerializer.Serialize(new { delivery.TenantId, delivery.EventId,
         delivery.Subscription.Owner, delivery.Subscription.AutomationId, delivery.Subscription.TriggerId, delivery.Subscription.SourceKind, delivery.Subscription.ResourceId,
         delivery.Core, delivery.Webhook }));

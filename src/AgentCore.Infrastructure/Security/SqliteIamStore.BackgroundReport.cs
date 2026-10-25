@@ -57,6 +57,7 @@ public sealed partial class SqliteIamStore
                 if (report is not null)
                 {
                     TenantBackgroundReportRules.Report(request, source, report, agent, now);
+        await RequireSpaceExecutionSource(db, report, state, new IamAuthorizer(this), ct, admission: true).ConfigureAwait(false);
                     if (source.Parent!.Snapshot.PendingAgentInputIds.Count > 0 || await db.AgentRuns.AnyAsync(r => r.SessionId == p.ParentSessionId.ToString("D")
                         && r.Status != (int)AgentRunStatus.Completed && r.Status != (int)AgentRunStatus.Failed && r.Status != (int)AgentRunStatus.Cancelled, ct).ConfigureAwait(false)) return false;
                 }

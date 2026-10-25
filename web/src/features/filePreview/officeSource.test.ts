@@ -8,7 +8,7 @@ beforeEach(() => vi.mocked(identityReadResponse).mockReset());
 const signal = () => new AbortController().signal;
 const sources: FileRef[] = [
   { kind: 'attachment', tenantId: 'tenant', sessionId: 's', attachmentId: 'a' },
-  { kind: 'tenantWorkspace', owner: { kind: 'home', tenantId: 'tenant', instanceId: 'i' }, instanceId: 'i', path: '/home/x.xlsx', metadata: { displayName: 'x.xlsx', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', byteSize: 1 } },
+  { kind: 'tenantWorkspace', owner: { kind: 'home', tenantId: 'tenant', spaceId: 'space' }, path: '/home/x.xlsx', metadata: { displayName: 'x.xlsx', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', byteSize: 1 } },
   { kind: 'tenantResource', tenantId: 'tenant', instanceId: 'i', resourceKey: 'resource', metadata: { displayName: 'x.docx', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', byteSize: 1 } },
 ];
 it.each([

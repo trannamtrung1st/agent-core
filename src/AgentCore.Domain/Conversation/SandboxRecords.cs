@@ -5,7 +5,9 @@ namespace AgentCore.Domain.Conversation;
 public enum SandboxLeaseState { Provisioning, Ready, Executing, NeedsReconciliation, Terminating, Terminated, Failed }
 public enum SandboxExecutionState { Dispatching, Running, Completed, Canceled, Indeterminate }
 
-public sealed record SandboxMountAuthority(string WorkingIdentity, string? HomeIdentity, HomeAccess HomeAccess, int Uid, int Gid, bool TranslatedOwnership = false, int CompatibilityContract = 0);
+public sealed record SandboxWorkspaceAccess(AgentCore.Domain.Spaces.RunSpaceWitness Context, HomeAccess HomeAccess, HomeAccess PrivateAccess, bool WorkingReadOnly);
+
+public sealed record SandboxMountAuthority(string WorkingIdentity, string? HomeIdentity, HomeAccess HomeAccess, int Uid, int Gid, bool TranslatedOwnership = false, int CompatibilityContract = 0, SandboxWorkspaceAccess? WorkspaceAccess = null, string? PrivateIdentity = null, HomeAccess PrivateAccess = HomeAccess.Disabled, bool WorkingReadOnly = false);
 
 // Provider identities are opaque server-side values; public projections omit them.
 public sealed record SandboxLease(Guid SessionId, Guid AgentInstanceId, Guid Generation, long Revision,
@@ -34,7 +36,7 @@ public sealed record SandboxProcessStop(Guid RequestId, Guid PrincipalId, DateTi
 public sealed record SandboxProfileVerification(string ProfileId, long ProfileRevision,
     DateTimeOffset VerifiedAt, bool Passed, string Message, string? FailureCode = null, int? ExitCode = null, string Stdout = "", string Stderr = "", bool Truncated = false, long DurationMs = 0, string? DiagnosticId = null, int ContractVersion = 0, Guid? RegistryCredentialId = null, long? RegistryCredentialRevision = null, long? RegistrySecretRevision = null, Guid? TenantId = null, bool IncludesInitialization = true, string? HostScope = null, Guid? InstanceId = null, long? InstanceRevision = null)
 {
-    public const int CurrentContractVersion = 4;
+    public const int CurrentContractVersion = 5;
 }
 
 public sealed record SandboxInitializationEvidence(string State, string ProfileId, long ProfileRevision, long? InstanceRevision,

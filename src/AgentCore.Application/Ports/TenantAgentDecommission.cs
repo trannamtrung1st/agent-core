@@ -1,4 +1,5 @@
 using AgentCore.Application.Admin;
+using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Ports;
@@ -13,6 +14,7 @@ public interface ITenantAgentDecommissionStore
         long expectedSecurityRevision, long expectedInstanceRevision, AuthorizationAudit audit, CancellationToken ct = default);
     ValueTask<TenantAgentDecommissionPage> ListAgentDecommissionCleanupAsync(Guid? afterInstance, int limit, CancellationToken ct = default);
     ValueTask<bool> CanPurgeDecommissionedAgentWorkspaceAsync(TenantBrowserAgentOwner owner, CancellationToken ct = default);
+    ValueTask<TenantWorkspaceReference.SpaceHome?> ReadDecommissionedPrivateWorkspaceAsync(TenantBrowserAgentOwner owner, CancellationToken ct = default);
     ValueTask<bool> IsAgentDecommissionedAsync(TenantBrowserAgentOwner owner, CancellationToken ct = default);
 }
 public interface ITenantAgentWorkspaceCleanup

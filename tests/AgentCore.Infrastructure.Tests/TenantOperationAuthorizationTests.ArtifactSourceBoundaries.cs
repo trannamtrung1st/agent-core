@@ -24,7 +24,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s, ["artifacts.create"]);
         await GrantWorkspaceRuntimeReads(f, s, new[] { "sessions.read", "agents.read", "workspaces.read" }.Where(p => policy || p != permission).ToArray());
         await SeedRuntimeWorkspace(f, s, false, "source.bin", [0, 255, 128, 3]);
-        var source = await WorkspaceReader(f).CaptureArtifactSourceTenantAsync(new(s.Tenant, s.Agent.Instance.InstanceId), "/home/source.bin");
+        var source = await WorkspaceReader(f).CaptureArtifactSourceTenantAsync(WorkspaceOwner(s), "/home/source.bin");
         if (policy) await Policies(f).SaveAsync(s.Tenant, s.Owner, permission, new(OperationApprovalMode.Always, false),
             (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, (await f.Iam.ReadTenantAsync(s.Tenant))!.OperationPolicies.SingleOrDefault(p => p.PermissionKey == permission)?.Revision ?? 0);
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
@@ -47,7 +47,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s); await GrantWorkspaceRuntimeReads(f, s);
         byte[] bytes = [0, 255, 128, 3]; await SeedRuntimeWorkspace(f, s, false, "source.bin", bytes);
-        var source = await WorkspaceReader(f).CaptureArtifactSourceTenantAsync(new(s.Tenant, s.Agent.Instance.InstanceId), "/home/source.bin");
+        var source = await WorkspaceReader(f).CaptureArtifactSourceTenantAsync(WorkspaceOwner(s), "/home/source.bin");
         var state = (await f.Iam.ReadTenantAsync(s.Tenant))!;
         Assert.NotNull(await ((ITenantAgentStore)f.Iam).TryChangeTenantAgentConfigurationAsync(state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } }, state.Tenant.Revision,
             new(s.Agent.Instance.InstanceId, s.Agent.Instance.Revision, AutomationPolicyChanges: [], SetSettingsOverrides: true, SettingsOverrides: new(HomeAccess: new(policy)),
@@ -173,7 +173,7 @@ public sealed partial class TenantOperationAuthorizationTests
         _ = WorkspaceReader(f); // Establish the disposable canonical layout before fixture-owned native writes.
         var native = new CanonicalWorkspaceFilesystem(AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), s.Agent.Instance.InstanceId, session), "/working");
         await native.WriteAsync("/working/source.bin", new byte[] { 0, 255, 128, 3 }, 4096, 8192);
-        var source = await WorkspaceReader(f).CaptureArtifactSourceTenantAsync(new(s.Tenant, s.Agent.Instance.InstanceId, session), "/working/source.bin");
+        var source = await WorkspaceReader(f).CaptureArtifactSourceTenantAsync(new TenantWorkspaceReference.SessionWorking(s.Tenant, session), "/working/source.bin");
         var witness = TenantArtifactSourceRules.Witness(source.Observation); if (!otherSession) witness = witness with { Sha256Hex = new('a', 64) };
         var args = TenantWorkspaceArtifactContract.Parse("""{"path":"/working/source.bin","displayName":"published.bin"}""");
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!; var state = (await f.Iam.ReadTenantAsync(s.Tenant))!;

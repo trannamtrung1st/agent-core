@@ -65,7 +65,14 @@ public sealed partial class TenantSessionAccessTests
     public Task Tenant_source_export_Artifact_live_card_and_durable_receipt_require_actual_readable_producer(bool sqlite, string source) =>
         WorkspaceArtifactFlow(sqlite, false, "allowed", resource: source == "resource", attachment: source == "attachment", wire: true);
 
-    private async Task WorkspaceArtifactFlow(bool sqlite, bool working, string mode, bool resource = false, bool attachment = false, bool wire = false)
+    [Theory]
+    [InlineData(false, "allowed")] [InlineData(true, "allowed")] [InlineData(false, "review")] [InlineData(true, "review")]
+    [InlineData(false, "source-review")] [InlineData(true, "source-review")] [InlineData(false, "missing-read")] [InlineData(true, "missing-read")]
+    [InlineData(false, "stale")] [InlineData(true, "stale")] [InlineData(false, "revoked")] [InlineData(true, "revoked")] [InlineData(true, "restart")]
+    public Task Space_resource_Artifact_keeps_actual_source_owner_bytes_and_current_consent(bool sqlite, string mode) =>
+        WorkspaceArtifactFlow(sqlite, false, mode, resource: true, spaceResource: true);
+
+    private async Task WorkspaceArtifactFlow(bool sqlite, bool working, string mode, bool resource = false, bool attachment = false, bool wire = false, bool spaceResource = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-source-artifact-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         WebApplicationFactory<Program>? recreated = null; HttpClient? fresh = null;
@@ -93,15 +100,30 @@ public sealed partial class TenantSessionAccessTests
             var bytes = processor.CreateDocument(new("Private source", [new(null, ["Private source body: thử nghiệm"], null)]), default).Bytes;
             string? resourceKey = null; long instanceRevision = 1;
             const string name = "exact-reviewed-source-with-long-name-thử-nghiệm-試験-2026.docx";
-            if (resource)
+            var privateSpace = (await factory.Services.GetRequiredService<ITenantSpaceStore>().FindPrivateSpaceAsync(tenant, instance))!;
+            Guid? spaceSourceId = null;
+            if (spaceResource)
+            {
+                Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(api + $"/spaces/{privateSpace.SpaceId}/workspace/content?path="+Uri.EscapeDataString("/home/"+name)+$"&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent(bytes))).StatusCode);
+                spaceSourceId=Guid.NewGuid();
+                var saved=await owner.PutAsJsonAsync(api+$"/spaces/{privateSpace.SpaceId}/resources/{spaceSourceId}",new{sourcePath="/home/"+name,logicalPath=name,kind="Reference",expectedRevision=await Revision(owner,tenant),expectedSpaceRevision=1,expectedResourceRevision=0});
+                Assert.True(saved.IsSuccessStatusCode,await saved.Content.ReadAsStringAsync());
+                resourceKey=AgentCore.Domain.Spaces.SpaceResourceKeys.Create(privateSpace.SpaceId,spaceSourceId.Value);
+                var member=Assert.Single(await factory.Services.GetRequiredService<ITenantSpaceStore>().ReadMembershipsAsync(tenant,privateSpace.SpaceId));
+                Assert.Equal(HttpStatusCode.OK,(await owner.PutAsJsonAsync(api+$"/spaces/{privateSpace.SpaceId}/memberships/{instance}",new{
+                    responsibility="Publisher",instructions="",disabledInheritedBindingKeys=Array.Empty<string>(),addedBindings=new[]{new{kind="SpaceFile",resourceKey}},
+                    expectedRevision=await Revision(owner,tenant),expectedSpaceRevision=2,expectedMembershipRevision=member.Revision})).StatusCode);
+            }
+            else if (resource)
             {
                 var saved = await Json(await owner.PostAsJsonAsync(api + $"/agents/{instance}/resources", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
                     input = new { logicalPath = name, kind = AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Reference, mediaType = OfficeLimits.DocumentMime, content = bytes } }));
                 resourceKey = saved.GetProperty("resource").GetProperty("key").GetString(); instanceRevision = saved.GetProperty("instanceRevision").GetInt64();
             }
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
-            var workspace = api + (working ? $"/sessions/{session}/workspace" : $"/agents/{instance}/workspace");
+            var workspace = api + (working ? $"/sessions/{session}/workspace" : $"/spaces/{privateSpace.SpaceId}/workspace");
             var path = (resource ? "/agent/instance/resources/" : working ? "/working/" : "/home/") + name;
+            if (spaceResource) path=AgentCore.Domain.Spaces.SpaceResourceKeys.VirtualPath(privateSpace.SpaceId,spaceSourceId!.Value,name);
             if (!resource && !attachment) Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(workspace + $"/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent(bytes))).StatusCode);
             Guid? attachmentId = null;
             if (attachment)
@@ -114,6 +136,11 @@ public sealed partial class TenantSessionAccessTests
             var args = new { path, displayName = "exact-reviewed-source-thử-nghiệm-試験.docx" };
             if (reviewed) model.ProposedArtifactAuthorization = JsonSerializer.Serialize(new { operation = "publish_workspace_artifact", artifact = args }); else model.ProposedArtifact = JsonSerializer.Serialize(args);
             var access = factory.Services.GetRequiredService<TenantAccessService>();
+            if (spaceResource)
+            {
+                var contextRole=await access.SaveRoleAsync(human,tenant,null,"Retain source Space access",["spaces.read"],await Revision(owner,tenant));
+                await access.AssignRoleAsync(human,tenant,executor,contextRole.RoleId,AccessScope.ForTenant(tenant),await Revision(owner,tenant));
+            }
             var permissions = new List<string> { "agents.read", "sessions.read", "artifacts.read" }; if (mode != "missing-read") permissions.Add(attachment ? "attachments.read" : resource ? "resources.read" : "workspaces.read"); if (mode != "grant") permissions.Add("artifacts.create");
             var role = await access.SaveRoleAsync(human, tenant, null, "Exact source publication", permissions, await Revision(owner, tenant));
             var assignment = await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
@@ -150,7 +177,12 @@ public sealed partial class TenantSessionAccessTests
                 if (mode == "stale")
                 {
                     bytes = processor.CreateDocument(new(null, [new(null, ["Concurrent source"], null)]), default).Bytes;
-                    if (resource) Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/agents/{instance}/resources", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision,
+                    if (spaceResource)
+                    {
+                        Assert.Equal(HttpStatusCode.NoContent,(await owner.PutAsync(workspace+"/content?path="+Uri.EscapeDataString("/home/"+name)+$"&expectedRevision={await Revision(owner,tenant)}",new ByteArrayContent(bytes))).StatusCode);
+                        Assert.Equal(HttpStatusCode.OK,(await owner.PutAsJsonAsync(api+$"/spaces/{privateSpace.SpaceId}/resources/{spaceSourceId}",new{sourcePath="/home/"+name,logicalPath=name,kind="Reference",expectedRevision=await Revision(owner,tenant),expectedSpaceRevision=3,expectedResourceRevision=1})).StatusCode);
+                    }
+                    else if (resource) Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/agents/{instance}/resources", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision,
                         input = new { resourceId = Guid.Parse(resourceKey![9..]), expectedResourceRevision = 1, logicalPath = name, kind = AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Reference, mediaType = OfficeLimits.DocumentMime, content = bytes } })).StatusCode);
                     else Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(workspace + $"/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent(bytes))).StatusCode);
                 }
@@ -170,7 +202,7 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Equal(AgentRunStatus.Failed, done.Status); Assert.Equal("authority-unavailable", done.Failure!.Code);
                 Assert.Single(model.Requests); // Current file input authority is rechecked before any continuation/provider request.
                 Assert.Empty((await Json(await owner.GetAsync(api + $"/sessions/{session}/artifacts"))).GetProperty("items").EnumerateArray());
-                Assert.Equal(bytes, await owner.GetByteArrayAsync(api + $"/sessions/{session}/attachments/{attachmentId}/content"));
+                if (!spaceResource) Assert.Equal(bytes, await owner.GetByteArrayAsync(api + $"/sessions/{session}/attachments/{attachmentId}/content"));
                 Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts); return;
             }
             Assert.True(done.Status == AgentRunStatus.Completed, $"{done.Status}: {done.Failure?.Code}: {done.Failure?.Summary}");
@@ -184,7 +216,7 @@ public sealed partial class TenantSessionAccessTests
             else
             {
                 var artifact = Assert.Single(items).GetProperty("artifactId").GetGuid(); Assert.Equal(bytes, await owner.GetByteArrayAsync(api + $"/sessions/{session}/artifacts/{artifact}/content"));
-                Assert.Equal(bytes, await owner.GetByteArrayAsync(attachment ? api + $"/sessions/{session}/attachments/{attachmentId}/content" : resource ? api + $"/agents/{instance}/resources/{Uri.EscapeDataString(resourceKey!)}/content" : workspace + "/content?path=" + Uri.EscapeDataString(path)));
+                if (!spaceResource) Assert.Equal(bytes, await owner.GetByteArrayAsync(attachment ? api + $"/sessions/{session}/attachments/{attachmentId}/content" : resource ? api + $"/agents/{instance}/resources/{Uri.EscapeDataString(resourceKey!)}/content" : workspace + "/content?path=" + Uri.EscapeDataString(path)));
                 if (hub is not null)
                 {
                     var blockEvent = await AwaitTenantWire(() => events.FirstOrDefault(e => e.Type == "agent.block.upsert"));

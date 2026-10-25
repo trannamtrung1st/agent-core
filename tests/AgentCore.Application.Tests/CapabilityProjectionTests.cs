@@ -57,7 +57,7 @@ public sealed class CapabilityProjectionTests
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../agents"));
         var baseline = (await new FileAgentDefinitionStore(path, SyntheticProviderAliases.Default).GetAsync("general-assistant", 21))!;
-        return baseline with { Skills = [], Environment = baseline.Environment! with { ToolAllowlist = null,
+        return baseline with { Skills = [], ExecutionPolicy = baseline.ExecutionPolicy! with { ToolAllowlist = null,
             Capabilities = new("Selected", names), Projection = new([]) } };
     }
     internal static AgentContext Context(AgentDefinition d) => new(d, [], "", null, SessionMode.Text, null, false, null, new(Guid.NewGuid(), TriggerKind.UserTurn, "email"), AgentWorkspaceAvailable: true);
@@ -66,28 +66,28 @@ public sealed class CapabilityProjectionTests
     public async Task All_resolves_exact_snapshot_without_runtime_catalog_expansion()
     {
         var d = await Definition();
-        var draft = AgentDefinitionCandidate.FromDefinition(d) with { Environment = d.Environment! with { Capabilities = new("All", []) } };
+        var draft = AgentDefinitionCandidate.FromDefinition(d) with { ExecutionPolicy = d.ExecutionPolicy! with { Capabilities = new("All", []) } };
         var resolved = CapabilityAuthorizationResolver.ResolveCandidate(draft);
-        Assert.NotEmpty(resolved.Environment!.ToolList);
-        Assert.All(resolved.Environment.ToolList, n => Assert.True(ToolRegistry.Get(n).DefinitionAuthorizable));
-        Assert.DoesNotContain(ToolCatalog.CredentialsList, resolved.Environment.ToolList);
-        Assert.DoesNotContain(ToolCatalog.ContinuitySearch, resolved.Environment.ToolList);
-        Assert.Contains(ToolCatalog.AttachmentsRead, resolved.Environment.ToolList);
+        Assert.NotEmpty(resolved.ExecutionPolicy!.ToolList);
+        Assert.All(resolved.ExecutionPolicy.ToolList, n => Assert.True(ToolRegistry.Get(n).DefinitionAuthorizable));
+        Assert.DoesNotContain(ToolCatalog.CredentialsList, resolved.ExecutionPolicy.ToolList);
+        Assert.DoesNotContain(ToolCatalog.ContinuitySearch, resolved.ExecutionPolicy.ToolList);
+        Assert.Contains(ToolCatalog.AttachmentsRead, resolved.ExecutionPolicy.ToolList);
         var context = Context(resolved.ToPublished(16)) with { AgentInstanceId = Guid.NewGuid(), CredentialMetadataAvailable = true };
         Assert.True(ToolPolicy.IsOffered(resolved.ToPublished(16), context, ToolCatalog.CredentialsList, ToolConfigurationGates.AllowAll));
         Assert.Equal(ToolPolicyDecision.Allow, ToolPolicy.EvaluateExecution(resolved.ToPublished(16), ToolCatalog.CapabilitiesLoad, ToolConfigurationGates.AllowAll, admission: new(false, TriggerKind.UserTurn)));
-        Assert.Equal(64, resolved.Environment.Capabilities!.AuthorizationFingerprint!.Length);
+        Assert.Equal(64, resolved.ExecutionPolicy.Capabilities!.AuthorizationFingerprint!.Length);
         var published = resolved.ToPublished(16);
-        Assert.Equal(resolved.Environment.ToolList, published.Environment!.ToolList);
-        Assert.DoesNotContain("workspace.retain", published.Environment.ToolList);
-        Assert.DoesNotContain("future.capability", published.Environment.ToolList);
+        Assert.Equal(resolved.ExecutionPolicy.ToolList, published.ExecutionPolicy!.ToolList);
+        Assert.DoesNotContain("workspace.retain", published.ExecutionPolicy.ToolList);
+        Assert.DoesNotContain("future.capability", published.ExecutionPolicy.ToolList);
         AgentDefinitionValidator.Validate(published);
     }
     [Fact]
     public async Task Frozen_All_snapshot_does_not_expand_to_other_current_registered_names()
     {
         var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceRead);
-        d = d with { Environment = d.Environment! with { Capabilities = new("All", d.Environment.ToolList), Projection = new([ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceRead]) } };
+        d = d with { ExecutionPolicy = d.ExecutionPolicy! with { Capabilities = new("All", d.ExecutionPolicy.ToolList), Projection = new([ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceRead]) } };
         Assert.Equal([ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceRead], ToolCatalog.For(d, Context(d), ToolConfigurationGates.AllowAll).Select(t => t.Name));
         Assert.False(AgentCore.Application.Agents.RolePermissions.AllowsTool(d, ToolCatalog.WorkspaceWrite));
         Assert.Equal(ToolPolicyDecision.Deny, ToolPolicy.EvaluateExecution(d, ToolCatalog.WorkspaceWrite, ToolConfigurationGates.AllowAll));
@@ -126,7 +126,7 @@ public sealed class CapabilityProjectionTests
         var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite);
         var c = Context(d);
         Assert.Equal([ToolCatalog.CapabilitiesLoad], ToolCatalog.For(d, c, ToolConfigurationGates.AllowAll).Select(t => t.Name));
-        d = d with { Environment = d.Environment! with { Projection = new([ToolCatalog.WorkspaceRead]) },
+        d = d with { ExecutionPolicy = d.ExecutionPolicy! with { Projection = new([ToolCatalog.WorkspaceRead]) },
             Skills = [new("write", "Write", "Write a file", "Use tools", SkillProjection.OnDemand, true, [ToolCatalog.WorkspaceWrite], [])] };
         c = c with { Definition = d, AgentInstanceId = Guid.NewGuid(), PinnedSkillCatalog = [new("definition:write", SkillOrigin.Definition, "write", "Write", "Write a file", "Use tools", SkillProjection.OnDemand, [ToolCatalog.WorkspaceWrite], [])], ActiveSkillKeys = ["definition:write"], LoadedCapabilityIds = [ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite] };
         Assert.Equal(new[] { ToolCatalog.CapabilitiesLoad, ToolCatalog.SkillsLoad, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite }.Order(), ToolCatalog.For(d, c, ToolConfigurationGates.AllowAll).Select(t => t.Name).Order());
@@ -182,8 +182,8 @@ public sealed class CapabilityProjectionTests
     public async Task Always_and_loaded_interfaces_still_obey_configuration_context_and_approval()
     {
         var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.EmailSend, ToolCatalog.WorkspaceWrite, ToolCatalog.AutomationCreate);
-        d = d with { Environment = d.Environment! with { Projection = new([ToolCatalog.EmailSend, ToolCatalog.WorkspaceWrite, ToolCatalog.AutomationCreate]) } };
-        var c = Context(d) with { LoadedCapabilityIds = d.Environment.ToolList };
+        d = d with { ExecutionPolicy = d.ExecutionPolicy! with { Projection = new([ToolCatalog.EmailSend, ToolCatalog.WorkspaceWrite, ToolCatalog.AutomationCreate]) } };
+        var c = Context(d) with { LoadedCapabilityIds = d.ExecutionPolicy.ToolList };
         Assert.DoesNotContain(ToolCatalog.EmailSend, ToolCatalog.For(d, c, ToolConfigurationGates.Unconfigured).Select(t => t.Name));
         Assert.Equal(ToolPolicyDecision.Deny, ToolPolicy.EvaluateExecution(d, ToolCatalog.EmailSend, ToolConfigurationGates.Unconfigured));
         Assert.Equal(ToolPolicyDecision.RequireApproval, ToolPolicy.EvaluateExecution(d, ToolCatalog.EmailSend, ToolConfigurationGates.AllowAll));

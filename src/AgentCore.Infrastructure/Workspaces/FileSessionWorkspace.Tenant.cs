@@ -42,7 +42,7 @@ public sealed partial class FileSessionWorkspace
                 Working(frame.Owner.AgentInstanceId, frame.SessionId).RequireDirectory("/working");
                 await Require(); return;
             }
-            var template = RoleEnvironments.Of(definition).WorkspacePolicy.TemplateId;
+            var template = DefinitionExecutionPolicies.Of(definition).WorkspacePolicy.TemplateId;
             var resources = (definition.ExecutionResources ?? []).Where(r => r.Kind == AgentDefinitionResourceKind.Template
                 && !string.IsNullOrEmpty(template) && r.LogicalPath.StartsWith(template + "/", StringComparison.Ordinal)).ToArray();
             var targets = resources.Select(r => (Resource: r, Path: "/working/" + r.LogicalPath[(template!.Length + 1)..])).ToArray();

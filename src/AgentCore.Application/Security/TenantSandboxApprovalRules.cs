@@ -18,6 +18,32 @@ public static class TenantSandboxApprovalRules
         foreach (var permission in new[] { "sandbox.execute", "approvals.approve" })
             if (!(await authorizer.CheckOwnedTenantAsync(state, decision.HumanPrincipalId, PermissionCatalog.Get(permission), target, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("grantor_authority_lost");
+        if (request.Operation.SandboxCommand?.WorkspaceAccess is { } workspace)
+        {
+            var scopes = new List<(string Permission, AccessScope Scope)> {
+                ("sessions.read", TenantSessionRules.Scope(request.TenantId, request.SessionId)),
+                ("workspaces.read", TenantWorkspaceRules.Working(request.TenantId, request.SessionId)) };
+            if (!workspace.WorkingReadOnly) { scopes.Add(("workspaces.write", TenantWorkspaceRules.Working(request.TenantId, request.SessionId))); scopes.Add(("workspaces.delete", TenantWorkspaceRules.Working(request.TenantId, request.SessionId))); }
+            foreach (var (space, access) in new[] { (workspace.Context.SpaceId, workspace.HomeAccess), (workspace.Context.PrivateSpaceId, workspace.PrivateAccess) })
+            {
+                if (access == AgentCore.Domain.Definitions.HomeAccess.Disabled) continue;
+                scopes.Add(("spaces.read", TenantSpaceService.Scope(request.TenantId, space)));
+                scopes.Add(("workspaces.read", TenantWorkspaceRules.Home(request.TenantId, space)));
+                if (access == AgentCore.Domain.Definitions.HomeAccess.ReadWrite) { scopes.Add(("workspaces.write", TenantWorkspaceRules.Home(request.TenantId, space))); scopes.Add(("workspaces.delete", TenantWorkspaceRules.Home(request.TenantId, space))); }
+            }
+            foreach (var (permission, scope) in scopes.Distinct())
+            {
+                if (!(await authorizer.CheckOwnedTenantAsync(state, decision.HumanPrincipalId, PermissionCatalog.Get(permission), scope, ct).ConfigureAwait(false)).Allowed)
+                    throw new AccessDeniedException("grantor_authority_lost");
+                if (await TenantSandboxReadOperationRules.NeedsReviewAsync(state, request.OriginalInitiatorPrincipalId, permission, scope, authorizer, ct).ConfigureAwait(false))
+                {
+                    if (TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(permission)).IndependentReview && request.OriginalInitiatorPrincipalId == decision.HumanPrincipalId)
+                        throw new AccessDeniedException("independent_reviewer_required");
+                    if (!(await authorizer.CheckOwnedTenantAsync(state, decision.HumanPrincipalId, PermissionCatalog.Get("approvals.approve"), scope, ct).ConfigureAwait(false)).Allowed)
+                        throw new AccessDeniedException("grantor_authority_lost");
+                }
+            }
+        }
         if (request.OriginalInitiatorPrincipalId is { } requester)
             foreach (var pair in new[] { ("agents.chat", target), ("sessions.read", TenantSessionRules.Scope(request.TenantId, request.SessionId)) })
                 if (!(await authorizer.CheckOwnedTenantAsync(state, requester, PermissionCatalog.Get(pair.Item1), pair.Item2, ct).ConfigureAwait(false)).Allowed)

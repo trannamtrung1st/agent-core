@@ -84,6 +84,7 @@ public sealed partial class TenantApprovalService
             if (reader.Run.Revision != expectedRunRevision) throw new SecurityConflictException("stale_revision");
             if (TenantAutomationReadRules.Sources(observed.Value).Length == 0) throw new AccessDeniedException("no_readable_automations");
             var op = TenantApprovalRules.PrepareAutomationRead(ids.NewId(), reader.Run.AgentInstanceId, observed.Value, reader.Agent.Instance.Revision, reader.Agent.Instance.PersonaRevision);
+            op = TenantApprovalRules.ForRun(op, reader.Run);
             var prior = await approvals.FindRootApprovalAsync(reference.TenantId, reader.Run.Admission.Activation.RootActivationId, reader.Agent.PrincipalId, op, ct).ConfigureAwait(false);
             if (prior is not null) return await DuplicateOutcome(reader.Security, reader.Run, prior, ct).ConfigureAwait(false);
             var decision = await service.DecisionAsync(observed, ct).ConfigureAwait(false);

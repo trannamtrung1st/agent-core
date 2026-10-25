@@ -52,12 +52,14 @@ public static class TenantAutomationMutationContract
         foreach (var field in root.EnumerateObject())
         {
             var value = field.Value; var shape = properties.GetProperty(field.Name);
-            var nullable = field.Name is "modelKey" or "reasoningEffort" or "filterExpression" or "endDate" or "startDate" or "endAtUtc" or "maxOccurrences";
+            var nullable = field.Name is "modelKey" or "reasoningEffort" or "filterExpression" or "endDate" or "startDate" or "endAtUtc" or "maxOccurrences" or "pinnedSpaceId" or "pinnedEnvironmentId";
             if (value.ValueKind == JsonValueKind.Null && nullable) continue;
             var type = shape.TryGetProperty("type", out var expected) && expected.ValueKind == JsonValueKind.String ? expected.GetString() : null;
             if (type == "string" && value.ValueKind != JsonValueKind.String || type == "integer" && (value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out _))
                 || type == "boolean" && value.ValueKind is not (JsonValueKind.True or JsonValueKind.False) || type == "array" && value.ValueKind != JsonValueKind.Array)
                 throw new ArgumentException("Use typed Automation arguments.");
+            if (field.Name is "pinnedSpaceId" or "pinnedEnvironmentId" && (value.ValueKind != JsonValueKind.String
+                || !Guid.TryParseExact(value.GetString(), "D", out var pin) || pin == Guid.Empty)) throw new ArgumentException("Use an exact context resource identity.");
             if (shape.TryGetProperty("enum", out var choices) && !choices.EnumerateArray().Any(c => c.GetRawText() == value.GetRawText())) throw new ArgumentException("Use an offered Automation choice.");
         }
         static void Fields(JsonElement value, params string[] names)

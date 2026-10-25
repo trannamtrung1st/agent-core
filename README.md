@@ -51,6 +51,8 @@ Agent Core is proprietary software. Source availability does not grant permissio
 
 ## Implementation baseline
 
+The Space/Environment successor replaces persistent Instance home ownership with tenant Spaces, protected Private Spaces, per-Session context and immutable Run captures. Membership controls contextual resource availability; optional Environments contain on-demand typed variables, and Secrets remain protected tenant resources. [Current implementation evidence](docs/reports/space-environment-implementation-2026-10-25.md) tracks qualification and remaining integration; [operator cutover](docs/space-environment-cutover.md) covers matching code/schema/root deployment and recoverable backups. Historical IAM/MVP delivery reports do not accept this successor.
+
 The original MVP and post-MVP freeze summaries are historical records. Their old authentication/route examples are not current interfaces. Milestone status and links to their frozen evidence belong to the [Implementation Plan](docs/18-implementation-plan.md) and [dated reports](docs/reports/); see the [MVP handoff](docs/reports/m12-mvp-handoff.md) for that original scope.
 
 Current code uses .NET 10/C# 14, the composed provider-neutral speech pipeline, tenant-qualified Session/Activation/Run execution and Ant Design v6. Native development and Docker Compose remain supported workflows; use [Operations](docs/17-observability-and-operations.md) for current bootstrap, configuration, launch and recovery instructions. Synthetic needs no AI credentials. Real/native effects require their documented readiness, current authority and explicit verification.

@@ -25,6 +25,7 @@ public sealed partial class TenantArtifactRuntimeReadService(TenantOperationAuth
             var before = await RequireAsync(frame, id, ct, audit: true).ConfigureAwait(false);
             var exact = TenantApprovalRules.PrepareArtifactVerification(ids.NewId(), before.Run.AgentInstanceId,
                 Witness(before.Artifact), before.Agent.Instance.Revision, before.Agent.Instance.PersonaRevision);
+            exact = TenantApprovalRules.ForRun(exact, before.Run);
             var prior = await approvals.FindRootApprovalAsync(before.State.Tenant.TenantId, before.Run.Admission.ExecutionContext!.RootActivationId,
                 before.Agent.PrincipalId, exact, ct).ConfigureAwait(false);
             if (prior is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(prior));

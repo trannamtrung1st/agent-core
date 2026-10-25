@@ -25,7 +25,7 @@ public static class RolePermissions
         }
 
         var normalized = tool.Trim();
-        if (definition.Environment?.Capabilities is not null) return definition.Environment.ToolList.Contains(normalized, StringComparer.Ordinal);
+        if (definition.ExecutionPolicy?.Capabilities is not null) return definition.ExecutionPolicy.ToolList.Contains(normalized, StringComparer.Ordinal);
         if (string.Equals(normalized, ToolCatalog.AttachmentsRead, StringComparison.Ordinal)
             || string.Equals(normalized, ToolCatalog.SkillsLoad, StringComparison.Ordinal)
             || string.Equals(normalized, ToolCatalog.AppMessageSend, StringComparison.Ordinal)
@@ -34,7 +34,7 @@ public static class RolePermissions
             return true;
         }
 
-        return RoleEnvironments.Of(definition).ToolList.Contains(normalized, StringComparer.Ordinal);
+        return DefinitionExecutionPolicies.Of(definition).ToolList.Contains(normalized, StringComparer.Ordinal);
     }
 
     public static void EnsureToolAllowed(AgentDefinition definition, string tool)
@@ -49,7 +49,7 @@ public static class RolePermissions
     {
         if (string.IsNullOrEmpty(path) || path.Contains('\0') || path.Contains('\\') || WorkspaceLogicalPath.HasParentSegment(path)) return false;
         if (path == "/") return true;
-        return new[] { "/home", "/working", "/agent", "/attachments" }
+        return new[] { "/home", "/private", "/working", "/agent", "/attachments" }
             .Any(root => path == root || path.StartsWith(root + "/", StringComparison.Ordinal));
     }
 
@@ -86,7 +86,7 @@ public sealed class RoleKnowledgeService(IRoleKnowledgeContentResolver contentRe
         CancellationToken cancellationToken = default)
     {
         RolePermissions.EnsureToolAllowed(definition, "knowledge.retrieve");
-        var source = RoleEnvironments.Of(definition).KnowledgeList
+        var source = DefinitionExecutionPolicies.Of(definition).KnowledgeList
             .FirstOrDefault(item => string.Equals(item.Identity, identity, StringComparison.Ordinal))
             ?? throw AgentCoreErrors.Forbidden("Knowledge identity is not approved for this role.");
         var content = await contentResolver.ReadContentAsync(definition, identity, cancellationToken).ConfigureAwait(false)

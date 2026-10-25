@@ -8,7 +8,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instances, InMemoryAgentDefinitionAdminStore definitions, InMemoryMemoryStore definitionReferences,
     IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null,
-    InMemoryCredentialStore? credentials = null, TimeProvider? clock = null, InMemorySandboxStore? sandboxProfiles = null, InMemoryArtifactStore? artifacts = null, InMemoryAttachmentStore? attachments = null, InMemoryBrowserPrivacyStore? browserPrivacy = null, BrowserPrivacyAuthority? browserPrivacyAuthority = null, InMemoryStructuredMemoryStore? structuredMemories = null, InMemoryEmailStore? emailDrafts = null, InMemoryTriggerStore? tenantTriggers = null, InMemoryExternalEventStore? tenantWebhooks = null, InMemoryEmailWatchStore? emailWatches = null, InMemoryExperienceStore? experience = null, Func<TenantManagementInspectionProjection>? managementInspection = null) : IIamStore, ITenantSandboxRuntimeStore, ITenantSandboxVerificationStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
+    InMemoryCredentialStore? credentials = null, TimeProvider? clock = null, InMemorySandboxStore? sandboxProfiles = null, InMemoryArtifactStore? artifacts = null, InMemoryAttachmentStore? attachments = null, InMemoryBrowserPrivacyStore? browserPrivacy = null, BrowserPrivacyAuthority? browserPrivacyAuthority = null, InMemoryStructuredMemoryStore? structuredMemories = null, InMemoryEmailStore? emailDrafts = null, InMemoryTriggerStore? tenantTriggers = null, InMemoryExternalEventStore? tenantWebhooks = null, InMemoryEmailWatchStore? emailWatches = null, InMemoryExperienceStore? experience = null, Func<TenantManagementInspectionProjection>? managementInspection = null) : IIamStore, ITenantSpaceStore, ITenantSpaceResourceStore, ITenantEnvironmentStore, ITenantSecretStore, ITenantSandboxRuntimeStore, ITenantSandboxVerificationStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
 {
     private readonly InMemoryAttachmentStore? attachmentBacking = attachments?.BindTenantAuthority(definitionReferences);
     private readonly InMemoryArtifactStore? artifactBacking = artifacts?.BindTenantAuthority(definitionReferences);
@@ -130,6 +130,10 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
     }
     private void EnsureReferences(TenantSecurityState state, AuthorizationAudit audit, Guid? creatingInstance = null, CancellationToken ct = default)
     {
+        if (state.Assignments.Any(a => TenantSecretService.TryId(a.Scope, out var secret) && _secrets.GetValueOrDefault((state.Tenant.TenantId, secret)) is not { Status: not AgentCore.Domain.Spaces.SecretStatus.Deleted }))
+            throw new ArgumentException("A Secret assignment requires its actual tenant owner.");
+        if (state.Assignments.Any(a => TenantSpaceService.TryId(a.Scope, out var space) && _spaces.GetValueOrDefault((state.Tenant.TenantId, space)) is not { DeletedAt: null }))
+            throw new ArgumentException("A Space assignment requires its actual tenant owner.");
         if (state.Assignments.Any(a => TenantEventAdmissionRules.TryId(a.Scope, out var coreEvent) && !sessionBacking.CoreEvents.OwnsTenantEvent(state.Tenant.TenantId, coreEvent)))
             throw new ArgumentException("A Core event assignment requires its actual tenant fact.");
         if (state.Assignments.Any(a => TenantWebhookRules.TryId(a.Scope, out var webhook) && !webhookBacking.OwnsTenantSource(state.Tenant.TenantId, webhook)))
@@ -146,6 +150,8 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
             throw new ArgumentException("A Session assignment requires a current owned Session.");
         if (state.Assignments.Any(a => TenantCredentialRules.TryId(a.Scope, out var id) && credentials?.OwnsTenantCredential(state.Tenant.TenantId, id) != true))
             throw new ArgumentException("A credential assignment requires a current owned credential.");
+        if (state.Assignments.Any(a => TenantResourceScopes.TrySpace(a.Scope, out var s, out var r) && FindSpaceResourceAsync(state.Tenant.TenantId, s, r, ct).Result is null))
+            throw new ArgumentException("A Space resource assignment requires its actual current owner.");
         RequireUserProfileReferences(state);
         RequireLearnedMemoryReferences(state);
         if (tenantExperiences.Values.Any(i => i.TenantId == state.Tenant.TenantId && i.UserPrincipalId is not null

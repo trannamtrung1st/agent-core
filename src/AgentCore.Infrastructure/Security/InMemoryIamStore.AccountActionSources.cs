@@ -17,12 +17,12 @@ public sealed partial class InMemoryIamStore
             if (request?.TenantId != tenant || request.Operation.AccountAction is null || receipt is null || decision is null) throw new AccessDeniedException("account_source_changed");
             var agent = FindTenantAgentAsync(tenant, run.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("executor_unavailable");
             var session = sessionBacking.ReadTenantSession(tenant, run.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
-            var bound = ReadTenantCredentialBindingsAsync(tenant, run.AgentInstanceId, ct).Result?.Bindings.SingleOrDefault(b => b.Binding.BindingId == request.Operation.AccountAction.Credential.BindingId)
+            var bound = ContextCredentialBindings(run).SingleOrDefault(b => b.Binding.BindingId == request.Operation.AccountAction.Credential.BindingId)
                 ?? throw new AccessDeniedException("account_source_changed");
             TenantAccountActionRules.Require(request.Operation.AccountAction, run, agent, session, TenantAgentDefinitionBaseline(agent), bound, !TenantCredentialOAuthRules.IsOAuth(bound.Credential.Value));
             if (agent.Instance.Revision != request.Operation.ExpectedInstanceRevision || agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision) throw new AccessDeniedException("account_source_changed");
             TenantAccountActionReferences.Receipt(reference, request, receipt, decision, _operationGrants.GetValueOrDefault(reference.RequestId), run);
-            TenantAccountActionRules.PermissionsAsync(_tenants[tenant], run.AgentInstanceId, request.Operation.AccountAction, agent.PrincipalId, new IamAuthorizer(this), request.Kind == ApprovalKind.Review, ct).GetAwaiter().GetResult();
+            TenantAccountActionRules.PermissionsAsync(_tenants[tenant], run.AgentInstanceId, request.Operation.AccountAction, TenantWorkspaceRules.Context(request.Operation), agent.PrincipalId, new IamAuthorizer(this), request.Kind == ApprovalKind.Review, ct).GetAwaiter().GetResult();
             RequireTenantExecutionSourcesAsync(run, _tenants[tenant], new IamAuthorizer(this), this, ct).GetAwaiter().GetResult();
             TenantAccountActionRules.ReviewerAsync(_tenants[tenant], request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
         }
@@ -33,10 +33,10 @@ public sealed partial class InMemoryIamStore
         var action = request.Operation.AccountAction ?? throw new SecurityConflictException("operation_mismatch");
         TenantApprovalContinuationRules.Require(request, run, source);
         var session = sessionBacking.ReadTenantSession(request.TenantId, action.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
-        var bound = ReadTenantCredentialBindingsAsync(request.TenantId, agent.Instance.InstanceId).Result?.Bindings.SingleOrDefault(b => b.Binding.BindingId == action.Credential.BindingId)
+        var bound = ContextCredentialBindings(run).SingleOrDefault(b => b.Binding.BindingId == action.Credential.BindingId)
             ?? throw new AccessDeniedException("account_source_changed");
         TenantAccountActionRules.Require(action, run, agent, session, TenantAgentDefinitionBaseline(agent), bound, exactSecret);
-        TenantAccountActionRules.PermissionsAsync(_tenants[request.TenantId], agent.Instance.InstanceId, action, agent.PrincipalId,
+        TenantAccountActionRules.PermissionsAsync(_tenants[request.TenantId], agent.Instance.InstanceId, action, TenantWorkspaceRules.Context(request.Operation), agent.PrincipalId,
             new IamAuthorizer(this), request.Kind == ApprovalKind.Review, CancellationToken.None).GetAwaiter().GetResult();
         if (request.Snapshot?.Credential != TenantAccountReadRules.Snapshot(agent, bound).Credential) throw new SecurityConflictException("account_source_changed");
         RequireTenantExecutionSourcesAsync(run, _tenants[request.TenantId], new IamAuthorizer(this), this, CancellationToken.None).GetAwaiter().GetResult();

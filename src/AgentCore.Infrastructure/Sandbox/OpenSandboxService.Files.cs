@@ -17,7 +17,7 @@ public sealed partial class OpenSandboxService
         var authority = lease.MountAuthority ?? throw CanonicalSandboxMountResolver.Incompatible("Mount authority is absent; reset and reverify this environment.");
         // Admission validates aliases; the usage sampler checks them again in
         // its single tree walk. Identity checks themselves need only root stat.
-        var mounted = MountResolver.Resolve(lease.AgentInstanceId, lease.SessionId, authority.HomeAccess, validateHardLinks:false);
+        var mounted = MountResolver.Resolve(lease.AgentInstanceId, lease.SessionId, authority.WorkspaceAccess ?? throw CanonicalSandboxMountResolver.Incompatible("Captured Space mount authority is absent."), validateHardLinks:false);
         if (mounted.Authority != authority with { TranslatedOwnership = false }) throw CanonicalSandboxMountResolver.Incompatible("Canonical root identity or execution identity changed. Retire the old generation before dispatch.");
         return mounted;
     }
@@ -65,6 +65,7 @@ public sealed partial class OpenSandboxService
         {
             var mounted = ResolveMounts(lease);
             if (cwd == "/working" || cwd.StartsWith("/working/", StringComparison.Ordinal)) mounted.Working.RequireDirectory(cwd);
+            else if (mounted.Private is not null && (cwd == "/private" || cwd.StartsWith("/private/", StringComparison.Ordinal))) mounted.Private.RequireDirectory(cwd);
             else if (mounted.Home is not null && (cwd == "/home" || cwd.StartsWith("/home/", StringComparison.Ordinal))) mounted.Home.RequireDirectory(cwd);
             else throw AgentCoreErrors.Forbidden("Cwd is outside mounted authorized roots.");
         }

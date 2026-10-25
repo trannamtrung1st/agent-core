@@ -20,7 +20,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var draft = await f.Service.ForkAsync(s.Human.PrincipalId, s.Tenant, Guid.Parse(s.Run.DefinitionId), 1, await Revision());
         draft = await f.Service.UpdateAsync(s.Human.PrincipalId, s.Tenant, draft.DraftId, draft.Candidate with {
             AgentInstructions = "New instructions must not rewrite this Run.",
-            Environment = new(Capabilities: new("Selected", removeProfile ? [ToolCatalog.SandboxExec] : [ToolCatalog.WorkspaceRead])),
+            ExecutionPolicy = new(Capabilities: new("Selected", removeProfile ? [ToolCatalog.SandboxExec] : [ToolCatalog.WorkspaceRead])),
             SandboxPolicy = removeProfile ? null : draft.Candidate.SandboxPolicy,
             StateIsolationPolicy = new(HomeAccess: HomeAccess.Disabled)
         }, await Revision(), draft.Revision);

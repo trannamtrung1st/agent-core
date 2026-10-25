@@ -14,6 +14,7 @@ public sealed partial class SqliteIamStore
         if (admission is null) return false;
         var state = await ReadTenantAsync(db, source.Owner.TenantId!.Value, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         if (state.Tenant.Revision != admission.ExpectedSecurityRevision) return false;
+        await RequireSpaceExecutionSource(db, admission.Run, state, new IamAuthorizer(this), ct, admission: true).ConfigureAwait(false);
         var root = await TenantCoreEventProduction.RootAsync(db, source, ct).ConfigureAwait(false);
         var owner = await OwnedAgents(db, state.Tenant.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == source.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("executor_unavailable");

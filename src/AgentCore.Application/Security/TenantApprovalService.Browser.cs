@@ -19,6 +19,7 @@ public sealed partial class TenantApprovalService
             var prepared = await (browserTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareAsync(run, tool, argumentsJson, ct, registerCold, downloadArtifacts).ConfigureAwait(false);
             var value = prepared.Command;
             var operation = TenantApprovalRules.PrepareBrowser(ids.NewId(), run.AgentInstanceId, value, prepared.Agent.Instance.Revision, prepared.Agent.Instance.PersonaRevision);
+            operation = TenantApprovalRules.ForRun(operation, run);
             var review = await TenantBrowserOperationRules.NeedsReviewAsync(state, run.AgentInstanceId, value,
                 run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, authorizer, ct).ConfigureAwait(false);
             var kind = value.Credential is { } credential && !(await authorizer.CheckTenantAsync(state, run.Owner.ExecutorPrincipalId!.Value,

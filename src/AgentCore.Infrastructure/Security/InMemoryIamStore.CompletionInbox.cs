@@ -85,6 +85,8 @@ public sealed partial class InMemoryIamStore
     }
     private void RequireTenantOutputSources(AgentRun parent, CancellationToken ct)
     {
+        RequireSpaceResourceReadSources(parent, ct);
+        RequireContextReadSources(parent, ct);
         RequirePublicWebSources(parent, ct);
         RequireHttpSources(parent, ct);
         RequireStoredProfileSource(parent, ct);

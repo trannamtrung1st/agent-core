@@ -28,11 +28,13 @@ public sealed partial class TenantSessionAccessTests
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
-            var url = api + (working ? $"/sessions/{session}/workspace" : $"/agents/{instance}/workspace");
+            var privateSpace = (await factory.Services.GetRequiredService<ITenantSpaceStore>().FindPrivateSpaceAsync(tenant, instance))!.SpaceId;
+            Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(api + $"/agents/{instance}/workspace")).StatusCode);
+            var url = api + (working ? $"/sessions/{session}/workspace" : $"/spaces/{privateSpace}/workspace");
             using (var anonymous = factory.CreateClient()) Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(url)).StatusCode);
             var logical = working ? "/working" : "/home";
             var physical = working ? AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(root, "workspaces"), instance, session)
-                : AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(root, "workspaces"), instance);
+                : AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(root, "workspaces"), tenant, privateSpace);
             Assert.Empty((await Json(await owner.GetAsync(url))).GetProperty("items").EnumerateArray()); Assert.False(Directory.Exists(physical));
             var files = new CanonicalWorkspaceFilesystem(physical, logical); files.Ensure();
             var text = Encoding.UTF8.GetBytes("Exact private UTF-8 thử nghiệm"); await files.WriteAsync(logical + "/report.txt", text, 1024, 4096);
@@ -47,13 +49,13 @@ public sealed partial class TenantSessionAccessTests
             }
             var identity = factory.Services.GetRequiredService<IdentityService>(); var access = factory.Services.GetRequiredService<TenantAccessService>();
             var account = await identity.RegisterAsync("workspace-reader@example.test", "Workspace reader", "strong-workspace-password");
-            var parentRole = await access.SaveRoleAsync(principal, tenant, null, "Parent reads", ["agents.read", "sessions.read"], await Revision(owner, tenant));
+            var parentRole = await access.SaveRoleAsync(principal, tenant, null, "Parent reads", ["spaces.read", "sessions.read"], await Revision(owner, tenant));
             var invitation = await access.InviteAsync(principal, tenant, account.LoginKey, parentRole.RoleId, await Revision(owner, tenant));
             var readerUser = await access.AcceptInvitationAsync(account.AccountId, tenant, invitation.Invitation.InvitationId, invitation.Token);
             using var reader = factory.CreateClient(); await Login(reader, account.LoginKey, "strong-workspace-password");
             var denied = await reader.GetAsync(url); Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode); Assert.DoesNotContain("report", await denied.Content.ReadAsStringAsync());
             var role = await access.SaveRoleAsync(principal, tenant, null, "Read exact workspace", ["workspaces.read"], await Revision(owner, tenant));
-            var scope = working ? TenantWorkspaceRules.Working(tenant, session) : TenantWorkspaceRules.Home(tenant, instance);
+            var scope = working ? TenantWorkspaceRules.Working(tenant, session) : TenantWorkspaceRules.Home(tenant, privateSpace);
             var grant = await access.AssignRoleAsync(principal, tenant, readerUser.PrincipalId, role.RoleId, scope, await Revision(owner, tenant));
             var page = await Json(await reader.GetAsync(url + "?limit=1")); Assert.Single(page.GetProperty("items").EnumerateArray()); Assert.True(page.GetProperty("truncated").GetBoolean());
             var next = await Json(await reader.GetAsync(url + "?limit=1&cursor=" + Uri.EscapeDataString(page.GetProperty("nextPath").GetString()!)));

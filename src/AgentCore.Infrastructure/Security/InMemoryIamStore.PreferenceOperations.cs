@@ -18,12 +18,14 @@ public sealed partial class InMemoryIamStore : ITenantPreferenceOperationStore
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision || run.Revision != commit.ExpectedRunRevision)
                 return ValueTask.FromResult<TenantOperationReceipt?>(null);
             var target = FindTenantAgentAsync(before.Tenant.TenantId, run.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("executor_unavailable");
-            TenantSessionRules.RequireExecutor(before, target); ValidateAgentActor(before, target.PrincipalId);
+            TenantSessionRules.RequireExecutor(before, target);
+            RequireSpaceExecutionSource(run, before, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult(); ValidateAgentActor(before, target.PrincipalId);
             if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } requester) ValidateAgentActor(before, requester);
             var at = (clock ?? TimeProvider.System).GetUtcNow();
             var prepared = TenantApprovalRules.PreparePreferences(commit.OperationId, run.AgentInstanceId,
                 AgentCore.Application.Tools.TenantPreferenceToolContract.Parameters(AgentCore.Application.Tools.TenantPreferenceToolContract.Parse(commit.ArgumentsJson)),
                 target.Instance.Revision, target.Instance.PersonaRevision);
+            prepared = TenantApprovalRules.ForRun(prepared, run);
             var previous = RootApproval(before.Tenant.TenantId, run.Admission.Activation.RootActivationId, target.PrincipalId, prepared.OperationFingerprint);
             if (previous is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(previous));
             var candidate = TenantPreferenceOperationRules.Apply(run, target, commit, at);

@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Space, Membership, Environment and Secrets successor — 2026-10-25
+
+The approved initiative is a coherent cutover across context, resources, files/sandbox, protected variable consumers, Automation/event pins and the tenant UI. Its [implementation ledger](reports/space-environment-implementation-2026-10-25.md) owns completed local qualification, disclosed deployment limits and main/PR integration; TODO initiative 2 retains its original number with the new ownership model. Prior phase freezes remain historical and do not accept this successor. Main synchronization followed completion of the requested proposal: fetched main was already an ancestor of the verified implementation, with no incoming changes or conflicts. The implementation ledger records the exact source and PR handoff. Installed data is never reset by tests or startup; the [operator runbook](space-environment-cutover.md) owns backup, explicit fresh-state deployment and rollback.
+
 The IAM successor has completed local implementation and Synthetic proposal acceptance in the final delivery. [Final delivery](reports/tenant-final-delivery-2026-10-24.md) owns the exact source/commit status, finite method/I/O/worker and UI acceptance, operating instructions and measured limits. The final 80-file scope is approved for direct commit to main. This does not imply deployment, live-provider/customer, physical-device or CI acceptance. Historical module reports below retain their original versions; earlier pending statements do not override their verified successors.
 
 The [IAM stabilization follow-up](reports/iam-stabilization-2026-10-24.md) owns subsequent launcher, Compose/HTTPS, canonical Playwright and approval-review integration evidence; earlier delivery fingerprints remain historical.

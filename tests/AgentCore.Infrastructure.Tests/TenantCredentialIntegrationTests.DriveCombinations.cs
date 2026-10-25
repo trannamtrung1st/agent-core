@@ -99,7 +99,7 @@ public sealed partial class TenantCredentialIntegrationTests
                 version = file.Version, md5Checksum = file.Md5Checksum, parents = file.Parents, trashed = file.Trashed });
         });
         var services = ActionServices(f, http); var run = s.Run;
-        var owner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId, run.SessionId);
+        var owner = new TenantWorkspaceReference.SessionWorking(s.Tenant, run.SessionId);
         var names = uncertainFirst ? new[] { "retry.csv", "retry.csv" } : ["sample.docx", "sample.xlsx", "sample.csv", "sample.js", "sample.doc", "sample.xls", "sample.cs"];
         var operations = new List<Guid>(); TenantApprovalRequest? first = null; TenantOperationReceipt? firstReceipt = null;
         foreach (var name in names)
@@ -109,7 +109,7 @@ public sealed partial class TenantCredentialIntegrationTests
                 // A genuinely new human activation has a new root and no previous
                 // effect checkpoint. Reusing the old root cannot mint a retry grant.
                 run = await AccountFreshActivation(f, s, "Upload the original file as a new explicit operation");
-                owner = new(s.Tenant, s.Agent.Instance.InstanceId, run.SessionId);
+                owner = new(s.Tenant, run.SessionId);
             }
             var bytes = Encoding.UTF8.GetBytes("Exact original fixture bytes for " + name);
             var path = "/working/" + name;

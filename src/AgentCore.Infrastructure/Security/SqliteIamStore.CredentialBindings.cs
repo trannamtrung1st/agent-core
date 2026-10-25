@@ -38,7 +38,7 @@ public sealed partial class SqliteIamStore
             var parent = await OwnedAgents(db, next.Tenant.TenantId).AsTracking().SingleOrDefaultAsync(item => item.Instance.InstanceId == binding.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false);
             if (parent is null || parent.Instance.Revision != expectedInstanceRevision) return false;
             if (parent.Instance.Lifecycle != nameof(AgentInstanceLifecycle.Active)) throw new AccessDeniedException("agent_archived");
-            if (!await StageTenantCredentialBinding(db, next.Tenant.TenantId, binding, false, expectedCredentialRevision, ct).ConfigureAwait(false)) return false;
+            if (!await StageTenantCredentialBinding(db, next.Tenant.TenantId, binding, false, expectedCredentialRevision, audit, ct).ConfigureAwait(false)) return false;
             parent.Instance.Revision++; parent.Instance.UpdatedAtUtc = binding.UpdatedAtUtc.ToUnixTimeMilliseconds(); result = Owned(parent); return true;
         }, ct, initiator).ConfigureAwait(false);
         return saved ? result : null;
@@ -56,7 +56,7 @@ public sealed partial class SqliteIamStore
             if (parent.Instance.Lifecycle != nameof(AgentInstanceLifecycle.Active)) throw new AccessDeniedException("agent_archived");
             var binding = await OwnedCredentialBindings(db, next.Tenant.TenantId, instanceId).SingleOrDefaultAsync(b => b.BindingId == bindingId.ToString("D"), ct).ConfigureAwait(false);
             if (binding is null || binding.Revision != expectedBindingRevision) return false;
-            if (!await StageTenantCredentialBinding(db, next.Tenant.TenantId, MapBinding(binding), true, 0, ct).ConfigureAwait(false)) return false;
+            if (!await StageTenantCredentialBinding(db, next.Tenant.TenantId, MapBinding(binding), true, 0, audit, ct).ConfigureAwait(false)) return false;
             parent.Instance.Revision++; parent.Instance.UpdatedAtUtc = at.ToUnixTimeMilliseconds();
             result = Owned(parent); return true;
         }, ct, initiator).ConfigureAwait(false);
@@ -64,15 +64,21 @@ public sealed partial class SqliteIamStore
     }
     // Human binding commands and model exact-operation commits share this association mutation.
     private async Task<bool> StageTenantCredentialBinding(AgentCoreDbContext db, Guid tenant, AgentCredentialBinding value,
-        bool remove, long expectedCredentialRevision, CancellationToken ct)
+        bool remove, long expectedCredentialRevision, AuthorizationAudit audit, CancellationToken ct)
     {
         if (remove)
         {
             var row = await OwnedCredentialBindings(db, tenant, value.AgentInstanceId).SingleOrDefaultAsync(b => b.BindingId == value.BindingId.ToString("D"), ct).ConfigureAwait(false);
             if (row is null || row.Revision != value.Revision || row.CredentialId != value.CredentialId.ToString("D") || row.Reference != value.Reference) return false;
+            await PruneSpaceExclusion(db, tenant, value.AgentInstanceId, new HashSet<string>(StringComparer.Ordinal) { "Credential:" + value.CredentialId.ToString("D") }, audit, ct).ConfigureAwait(false);
             db.AgentCredentialBindings.Remove(row); return true;
         }
         TenantCredentialBindingRules.NewBinding(value);
+        var instanceKey = value.AgentInstanceId.ToString("D"); var credentialKey = value.CredentialId.ToString("D");
+        if (await db.Set<SpaceAddedBindingRecord>().AnyAsync(b => b.TenantId == tenant && b.InstanceId == instanceKey
+            && b.Kind == AgentCore.Domain.Spaces.SpaceBindingKind.Credential && (b.AccountRef == value.Reference && b.ResourceKey != credentialKey
+                || b.ResourceKey == credentialKey && b.AccountRef != value.Reference), ct).ConfigureAwait(false))
+            throw new SecurityConflictException("contextual_binding_conflict");
         var credential = await OwnedCredentials(db, tenant).Include(c => c.EmailAccount).Include(c => c.DriveAccount)
             .SingleOrDefaultAsync(c => c.CredentialId == value.CredentialId.ToString("D"), ct).ConfigureAwait(false);
         if (credential is null || credential.Revision != expectedCredentialRevision) return false;

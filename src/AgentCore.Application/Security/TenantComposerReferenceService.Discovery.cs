@@ -10,20 +10,20 @@ namespace AgentCore.Application.Security;
 public sealed partial class TenantComposerReferenceService
 {
     private sealed record Cursor(Guid Tenant, Guid Instance, string Category, string Search, int Page = 0,
-        string? Path = null, Guid? Artifact = null);
+        string? Path = null, Guid? Artifact = null, Guid? Space = null);
     public async ValueTask<TenantComposerPage> DiscoverAsync(Guid tenant, Guid instance, TenantSessionInitiator human,
-        string category, string? search = null, string? cursor = null, CancellationToken ct = default)
+        string category, string? search = null, string? cursor = null, CancellationToken ct = default, Guid? spaceId = null)
     {
         search = search?.Trim() ?? "";
         if (search.Length > 200 || cursor?.Length > 8192 || category is not ("homeFile" or "session" or "backgroundSession" or "artifact" or "agentRun" or "skill" or "invocation"))
             throw AgentCoreErrors.Validation("Invalid reference category, search or cursor.");
-        var position = new Cursor(tenant, instance, category, search);
+        var position = new Cursor(tenant, instance, category, search, Space: spaceId);
         if (cursor is not null)
         {
             try
             {
                 position = JsonSerializer.Deserialize<Cursor>(Convert.FromBase64String(cursor), UserMessageContent.Json)!;
-                if (position is null || position.Tenant != tenant || position.Instance != instance || position.Category != category
+                if (position is null || position.Tenant != tenant || position.Instance != instance || position.Space != spaceId || position.Category != category
                     || position.Search != search || position.Page is < 0 or > 100000) throw new FormatException();
             }
             catch (Exception error) when (error is FormatException or JsonException) { throw AgentCoreErrors.Validation("Invalid reference cursor. Search again."); }
@@ -40,13 +40,14 @@ public sealed partial class TenantComposerReferenceService
             ct.ThrowIfCancellationRequested(); next = null;
             if (category == "homeFile")
             {
-                var owner = new TenantWorkspaceReference(tenant, instance);
+                var owner = await HomeOwner(tenant, instance, spaceId ?? throw new AccessDeniedException("space_context_required"), ct).ConfigureAwait(false);
+                await Permission(state, human.PrincipalId, "spaces.read", TenantSpaceService.Scope(tenant, owner.SpaceId), ct).ConfigureAwait(false);
                 await Permission(state, human.PrincipalId, "workspaces.read", TenantWorkspaceRules.Scope(owner), ct).ConfigureAwait(false);
                 if (position.Path is not null) TenantWorkspaceRules.Path(owner, position.Path.TrimEnd('/'));
                 var page = await files.SearchTenantAsync(owner, search, position.Path, 40, ct).ConfigureAwait(false);
                 foreach (var file in page.Items.Where(f => !f.Directory && Matches(f.LogicalPath)))
                     items.Add(new(file.LogicalPath, Label(file.LogicalPath), file.ContentType + (file.ByteSize > MaxBodyBytes || !TextType(file.ContentType) ? " · Metadata only" : ""), category,
-                        Reference: new(category, AgentInstanceId: instance, Path: file.LogicalPath)));
+                        Reference: new(category, SpaceId: owner.SpaceId, Path: file.LogicalPath)));
                 next = page.NextPath is { } path ? position with { Path = path } : null;
             }
             else if (category is "skill" or "invocation")

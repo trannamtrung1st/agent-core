@@ -9,7 +9,7 @@ public sealed partial class InMemoryMemoryStore
 {
     private HashSet<Guid> FutureTenantEntries(AgentRun run)
     {
-        if ((TenantConfigurationContinuationRules.InputBoundary(run) ?? TenantBackgroundCompletionFactory.InputBoundary(run) ?? TenantAutomationConversationRules.InputBoundary(run)) is { } reportBoundary)
+        if ((TenantContextContinuationRules.InputBoundary(run) ?? TenantConfigurationContinuationRules.InputBoundary(run) ?? TenantBackgroundCompletionFactory.InputBoundary(run) ?? TenantAutomationConversationRules.InputBoundary(run)) is { } reportBoundary)
             return _entries.GetValueOrDefault(run.SessionId, []).Where(e => e.Sequence > reportBoundary && e.ResponseId != run.ResponseId).Select(e => e.EntryId).ToHashSet();
         var inputs = TenantApprovalContinuationRules.Inputs(run).Select(id => FindEntry(run.SessionId, id)).ToArray();
         if (inputs.Length == 0 || inputs.Any(e => e is not { Role: ConversationRole.User, Status: EntryStatus.Completed })) throw new AccessDeniedException("tenant_runtime_inputs_unavailable");
@@ -45,13 +45,13 @@ public sealed partial class InMemoryMemoryStore
             return _sessions[frame.SessionId] with { Entries = entries };
         }
     }
-    internal void SaveTenantRuntime(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision, DateTimeOffset at, bool foreground = false)
+    internal void SaveTenantRuntime(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision, DateTimeOffset at, bool foreground = false, bool contextSwitch = false)
     {
         lock (_gate)
         {
             var run = ReadTenantRun(frame.Owner.TenantId!.Value, frame.RunId) ?? throw new AccessDeniedException("run_unavailable");
             TenantRuntimeRules.Require(frame, tenantSessions[frame.SessionId], run, at);
-            var current = _sessions[frame.SessionId]; TenantRuntimeRules.ValidateSnapshot(frame, current, snapshot, foreground);
+            var current = _sessions[frame.SessionId]; TenantRuntimeRules.ValidateSnapshot(frame, current, snapshot, foreground, contextSwitch);
             var window = CloneForCompare(current, frame.SessionId, snapshot.Entries);
             if (current.Revision == snapshot.Revision && SameContent(window, snapshot)) return;
             if (current.Revision != expectedRevision || snapshot.Revision != expectedRevision + 1) throw AgentCoreErrors.Conflict("Stale Session revision.");

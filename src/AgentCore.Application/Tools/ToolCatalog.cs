@@ -140,7 +140,7 @@ public static class ToolCatalog
 
         var offered = new List<ModelToolDefinition>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var name in RoleEnvironments.Of(definition).ToolList)
+        foreach (var name in DefinitionExecutionPolicies.Of(definition).ToolList)
         {
             if (!ToolRegistry.TryGet(name, out var descriptor)
                 || descriptor.OfferRule is not (ToolOfferRule.RoleAllowlist or ToolOfferRule.ConfigurationWhenRoleAllows)
@@ -177,7 +177,7 @@ public static class ToolCatalog
     {
         var offered = new List<ModelToolDefinition>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var name in RoleEnvironments.Of(definition).ToolList)
+        foreach (var name in DefinitionExecutionPolicies.Of(definition).ToolList)
         {
             if (!ToolRegistry.TryGet(name, out var descriptor)
                 || !ToolPolicy.IsOffered(descriptor, definition, context, configurationGate)

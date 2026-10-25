@@ -36,7 +36,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var v = await WorkspaceReviewFixture(f, working); var s = v.Setup;
         var physical = working ? AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), s.Agent.Instance.InstanceId, s.Run.SessionId)
-            : AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), s.Agent.Instance.InstanceId);
+            : AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), s.Tenant, SpaceId(s));
         var file = Path.Combine(physical, "private.txt"); var stamp = File.GetLastWriteTimeUtc(file); var length = new FileInfo(file).Length;
         await File.WriteAllBytesAsync(file, Enumerable.Repeat((byte)'X', (int)length).ToArray()); File.SetLastWriteTimeUtc(file, stamp);
         var view = await v.Approvals.ReadViewAsync(s.Tenant, v.Request.RequestId, s.Owner); Assert.False(view.Review!.CanDecide); Assert.Equal("workspace_source_changed", view.Review.DecisionUnavailableReason);
@@ -57,7 +57,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var v = await WorkspaceReviewFixture(f, working); var s = v.Setup;
         var reader = await User(f, s, "scoped-workspace-reviewer@example.test", ["approvals.read", "sessions.read"]);
-        var scope = TenantWorkspaceRules.Scope(new(s.Tenant, s.Agent.Instance.InstanceId, working ? s.Run.SessionId : null));
+        var scope = TenantWorkspaceRules.Scope(WorkspaceOwner(s, working));
         var role = await f.Access.SaveRoleAsync(s.Owner.PrincipalId, s.Tenant, null, "Inspect exact saved workspace", ["workspaces.read"], (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
         var grant = await f.Access.AssignRoleAsync(s.Owner.PrincipalId, s.Tenant, reader.PrincipalId, role.RoleId, scope, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
         var page = await v.Approvals.ListAsync(s.Tenant, reader, new(0, 1)); Assert.Equal(working ? 1 : 0, page.Total);

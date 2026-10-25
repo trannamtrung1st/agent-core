@@ -16,7 +16,7 @@ public sealed record AgentDefinition(
     VoiceConfiguration Voice,
     ProviderPreferences ProviderPreferences,
     IReadOnlyDictionary<string, string> Metadata,
-    RoleEnvironment? Environment = null,
+    DefinitionExecutionPolicy? ExecutionPolicy = null,
     AgentModelDefaults? ModelDefaults = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     MemoryPolicy? MemoryPolicy = null,

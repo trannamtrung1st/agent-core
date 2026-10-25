@@ -43,9 +43,10 @@ public sealed partial class InMemoryIamStore : ITenantCredentialCheckStore
                 : grant is not null && grant.ExpiresAt <= at ? "grant_expired" : null;
             if (reason is null)
             {
-                var bindings = ReadTenantCredentialBindingsAsync(request.TenantId, request.Operation.InstanceId, ct).Result;
-                var bound = bindings?.Bindings.SingleOrDefault(b => b.Binding.BindingId == request.Operation.CredentialCheck!.BindingId);
-                reason = TenantCredentialCheckRules.TargetReason(request, run, agent, bound, source);
+                TenantCredentialBinding? bound = null;
+                try { bound = ContextCredentialBindings(run, ct).SingleOrDefault(b => b.Binding.BindingId == request.Operation.CredentialCheck!.BindingId); }
+                catch (AccessDeniedException ex) { reason = ex.ReasonCode; }
+                reason ??= TenantCredentialCheckRules.TargetReason(request, run, agent, bound, source);
             }
             if (reason is null && _credentialCheckDispatches.Values.Any(d => d.TenantId == request.TenantId && d.CredentialId == request.Operation.CredentialCheck!.CredentialId && d.CompletedAt is null))
                 reason = "credential_check_in_progress";

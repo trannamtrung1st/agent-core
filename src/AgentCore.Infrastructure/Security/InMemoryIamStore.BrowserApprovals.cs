@@ -18,7 +18,7 @@ public sealed partial class InMemoryIamStore
         if (value.Credential is { } credential)
         {
             TenantBrowserCredentialRules.RequireChatLineageAsync(run, (id, _) => ValueTask.FromResult(sessionBacking.ReadTenantRun(request.TenantId, id)), CancellationToken.None).GetAwaiter().GetResult();
-            var bound = ReadTenantCredentialBindingsAsync(request.TenantId, request.Operation.InstanceId).Result?.Bindings.SingleOrDefault(b => b.Binding.BindingId == credential.BindingId)
+            var bound = ContextCredentialBindings(run).SingleOrDefault(b => b.Binding.BindingId == credential.BindingId)
                 ?? throw new AccessDeniedException("credential_binding_changed");
             TenantBrowserCredentialRules.RequireBinding(run, agent, bound, TenantAgentDefinitionBaseline(agent)); TenantBrowserCredentialRules.RequireWitness(credential, bound);
         }

@@ -1,3 +1,4 @@
+using AgentCore.Domain.Conversation;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
@@ -15,8 +16,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var state = (await f.Iam.ReadTenantAsync(s.Tenant, ct))!;
         foreach (var owner in owners)
         {
-            var targets = new[] { (owner.SessionId is null ? "agents.read" : "sessions.read", owner.SessionId is { } id
-                ? TenantSessionRules.Scope(s.Tenant, id) : AccessScope.ForResource(s.Tenant, "agent", owner.InstanceId.ToString("D"))),
+            var targets = new[] { TenantWorkspaceMutationRules.Parent(owner),
                 ("workspaces.read", TenantWorkspaceRules.Scope(owner)), ("workspaces.write", TenantWorkspaceRules.Scope(owner)), ("workspaces.delete", TenantWorkspaceRules.Scope(owner)) };
             foreach (var (key, scope) in targets)
                 if (!(await f.Authorizer.CheckOwnedTenantAsync(state, s.Agent.PrincipalId, PermissionCatalog.Get(key), scope, ct)).Allowed)
@@ -29,8 +29,8 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
         await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read", "workspaces.read", "workspaces.write", "workspaces.delete"]);
-        var files = WorkspaceReader(f); var owner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId, working ? s.Run.SessionId : null);
-        var other = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId, working ? null : s.Run.SessionId);
+        var files = WorkspaceReader(f); var owner = WorkspaceOwner(s, working);
+        var other = WorkspaceOwner(s, !working);
         ValueTask Gate(CancellationToken ct) => WorkspacePrimitiveAuthority(f, s, [owner], ct);
         var root = owner.LogicalRoot;
         await WorkspaceMutations(f, files).WriteAsync(s.Tenant, working ? s.Run.SessionId : s.Agent.Instance.InstanceId, working,

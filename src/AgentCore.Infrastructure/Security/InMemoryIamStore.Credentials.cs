@@ -22,25 +22,28 @@ public sealed partial class InMemoryIamStore
         Credential value, long expectedRevision, long expectedSecretRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         next = IamStateRules.Freeze(next); value = TenantCredentialRules.Freeze(value);
-        return ValueTask.FromResult(WriteCredential(next, expectedSecurityRevision, audit, () => owner.TenantId == next.Tenant.TenantId
+        return ValueTask.FromResult(WriteTenantResource(next, expectedSecurityRevision, audit, () => owner.TenantId == next.Tenant.TenantId
             && CredentialBacking().SaveTenantCredential(owner, value, expectedRevision, expectedSecretRevision), ct, initiator));
     }
     public ValueTask<bool> TryDeleteTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision, Guid credentialId,
         long expectedRevision, long expectedSecretRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         next = IamStateRules.Freeze(next);
-        return ValueTask.FromResult(WriteCredential(next, expectedSecurityRevision, audit, () =>
+        return ValueTask.FromResult(WriteTenantResource(next, expectedSecurityRevision, audit, () =>
         {
+            if (_variables.Values.Any(v => v.TenantId == next.Tenant.TenantId && v.CredentialId == credentialId)
+                || _spaceMemberships.Values.Any(m => m.TenantId == next.Tenant.TenantId && m.AddedBindings.Any(b => b.Kind == AgentCore.Domain.Spaces.SpaceBindingKind.Credential && b.ResourceKey == credentialId.ToString("D"))))
+                throw new SecurityConflictException("credential_has_context_references");
             if (next.Assignments.Any(a => a.Scope == TenantCredentialRules.Scope(next.Tenant.TenantId, credentialId)))
                 throw new ArgumentException("Deleting a credential must retire its direct assignments.");
             return CredentialBacking().DeleteTenantCredential(next.Tenant.TenantId, credentialId, expectedRevision, expectedSecretRevision, at);
         }, ct, initiator));
     }
     private AgentCore.Infrastructure.Persistence.InMemoryCredentialStore CredentialBacking() => credentials ?? throw new AccessDeniedException("credential_store_unavailable");
-    private bool WriteCredential(TenantSecurityState next, long expected, AuthorizationAudit audit, Func<bool> change, CancellationToken ct, HumanSessionReference? initiator = null)
+    private bool WriteTenantResource(TenantSecurityState next, long expected, AuthorizationAudit audit, Func<bool> change, CancellationToken ct, HumanSessionReference? initiator = null)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
-        if (audit.TenantId != next.Tenant.TenantId || next.Tenant.Revision != checked(expected + 1)) throw new ArgumentException("Invalid credential transaction.");
+        if (audit.TenantId != next.Tenant.TenantId || next.Tenant.Revision != checked(expected + 1)) throw new ArgumentException("Invalid tenant resource transaction.");
         lock (_gate) lock (instances.CredentialGate)
         {
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expected) return false;

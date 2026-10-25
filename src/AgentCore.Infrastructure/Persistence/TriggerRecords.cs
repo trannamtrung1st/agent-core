@@ -14,6 +14,8 @@ public sealed class AutomationRecord
     public string? ProfileId { get; set; }
     public Guid? TenantId { get; set; }
     public Guid? ExecutorPrincipalId { get; set; }
+    public Guid? PinnedSpaceId { get; set; }
+    public Guid? PinnedEnvironmentId { get; set; }
     public int Status { get; set; }
     public string Instructions { get; set; } = "";
     public string Name { get; set; } = "";
@@ -46,6 +48,8 @@ public sealed class TriggerOccurrenceRecord
     public string? ProfileId { get; set; }
     public Guid? TenantId { get; set; }
     public Guid? ExecutorPrincipalId { get; set; }
+    public Guid? PinnedSpaceId { get; set; }
+    public Guid? PinnedEnvironmentId { get; set; }
     public int SourceKind { get; set; }
     public long? ScheduledAtUtc { get; set; }
     public long ObservedAtUtc { get; set; }

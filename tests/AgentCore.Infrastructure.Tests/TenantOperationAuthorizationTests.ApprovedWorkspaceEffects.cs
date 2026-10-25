@@ -14,6 +14,8 @@ public sealed partial class TenantOperationAuthorizationTests
     private static async Task<(Environment Setup, TenantRuntimeFrame Frame, TenantApprovalRequest Request)> ApprovedWorkspaceCase(Fixture f, bool working, bool exceptional)
     {
         var v = await MutationReviewFixture(f, working, exceptional); var s = v.Setup;
+        var pending = await v.Approvals.ListAsync(s.Tenant, s.Owner, new());
+        Assert.Contains(pending.Items, item => item.Request.RequestId == v.Request.RequestId);
         var request = await v.Approvals.DecideAsync(s.Tenant, v.Request.RequestId, s.Owner, true, v.Request.Operation.ActionHash,
             (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, v.Request.Revision);
         Assert.Equal(1, await v.Approvals.DispatchPendingAsync());
@@ -37,7 +39,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(v.Request.RequestId, receipt.RequestId); Assert.Null(receipt.SourceCallId); Assert.Null(receipt.ParametersHash);
         Assert.Equal(receipt, await ExecuteApprovedWorkspace(service, v.Frame, v.Request)); Assert.Equal(1, calls);
         Assert.DoesNotContain("Exact reviewed literal", JsonSerializer.Serialize(receipt));
-        var file = await WorkspaceReader(f).InspectTenantAsync(new(s.Tenant, s.Agent.Instance.InstanceId, working ? v.Frame.SessionId : null), (working ? "/working/" : "/home/") + "private.txt", 1024);
+        var file = await WorkspaceReader(f).InspectTenantAsync(WorkspaceOwner(s, working), (working ? "/working/" : "/home/") + "private.txt", 1024);
         Assert.Equal("Exact reviewed literal replacement", Encoding.UTF8.GetString(file.Bytes));
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, v.Frame.RunId))!;
         Assert.Equal(AgentRunSideEffectDisposition.Succeeded, run.SideEffect.Disposition); Assert.Null(run.SideEffect.ExternalEffect!.DirectOperation);

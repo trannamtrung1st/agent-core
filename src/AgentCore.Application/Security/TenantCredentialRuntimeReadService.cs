@@ -112,7 +112,7 @@ public sealed partial class TenantCredentialRuntimeReadService(TenantOperationAu
             if (sessionRead.Decision != OperationDecisionKind.Allowed) throw new AccessDeniedException(sessionRead.ReasonCode);
         }
         var (agent, baseline) = await configuration.BaselineAsync(state.Tenant.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
-        var snapshot = await bindings.ReadTenantCredentialBindingsAsync(state.Tenant.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false)
+        var snapshot = await configuration.CurrentCredentialBindingsAsync(run, ct, bindings).ConfigureAwait(false)
             ?? throw new AccessDeniedException("resource_unavailable");
         if (snapshot.Agent.PrincipalId != run.Owner.ExecutorPrincipalId || snapshot.Agent.Instance.Revision != agent.Instance.Revision)
             throw new SecurityConflictException("credential_source_changed");

@@ -179,7 +179,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         async ValueTask<long> Revision() => (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;
         var draft = await f.Service.ForkAsync(s.Human.PrincipalId, s.Tenant, Guid.Parse(s.Run.DefinitionId), 1, await Revision());
         draft = await f.Service.UpdateAsync(s.Human.PrincipalId, s.Tenant, draft.DraftId, draft.Candidate with {
-            SandboxPolicy = null, Environment = new(Capabilities: new("Selected", mode == "remove" ? [] : [ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus]))
+            SandboxPolicy = null, ExecutionPolicy = new(Capabilities: new("Selected", mode == "remove" ? [] : [ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus]))
         }, await Revision(), draft.Revision);
         await f.Service.PublishAsync(s.Human.PrincipalId, s.Tenant, draft.DraftId, await Revision(), draft.Revision);
         await ConfigurationServices(f).Configuration.AdoptVersionAsync(s.Human.PrincipalId, s.Tenant, s.Session.AgentInstanceId, 2, await Revision(), 1);

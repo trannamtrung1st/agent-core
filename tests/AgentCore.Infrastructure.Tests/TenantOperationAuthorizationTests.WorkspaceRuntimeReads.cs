@@ -24,7 +24,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         var root = Path.Combine(f.Root, "workspaces"); _ = WorkspaceReader(f);
         var fs = new CanonicalWorkspaceFilesystem(working ? AgentWorkspacePhysicalPaths.WorkingDirectory(root, s.Agent.Instance.InstanceId, s.Run.SessionId)
-            : AgentWorkspacePhysicalPaths.HomeDirectory(root, s.Agent.Instance.InstanceId), working ? "/working" : "/home");
+            : AgentWorkspacePhysicalPaths.SpaceHomeDirectory(root, s.Tenant, SpaceId(s)), working ? "/working" : "/home");
         fs.Ensure(); await fs.WriteAsync((working ? "/working/" : "/home/") + name, bytes ?? Encoding.UTF8.GetBytes("Private model bytes: thử nghiệm"), maxFileBytes, 100000);
     }
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
@@ -114,7 +114,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(AgentRunStatus.Running, run.Status); Assert.Equal(runBefore.Revision, run.Revision); Assert.Equal(frame.Generation, run.Claim!.Generation);
         Assert.Equal(securityRevision, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
         Assert.Equal("Private model bytes: thử nghiệm", Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(
-            new(s.Tenant, s.Agent.Instance.InstanceId, frame.SessionId), "/working/private.txt", 4096)).Bytes));
+            WorkspaceOwner(s, true), "/working/private.txt", 4096)).Bytes));
         Assert.True(conflict is null, $"An unchanged owned read failed after only conversation progress: {conflict?.ReasonCode}");
         Assert.NotNull(output); using var read = JsonDocument.Parse(output);
         Assert.Equal("Private model bytes: thử nghiệm", read.RootElement.GetProperty("content").GetString());
@@ -188,7 +188,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
         var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, false); await SeedRuntimeWorkspace(f, s, true);
         await GrantWorkspaceRuntimeReads(f, s, ["sessions.read", "agents.read"]);
-        var homeGrant = await GrantWorkspaceRuntimeReads(f, s, ["workspaces.read"], TenantWorkspaceRules.Home(s.Tenant, s.Agent.Instance.InstanceId));
+        var homeGrant = await GrantWorkspaceRuntimeReads(f, s, ["workspaces.read"], TenantWorkspaceRules.Home(s.Tenant, SpaceId(s)));
         var service = WorkspaceRuntimeReads(f); var home = new ModelToolCall("home-scope", ToolCatalog.WorkspaceRead, """{"path":"/home/private.txt"}""");
         Assert.Contains("tenantWorkspaceRead", await service.InspectAsync(frame, home, 16000));
         var working = home with { ArgumentsJson = """{"path":"/working/private.txt"}""" };

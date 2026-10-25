@@ -31,24 +31,24 @@ public sealed partial class TenantOperationAuthorizationTests
         async Task Seed(Environment s)
         {
             await SeedRuntimeWorkspace(f, s, true, "tree/a.txt");
-            await WorkspaceReader(f).StructureTenantAsync(new(s.Tenant, s.Agent.Instance.InstanceId, s.Run.SessionId), [new("mkdir", Path: "/working/tree/empty")], _ => ValueTask.CompletedTask);
+            await WorkspaceReader(f).StructureTenantAsync(WorkspaceOwner(s, true), [new("mkdir", Path: "/working/tree/empty")], _ => ValueTask.CompletedTask);
         }
         var v = await ApprovedWorkspaceSuccessor(f, tool == "copy-tree" ? ToolCatalog.WorkspaceCopy : tool, args, seed: tool == "copy-tree" ? Seed : null); var service = WorkspaceEffects(f);
         var result = await ExecuteApprovedWorkspace(service, v.Frame, v.Request); Assert.Equal(TenantOperationOutcome.Completed, result.Outcome);
         Assert.Equal(result, await ExecuteApprovedWorkspace(service, v.Frame, v.Request));
-        var owner = new TenantWorkspaceReference(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId); var files = WorkspaceReader(f);
+        var owner = WorkspaceOwner(v.Setup, true); var files = WorkspaceReader(f);
         if (tool == ToolCatalog.WorkspaceMkdir) Assert.Contains((await files.ListTenantAsync(owner, "/working", null, 100)).Items, i => i.LogicalPath == "/working/new" && i.Directory);
         else if (tool == ToolCatalog.WorkspaceDelete) Assert.DoesNotContain((await files.ListTenantAsync(owner, "/working", null, 100)).Items, i => i.LogicalPath == "/working/private.txt");
         else if (tool == "copy-tree")
         {
-            var home = owner with { SessionId = null };
+            var home = WorkspaceOwner(v.Setup);
             Assert.Contains((await files.ListTenantAsync(home, "/home/copied-tree", null, 100)).Items, i => i.LogicalPath == "/home/copied-tree/empty" && i.Directory);
             Assert.Equal("Private model bytes: thử nghiệm", Encoding.UTF8.GetString((await files.InspectTenantAsync(home, "/home/copied-tree/a.txt", 1024)).Bytes));
         }
         else
         {
             var path = tool == ToolCatalog.WorkspaceCopy ? "/home/copy.txt" : tool == ToolCatalog.WorkspaceMove ? "/working/moved.txt" : "/working/private.txt";
-            var bytes = await files.InspectTenantAsync(tool == ToolCatalog.WorkspaceCopy ? owner with { SessionId = null } : owner, path, 1024);
+            var bytes = await files.InspectTenantAsync(tool == ToolCatalog.WorkspaceCopy ? WorkspaceOwner(v.Setup) : owner, path, 1024);
             Assert.Equal(tool == ToolCatalog.WorkspacePatch ? "Exact patched bytes: thử nghiệm" : "Private model bytes: thử nghiệm", Encoding.UTF8.GetString(bytes.Bytes));
             if (tool == ToolCatalog.WorkspaceMove) Assert.DoesNotContain((await files.ListTenantAsync(owner, "/working", null, 100)).Items, i => i.LogicalPath == "/working/private.txt");
         }
@@ -62,7 +62,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var v = await ApprovedWorkspaceSuccessor(f, ToolCatalog.WorkspaceBatch, new { operations = new object[] {
             new { op = "mkdir", path = "/working/prefix" }, new { op = "move", source = "/working/missing", destination = "/working/moved" }, new { op = "mkdir", path = "/working/later" } } });
         var service = WorkspaceEffects(f); var result = await ExecuteApprovedWorkspace(service, v.Frame, v.Request); Assert.Equal(TenantOperationOutcome.Indeterminate, result.Outcome);
-        var owner = new TenantWorkspaceReference(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId);
+        var owner = WorkspaceOwner(v.Setup, true);
         var listing = await WorkspaceReader(f).ListTenantAsync(owner, "/working", null, 100);
         Assert.Contains(listing.Items, i => i.LogicalPath == "/working/prefix"); Assert.DoesNotContain(listing.Items, i => i.LogicalPath is "/working/later" or "/working/moved");
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(v.Setup.Tenant, v.Frame.RunId))!;
@@ -112,7 +112,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(TenantOperationOutcome.Indeterminate, receipt.Outcome); Assert.Equal(OperationGrantStatus.Indeterminate, (await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(v.Setup.Tenant, v.Request.RequestId))!.Status);
         proceed.TrySetResult(); await files.Finished.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal(receipt, await ExecuteApprovedWorkspace(service, v.Frame, v.Request)); Assert.Equal(1, calls);
-        Assert.Equal("Private model bytes: thử nghiệm", Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(new(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId), "/working/private.txt", 1024)).Bytes));
+        Assert.Equal("Private model bytes: thử nghiệm", Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(WorkspaceOwner(v.Setup, true), "/working/private.txt", 1024)).Bytes));
     }
 
     private sealed class DelayedApprovedWorkspaceWrite(ITenantWorkspaceMutationStore inner, Func<Task> wait) : ITenantWorkspaceMutationStore
@@ -142,6 +142,6 @@ public sealed partial class TenantOperationAuthorizationTests
         }));
         var receipt = await ExecuteApprovedWorkspace(service, v.Frame, v.Request); Assert.Equal(TenantOperationOutcome.Completed, receipt.Outcome);
         Assert.Equal(receipt, await ExecuteApprovedWorkspace(service, v.Frame, v.Request)); Assert.Equal(0, await service.RecoverAsync());
-        Assert.Equal("Committed before checkpoint changed", Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(new(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId), "/working/private.txt", 1024)).Bytes));
+        Assert.Equal("Committed before checkpoint changed", Encoding.UTF8.GetString((await WorkspaceReader(f).InspectTenantAsync(WorkspaceOwner(v.Setup, true), "/working/private.txt", 1024)).Bytes));
     }
 }

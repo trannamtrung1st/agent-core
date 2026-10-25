@@ -27,7 +27,7 @@ internal static class HarnessManagementRules
         var old = owner.HarnessManagement ?? new(effective);
         // This catalog is configuration eligibility; IAM and execution policy still authorize each operation.
         var policy = effective with { Frozen = frozen ?? effective.Frozen,
-            EligibleTools = effective.EligibleTools.Concat(RoleEnvironments.Of(definition).ToolList.Append(ToolCatalog.AttachmentsRead))
+            EligibleTools = effective.EligibleTools.Concat(DefinitionExecutionPolicies.Of(definition).ToolList.Append(ToolCatalog.AttachmentsRead))
                 .Where(t => ToolRegistry.TryGet(t, out var descriptor) && descriptor.DefinitionAuthorizable
                     && RolePermissions.AllowsTool(definition, t)).Distinct().ToArray() };
         return old with { Policy = policy, Overrides = overrides, PolicyRevision = checked(old.PolicyRevision + 1) };

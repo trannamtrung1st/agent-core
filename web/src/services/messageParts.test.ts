@@ -162,3 +162,10 @@ describe("canonical composer input", () => {
     ).toBe(true);
   });
 });
+
+it('qualifies home references by actual Space and refuses retired Instance home fields', () => {
+  const spaceId = '11111111-1111-4111-8111-111111111111';
+  const parts = normalizeParts([{ kind: 'reference', reference: { kind: 'homeFile', spaceId, path: '/home/project.txt' } }]);
+  expect(messageText(parts)).toBe(`@homeFile:${spaceId}/home/project.txt`);
+  expect(() => normalizeParts([{ kind: 'reference', reference: { kind: 'homeFile', agentInstanceId: spaceId, path: '/home/project.txt' } }])).toThrow();
+});

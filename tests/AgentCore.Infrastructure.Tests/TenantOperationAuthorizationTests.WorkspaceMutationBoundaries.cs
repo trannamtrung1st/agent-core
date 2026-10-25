@@ -1,3 +1,4 @@
+using AgentCore.Domain.Conversation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Application.Sessions;
@@ -117,7 +118,7 @@ public sealed partial class TenantOperationAuthorizationTests
             await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(setup.Tenant, target.Id, false, target.Human, revision, path, bytes).AsTask());
             await Assert.ThrowsAsync<AgentCoreException>(() => service.DeleteAsync(setup.Tenant, target.Id, false, target.Human, revision, path).AsTask());
         }
-        await Assert.ThrowsAsync<AccessDeniedException>(() => WorkspaceReader(f).WriteTenantAsync(new(f.Ids.NewId(), target.Id, null), target.Path, bytes, _ => ValueTask.CompletedTask).AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => WorkspaceReader(f).WriteTenantAsync(new TenantWorkspaceReference.SpaceHome(f.Ids.NewId(), target.Id), target.Path, bytes, _ => ValueTask.CompletedTask).AsTask());
         Assert.Equal("exact supplied", await File.ReadAllTextAsync(Path.Combine(target.Root, "private.txt")));
     }
 
@@ -153,7 +154,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f); var target = await WorkspaceMutationCase(f, setup, false);
         var revision = (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision;
-        var owner = new TenantWorkspaceReference(setup.Tenant, target.Id, null);
+        var owner = new TenantWorkspaceReference.SpaceHome(setup.Tenant, target.Id);
         TenantWorkspaceHumanAuthorization Proof(string decision = "allowed") => new(owner, target.Human, revision, setup.Agent.Instance.Revision, "workspaces.write",
             new(f.Ids.NewId(), setup.Tenant, target.Human.PrincipalId, "workspaces.write", TenantWorkspaceRules.Scope(owner).ResourceId!, decision,
                 decision == "allowed" ? "human_workspace_authorized" : "human_workspace_denied", DateTimeOffset.FromUnixTimeMilliseconds(f.Clock.GetUtcNow().ToUnixTimeMilliseconds())));
@@ -161,7 +162,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var valid = Proof(); Assert.True(await audits.TryRecordWorkspaceAuthorizationAsync(valid));
         Assert.True(await audits.TryRecordWorkspaceAuthorizationAsync(valid));
         Assert.False(await audits.TryRecordWorkspaceAuthorizationAsync(Proof() with { SecurityRevision = revision - 1 }));
-        Assert.False(await audits.TryRecordWorkspaceAuthorizationAsync(Proof() with { InstanceRevision = setup.Agent.Instance.Revision + 1 }));
+        Assert.False(await audits.TryRecordWorkspaceAuthorizationAsync(Proof() with { OwnerRevision = setup.Agent.Instance.Revision + 1 }));
         Assert.False(await audits.TryRecordWorkspaceAuthorizationAsync(Proof() with { Human = target.Human with { AuthenticationSessionId = f.Ids.NewId() } }));
         Assert.False(await audits.TryRecordWorkspaceAuthorizationAsync(Proof("denied")));
         await Assert.ThrowsAsync<ArgumentException>(() => audits.TryRecordWorkspaceAuthorizationAsync(Proof() with { Permission = "workspaces.read" }).AsTask());
@@ -178,9 +179,9 @@ public sealed partial class TenantOperationAuthorizationTests
         var human = await User(f, setup, "workspace-mutator@example.test", ["agents.read", "sessions.read"]);
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Exact workspace mutations", ["workspaces.write", "workspaces.delete"], (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         var grant = await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, human.PrincipalId, role.RoleId,
-            working ? TenantWorkspaceRules.Working(setup.Tenant, setup.Run.SessionId) : TenantWorkspaceRules.Home(setup.Tenant, setup.Agent.Instance.InstanceId), (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
+            working ? TenantWorkspaceRules.Working(setup.Tenant, setup.Run.SessionId) : TenantWorkspaceRules.Home(setup.Tenant, SpaceId(setup)), (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         var root = working ? AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), setup.Agent.Instance.InstanceId, setup.Run.SessionId)
-            : AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), setup.Agent.Instance.InstanceId);
+            : AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), setup.Tenant, SpaceId(setup));
         var path = (working ? "/working" : "/home") + "/private.txt";
         await new CanonicalWorkspaceFilesystem(root, working ? "/working" : "/home").WriteAsync(path, "original"u8.ToArray(), 1024, 4096);
         return (human, grant, working ? setup.Run.SessionId : setup.Agent.Instance.InstanceId, path, root);

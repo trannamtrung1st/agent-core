@@ -87,6 +87,7 @@ public static class TenantConfigurationContinuationRules
     public static bool SafeSession(AgentRun source, AgentRun root, SessionSnapshot snapshot, IEnumerable<AgentRun> runs, IEnumerable<ConversationEntry>? authoritativeEntries = null)
     {
         if (snapshot.SessionId != source.SessionId || snapshot.AgentInstanceId != source.AgentInstanceId || snapshot.ProfileId is not null
+            || source.Admission.Configuration?.SpaceContext is not { } sourceContext || !sourceContext.MatchesSelection(snapshot.ContextSelection)
             || snapshot.ArchivedAt is not null || snapshot.DurablyDeletedAt is not null || snapshot.LifecycleStatus != SessionLifecycleStatus.Active
             || snapshot.Status is not (SessionStatus.Created or SessionStatus.Attached) || !snapshot.Surfaces.HasFlag(SessionSurface.ChatList)
             || root.Admission.ExecutionContext?.Origin != ExecutionOrigin.UserMessage || root.SessionId != source.SessionId) return false;
@@ -108,6 +109,8 @@ public static class TenantConfigurationContinuationRules
             || pending.Request.RequestId != admission.RequestId || pending.Request.Operation.OperationId != admission.OperationId
             || next.Owner != source.Owner || next.SessionId != source.SessionId || next.Status != AgentRunStatus.Queued || next.MaxAttempts != 1
             || next.Admission.Configuration?.InstanceRevision != pending.Task.InstanceRevision
+            || next.Admission.Configuration.SpaceContext is not { } nextContext || !nextContext.SameLocation(source.Admission.Configuration?.SpaceContext)
+            || !nextContext.MatchesSelection(snapshot.ContextSelection)
             || next.DefinitionId != current.Instance.DefinitionId || next.DefinitionVersion != current.Instance.ActiveVersion
             || next.PinnedPersona != current.Instance.Persona || next.Admission.Configuration.PersonaRevision != current.Instance.PersonaRevision || Target(next) != pending.Task.Target
             || InputBoundary(next) != snapshot.DurableLastEntrySequence

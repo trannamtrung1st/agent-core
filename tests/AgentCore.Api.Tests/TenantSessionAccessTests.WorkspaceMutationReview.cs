@@ -1,3 +1,4 @@
+using AgentCore.Infrastructure.Workspaces;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
@@ -44,7 +45,7 @@ public sealed partial class TenantSessionAccessTests
             {
                 if (unsettled) services.Replace(ServiceDescriptor.Singleton<ITenantWorkspaceOperationStore>(p => new UnavailableHostedWorkspaceSettlement((ITenantWorkspaceOperationStore)p.GetRequiredService<IIamStore>())));
                 if (proof) ((IdentityHttpOptions)services.Single(d => d.ServiceType == typeof(IdentityHttpOptions)).ImplementationInstance!).AllowedOrigins = ["http://127.0.0.1:5179"];
-                if (mode == "unknown") services.Replace(ServiceDescriptor.Singleton<ITenantWorkspaceMutationStore>(p => new ReviewedWorkspaceAcknowledgement((ITenantWorkspaceMutationStore)p.GetRequiredService<IAgentInstanceWorkspaceStore>(), () => injectLoss, () => Interlocked.Increment(ref writes))));
+                if (mode == "unknown") services.Replace(ServiceDescriptor.Singleton<ITenantWorkspaceMutationStore>(p => new ReviewedWorkspaceAcknowledgement((ITenantWorkspaceMutationStore)p.GetRequiredService<FileSpaceWorkspaceStore>(), () => injectLoss, () => Interlocked.Increment(ref writes))));
             }
             await using WebApplicationFactory<Program> initial = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
             WebApplicationFactory<Program> factory = initial;
@@ -124,7 +125,7 @@ public sealed partial class TenantSessionAccessTests
                 await factory.DisposeAsync();
                 var replayModel = new WorkspaceMutationReviewModel(path, content); var reopenedWrites = 0;
                 recreated = new NativeTenantSqliteFactory(root, replayModel, services => services.Replace(ServiceDescriptor.Singleton<ITenantWorkspaceMutationStore>(p =>
-                    new ReviewedWorkspaceAcknowledgement((ITenantWorkspaceMutationStore)p.GetRequiredService<IAgentInstanceWorkspaceStore>(), () => true, () => { }, () => Interlocked.Increment(ref reopenedWrites)))));
+                    new ReviewedWorkspaceAcknowledgement((ITenantWorkspaceMutationStore)p.GetRequiredService<FileSpaceWorkspaceStore>(), () => true, () => { }, () => Interlocked.Increment(ref reopenedWrites)))));
                 recreatedOwner = recreated.CreateClient(); factory = recreated; owner = recreatedOwner;
                 await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
                 TenantOperationReceipt? recovered = null;

@@ -21,7 +21,7 @@ public static class TenantAttachmentArtifactRules
         if (item.TenantId != owner.TenantId || item.SessionId != owner.SessionId || item.State != AttachmentState.Bound || item.EntryId is null)
             throw new AccessDeniedException("attachment_source_changed");
         if (item.EntryId == Guid.Empty) throw new AccessDeniedException("attachment_source_changed");
-        return new(new(owner.TenantId, owner.AgentInstanceId, owner.SessionId), "/attachments/" + item.AttachmentId.ToString("D"), item.ContentType,
+        return new(new TenantWorkspaceReference.SessionWorking(owner.TenantId, owner.SessionId), "/attachments/" + item.AttachmentId.ToString("D"), item.ContentType,
             item.ByteSize, item.Sha256Hex, Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(item))), AttachmentId: item.AttachmentId, EntryId: item.EntryId, AttachmentName: item.DisplayName);
     }
     public static void Require(PreparedArtifactSource saved, TenantSessionRoot owner, AttachmentRecord? item)

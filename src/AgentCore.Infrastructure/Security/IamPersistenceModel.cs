@@ -17,6 +17,9 @@ internal static class IamPersistenceModel
 {
     public static void Configure(ModelBuilder model)
     {
+        TenantSpaceRecords.Configure(model);
+        SpaceAutomationPinPersistence.Configure(model);
+        TenantEnvironmentRecords.Configure(model);
         TenantDefinitionRecord.Configure(model);
         TenantCredentialRecord.Configure(model);
         TenantSessionRecord.Configure(model);

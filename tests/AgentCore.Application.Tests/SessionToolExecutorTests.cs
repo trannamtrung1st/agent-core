@@ -204,7 +204,7 @@ trailer<< /Root 1 0 R >>
     private static AgentDefinition Compliance() => Support() with
     {
         Id = "compliance",
-        Environment = new RoleEnvironment(
+        ExecutionPolicy = new DefinitionExecutionPolicy(
             ToolAllowlist: [ToolCatalog.KnowledgeRetrieve],
             KnowledgeSources:
             [
@@ -225,7 +225,7 @@ trailer<< /Root 1 0 R >>
         new VoiceConfiguration(false, "default", 1.0),
         new ProviderPreferences("primary-llm", null, null),
         new Dictionary<string, string>(),
-        new RoleEnvironment(
+        new DefinitionExecutionPolicy(
             ToolAllowlist:
             [
                 ToolCatalog.KnowledgeRetrieve,
@@ -234,12 +234,12 @@ trailer<< /Root 1 0 R >>
 
     private static AgentDefinition Sandboxed() => Support() with
     {
-        Environment = new RoleEnvironment(ToolAllowlist: ["sandbox.run"])
+        ExecutionPolicy = new DefinitionExecutionPolicy(ToolAllowlist: ["sandbox.run"])
     };
 
     private static AgentDefinition Artifacts() => Support() with
     {
-        Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.ArtifactsCreate])
+        ExecutionPolicy = new DefinitionExecutionPolicy(ToolAllowlist: [ToolCatalog.ArtifactsCreate])
     };
 
     private sealed class RecordingWorkspace : ISessionWorkspace

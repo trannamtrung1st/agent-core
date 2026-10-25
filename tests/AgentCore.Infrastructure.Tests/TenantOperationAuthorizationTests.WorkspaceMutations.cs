@@ -14,16 +14,16 @@ public sealed partial class TenantOperationAuthorizationTests
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f);
         var store = WorkspaceReader(f); var service = WorkspaceMutations(f, store);
         var writer = await User(f, setup, "workspace-writer@example.test", ["agents.read", "sessions.read"]);
-        var scope = working ? TenantWorkspaceRules.Working(setup.Tenant, setup.Run.SessionId) : TenantWorkspaceRules.Home(setup.Tenant, setup.Agent.Instance.InstanceId);
+        var scope = working ? TenantWorkspaceRules.Working(setup.Tenant, setup.Run.SessionId) : TenantWorkspaceRules.Home(setup.Tenant, SpaceId(setup));
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Write exact workspace", ["workspaces.write"], (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, writer.PrincipalId, role.RoleId, scope, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
-        var id = working ? setup.Run.SessionId : setup.Agent.Instance.InstanceId; var logical = working ? "/working" : "/home";
+        var id = working ? setup.Run.SessionId : SpaceId(setup); var logical = working ? "/working" : "/home";
         var physical = working ? AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), setup.Agent.Instance.InstanceId, setup.Run.SessionId)
-            : AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), setup.Agent.Instance.InstanceId);
+            : AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), setup.Tenant, SpaceId(setup));
         var revision = (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision;
         var hints = await service.InspectAsync(setup.Tenant, id, working, writer);
         Assert.False(hints.CanRead); Assert.True(hints.CanWrite); Assert.False(hints.CanDelete); Assert.False(hints.ReadOnly);
-        Assert.Equal(revision, hints.SecurityRevision); Assert.Equal(setup.Agent.Instance.InstanceId, hints.Workspace.InstanceId);
+        Assert.Equal(revision, hints.SecurityRevision); Assert.Equal(id, hints.Workspace.OwnerId);
         await service.AuthorizeAsync(setup.Tenant, id, working, writer, revision, false); Assert.False(Directory.Exists(physical));
         const string name = "/private-secret-name.txt"; var bytes = Encoding.UTF8.GetBytes("Private supplied bytes thử nghiệm");
         await service.WriteAsync(setup.Tenant, id, working, writer, revision, logical + name, bytes);
@@ -48,11 +48,11 @@ public sealed partial class TenantOperationAuthorizationTests
         var reader = await User(f, setup, "session-only-workspace@example.test", ["sessions.read"]);
         var service = WorkspaceMutations(f, WorkspaceReader(f));
         var hints = await service.InspectAsync(setup.Tenant, setup.Run.SessionId, true, reader);
-        Assert.Null(hints.InstanceName); Assert.Null(hints.InstanceRevision);
+        Assert.Equal(hints.SessionTitle, hints.WorkspaceName); Assert.True(hints.OwnerRevision >= 1);
         Assert.False(hints.CanRead); Assert.False(hints.CanWrite); Assert.False(hints.CanDelete);
-        Assert.Equal(setup.Agent.Instance.InstanceId, hints.Workspace.InstanceId);
-        Assert.Equal(setup.Run.SessionId, hints.Workspace.SessionId);
-        await Assert.ThrowsAsync<AccessDeniedException>(() => service.InspectAsync(setup.Tenant, setup.Agent.Instance.InstanceId, false, reader).AsTask());
+        Assert.Equal(setup.Run.SessionId, hints.Workspace.OwnerId);
+        Assert.Equal(setup.Run.SessionId, hints.Workspace.WorkingSessionId);
+        await Assert.ThrowsAsync<AccessDeniedException>(() => service.InspectAsync(setup.Tenant, SpaceId(setup), false, reader).AsTask());
         Assert.False(Directory.Exists(AgentWorkspacePhysicalPaths.AgentRoot(Path.Combine(f.Root, "workspaces"), setup.Agent.Instance.InstanceId)));
     }
 

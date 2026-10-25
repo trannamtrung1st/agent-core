@@ -17,8 +17,9 @@ public sealed partial class InMemoryIamStore
             "drive.write" => accounts?.DriveWriteCredentials, "drive.delete" => accounts?.DriveDeleteCredentials, _ => null })) return false;
         var args = TenantAccountActionRules.Arguments(action);
         if (args.Path is not { } path) return true;
-        if (path.StartsWith("/home/", StringComparison.Ordinal) && workspace?.HomeAgents is { } agents && !agents.Contains(request.Operation.InstanceId)) return false;
-        var resource = (path.StartsWith("/working/", StringComparison.Ordinal) ? "working:" + request.SessionId.ToString("D") : "home:" + request.Operation.InstanceId.ToString("D"));
+        var owner = TenantWorkspaceRules.ForCaptured(request.TenantId, request.SessionId, path, TenantWorkspaceRules.Context(request.Operation));
+        if (!owner.IsWorking && workspace?.HomeSpaces is { } spaces && !spaces.Contains(owner.OwnerId)) return false;
+        var resource = TenantWorkspaceRules.Scope(owner).ResourceId!;
         var scopes = args.Upload ? workspace?.Reads : workspace?.Writes;
         return scopes is null || scopes.Contains(resource, StringComparer.Ordinal);
     }

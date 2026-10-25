@@ -24,7 +24,7 @@ public sealed class TenantAttachmentMaterializationService(IIamStore security, I
             await TenantAttachmentRules.PermissionsAsync(state, human.PrincipalId, session, attachment, "attachments.read", iam, ct).ConfigureAwait(false);
             if (!TenantAttachmentRules.Available(source, time.GetUtcNow())) throw new AccessDeniedException("resource_unavailable");
             var readOnly = !TenantWorkspaceMutationRules.Writable(agent, saved) || saved.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active;
-            var can = !readOnly && await TenantWorkspaceMutationRules.Allowed(state, new(tenant, agent.Instance.InstanceId, session), human.PrincipalId, "workspaces.write", iam, ct).ConfigureAwait(false)
+            var can = !readOnly && await TenantWorkspaceMutationRules.Allowed(state, new TenantWorkspaceReference.SessionWorking(tenant, session), human.PrincipalId, "workspaces.write", iam, ct).ConfigureAwait(false)
                 && (await iam.CheckOwnedTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("artifacts.create"), TenantSessionRules.Scope(tenant, session), ct).ConfigureAwait(false)).Allowed;
             return (new(state, saved, agent, source), new(source.DisplayName, state.Tenant.Revision, can, readOnly));
         }
@@ -50,7 +50,7 @@ public sealed class TenantAttachmentMaterializationService(IIamStore security, I
         if (revision < 1) throw new ArgumentException("Use a current security revision.");
         var before = await Require(tenant, session, attachment, human, revision, ct).ConfigureAwait(false);
         var bytes = await attachments.ReadTenantContentAsync(tenant, session, attachment, ct).ConfigureAwait(false); TenantAttachmentRules.Content(before.Source, bytes);
-        var workspace = new TenantWorkspaceReference(tenant, before.Session.Owner.AgentInstanceId, session);
+        var workspace = new TenantWorkspaceReference.SessionWorking(tenant, session);
         async ValueTask Guard(CancellationToken token)
         {
             var now = await Require(tenant, session, attachment, human, revision, token).ConfigureAwait(false);

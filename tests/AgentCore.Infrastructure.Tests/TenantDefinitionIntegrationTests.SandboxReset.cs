@@ -57,7 +57,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             var options = new OpenSandboxOptions { Enabled = true, Endpoint = server.Urls.Single(), ApiKey = "synthetic-reset-key", CanonicalWorkspaceRoot = root, WorkspaceDockerHostRoot = root };
             s = await PrepareRuntimeSandbox(f, options: options);
             var mount = new CanonicalSandboxMountResolver(options).Resolve(s.Session.AgentInstanceId, s.Session.SessionId,
-                s.Run.Admission.Configuration!.Definition.StateIsolationPolicy?.HomeAccess ?? AgentCore.Domain.Definitions.HomeAccess.ReadWrite, create: true);
+                await RuntimeWorkspaceAccess(f, s), create: true);
             await mount.Working.WriteAsync("/working/keep.txt", "retained working bytes"u8.ToArray(), 1024, long.MaxValue, default);
             if (mount.Home is not null) await mount.Home.WriteAsync("/home/keep.txt", "retained home bytes"u8.ToArray(), 1024, long.MaxValue, default);
             var known = mode is "known" or "foreignHandle" or "hostChanged";

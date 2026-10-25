@@ -55,7 +55,7 @@ public sealed partial class TenantSessionAccessTests
         {
             var draft = await Json(await owner.PostAsJsonAsync(api + "/agent-definitions/from-template", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
             var candidate = System.Text.Json.Nodes.JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
-            candidate["environment"]!["capabilities"]!["resolvedCapabilities"]!.AsArray().Add(ToolCatalog.AttachmentsRead);
+            candidate["executionPolicy"]!["capabilities"]!["resolvedCapabilities"]!.AsArray().Add(ToolCatalog.AttachmentsRead);
             var draftId = draft.GetProperty("draftId").GetGuid();
             var saved = await owner.PutAsJsonAsync(api + $"/definition-drafts/{draftId}", new { candidate, expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 1 });
             Assert.True(saved.IsSuccessStatusCode, await saved.Content.ReadAsStringAsync());

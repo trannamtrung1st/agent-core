@@ -60,6 +60,7 @@ public static class TenantPreferenceToolContract
 
     public static bool Allows(AgentDefinition definition) => definition.SelfManagement?.Allows(HarnessManagementScope.Settings) == true
         && definition.SelfManagement.AutoApplies(ManagementAutoApply.ConversationPreferences);
-    public static string ActionHash(Guid instance, long revision, string parametersHash) => Convert.ToHexStringLower(SHA256.HashData(
-        Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { operation = Name, permission = Permission, instance, revision, parametersHash }))));
+    public static string ActionHash(AgentCore.Domain.Conversation.AgentRun run, long revision, string parametersHash) => Convert.ToHexStringLower(SHA256.HashData(
+        Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { operation = Name, permission = Permission, instance = run.AgentInstanceId, revision, parametersHash,
+            spaceContext = (run.Admission.Configuration?.SpaceContext ?? throw new AgentCore.Application.Security.AccessDeniedException("space_context_required")).Witness() }))));
 }

@@ -44,7 +44,9 @@ public static partial class TenantApprovalRules
         return new(operationId, instance, null, instanceRevision, personaRevision, json, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json))), CredentialCheck: check);
     }
 
-    public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => op.Kind switch
+    public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => BindSpace(RebuildCore(op), op.SpaceContext);
+
+    private static PreparedTenantOperation RebuildCore(PreparedTenantOperation op) => op.Kind switch
     {
         TenantOperationKind.AutomationMutation => PrepareAutomationMutation(op.OperationId, op.InstanceId, op.AutomationMutation!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.HttpRequest => PrepareHttpRequest(op.OperationId, op.InstanceId, op.HttpRequest!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
@@ -82,6 +84,8 @@ public static partial class TenantApprovalRules
         if (request.Operation.AutomationAdmission is not null) throw new ArgumentException("Admission consent requires its reserved occurrence owner.");
         var context = run.Admission.ExecutionContext ?? throw new AccessDeniedException("tenant_context_required");
         var op = request.Operation;
+        var space = run.Admission.Configuration?.SpaceContext ?? throw new AccessDeniedException("space_context_required");
+        if (op.SpaceContext != space.Witness()) throw new AccessDeniedException("operation_context_changed");
         if (op.ReportSourceRead is not null) TenantReportSourceReadRules.Source(request, run);
         else if (op.BackgroundReport is not null) TenantBackgroundReportRules.Source(request, run);
         else TenantApprovalContinuationRules.Require(request, run, source);

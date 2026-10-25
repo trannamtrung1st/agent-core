@@ -8,43 +8,44 @@ namespace AgentCore.Application.Security;
 public sealed class TenantWorkspaceMutationService(IIamStore security, ITenantAgentStore agents, ITenantSessionStore sessions,
     ITenantWorkspaceMutationStore files, ITenantAuthorizationAuditStore audits, IdentityService identity, IamAuthorizer iam, IIdGenerator ids, TimeProvider time)
 {
-    private sealed record View(TenantSecurityState State, TenantAgent Agent, TenantSession? Session, TenantWorkspaceReference Workspace);
+    private sealed record View(TenantSecurityState State, TenantWorkspaceOwnership Ownership)
+    {
+        public TenantWorkspaceReference Workspace => Ownership.Owner;
+    }
     private async ValueTask<View> Load(Guid tenant, Guid id, bool working, HumanSessionReference human, CancellationToken ct)
     {
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
-        var session = working ? await sessions.FindTenantSessionAsync(tenant, id, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable") : null;
-        var agent = await agents.FindTenantAgentAsync(tenant, session?.Owner.AgentInstanceId ?? id, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        var owner = new TenantWorkspaceReference(tenant, agent.Instance.InstanceId, session?.Owner.SessionId);
-        if (!TenantWorkspaceMutationRules.Matches(owner, agent, session)) throw new AccessDeniedException("resource_unavailable");
-        return new(state, agent, session, owner);
+        TenantWorkspaceReference owner = working ? new TenantWorkspaceReference.SessionWorking(tenant, id) : new TenantWorkspaceReference.SpaceHome(tenant, id);
+        var ownership = await new TenantWorkspaceOwnerResolver((ITenantSpaceStore)security, agents, sessions).ResolveAsync(owner, ct).ConfigureAwait(false);
+        return new(state, ownership);
     }
     public async ValueTask<TenantWorkspaceAccess> InspectAsync(Guid tenant, Guid id, bool working, HumanSessionReference human, CancellationToken ct = default)
     {
         var view = await Load(tenant, id, working, human, ct).ConfigureAwait(false);
-        var parent = working ? TenantSessionRules.Scope(tenant, id) : AccessScope.ForResource(tenant, "agent", id.ToString("D"));
-        if (!(await iam.CheckOwnedTenantAsync(view.State, human.PrincipalId, PermissionCatalog.Get(working ? "sessions.read" : "agents.read"), parent, ct).ConfigureAwait(false)).Allowed)
+        var (readPermission, parent) = TenantWorkspaceMutationRules.Parent(view.Workspace);
+        if (!(await iam.CheckOwnedTenantAsync(view.State, human.PrincipalId, PermissionCatalog.Get(readPermission), parent, ct).ConfigureAwait(false)).Allowed)
             throw new AccessDeniedException("resource_unavailable");
         var scope = TenantWorkspaceRules.Scope(view.Workspace);
         var read = (await iam.CheckOwnedTenantAsync(view.State, human.PrincipalId, PermissionCatalog.Get("workspaces.read"), scope, ct).ConfigureAwait(false)).Allowed;
-        var writable = TenantWorkspaceMutationRules.Writable(view.Agent, view.Session);
+        var writable = view.Ownership.Writable;
         var write = writable && await TenantWorkspaceMutationRules.Allowed(view.State, view.Workspace, human.PrincipalId, "workspaces.write", iam, ct).ConfigureAwait(false);
         var delete = writable && await TenantWorkspaceMutationRules.Allowed(view.State, view.Workspace, human.PrincipalId, "workspaces.delete", iam, ct).ConfigureAwait(false);
         var current = await Load(tenant, id, working, human, ct).ConfigureAwait(false);
         var authority = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
-        if (authority.Tenant.Revision != view.State.Tenant.Revision || current.State.Tenant.Revision != view.State.Tenant.Revision || current.Agent.Instance.Revision != view.Agent.Instance.Revision
-            || current.Session?.Snapshot.Revision != view.Session?.Snapshot.Revision) throw new SecurityConflictException("stale_revision");
-        return new(view.Workspace, view.State.Tenant.Revision, working ? null : view.Agent.Instance.Revision, read, write, delete, !writable,
-            working ? null : view.Agent.Instance.Persona.Name, view.Session?.Snapshot.Title);
+        if (authority.Tenant.Revision != view.State.Tenant.Revision || current.State.Tenant.Revision != view.State.Tenant.Revision || current.Ownership.Revision != view.Ownership.Revision
+            || current.Ownership.Agent?.Instance.Revision != view.Ownership.Agent?.Instance.Revision) throw new SecurityConflictException("stale_revision");
+        return new(view.Workspace, view.State.Tenant.Revision, view.Ownership.Revision, read, write, delete, !writable,
+            view.Ownership.Name, view.Ownership.Session?.Snapshot.Title);
     }
     private async ValueTask<View> Require(Guid tenant, Guid id, bool working, HumanSessionReference human, long expected, string permission, CancellationToken ct)
     {
         var view = await Load(tenant, id, working, human, ct).ConfigureAwait(false);
-        var state = view.State; var agent = view.Agent; var session = view.Session; var owner = view.Workspace;
+        var state = view.State; var owner = view.Workspace;
         if (!await TenantWorkspaceMutationRules.Allowed(state, owner, human.PrincipalId, permission, iam, ct).ConfigureAwait(false))
         {
             await Record(view, human, permission, false, ct).ConfigureAwait(false); throw new AccessDeniedException("resource_unavailable");
         }
-        if (!TenantWorkspaceMutationRules.Writable(agent, session))
+        if (!view.Ownership.Writable)
         {
             await Record(view, human, permission, false, ct).ConfigureAwait(false); throw new SecurityConflictException("workspace_read_only");
         }
@@ -52,7 +53,7 @@ public sealed class TenantWorkspaceMutationService(IIamStore security, ITenantAg
         return view;
     }
     private ValueTask<bool> Record(View view, HumanSessionReference human, string permission, bool allowed, CancellationToken ct) =>
-        audits.TryRecordWorkspaceAuthorizationAsync(new(view.Workspace, human, view.State.Tenant.Revision, view.Agent.Instance.Revision, permission,
+        audits.TryRecordWorkspaceAuthorizationAsync(new(view.Workspace, human, view.State.Tenant.Revision, view.Ownership.Revision, permission,
             new(ids.NewId(), view.Workspace.TenantId, human.PrincipalId, permission, TenantWorkspaceRules.Scope(view.Workspace).ResourceId!,
                 allowed ? "allowed" : "denied", allowed ? "human_workspace_authorized" : "human_workspace_denied",
                 DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds()))), ct);
@@ -73,7 +74,7 @@ public sealed class TenantWorkspaceMutationService(IIamStore security, ITenantAg
         async ValueTask Commit(CancellationToken token)
         {
             var current = await Require(tenant, id, working, human, expected, permission, token).ConfigureAwait(false);
-            if (current.Workspace != before.Workspace || current.Agent.Instance.Revision != before.Agent.Instance.Revision)
+            if (current.Workspace != before.Workspace || current.Ownership.Revision != before.Ownership.Revision || current.Ownership.Agent?.Instance.Revision != before.Ownership.Agent?.Instance.Revision)
                 throw new SecurityConflictException("stale_revision");
             if (!await Record(current, human, permission, true, token).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
         }

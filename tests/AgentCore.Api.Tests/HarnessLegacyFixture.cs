@@ -10,8 +10,8 @@ internal static class HarnessLegacyFixture
     // Explicit owner repair of a disposable draft; immutable built-ins keep their historical authority.
     internal static AgentDefinitionCandidate WithoutRetiredSandboxTool(AgentDefinitionCandidate candidate)
     {
-        var environment = candidate.Environment!;
-        return candidate with { Environment = environment with {
+        var environment = candidate.ExecutionPolicy!;
+        return candidate with { ExecutionPolicy = environment with {
             ToolAllowlist = environment.ToolAllowlist?.Where(name => name != "sandbox.run").ToArray(),
             Capabilities = environment.Capabilities is { } authority ? authority with {
                 ResolvedCapabilities = authority.ResolvedCapabilities.Where(name => name != "sandbox.run").ToArray(),

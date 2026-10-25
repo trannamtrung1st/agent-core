@@ -23,7 +23,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var witness=new AdminDefinitionDeleteWitness([],[new(1,1)]);Assert.Equal("definition_in_use",(await Assert.ThrowsAsync<SecurityConflictException>(()=>f.Service.DeleteAsync(human.PrincipalId,first.TenantId,id,witness,5).AsTask())).ReasonCode);
         var root=Path.Combine(Path.GetTempPath(),"retired-definition-owner-"+Guid.NewGuid().ToString("N"));var browser=new NativePlaywrightBrowser(new(){Enabled=false,ProfileRoot=Path.Combine(root,"profiles")},null);
         try {
-            var workspace=new FileAgentInstanceWorkspaceStore(Path.Combine(root,"workspaces"),f.Instances,f.Sandbox,tenantAgents:(ITenantAgentStore)f.Iam);var store=(ITenantAgentDecommissionStore)f.Iam;
+            var workspace=new FileSpaceWorkspaceStore(Path.Combine(root,"workspaces"),(ITenantSpaceStore)f.Iam,(ITenantAgentStore)f.Iam,(ITenantSessionStore)f.Iam,(ITenantAgentDecommissionStore)f.Iam, f.Sandbox);var store=(ITenantAgentDecommissionStore)f.Iam;
             var cleanup=new TenantAgentDecommissionCleanup(store,browser,workspace,f.Ids,TimeProvider.System);var service=new TenantAgentDecommissionService(f.Iam,store,f.Identity,f.Authorizer,TimeProvider.System,new(),cleanup);
             var before=await service.ReadAsync(first.TenantId,agent.Instance.InstanceId,human);await service.DecommissionAsync(first.TenantId,agent.Instance.InstanceId,human,before.SecurityRevision,before.InstanceRevision,f.Ids.NewId());
             await f.Service.DeleteAsync(human.PrincipalId,first.TenantId,id,witness,6);Assert.Null(await f.Definitions.FindDefinitionAsync(first.TenantId,id));Assert.True(await f.Instances.HasBackingInstanceAsync(agent.Instance.InstanceId));

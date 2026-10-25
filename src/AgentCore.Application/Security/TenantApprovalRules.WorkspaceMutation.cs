@@ -4,13 +4,16 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
-public sealed record WorkspaceMutationScopeTarget(string Permission, bool Working);
+public sealed record WorkspaceMutationScopeTarget(string Permission, string Root)
+{
+    public bool Working => Root == "/working";
+};
 
 public static partial class TenantApprovalRules
 {
     public static IReadOnlyList<WorkspaceMutationScopeTarget> MutationScopes(TenantWorkspaceMutationArguments args) => args.Targets
-        .Select(t => new WorkspaceMutationScopeTarget(t.Permission, t.Path.StartsWith("/working/", StringComparison.Ordinal)))
-        .Distinct().OrderBy(t => t.Permission, StringComparer.Ordinal).ThenBy(t => t.Working).ToArray();
+        .Select(t => new WorkspaceMutationScopeTarget(t.Permission, TenantWorkspaceRules.LogicalRoot(t.Path)))
+        .Distinct().OrderBy(t => t.Permission, StringComparer.Ordinal).ThenBy(t => t.Root, StringComparer.Ordinal).ToArray();
 
     public static PreparedWorkspaceMutation MutationParameters(Guid session, TenantWorkspaceMutationArguments args, string observation)
     {

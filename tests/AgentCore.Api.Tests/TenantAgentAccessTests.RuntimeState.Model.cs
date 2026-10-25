@@ -111,7 +111,7 @@ public sealed partial class TenantAgentAccessTests
     {
         private static AgentDefinition View(AgentDefinition definition) => definition with {
             StateIsolationPolicy = new(AgentStateVisibility: AgentStateVisibility.InstanceSummary, MaxAgentStateVisibility: AgentStateVisibility.InstanceSummary),
-            Environment = new(Capabilities: new("Selected", ["chat.respond", ToolCatalog.AgentStateInspect]), Projection: new([ToolCatalog.AgentStateInspect])) };
+            ExecutionPolicy = new(Capabilities: new("Selected", ["chat.respond", ToolCatalog.AgentStateInspect]), Projection: new([ToolCatalog.AgentStateInspect])) };
         public async ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken ct = default) => (await inner.ListAsync(ct)).Select(View).ToArray();
         public async ValueTask<AgentDefinition?> GetAsync(string id, int? version = null, CancellationToken ct = default) => await inner.GetAsync(id, version, ct) is { } value ? View(value) : null;
     }

@@ -23,7 +23,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var v = await MutationReviewFixture(f, working, false); var s = v.Setup;
         var directory = working ? AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), s.Agent.Instance.InstanceId, v.Frame.SessionId)
-            : AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), s.Agent.Instance.InstanceId);
+            : AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), s.Tenant, SpaceId(s));
         var path = Path.Combine(directory, "private.txt"); var stamp = File.GetLastWriteTimeUtc(path); var length = new FileInfo(path).Length;
         await File.WriteAllBytesAsync(path, Enumerable.Repeat((byte)'X', (int)length).ToArray()); File.SetLastWriteTimeUtc(path, stamp);
         var view = await v.Approvals.ReadViewAsync(s.Tenant, v.Request.RequestId, s.Owner);
@@ -54,7 +54,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(OperationDecisionKind.Denied, result.Decision); Assert.Equal("previously_rejected", result.ReasonCode); Assert.Null(result.Receipt);
         var args = TenantWorkspaceMutationContract.Parse(frame.SessionId, call.Name, call.ArgumentsJson);
         var op = new AgentRunDirectOperation(f.Ids.NewId(), call.Id, call.Name, args.CanonicalArguments, args.ParametersHash, s.Agent.Instance.Revision, s.Agent.Instance.PersonaRevision);
-        var commit = new TenantWorkspaceEffectCommit(current.AgentRunId, frame.Generation, current.Revision, op, TenantWorkspaceMutationContract.ActionHash(frame.SessionId, args.ParametersHash));
+        var commit = new TenantWorkspaceEffectCommit(current.AgentRunId, frame.Generation, current.Revision, op, TenantWorkspaceMutationContract.ActionHash(current, args.ParametersHash));
         var state = (await f.Iam.ReadTenantAsync(s.Tenant))!;
         var failure = await Assert.ThrowsAsync<AccessDeniedException>(() => ((ITenantWorkspaceOperationStore)f.Iam).TryStartWorkspaceEffectAsync(
             state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } }, state.Tenant.Revision, commit,
@@ -114,7 +114,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await service.DecideAsync(s.Tenant, request.RequestId, s.Owner, true, request.Operation.ActionHash, view.SecurityRevision, request.Revision);
         var grant = await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(s.Tenant, request.RequestId);
         Assert.Equal(exceptional, grant is not null); if (grant is not null) Assert.Equal(request.Operation.OperationId, grant.OperationId);
-        var files = WorkspaceReader(f); var owner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId, frame.SessionId);
+        var files = WorkspaceReader(f); var owner = WorkspaceOwner(s, true);
         Assert.NotEmpty((await files.InspectTenantAsync(owner, "/working/private.txt", 1024)).Bytes);
         Assert.DoesNotContain((await files.ListTenantAsync(owner, "/working", null, 100)).Items, item => item.LogicalPath == "/working/new");
         Assert.Null(await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(s.Tenant, request.Operation.OperationId));
@@ -137,7 +137,7 @@ public sealed partial class TenantOperationAuthorizationTests
         }
         await Grant("workspaces.write", TenantWorkspaceRules.Working(s.Tenant, frame.SessionId));
         var page = await service.ListAsync(s.Tenant, reader, new(0, 1)); Assert.Equal(0, page.Total); Assert.Empty(page.Items);
-        await Grant("workspaces.read", TenantWorkspaceRules.Home(s.Tenant, s.Agent.Instance.InstanceId));
+        await Grant("workspaces.read", TenantWorkspaceRules.Home(s.Tenant, SpaceId(s)));
         page = await service.ListAsync(s.Tenant, reader, new(0, 1)); Assert.Equal(0, page.Total); Assert.Empty(page.Items);
         var parent = await Grant("agents.read", AccessScope.ForResource(s.Tenant, "agent", s.Agent.Instance.InstanceId.ToString("D")));
         page = await service.ListAsync(s.Tenant, reader, new(0, 1)); Assert.Equal(1, page.Total); Assert.Equal(request.RequestId, Assert.Single(page.Items).Request.RequestId);

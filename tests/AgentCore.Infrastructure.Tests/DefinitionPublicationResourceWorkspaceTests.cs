@@ -324,7 +324,7 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             new VoiceConfiguration(false, "alloy", 1.0),
             new ProviderPreferences("primary-llm", null, null),
             new Dictionary<string, string>(),
-            workspaceTemplateId is null ? null : new RoleEnvironment(Workspace: new WorkspaceTemplatePolicy(workspaceTemplateId)));
+            workspaceTemplateId is null ? null : new DefinitionExecutionPolicy(Workspace: new WorkspaceTemplatePolicy(workspaceTemplateId)));
 
     private sealed class TempDir : IDisposable
     {

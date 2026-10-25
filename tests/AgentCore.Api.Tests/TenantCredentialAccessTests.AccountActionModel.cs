@@ -123,7 +123,7 @@ public sealed partial class TenantCredentialAccessTests
         foreach (var id in new[] { "file", "second", "destination" })
             await remote.SaveAsync(s.Credential, new(id, id + ".bin", id == "destination" ? "application/vnd.google-apps.folder" : "application/octet-stream", id == "destination" ? 0 : bytes.Length, "1", null, ["root"], false), id == "destination" ? [] : bytes, null, default);
         var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
-        var workspace = new TenantWorkspaceReference(s.Tenant, s.Instance, session);
+        var workspace = new TenantWorkspaceReference.SessionWorking(s.Tenant, session);
         var files = factory.Services.GetRequiredService<ITenantWorkspaceMutationStore>();
         if (tool == ToolCatalog.DriveUpload) await files.WriteTenantAsync(workspace, "/working/Original.bin", bytes, _ => ValueTask.CompletedTask);
         object args = tool switch {

@@ -9,14 +9,22 @@ namespace AgentCore.Application.Tests;
 
 public sealed class TenantBackgroundReportContractTests
 {
-    private static PreparedBackgroundReport Report() => new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 3, Guid.NewGuid(), 2, 0, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
-        JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(TriggerKind.BackgroundCompleted, """{"summary":"Exact completion","status":"Completed"}""", null, 0)), new string('a', 64), new("synthetic", "primary-llm", "scripted-alpha", null));
+    private static PreparedBackgroundReport Report()
+    {
+        var tenant = Guid.NewGuid();
+        return new(tenant, Guid.NewGuid(), Guid.NewGuid(), 3, Guid.NewGuid(), 2, 0, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(TriggerKind.BackgroundCompleted, """{"summary":"Exact completion","status":"Completed"}""", null, 0)),
+            new string('a', 64), new("synthetic", "primary-llm", "scripted-alpha", null), new(tenant, Guid.NewGuid(), null, 0, 1, DateTimeOffset.UnixEpoch));
+    }
     [Fact]
     public void Report_semantic_dedupe_retains_source_and_destination_while_exact_grants_bind_all_witnesses()
     {
         var p = Report(); var instance = Guid.NewGuid(); var first = TenantApprovalRules.PrepareBackgroundReport(Guid.NewGuid(), instance, p, 1, 1);
         var later = TenantApprovalRules.PrepareBackgroundReport(Guid.NewGuid(), instance, p with { RunId = Guid.NewGuid(), ActivationId = Guid.NewGuid(), ResponseId = Guid.NewGuid(), ParentRevision = 3 }, 2, 1);
         Assert.Equal(first.OperationFingerprint, later.OperationFingerprint); Assert.NotEqual(first.ActionHash, later.ActionHash);
+        var elsewhere = TenantApprovalRules.PrepareBackgroundReport(Guid.NewGuid(), instance, p with {
+            DestinationContext = p.DestinationContext with { SpaceId = Guid.NewGuid() } }, 1, 1);
+        Assert.NotEqual(first.OperationFingerprint, elsewhere.OperationFingerprint);
         Assert.Equal("agent-runs.create", first.Permission); Assert.Equal(AccessScopeKind.Tenant, TenantApprovalRules.Scope(p.TenantId, first).Kind);
         Assert.Equal(first, TenantApprovalRules.Rebuild(first));
     }

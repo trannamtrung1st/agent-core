@@ -51,6 +51,13 @@ public interface ITenantSandboxRuntimeStore
         long expectedRevision, AgentCore.Domain.Security.AuthorizationAudit audit, CancellationToken ct = default) => throw new NotSupportedException();
 }
 
+// Technical retirement of an idle owned generation before changing Session context. This cannot
+// select a profile, start a generation, replay initialization or interrupt an in-flight command.
+public interface ITenantSandboxContextIsolation
+{
+    ValueTask RetireIdleGenerationAsync(TenantSessionRoot owner, CancellationToken ct = default);
+}
+
 // Trusted worker entry; arguments and ownership are loaded from the saved exact review.
 public interface ITenantSandboxCommandExecutor
 {

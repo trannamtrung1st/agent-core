@@ -7,6 +7,10 @@ namespace AgentCore.Application.Tests;
 
 public sealed class TenantWorkspaceMutationApprovalContractTests
 {
+    private static readonly AgentCore.Domain.Spaces.RunSpaceWitness Context = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null, 1, 1, null, 0, 1);
+    private static PreparedTenantOperation Prepare(Guid id, Guid instance, PreparedWorkspaceMutation value, long revision, long persona) =>
+        TenantApprovalRules.Rebuild(TenantApprovalRules.PrepareWorkspaceMutation(id, instance, value, revision, persona) with { SpaceContext = Context });
+
     [Theory]
     [InlineData("workspace.write", """{"path":"/working/a","content":"literal"}""", "workspaces.write", true)]
     [InlineData("workspace.patch", """{"path":"/home/a","edits":[{"oldText":"a","newText":"b"}]}""", "workspaces.write", false)]
@@ -19,16 +23,16 @@ public sealed class TenantWorkspaceMutationApprovalContractTests
     {
         var session = Guid.NewGuid(); var instance = Guid.NewGuid(); var args = TenantWorkspaceMutationContract.Parse(session, tool, json);
         var value = TenantApprovalRules.MutationParameters(session, args, new('a', 64));
-        var op = TenantApprovalRules.PrepareWorkspaceMutation(Guid.NewGuid(), instance, value, 2, 3);
+        var op = Prepare(Guid.NewGuid(), instance, value, 2, 3);
         Assert.Equal(TenantOperationKind.WorkspaceMutation, op.Kind); Assert.False(op.IsLocalConfiguration);
-        Assert.Equal(permission, op.Permission); Assert.Equal("workspace", op.ResourceType); Assert.Equal(working ? "working:" + session.ToString("D") : "home:" + instance.ToString("D"), op.ResourceId);
+        Assert.Equal(permission, op.Permission); Assert.Equal("workspace", op.ResourceType); Assert.Equal(working ? "working:" + session.ToString("D") : "home:" + Context.SpaceId.ToString("D"), op.ResourceId);
         Assert.Equal(op, TenantApprovalRules.Rebuild(op));
         Assert.Equal(op, JsonSerializer.Deserialize<PreparedTenantOperation>(JsonSerializer.Serialize(op)));
         Assert.Equal(working, value.Working);
         if (tool == ToolCatalog.WorkspaceCopy)
         {
             var scopes = JsonSerializer.Deserialize<WorkspaceMutationScopeTarget[]>(value.TargetsJson)!;
-            Assert.Contains(new WorkspaceMutationScopeTarget("workspaces.read", false), scopes); Assert.Contains(new WorkspaceMutationScopeTarget("workspaces.write", true), scopes);
+            Assert.Contains(new WorkspaceMutationScopeTarget("workspaces.read", "/home"), scopes); Assert.Contains(new WorkspaceMutationScopeTarget("workspaces.write", "/working"), scopes);
         }
         if (tool == ToolCatalog.WorkspaceBatch) Assert.Contains("workspaces.write", value.TargetsJson);
     }
@@ -41,7 +45,7 @@ public sealed class TenantWorkspaceMutationApprovalContractTests
             """{"source":"/home/a","destination":"/working/b"}"""), new('a', 64));
         foreach (var forged in new[] { value with { Working = false }, value with { Permission = "workspaces.read" }, value with { TargetsJson = "[]" },
             value with { ObservationHash = new('z', 64) }, value with { ArgumentsJson = """{"source":"/working/a","destination":"/home/b"}""" } })
-            Assert.Throws<ArgumentException>(() => TenantApprovalRules.PrepareWorkspaceMutation(Guid.NewGuid(), instance, forged, 1, 1));
+            Assert.Throws<ArgumentException>(() => Prepare(Guid.NewGuid(), instance, forged, 1, 1));
     }
 
     [Fact]
@@ -50,11 +54,11 @@ public sealed class TenantWorkspaceMutationApprovalContractTests
         var session = Guid.NewGuid(); var instance = Guid.NewGuid();
         var value = TenantApprovalRules.MutationParameters(session, TenantWorkspaceMutationContract.Parse(session, ToolCatalog.WorkspaceWrite,
             """{"path":"/working/a","content":"saved"}"""), new('a', 64));
-        var first = TenantApprovalRules.PrepareWorkspaceMutation(Guid.NewGuid(), instance, value, 1, 1);
-        var changed = TenantApprovalRules.PrepareWorkspaceMutation(Guid.NewGuid(), instance, value with { ObservationHash = new('b', 64) }, 2, 2);
+        var first = Prepare(Guid.NewGuid(), instance, value, 1, 1);
+        var changed = Prepare(Guid.NewGuid(), instance, value with { ObservationHash = new('b', 64) }, 2, 2);
         Assert.Equal(first.OperationFingerprint, changed.OperationFingerprint); Assert.NotEqual(first.ActionHash, changed.ActionHash);
         var args = TenantWorkspaceMutationContract.Parse(session, ToolCatalog.WorkspaceWrite, """{"path":"/working/a","content":"different"}""");
-        var different = TenantApprovalRules.PrepareWorkspaceMutation(Guid.NewGuid(), instance, TenantApprovalRules.MutationParameters(session, args, value.ObservationHash), 1, 1);
+        var different = Prepare(Guid.NewGuid(), instance, TenantApprovalRules.MutationParameters(session, args, value.ObservationHash), 1, 1);
         Assert.NotEqual(first.OperationFingerprint, different.OperationFingerprint);
         Assert.Throws<ArgumentException>(() => (first with { Preferences = new("balanced", null, null) }).Kind);
     }

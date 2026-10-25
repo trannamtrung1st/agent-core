@@ -21,7 +21,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService
     {
         var observed = await ObserveExact(frame, call, ct).ConfigureAwait(false); var before = observed.Before;
         var value = Witness(frame.SessionId, call, observed.Hash, observed.Before.Resource?.Resource.Key, observed.Before.Resource?.ResourceRevision, observed.Before.Collection?.MembersJson, observed.Before.Knowledge, observed.Before.Attachments?.MembersJson); var review = false;
-        foreach (var (key, scope) in TenantWorkspaceReadOperationRules.Targets(before.Workspace.TenantId, before.Agent.Instance.InstanceId, value))
+        foreach (var (key, scope) in TenantWorkspaceReadOperationRules.Targets(before.Workspace.TenantId, before.Agent.Instance.InstanceId, value, TenantWorkspaceRules.Context(before.Run)))
             review |= await TenantSandboxReadOperationRules.NeedsReviewAsync(before.State, before.Run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, key, scope, iam, ct).ConfigureAwait(false);
         await Fence(frame, call.Name, TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson), before, ct, approved: true).ConfigureAwait(false);
         return new(before.Run, before.State, before.Agent, value, new(before.Agent.Instance.Persona.Name), review);
@@ -48,14 +48,14 @@ public sealed partial class TenantWorkspaceRuntimeReadService
     }
     public async ValueTask RequireInspectionReadAsync(TenantApprovalRequest request, TenantSecurityState state, Guid human, CancellationToken ct)
     {
-        await TenantWorkspaceReadOperationRules.PermissionsAsync(state, request.Operation.InstanceId, request.Operation.WorkspaceRead!, human, iam, ct).ConfigureAwait(false);
+        await TenantWorkspaceReadOperationRules.PermissionsAsync(state, request.Operation.InstanceId, request.Operation.WorkspaceRead!, TenantWorkspaceRules.Context(request.Operation), human, iam, ct).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(request.TenantId, request.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
         if (session.Owner.AgentInstanceId != request.Operation.InstanceId || session.Owner.ExecutorPrincipalId != request.ExecutorPrincipalId) throw new AccessDeniedException("approval_unavailable");
     }
     public ValueTask RequireInspectionReviewerAsync(TenantApprovalRequest request, TenantSecurityState state, Guid human, CancellationToken ct) =>
-        TenantWorkspaceReadOperationRules.ReviewerAsync(state, request.Operation.InstanceId, request.Operation.WorkspaceRead!, request.OriginalInitiatorPrincipalId, human, iam, ct);
+        TenantWorkspaceReadOperationRules.ReviewerAsync(state, request.Operation.InstanceId, request.Operation.WorkspaceRead!, TenantWorkspaceRules.Context(request.Operation), request.OriginalInitiatorPrincipalId, human, iam, ct);
     public ValueTask<bool> InspectionIndependentAsync(TenantApprovalRequest request, TenantSecurityState state, CancellationToken ct) =>
-        TenantWorkspaceReadOperationRules.IndependentAsync(state, request.Operation.InstanceId, request.Operation.WorkspaceRead!, request.OriginalInitiatorPrincipalId, iam, ct);
+        TenantWorkspaceReadOperationRules.IndependentAsync(state, request.Operation.InstanceId, request.Operation.WorkspaceRead!, TenantWorkspaceRules.Context(request.Operation), request.OriginalInitiatorPrincipalId, iam, ct);
     private async ValueTask RequireApprovedData(Read current, TenantApprovalRequest request, TenantOperationReceipt receipt, CancellationToken ct)
     {
         if (request.Operation.WorkspaceRead is null || request.Kind != ApprovalKind.Review || request.Status != TenantApprovalStatus.Approved

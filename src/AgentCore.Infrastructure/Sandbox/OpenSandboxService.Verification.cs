@@ -69,11 +69,11 @@ public sealed partial class OpenSandboxService
         {
             connection = Connection();
             if (profile.TenantId is not null) await RequireTenantRetirementCapabilityAsync(deadline.Token, verification: true);
-            foreach (var access in new[] { HomeAccess.ReadWrite, HomeAccess.ReadOnly, HomeAccess.Disabled })
+            foreach (var (access, workingReadOnly) in new[] { (HomeAccess.ReadWrite, false), (HomeAccess.ReadOnly, false), (HomeAccess.Disabled, false), (HomeAccess.ReadOnly, true) })
             {
                 homeAccess = access;
                 if (require is not null) await require(deadline.Token);
-                mounted = MountResolver.Verification(id, access, deadline.Token);
+                mounted = MountResolver.Verification(id, access, deadline.Token, workingReadOnly);
                 var auth = await Images.ResolveAuthAsync(profile, deadline.Token, requireVerification: false, require);
                 if (!OciImageReference.Parse(profile.ImageReference).IsLocal)
                     await RegistryAuthorizationProbe.CheckAsync(options, OciImageReference.Parse(profile.ImageReference), auth, deadline.Token);

@@ -33,14 +33,15 @@ public sealed partial class InMemoryIamStore
                 && (attachments?.Attachments is null || attachments.Attachments.Contains(attachmentId))
                 && (attachments?.Sessions is null || attachments.Sessions.Contains(request.SessionId));
         }
-        var scope = TenantWorkspaceRules.Scope(new(request.TenantId, request.Operation.InstanceId, source.Working ? request.SessionId : null));
+        var scope = TenantWorkspaceRules.Scope(TenantWorkspaceRules.ForCaptured(request.TenantId, request.SessionId, source.Path, TenantWorkspaceRules.Context(request.Operation)));
         return session is not null && session.Snapshot.DurablyDeletedAt is null && agent is not null && agent.PrincipalId == request.ExecutorPrincipalId
             && session.Owner.AgentInstanceId == agent.Instance.InstanceId && session.Owner.ExecutorPrincipalId == agent.PrincipalId
             && (source.ResourceKey is { } key
-                ? ChildCatalog(request.TenantId, agent.Instance.InstanceId, null, CancellationToken.None).Contains(TenantAgentChildScopes.Scope(request.TenantId, agent.Instance.InstanceId, "resource", key))
-                    && (visible?.Resources is null || visible.Resources.Contains(agent.Instance.InstanceId.ToString("D") + ":" + key))
+                ? OwnsResourceAsync(TenantResourceScopes.Source(request.TenantId, agent.Instance.InstanceId, key)).Result
+                    && (visible?.Resources is null || visible.Resources.Contains(TenantResourceScopes.Source(request.TenantId, agent.Instance.InstanceId, key).ResourceId!))
                 : visible?.Workspaces is null || visible.Workspaces.Contains(scope.ResourceId!))
-            && (source.Working || visible?.HomeAgents is null || visible.HomeAgents.Contains(agent.Instance.InstanceId))
+            && (source.Working || (source.ResourceKey is not null ? visible?.ResourceAgents is null || visible.ResourceAgents.Contains(agent.Instance.InstanceId)
+                : visible?.HomeSpaces is null || visible.HomeSpaces.Contains(TenantWorkspaceRules.ForCaptured(request.TenantId, request.SessionId, source.Path, TenantWorkspaceRules.Context(request.Operation)).OwnerId)))
             && (visible?.Sessions is null || visible.Sessions.Contains(request.SessionId));
     }
 }

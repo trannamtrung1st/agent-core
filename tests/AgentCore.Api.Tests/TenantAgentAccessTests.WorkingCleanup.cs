@@ -32,7 +32,7 @@ public sealed partial class TenantAgentAccessTests
         var root = factory.Services.GetRequiredService<PersistenceOptions>().WorkspaceRoot;
         var path = AgentWorkspacePhysicalPaths.SessionRoot(root, instance, session); Directory.CreateDirectory(Path.Combine(path, "working"));
         await File.WriteAllTextAsync(Path.Combine(path, "working", "owned.txt"), "private working bytes"); await File.WriteAllTextAsync(Path.Combine(path, ".provisioned"), "retained marker");
-        var home = AgentWorkspacePhysicalPaths.HomeDirectory(root, instance); Directory.CreateDirectory(home); await File.WriteAllTextAsync(Path.Combine(home, "keep.txt"), "home");
+        var home = AgentWorkspacePhysicalPaths.SpaceHomeDirectory(root, tenant, (await factory.Services.GetRequiredService<ITenantSpaceStore>().FindPrivateSpaceAsync(tenant, instance))!.SpaceId); Directory.CreateDirectory(home); await File.WriteAllTextAsync(Path.Combine(home, "keep.txt"), "home");
         var sibling = AgentWorkspacePhysicalPaths.WorkingDirectory(root, instance, Guid.NewGuid()); Directory.CreateDirectory(sibling); await File.WriteAllTextAsync(Path.Combine(sibling, "keep.txt"), "sibling");
         var outside = Path.Combine(root, "outside"); Directory.CreateDirectory(outside); await File.WriteAllTextAsync(Path.Combine(outside, "keep.txt"), "outside"); Directory.CreateSymbolicLink(Path.Combine(path, "working", "redirect"), outside);
         Assert.Null(await store.ReadTenantWorkingCleanupAsync(owner)); Assert.False(await cleanup.CleanupAsync(owner));

@@ -66,7 +66,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService
         }
         var members = JsonSerializer.Serialize(selected.Select(s => new PreparedAttachmentReadMember(s.AttachmentId, s.EntryId!.Value, s.Sha256Hex)).OrderBy(s => s.AttachmentId.ToString("D"), StringComparer.Ordinal));
         var hash = Hash(JsonSerializer.Serialize(new { tool, args, sources = selected.Select(s => TenantAttachmentContextRules.Witness(s, null)), truncated = more || selected.Count > maximum }));
-        return new(run, state, session, current.Agent, new(tenant, run.AgentInstanceId, run.SessionId), Attachments: new(selected, members, hash, more || selected.Count > maximum));
+        return new(run, state, session, current.Agent, new TenantWorkspaceReference.SessionWorking(tenant, run.SessionId), Attachments: new(selected, members, hash, more || selected.Count > maximum));
     }
 
     private async ValueTask<(string Output, string Hash)> InspectAttachments(TenantRuntimeFrame frame, ModelToolCall call,

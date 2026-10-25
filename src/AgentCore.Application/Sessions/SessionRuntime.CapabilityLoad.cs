@@ -38,7 +38,7 @@ public sealed partial class SessionRuntime
             AgentWorkspaceAvailable: _runtimeOwner is not null,
             AllowAgentConsolidation: (await CurrentContinuitySettingsAsync(_boundAgentRun, ct).ConfigureAwait(false))?.AllowMaintenance == true,
             ContinuityContext: null)
-            { TenantManagementReadSources = tenantSkills.Sources, ExecutionContext = _boundAgentRun?.Admission.ExecutionContext, ApprovalOutcome = _tenantApprovalOutcome,
+            { CurrentContextTools = await _tools.ContextToolsAsync(_boundAgentRun, ct).ConfigureAwait(false), TenantManagementReadSources = tenantSkills.Sources, ExecutionContext = _boundAgentRun?.Admission.ExecutionContext, ApprovalOutcome = _tenantApprovalOutcome,
                 Configuration = _boundAgentRun?.Admission.Configuration, CurrentContinuitySettings = await CurrentContinuitySettingsAsync(_boundAgentRun, ct).ConfigureAwait(false), RunTaskIntent = _boundAgentRun?.Admission.TaskIntent };
     }
 
@@ -74,6 +74,7 @@ public sealed partial class SessionRuntime
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, input.RequestCancellation);
             using var json = JsonDocument.Parse(input.ArgumentsJson);
             var context = input.ProjectionContext with {
+                CurrentContextTools = await _tools.ContextToolsAsync(current, linked.Token).ConfigureAwait(false),
                 Definition = await ProjectionDefinitionAsync(ExecutionDefinition, current, _snapshot.AgentInstanceId, linked.Token).ConfigureAwait(false),
                 Harness = await HarnessContextAsync(current, linked.Token).ConfigureAwait(false),
                 LoadedCapabilityIds = current.LoadedCapabilityIds, ActiveSkillKeys = current.ActiveSkillKeys, PinnedSkillCatalog = current.PinnedSkillCatalog

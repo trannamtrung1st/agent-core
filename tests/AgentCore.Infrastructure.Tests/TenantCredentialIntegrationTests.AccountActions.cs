@@ -22,7 +22,7 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantCredentialIntegrationTests
 {
-    private sealed record AccountActionServices(TenantApprovalService Approvals, TenantAccountEffectService Effects, TenantRunContinuationService Continuations, FileAgentInstanceWorkspaceStore Files, TenantAccountRuntimeReadService Reads, IDriveOperationStore Ledger);
+    private sealed record AccountActionServices(TenantApprovalService Approvals, TenantAccountEffectService Effects, TenantRunContinuationService Continuations, FileSpaceWorkspaceStore Files, TenantAccountRuntimeReadService Reads, IDriveOperationStore Ledger);
     private static AccountActionServices ActionServices(Fixture f, IHttpClientFactory http, IIamStore? reopened = null)
     {
         var store = reopened ?? f.Iam; var iam = new IamAuthorizer(store);
@@ -32,8 +32,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var native = new TenantConnectedAccountReader(new(SharedOAuth(), options, new(Path.Combine(f.Root, "keys")), f.Protector, http, false),
             new EmailTransportOptions { Enabled = true, SendEnabled = true }, options, http, f.Protector, ledger, (ISyntheticDriveStore)ledger, f.Ids, f.Clock, false, NullLoggerFactory.Instance, new SystemDiagnosticIdSource());
         var reads = RuntimeAccountReads(f, http, store, ledger);
-        var files = new FileAgentInstanceWorkspaceStore(Path.Combine(f.Root, "working"), f.Instances, f.Sandboxes,
-            tenantAgents: (ITenantAgentStore)store, tenantSessions: (ITenantSessionStore)store);
+        var files = new FileSpaceWorkspaceStore(Path.Combine(f.Root, "working"), (ITenantSpaceStore)store, (ITenantAgentStore)store, (ITenantSessionStore)store, (ITenantAgentDecommissionStore)store, f.Sandboxes);
         var target = new TenantAccountActionTarget(operations, (ITenantRunStore)store, store, (ITenantSessionStore)store,
             (ITenantCredentialBindingStore)store, f.RunConfiguration(), iam, reads, native, files, files, f.EmailDrafts, f.Ids, f.Clock);
         var approvals = new TenantApprovalService(store, (ITenantApprovalStore)store, (ITenantAgentStore)store, operations, iam, f.Identity, f.Ids, f.Clock,
@@ -61,7 +60,8 @@ public sealed partial class TenantCredentialIntegrationTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true);
         var email = !mode.StartsWith("folder", StringComparison.Ordinal);
-        var s = await RuntimeCredential(f, true, email ? CredentialPurpose.EmailAccount : CredentialPurpose.GoogleDriveAccount, password: mode == "draft-password");
+        var s = await RuntimeCredential(f, true, email ? CredentialPurpose.EmailAccount : CredentialPurpose.GoogleDriveAccount,
+            password: mode == "draft-password", contextual: mode.EndsWith("-contextual", StringComparison.Ordinal) || mode.EndsWith("-variable", StringComparison.Ordinal), variableReference: mode.EndsWith("-variable", StringComparison.Ordinal));
         var tool = mode.StartsWith("draft", StringComparison.Ordinal) ? ToolCatalog.EmailCreateDraft : email ? ToolCatalog.EmailSend : ToolCatalog.DriveCreateFolder;
         var permission = tool == ToolCatalog.EmailCreateDraft ? "email.draft" : email ? "email.send" : "drive.write";
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;
@@ -100,14 +100,32 @@ public sealed partial class TenantCredentialIntegrationTests
                 new("exact-draft", ["friend@example.test"], [], [], "Exact subject", "Exact body", s.CredentialId, "work-drive", "fixture@example.test", 1,
                     witness.CredentialRevision, witness.BindingId, witness.BindingRevision, witness.AuthEpoch), f.Clock.GetUtcNow()));
         }
+        var contextMessages = new List<ModelMessage>();
+        var accountRef="work-drive";
+        if(mode.EndsWith("-variable",StringComparison.Ordinal))
+        {
+            var operations=new TenantOperationAuthorizer(f.Iam,(ITenantRunStore)f.Iam,(ITenantAgentStore)f.Iam,f.Authorizer,new((ITenantAuthorizationAuditStore)f.Iam,f.Ids,f.Clock));
+            var contexts=new TenantContextToolService(operations,(ITenantSessionStore)f.Iam,(ITenantSpaceStore)f.Iam,(ITenantEnvironmentStore)f.Iam,(ITenantSecretStore)f.Iam,f.Iam,f.RunConfiguration(),f.Clock);
+            var lookup=new ModelToolCall("resolve-context-account","variables.resolve","{\"name\":\"ACCOUNT\"}");
+            var descriptor=await contexts.ExecuteAsync(new(s.Run.Owner,s.Run.SessionId,s.Run.AgentRunId,s.Run.Claim!.Generation),lookup,16000);
+            using var safe=JsonDocument.Parse(descriptor);
+            accountRef=safe.RootElement.GetProperty("result").GetProperty("accountRef").GetString()!;
+            Assert.Equal("work-drive",accountRef);Assert.True(safe.RootElement.GetProperty("result").GetProperty("authorizationRequiredAtConsumer").GetBoolean());
+            Assert.DoesNotContain("private-access",descriptor);Assert.DoesNotContain("private-refresh",descriptor);
+            contextMessages.Add(new(ModelRole.Assistant,"",ToolCalls:[lookup]));contextMessages.Add(new(ModelRole.Tool,descriptor,ToolCallId:lookup.Id,Name:lookup.Name));
+        }
         var json = tool == ToolCatalog.EmailCreateDraft ? """{"accountRef":"work-drive","to":["friend@example.test"],"subject":"Exact subject","body":"Exact body"}"""
             : email ? """{"accountRef":"work-drive","draftId":"exact-draft"}""" : """{"accountRef":"work-drive","authEpoch":1,"name":"Exact folder","parentId":"root"}""";
+        if(mode.EndsWith("-variable",StringComparison.Ordinal))
+        {
+            var contextualArgs=System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();contextualArgs["accountRef"]=accountRef;json=contextualArgs.ToJsonString();
+        }
         var intent = new TenantAccountActionIntent(tool, TenantAccountActionContract.Parse(s.Run.SessionId, tool, json).Json);
         using var arguments = JsonDocument.Parse(intent.ArgumentsJson);
         var call = new ModelToolCall("exact-action", ToolCatalog.RequestAuthorization, JsonSerializer.Serialize(new { operation = TenantAccountActionContract.Operation, action = new { tool, arguments = arguments.RootElement } }));
         var runtime = (ITenantRuntimeStore)f.Iam; var runs = (ITenantRunStore)f.Iam;
         var run = await runtime.ApplyTenantRuntimeCommandAsync(s.Run.Owner, s.Run.AgentRunId,
-            new AgentRunCommand.Checkpoint(s.Run.Revision, f.Clock.GetUtcNow(), s.Run.Claim!.Generation, new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [call])]), 1, 0, 120000, 100), null), f.Ids.NewId());
+            new AgentRunCommand.Checkpoint(s.Run.Revision, f.Clock.GetUtcNow(), s.Run.Claim!.Generation, new(AgentRunToolCallCheckpoint.Write([..contextMessages, new(ModelRole.Assistant, "", ToolCalls: [call])]), 1, 0, 120000, 100), null), f.Ids.NewId());
         var prepared = await services.Approvals.PrepareAccountActionAsync(new(s.Tenant, run.AgentRunId), intent, run.Revision, run.Claim!.Generation);
         Assert.Equal(OperationDecisionKind.RequiresApproval, prepared.Decision); var request = prepared.Request!;
         Assert.Equal(mode == "draft-exception" ? ApprovalKind.ExceptionalGrant : ApprovalKind.Review, request.Kind);
@@ -197,4 +215,14 @@ public sealed partial class TenantCredentialIntegrationTests
         Assert.Single(audit, a => a.Action == TenantAccountEffectRules.ResultAction && a.Execution?.OperationId == request.Operation.OperationId);
         Assert.DoesNotContain("private-refresh", JsonSerializer.Serialize(audit)); Assert.DoesNotContain("private-access", JsonSerializer.Serialize(audit));
     }
+
+    [Theory] [InlineData(false, "folder-contextual")] [InlineData(true, "folder-contextual")]
+    [InlineData(false, "draft-contextual")] [InlineData(true, "draft-contextual")]
+    public Task Membership_only_account_alias_uses_existing_Drive_and_Email_effects_with_exact_consent(bool sqlite, string mode) =>
+        Account_actions_use_owned_atomic_drafts_exact_successors_and_factual_native_receipts_without_replay(sqlite, mode);
+    [Theory] [InlineData(false,"folder-variable")] [InlineData(true,"folder-variable")]
+    [InlineData(false,"draft-variable")] [InlineData(true,"draft-variable")]
+    public Task Credential_variable_alias_reaches_actual_Drive_and_Email_consumers_with_original_exact_consent(bool sqlite,string mode) =>
+        Account_actions_use_owned_atomic_drafts_exact_successors_and_factual_native_receipts_without_replay(sqlite,mode);
+
 }

@@ -32,6 +32,7 @@ public sealed partial class SqliteIamStore
         }
         var state = (await ReadTenantAsync(db, tenant, ct).ConfigureAwait(false))!;
         await TenantSandboxRuntimeRules.RequirePermissionsAsync(state, run, pinned, new IamAuthorizer(this), ct).ConfigureAwait(false);
+        await TenantSandboxWorkspaceRules.RequireCurrentAsync(state, run, agent, baseline, value.WorkspaceAccess ?? throw new AccessDeniedException("sandbox_workspace_context_required"), new IamAuthorizer(this), ct).ConfigureAwait(false);
     }
     private async ValueTask<(SandboxLease Lease, SandboxExecution? Execution)> RequireSandboxControlOperation(AgentCoreDbContext db, TenantApprovalRequest request, AgentRun run, TenantAgent agent, CancellationToken ct)
     {

@@ -24,6 +24,7 @@ public sealed class SessionRecord
     public string AgentInstanceId { get; set; } = "";
     public string? PinnedPersonaJson { get; set; }
     public long? PinnedPersonaRevision { get; set; }
+    public string? ContextSelectionJson { get; set; }
     public string PendingAgentInputIdsJson { get; set; } = "[]";
     public string OriginJson { get; set; } = "{\"kind\":0}";
     public int Surfaces { get; set; } = (int)SessionSurface.ChatList;

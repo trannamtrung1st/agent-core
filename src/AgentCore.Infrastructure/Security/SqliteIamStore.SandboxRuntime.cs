@@ -46,6 +46,8 @@ public sealed partial class SqliteIamStore
         var state = await ReadTenantAsync(db, tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         var agent = Owned(parent); TenantSessionRules.RequireExecutor(state, agent);
         TenantSandboxRuntimeRules.RequireReservation(write, session, run, agent, state.Tenant.Revision, at);
+        await RequireSpaceExecutionSource(db, run, state, new IamAuthorizer(this), ct).ConfigureAwait(false);
+        TenantSandboxContextRules.RequireSelected(session, run);
         var savedSource = await OwnedSandboxProfiles(db, tenant).SingleOrDefaultAsync(p => p.Id == source.Id && p.Revision == source.Revision, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("resource_unavailable");
         var latest = await OwnedSandboxProfiles(db, tenant).Where(p => p.Id == source.Id).OrderByDescending(p => p.Revision).FirstAsync(ct).ConfigureAwait(false);
@@ -61,6 +63,8 @@ public sealed partial class SqliteIamStore
         else baseline = builtIns is null ? null : await builtIns.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).ConfigureAwait(false);
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
         TenantSandboxRuntimeRules.RequireCurrentPolicy(run, agent, baseline, source, SandboxValue(savedSource), mounted);
+        if (mounted is not null)
+            await TenantSandboxWorkspaceRules.RequireCurrentAsync(state, run, agent, baseline, mounted.WorkspaceAccess ?? throw new AccessDeniedException("sandbox_workspace_context_required"), new IamAuthorizer(this), ct).ConfigureAwait(false);
         if (source.RegistryCredentialId is { } credential)
         {
             var value = await OwnedCredentials(db, tenant).SingleOrDefaultAsync(c => c.CredentialId == credential.ToString("D"), ct).ConfigureAwait(false);

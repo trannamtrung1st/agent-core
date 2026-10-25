@@ -55,6 +55,7 @@ public sealed partial class InMemoryIamStore
                     if (report is not null)
                     {
                         TenantBackgroundReportRules.Report(request, source, report, agent, now);
+            RequireSpaceExecutionSource(report, state, new IamAuthorizer(this), ct, admission: true).AsTask().GetAwaiter().GetResult();
                         if (source.Parent!.Snapshot.PendingAgentInputIds.Count > 0 || sessionBacking.AgentRuns.Runs.Values.Any(r => r.SessionId == p.ParentSessionId && !r.IsTerminal))
                             return ValueTask.FromResult(false);
                     }

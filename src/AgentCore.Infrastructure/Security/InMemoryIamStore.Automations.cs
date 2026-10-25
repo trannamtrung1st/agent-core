@@ -55,6 +55,7 @@ public sealed partial class InMemoryIamStore : ITenantAutomationStore
             TenantAutomationPresetRules.ValidateNew(current, proposed);
             TenantAutomationAuthoring.ValidateTransition(current, proposed, expectedAutomationRevision, permission, audit.At); TenantAutomationRules.Configuration(proposed, policy, audit.At, current: current);
             RequireAutomationHuman(before, human.PrincipalId, agent, proposed.AutomationId, permission, current is null, ct);
+            RequireAutomationContextAuthoring(before, agent, current, proposed, human.PrincipalId, ct);
             if (permission is "automations.create" or "automations.update") TenantAutomationRules.HumanSourcesAsync(before, human.PrincipalId, proposed, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             if (permission is "automations.create" or "automations.update")
                 TenantCompletionDestinationRules.AuthoringAsync(before, human.PrincipalId, proposed,
@@ -79,6 +80,7 @@ public sealed partial class InMemoryIamStore : ITenantAutomationStore
                 || automationBacking.ReadTenantAutomation(before.Tenant.TenantId, current.AutomationId) is not { } saved || !TenantAutomationRules.Same(saved, current)) return ValueTask.FromResult(false);
             var agent = FindTenantAgentAsync(before.Tenant.TenantId, current.Owner.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("resource_unavailable");
             TenantAutomationRules.Owner(current, agent); TenantSessionRules.RequireExecutor(before, agent); TenantAutomationRules.TechnicalAdvance(current, advanced, audit.At);
+            if (TenantAutomationContextRules.IsSuspension(advanced)) RequireAutomationContextUnavailable(before, agent, current, ct);
             ValidateAutomationTransaction(next, expectedSecurityRevision, current, agent.PrincipalId, "automations.schedule.advance", audit);
             EnsureReferences(next, audit, ct: ct); ct.ThrowIfCancellationRequested();
             automationBacking.SaveTenantAutomation(advanced); _tenants[before.Tenant.TenantId] = next; _audit.Add(audit); return ValueTask.FromResult(true);

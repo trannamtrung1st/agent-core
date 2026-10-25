@@ -53,7 +53,7 @@ public sealed partial class TenantCredentialIntegrationTests
     public async Task Agent_account_read_real_transport_preserves_exact_consent_rotation_and_current_compound_authority(bool sqlite, CredentialPurpose purpose, string mode)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true);
-        var s = await RuntimeCredential(f, mode != "exception", purpose); var familyKey = purpose == CredentialPurpose.EmailAccount ? "email.read" : "drive.read";
+        var s = await RuntimeCredential(f, mode != "exception", purpose, contextual: mode == "contextual"); var familyKey = purpose == CredentialPurpose.EmailAccount ? "email.read" : "drive.read";
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;
         var role = await f.Access.SaveRoleAsync(s.Owner.PrincipalId, s.Tenant, null, "Account source reads", ["sessions.read", familyKey], await Revision());
         RoleAssignment? family = null;
@@ -114,7 +114,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var failure = await Record.ExceptionAsync(async () => result = await reads.InspectApprovedForRunAsync(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, 32768));
         var after = (await f.Credentials.FindTenantCredentialAsync(s.Tenant, s.CredentialId))!.Value;
         var audit = await f.Iam.ReadAuditAsync(s.Tenant, 200);
-        if (mode is "rotate" or "exception")
+        if (mode is "rotate" or "exception" or "contextual")
         {
             Assert.Null(failure); Assert.NotNull(result); Assert.Contains("tenantAccountRead", result); Assert.DoesNotContain("private-refresh", result); Assert.DoesNotContain("private-access", result);
             Assert.Equal(1, posts); Assert.Equal(purpose == CredentialPurpose.EmailAccount ? 2 : 1, gets);
@@ -132,4 +132,9 @@ public sealed partial class TenantCredentialIntegrationTests
             else Assert.Equal(before.ProtectedPayload, after.ProtectedPayload);
         }
     }
+
+    [Theory] [InlineData(false, CredentialPurpose.EmailAccount)] [InlineData(true, CredentialPurpose.EmailAccount)]
+    [InlineData(false, CredentialPurpose.GoogleDriveAccount)] [InlineData(true, CredentialPurpose.GoogleDriveAccount)]
+    public Task Membership_only_alias_reaches_existing_Email_and_Drive_read_adapters(bool sqlite, CredentialPurpose purpose) =>
+        Agent_account_read_real_transport_preserves_exact_consent_rotation_and_current_compound_authority(sqlite, purpose, "contextual");
 }

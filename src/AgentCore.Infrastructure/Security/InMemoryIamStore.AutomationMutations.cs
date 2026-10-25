@@ -36,6 +36,8 @@ public sealed partial class InMemoryIamStore : ITenantAutomationMutationStore
             var history = sessionBacking.ReadTenantConversation(reader.Security.Tenant.TenantId, reader.Root.SessionId, null, before, 8)?.History.Items ?? [];
             source = source with { ConversationEvidenceJson = TenantAutomationMutationRules.ConversationEvidence(reader, history, before) };
         }
+        if (expected is not null) RequireAutomationContextAuthoring(reader.Security, reader.Agent, current, expected.Proposed,
+            reader.Run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId, ct);
         return source;
     }
 }

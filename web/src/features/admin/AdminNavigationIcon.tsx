@@ -1,7 +1,7 @@
 import { ApiOutlined, AppstoreOutlined, AudioOutlined, BranchesOutlined, CloudUploadOutlined, CodeOutlined, ControlOutlined, DatabaseOutlined, ExperimentOutlined, FieldTimeOutlined, FileTextOutlined, FolderOutlined, HistoryOutlined, IdcardOutlined, InfoCircleOutlined, KeyOutlined, MessageOutlined, NodeIndexOutlined, ProfileOutlined, RobotOutlined, SafetyOutlined, SettingOutlined, ThunderboltOutlined, ToolOutlined, UnorderedListOutlined, UserOutlined } from '@ant-design/icons';
 const icons: Record<string, typeof UserOutlined> = {
   organizations: AppstoreOutlined, members: UserOutlined, roles: SafetyOutlined, access: KeyOutlined, audit: HistoryOutlined,
-  instances: RobotOutlined, definitions: AppstoreOutlined, credentials: KeyOutlined, events: ThunderboltOutlined,
+  instances: RobotOutlined, agents: RobotOutlined, spaces: AppstoreOutlined, secrets: KeyOutlined, definitions: AppstoreOutlined, credentials: KeyOutlined, events: ThunderboltOutlined,
   'system-organizations': AppstoreOutlined, 'system-accounts': UserOutlined, 'system-operators': SafetyOutlined, 'system-audit': HistoryOutlined, 'browser-privacy': SafetyOutlined, sandboxes: CodeOutlined, overview: InfoCircleOutlined, profile: UserOutlined, version: BranchesOutlined,
   instructions: FileTextOutlined, conversation: MessageOutlined, behavior: ControlOutlined, initiative: ThunderboltOutlined,
   voice: AudioOutlined, models: RobotOutlined, providers: ApiOutlined, execution: FieldTimeOutlined,

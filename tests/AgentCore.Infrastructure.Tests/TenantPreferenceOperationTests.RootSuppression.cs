@@ -65,7 +65,7 @@ public sealed partial class TenantPreferenceOperationTests
         var patch = TenantPreferenceToolContract.Parse(Preferences);
         var commit = new TenantPreferenceCommit(f.Ids.NewId(), current.AgentRunId, current.Claim.Generation, current.Revision,
             "bypass-store", patch.CanonicalArguments, patch.ParametersHash, setup.Agent.Instance.Revision,
-            TenantPreferenceToolContract.ActionHash(current.AgentInstanceId, setup.Agent.Instance.Revision, patch.ParametersHash));
+            TenantPreferenceToolContract.ActionHash(current, setup.Agent.Instance.Revision, patch.ParametersHash));
         var state = (await f.Iam.ReadTenantAsync(setup.Tenant))!;
         var denied = await Assert.ThrowsAsync<AccessDeniedException>(() => ((ITenantPreferenceOperationStore)f.Iam).TryCommitPreferencesAsync(
             state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } }, state.Tenant.Revision, commit,

@@ -6,7 +6,7 @@ public static class TenantCredentialBindingRules
 {
     public static void NewBinding(AgentCredentialBinding binding)
     {
-        if (binding.BindingId == Guid.Empty || binding.AgentInstanceId == Guid.Empty || binding.CredentialId == Guid.Empty
+        if (binding.ContextSpaceId is not null || binding.BindingId == Guid.Empty || binding.AgentInstanceId == Guid.Empty || binding.CredentialId == Guid.Empty
             || binding.Reference != CredentialRules.Reference(binding.Reference) || binding.Revision != 1
             || binding.CreatedAtUtc != binding.UpdatedAtUtc)
             throw new ArgumentException("Invalid initial credential binding.");

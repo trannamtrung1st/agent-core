@@ -25,7 +25,7 @@ public sealed class SandboxApiTests
     {
         await using var factory = new SandboxFactory();
         var source = (await factory.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!;
-        Assert.Contains("sandbox.run", RoleEnvironments.Of(source).ToolList);
+        Assert.Contains("sandbox.run", DefinitionExecutionPolicies.Of(source).ToolList);
         var candidate = AgentDefinitionCandidate.FromDefinition(source);
         var aliases = factory.Services.GetRequiredService<ProviderAliasSet>();
         var rejected = Assert.Throws<AgentCore.Application.Sessions.AgentCoreException>(() =>
@@ -33,9 +33,9 @@ public sealed class SandboxApiTests
         Assert.Equal(400, rejected.StatusCode);
         var repaired = HarnessLegacyFixture.WithoutRetiredSandboxTool(candidate) with { AgentInstructions = "Explicit repair." };
         AgentCore.Application.Admin.AgentDefinitionCandidateValidator.ValidateForPersistence(repaired, aliases);
-        Assert.DoesNotContain("sandbox.run", repaired.Environment!.ToolList); Assert.DoesNotContain("sandbox.exec", repaired.Environment.ToolList);
+        Assert.DoesNotContain("sandbox.run", repaired.ExecutionPolicy!.ToolList); Assert.DoesNotContain("sandbox.exec", repaired.ExecutionPolicy.ToolList);
         Assert.Null(repaired.SandboxPolicy);
-        Assert.Contains("sandbox.run",RoleEnvironments.Of((await factory.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(source.Id,source.Version))!).ToolList);
+        Assert.Contains("sandbox.run",DefinitionExecutionPolicies.Of((await factory.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(source.Id,source.Version))!).ToolList);
     }
 
     private sealed class SandboxFactory(OpenSandboxOptions? options = null) : AgentCoreApiFactory

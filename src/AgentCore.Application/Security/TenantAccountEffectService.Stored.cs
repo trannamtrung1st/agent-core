@@ -21,7 +21,7 @@ public sealed partial class TenantAccountEffectService
             var decision = await receipts.FindApprovalDecisionAsync(tenant, reference.RequestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("account_source_changed");
             var grant = await approvals.FindOperationGrantAsync(tenant, reference.RequestId, ct).ConfigureAwait(false);
             TenantAccountActionReferences.Receipt(reference, request, receipt, decision, grant, run);
-            await TenantAccountActionRules.PermissionsAsync(current.State, run.AgentInstanceId, action, current.Agent.PrincipalId, iam, request.Kind == ApprovalKind.Review, ct).ConfigureAwait(false);
+            await TenantAccountActionRules.PermissionsAsync(current.State, run.AgentInstanceId, action, TenantWorkspaceRules.Context(run), current.Agent.PrincipalId, iam, request.Kind == ApprovalKind.Review, ct).ConfigureAwait(false);
             await TenantAccountActionRules.ReviewerAsync(current.State, request, decision.HumanPrincipalId, iam, ct).ConfigureAwait(false);
         }
     }

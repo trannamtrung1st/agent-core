@@ -14,7 +14,7 @@ public sealed record TenantArtifactMaterialization(string DisplayName, string Co
 // The incumbent Artifact owner combines this storage evidence with current IAM, Run and consent fences.
 public static class TenantArtifactSourceRules
 {
-    public static PreparedArtifactSource Witness(TenantWorkspaceArtifactObservation value) => new(value.Owner.SessionId is not null,
+    public static PreparedArtifactSource Witness(TenantWorkspaceArtifactObservation value) => new(value.Owner.IsWorking,
         value.Path, value.ContentType, value.ByteSize, value.Sha256Hex, value.ObservationHash, value.ResourceKey, value.ResourceRevision, value.AttachmentId, value.EntryId, value.AttachmentName);
     public static void ValidateWitness(PreparedArtifactSource value, string path)
     {
@@ -30,7 +30,7 @@ public static class TenantArtifactSourceRules
         {
             TenantResourceSourceTarget.ValidatePath(path);
             if (value.Working || value.ResourceKey is not { } key || value.ResourceRevision is null or < 0
-                || !TenantAgentChildScopes.IsResourceKey(key))
+                || !TenantResourceScopes.IsKey(key))
                 throw new ArgumentException("Use an exact resource source witness.");
         }
         else if (value.ResourceKey is not null || value.ResourceRevision is not null) throw new ArgumentException("Unexpected resource source witness.");
@@ -41,23 +41,23 @@ public static class TenantArtifactSourceRules
             throw new ArgumentException("Invalid exact Artifact source.");
     }
     private static bool Hex(string value) => value is { Length: 64 } && value.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
-    public static TenantWorkspaceReference Owner(AgentRun run, string path) => new(run.Owner.TenantId!.Value, run.AgentInstanceId,
-        SessionPath(path) ? run.SessionId : null);
+    public static TenantWorkspaceReference Owner(AgentRun run, string path) => TenantWorkspaceRules.ForRun(run, path);
     private static bool SessionPath(string path) => path.StartsWith("/working/", StringComparison.Ordinal) || TenantAttachmentArtifactRules.IsPath(path);
     public static IEnumerable<(string Permission, AccessScope Scope)> Targets(AgentRun run, string path, string? resourceKey = null)
     {
         if (TenantWorkspaceReadContract.IsResourcePath(path))
             resourceKey ??= run.Admission.Configuration!.Resources.SingleOrDefault(r => r.VirtualPath == path)?.Key ?? throw new AccessDeniedException("resource_unavailable");
-        return Targets(run.Owner.TenantId!.Value, run.AgentInstanceId, run.SessionId, SessionPath(path), resourceKey, TenantAttachmentArtifactRules.IsPath(path) ? TenantAttachmentArtifactRules.Id(path) : null);
+        return Targets(run.Owner.TenantId!.Value, run.AgentInstanceId, run.SessionId, path, TenantWorkspaceRules.Context(run), resourceKey, TenantAttachmentArtifactRules.IsPath(path) ? TenantAttachmentArtifactRules.Id(path) : null);
     }
-    public static IEnumerable<(string Permission, AccessScope Scope)> Targets(Guid tenant, Guid instance, Guid session, bool working, string? resourceKey = null, Guid? attachmentId = null)
+    public static IEnumerable<(string Permission, AccessScope Scope)> Targets(Guid tenant, Guid instance, Guid session, string path, AgentCore.Domain.Spaces.RunSpaceWitness context, string? resourceKey = null, Guid? attachmentId = null)
     {
         yield return ("sessions.read", TenantSessionRules.Scope(tenant, session));
         if (attachmentId is { } id) { yield return ("attachments.read", TenantAttachmentRules.Scope(tenant, id)); yield break; }
-        var owner = new TenantWorkspaceReference(tenant, instance, working ? session : null);
-        if (owner.SessionId is null) yield return ("agents.read", AccessScope.ForResource(owner.TenantId, "agent", owner.InstanceId.ToString("D")));
+        var owner = TenantWorkspaceRules.ForCaptured(tenant, session, path, context);
+        if (resourceKey is not null) yield return ("agents.read", AccessScope.ForResource(tenant, "agent", instance.ToString("D")));
+        else yield return TenantWorkspaceMutationRules.Parent(owner);
         yield return resourceKey is null ? ("workspaces.read", TenantWorkspaceRules.Scope(owner))
-            : ("resources.read", TenantAgentChildScopes.Scope(tenant, instance, "resource", resourceKey));
+            : ("resources.read", TenantResourceScopes.Source(tenant, instance, resourceKey));
     }
     public static void Require(AgentRun run, TenantAgent agent, AgentDefinition current, TenantSession session, string path, PreparedArtifactSource? source = null)
     {

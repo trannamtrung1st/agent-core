@@ -754,6 +754,30 @@ const admissionRequest = (): TenantApproval => ({ ...request, summary: 'Admit ex
     admissionOccurrence: 'Invoked at the saved UTC time · registration revision 1', admissionPrimaryPermission: 'agent-runs.create', admissionObjective: '<script>Literal admission objective</script>', admissionSchedule: 'Once at the saved UTC time', admissionDestination: 'New separate Background Session · no completion report',
     admissionModel: 'Synthetic model', admissionScope: 'automations.run; sessions.create; agent-runs.create', admissionLimit: 'One exact occurrence. Primary grant only; later tools remain independent.' })
     .map(([field, after]) => ({ field, before: null, after, beforeAvailable: false, afterAvailable: true, restoresDefault: false })) } });
+const pinnedAdmissionRequest = (environment = true): TenantApproval => {
+  const value = admissionRequest();
+  value.review.changes.push(...Object.entries({ admissionSpace: 'Shared workroom · 11111111-1111-4111-8111-111111111111 · captured revision 3',
+    admissionEnvironment: environment ? 'Staging profile · 22222222-2222-4222-8222-222222222222 · captured revision 2' : 'No Environment' })
+    .map(([field, after]) => ({ field, before: null, after, beforeAvailable: false, afterAvailable: true, restoresDefault: false })));
+  return value;
+};
+it.each([true, false])('renders exact pinned Automation context without exposing values: Environment=%s', async environment => {
+  view(pinnedAdmissionRequest(environment)); const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByText(/Shared workroom · 11111111/)).toBeVisible();
+  expect(within(dialog).getByText(environment ? /Staging profile · 22222222/ : 'No Environment')).toBeVisible();
+  expect(within(dialog).getByRole('button', { name: 'Authorize once' })).toBeEnabled();
+});
+it.each(['missing', 'duplicate', 'malformed', 'expired'])('refuses unsafe pinned Automation consent: %s', async boundary => {
+  const item = pinnedAdmissionRequest();
+  if (boundary === 'missing') item.review.changes.pop();
+  else if (boundary === 'duplicate') item.review.changes.push({ ...item.review.changes.find(c => c.field === 'admissionSpace')! });
+  else if (boundary === 'malformed') item.review.changes.find(c => c.field === 'admissionSpace')!.after = 'Unverified name without an exact source';
+  else { item.status = 'expired'; item.review = { ...item.review, canDecide: false, canCancel: false }; }
+  view(item); const dialog = await screen.findByRole('dialog'); await within(dialog).findByText('Saved exact task');
+  if (boundary === 'expired') expect(within(dialog).queryByRole('button', { name: 'Authorize once' })).not.toBeInTheDocument();
+  else expect(within(dialog).getByRole('button', { name: 'Authorize once' })).toBeDisabled();
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
 it('reviews source-less exact admission intent without inventing a conversation or executing work', async () => {
   view(admissionRequest()); const dialog = await screen.findByRole('dialog');
   expect(await within(dialog).findByText('<script>Literal admission objective</script>')).toBeVisible(); expect(dialog.querySelector('script')).toBeNull();

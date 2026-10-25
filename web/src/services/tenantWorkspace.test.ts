@@ -20,14 +20,14 @@ it.each([409, 503, 202])('never replays a %s mutation response or treats an unce
   expect(fetchMock).toHaveBeenCalledTimes(2); expect(fetchMock.mock.calls[1][1].method).toBe('DELETE');
 });
 it('rejects an incoherent access projection without using the returned owner for any file operation', async () => {
-  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ workspace: { tenantId: 'beta', instanceId: 'agent', sessionId: 'session', logicalRoot: '/working' }, securityRevision: 1, instanceRevision: 1, canRead: true, canWrite: true, canDelete: true, readOnly: false })));
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ workspace: { tenantId: 'beta', kind: 'sessionWorking', sessionId: 'session' }, securityRevision: 1, instanceRevision: 1, canRead: true, canWrite: true, canDelete: true, readOnly: false })));
   await expect(readWorkspaceAccess(owner, new AbortController().signal)).rejects.toThrow('Current workspace access is unavailable'); expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
 it('accepts Session-bound hints without live Instance configuration and rejects cross-parent facts', async () => {
-  const value = { workspace: { tenantId: 'alpha', instanceId: 'agent', sessionId: 'session', logicalRoot: '/working' }, securityRevision: 9, instanceRevision: null,
-    instanceName: null, sessionTitle: 'Retained Session', canRead: false, canWrite: true, canDelete: false, readOnly: false };
-  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(value))).mockResolvedValueOnce(new Response(JSON.stringify({ ...value, instanceName: 'Private current persona', instanceRevision: 77 })));
+  const value = { workspace: { tenantId: 'alpha', kind: 'sessionWorking', sessionId: 'session' }, securityRevision: 9, ownerRevision: 1,
+    workspaceName: 'Session files', sessionTitle: 'Retained Session', canRead: false, canWrite: true, canDelete: false, readOnly: false };
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(value))).mockResolvedValueOnce(new Response(JSON.stringify({ ...value, workspace: { kind: 'sessionWorking', tenantId: 'alpha', sessionId: 'another-session' } })));
   expect(await readWorkspaceAccess(owner, new AbortController().signal)).toEqual(value);
   await expect(readWorkspaceAccess(owner, new AbortController().signal)).rejects.toThrow('Current workspace access is unavailable');
 });

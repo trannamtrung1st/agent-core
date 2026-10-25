@@ -72,7 +72,7 @@
     "scenario": "general-harness",
     "owner": "demo"
   },
-  "environment": {
+  "executionPolicy": {
     "knowledgeSources": [
       {
         "identity": "support-order-policy",

@@ -406,7 +406,7 @@ export function Composer({
             ))}
           </ul>
         ) : null}
-        <StructuredMessageEditor draft={draft} parts={parts} instanceId={instanceId} ready={ready} placeholder={placeholder} canSend={canSend} onValidationChange={setEditorValid} onChange={onDraftChange} onPartsChange={onPartsChange} onSend={behavior => { if (behavior === "interrupt") { if (canStop) onSend(behavior); } else onSend(); }} onFiles={takeFiles} pickerRequest={pickerRequest} />
+        <StructuredMessageEditor sessionId={sessionId} draft={draft} parts={parts} instanceId={instanceId} ready={ready} placeholder={placeholder} canSend={canSend} onValidationChange={setEditorValid} onChange={onDraftChange} onPartsChange={onPartsChange} onSend={behavior => { if (behavior === "interrupt") { if (canStop) onSend(behavior); } else onSend(); }} onFiles={takeFiles} pickerRequest={pickerRequest} />
         <input
           ref={fileInput}
           className="attach-input"

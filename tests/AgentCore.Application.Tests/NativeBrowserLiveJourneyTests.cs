@@ -33,7 +33,7 @@ public sealed class NativeBrowserLiveJourneyTests(ITestOutputHelper evidence)
             while (agentDirectory is not null && !Directory.Exists(Path.Combine(agentDirectory.FullName, "agents"))) agentDirectory = agentDirectory.Parent;
             var definition = (await new FileAgentDefinitionStore(Path.Combine(agentDirectory!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("general-assistant", 21))!;
             // Keep this proof bounded to Browser and contextual capability discovery.
-            definition = definition with { Environment = definition.Environment! with
+            definition = definition with { ExecutionPolicy = definition.ExecutionPolicy! with
             {
                 Capabilities = new("Selected", BrowserToolCatalog.Tools.Values.Where(t => t.Group is "core" or "forms" or "testing").Select(t => t.Name).ToArray()),
                 Projection = new([ToolCatalog.BrowserNavigate, ToolCatalog.BrowserSnapshot, ToolCatalog.BrowserFind, ToolCatalog.BrowserClick, ToolCatalog.BrowserType, ToolCatalog.BrowserWait])

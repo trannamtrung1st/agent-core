@@ -63,6 +63,7 @@ public sealed partial class SqliteIamStore : ITenantAutomationStore
             TenantAutomationPresetRules.ValidateNew(current, proposed);
             TenantAutomationAuthoring.ValidateTransition(current, proposed, expectedAutomationRevision, permission, audit.At); TenantAutomationRules.Configuration(proposed, policy, audit.At, current: current);
         await RequireAutomationHuman(before, human.PrincipalId, agent, proposed.AutomationId, permission, current is null, ct);
+        await RequireAutomationContextAuthoring(db, before, agent, current, proposed, human.PrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
         if (permission is "automations.create" or "automations.update") await TenantAutomationRules.HumanSourcesAsync(before, human.PrincipalId, proposed, new IamAuthorizer(this), ct);
         if (permission is "automations.create" or "automations.update")
         {
@@ -100,6 +101,7 @@ public sealed partial class SqliteIamStore : ITenantAutomationStore
         var agentRow = await OwnedAgents(db, next.Tenant.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == current.Owner.AgentInstanceId.ToString("D"), ct) ?? throw new AccessDeniedException("resource_unavailable");
         var agent = Owned(agentRow); var before = (await ReadTenantAsync(db, next.Tenant.TenantId, ct))!;
         TenantAutomationRules.Owner(current, agent); TenantSessionRules.RequireExecutor(before, agent); TenantAutomationRules.TechnicalAdvance(current, advanced, audit.At);
+        if (TenantAutomationContextRules.IsSuspension(advanced)) await RequireAutomationContextUnavailable(db, before, agent, current, ct).ConfigureAwait(false);
         ValidateAutomationTransaction(next, expectedSecurityRevision, current, agent.PrincipalId, "automations.schedule.advance", audit);
         StageAutomation(db, row, advanced); return true;
     }, ct);

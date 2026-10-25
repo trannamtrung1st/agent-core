@@ -437,7 +437,7 @@ public sealed class CompactionLifecycleTests
             new VoiceConfiguration(false, "default", 1.0),
             new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
             new Dictionary<string, string>(StringComparer.Ordinal),
-            new RoleEnvironment(ToolAllowlist: [ToolCatalog.EmailSend]));
+            new DefinitionExecutionPolicy(ToolAllowlist: [ToolCatalog.EmailSend]));
 
     private sealed class CountingModel(ScriptedLanguageModel inner) : ILanguageModel
     {

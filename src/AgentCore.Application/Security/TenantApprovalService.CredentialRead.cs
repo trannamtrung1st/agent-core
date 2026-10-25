@@ -16,6 +16,7 @@ public sealed partial class TenantApprovalService
             var prepared = await (credentialReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareInspectionAsync(
                 new(run.Owner, run.SessionId, run.AgentRunId, generation), arguments, ct).ConfigureAwait(false);
             var op = TenantApprovalRules.PrepareCredentialRead(ids.NewId(), run.AgentInstanceId, prepared.Read, prepared.Agent.Instance.Revision, prepared.Agent.Instance.PersonaRevision);
+            op = TenantApprovalRules.ForRun(op, run);
             if (!prepared.ReviewRequired) return await PreparationOutcome(prepared.State, run, op, OperationDecisionKind.Allowed, "allowed", null, ct).ConfigureAwait(false);
             var qualified = false;
             foreach (var human in prepared.State.Users.Where(u => u.Status == IdentityStatus.Active))

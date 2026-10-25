@@ -39,7 +39,7 @@ public sealed class TenantArtifactSourceTarget(TenantOperationAuthorizer operati
                 ? await (attachments as ITenantAttachmentArtifactSourceStore ?? throw new AccessDeniedException("tenant_effect_unavailable"))
                     .CaptureAttachmentArtifactSourceTenantAsync(before.Session.Owner, TenantAttachmentArtifactRules.Id(args.Path), ct).ConfigureAwait(false)
                 : TenantWorkspaceReadContract.IsResourcePath(args.Path)
-                ? new ResourceArtifactSource(await (resources ?? throw new AccessDeniedException("tenant_effect_unavailable")).CaptureForArtifactAsync(frame, args.Path, review, live, ct).ConfigureAwait(false))
+                ? new ResourceArtifactSource(TenantWorkspaceRules.ForRun(before.Run, "/home"), await (resources ?? throw new AccessDeniedException("tenant_effect_unavailable")).CaptureForArtifactAsync(frame, args.Path, review, live, ct).ConfigureAwait(false))
                 : await files.CaptureArtifactSourceTenantAsync(TenantArtifactSourceRules.Owner(before.Run, args.Path), args.Path, ct).ConfigureAwait(false);
         }
         catch (Exception e) when (e is AgentCoreException or IOException or UnauthorizedAccessException) { throw new AccessDeniedException("artifact_content_unavailable"); }
@@ -55,9 +55,9 @@ public sealed class TenantArtifactSourceTarget(TenantOperationAuthorizer operati
         return new(after.Run, after.State, after.Agent, source);
     }
 
-    private sealed class ResourceArtifactSource(TenantResourceSource captured) : ITenantWorkspaceArtifactSource
+    private sealed class ResourceArtifactSource(TenantWorkspaceReference owner, TenantResourceSource captured) : ITenantWorkspaceArtifactSource
     {
-        public TenantWorkspaceArtifactObservation Observation { get; } = new(new(captured.Observation.TenantId, captured.Observation.InstanceId),
+        public TenantWorkspaceArtifactObservation Observation { get; } = new(owner,
             captured.Observation.Resource.VirtualPath, captured.Observation.Resource.MediaType, captured.Observation.Resource.ByteLength,
             captured.Observation.Resource.ContentSha256, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(captured.Observation))),
             captured.Observation.Resource.Key, captured.Observation.ResourceRevision);

@@ -36,7 +36,7 @@ public sealed class BrowserEnvironmentJourneyTests
             new("answerNewTurn", true, true), new("balanced", false, "en", 2048),
             new(false, 60_000, 120_000, 1, ["longSilence"], 0), new(false, "default", 1),
             new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>(),
-            new RoleEnvironment(ToolAllowlist: [ToolCatalog.BrowserConfiguration, ToolCatalog.BrowserNavigate]));
+            new DefinitionExecutionPolicy(ToolAllowlist: [ToolCatalog.BrowserConfiguration, ToolCatalog.BrowserNavigate]));
         var id = Guid.NewGuid();
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn);
         var call = new ModelToolCall("config", ToolCatalog.BrowserConfiguration, "{}");
@@ -60,7 +60,7 @@ public sealed class BrowserEnvironmentJourneyTests
             Assert.Equal(enabled ? 1 : 0, probes);
             Assert.Contains("Trusted tenant execution is required", (await executor.ExecuteAsync(definition,
                 id, call, ToolLimits.MaxOutputBytes, admission: admission)).Text);
-            Assert.Contains("forbidden", (await executor.ExecuteAsync(definition with { Environment = new RoleEnvironment(ToolAllowlist: []) },
+            Assert.Contains("forbidden", (await executor.ExecuteAsync(definition with { ExecutionPolicy = new DefinitionExecutionPolicy(ToolAllowlist: []) },
                 id, call, ToolLimits.MaxOutputBytes, admission: admission)).Text);
         }
         finally { await browser.StopAsync(CancellationToken.None); }

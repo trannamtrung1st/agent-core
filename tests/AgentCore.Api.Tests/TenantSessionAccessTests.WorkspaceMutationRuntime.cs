@@ -1,3 +1,4 @@
+using AgentCore.Infrastructure.Workspaces;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
@@ -38,7 +39,7 @@ public sealed partial class TenantSessionAccessTests
             {
                 if (mode == "unsettled") services.Replace(ServiceDescriptor.Singleton<ITenantWorkspaceOperationStore>(p => new UnavailableHostedWorkspaceSettlement((ITenantWorkspaceOperationStore)p.GetRequiredService<IIamStore>())));
                 if (mode == "unknown") services.Replace(ServiceDescriptor.Singleton<ITenantWorkspaceMutationStore>(p =>
-                    new LostWorkspaceAcknowledgement((ITenantWorkspaceMutationStore)p.GetRequiredService<IAgentInstanceWorkspaceStore>(), () => Interlocked.Increment(ref writes))));
+                    new LostWorkspaceAcknowledgement((ITenantWorkspaceMutationStore)p.GetRequiredService<FileSpaceWorkspaceStore>(), () => Interlocked.Increment(ref writes))));
             }
             await using WebApplicationFactory<Program> factory = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
             using var owner = factory.CreateClient(); await Login(owner, "owner@example.test", "explicit-synthetic-test-password");

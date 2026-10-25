@@ -17,6 +17,10 @@ public sealed record EventSubscriptionSnapshot(Guid AutomationId, TriggerOwner O
     string? FilterExpression, EventDispatch Dispatch, TriggerSourceKind SourceKind = TriggerSourceKind.CoreEvent, Guid? ResourceId = null)
 {
     public Guid TriggerId { get; init; } = AutomationId;
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? PinnedSpaceId { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? PinnedEnvironmentId { get; init; }
     public string ExpressionVersion { get; init; } = "js-expression-v1";
     public string FilterHash => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(FilterExpression ?? ""))).ToLowerInvariant();
 }

@@ -16,7 +16,7 @@ public static partial class TenantApprovalRules
             throw new ArgumentException("Use a bounded exact resource observation.");
         var refs = JsonSerializer.Deserialize<PreparedResourceReadMember[]>(value.ResourceMembersJson);
         if (refs is null || refs.Length > 257 || refs.Any(r => r is null || r.Revision < 0
-                || !TenantAgentChildScopes.TryParse(AccessScope.ForResource(value.SessionId, "resource", value.SessionId.ToString("D") + ":" + r.Key), out _, out _))
+                || !TenantResourceScopes.IsKey(r.Key))
             || refs.Select(r => r.Key).Distinct(StringComparer.Ordinal).Count() != refs.Length
             || JsonSerializer.Serialize(refs.OrderBy(r => r.Key, StringComparer.Ordinal)) != value.ResourceMembersJson)
             throw new ArgumentException("Invalid exact resource member set.");

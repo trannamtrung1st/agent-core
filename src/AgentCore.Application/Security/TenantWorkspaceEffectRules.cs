@@ -14,20 +14,21 @@ public static class TenantWorkspaceEffectRules
     public const string Result = "operations.workspace.mutation";
     public const string Completed = "workspace_mutation_completed";
     public const string Uncertain = "workspace_mutation_uncertain";
-    public static TenantWorkspaceReference Owner(AgentRun run, string path) => new(run.Owner.TenantId!.Value, run.AgentInstanceId,
-        path.StartsWith("/working/", StringComparison.Ordinal) ? run.SessionId : null);
+    public static TenantWorkspaceReference Owner(AgentRun run, string path) => TenantWorkspaceRules.ForRun(run, path);
     public static void Session(AgentRun run, TenantAgent agent, TenantSession session)
     {
-        if (!TenantWorkspaceMutationRules.Matches(new(agent.TenantId, agent.Instance.InstanceId, run.SessionId), agent, session)
+        if (!TenantWorkspaceMutationRules.Matches(new TenantWorkspaceReference.SessionWorking(agent.TenantId, run.SessionId), agent, session)
             || !TenantWorkspaceMutationRules.Writable(agent, session) || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active)
             throw new AccessDeniedException("resource_unavailable");
     }
     public static IEnumerable<(string Permission, AccessScope Scope)> Targets(AgentRun run, TenantWorkspaceMutationArguments args)
     {
         yield return ("sessions.read", TenantSessionRules.Scope(run.Owner.TenantId!.Value, run.SessionId));
-        if (args.Targets.Any(t => t.Path.StartsWith("/home/", StringComparison.Ordinal)))
-            yield return ("agents.read", AccessScope.ForResource(run.Owner.TenantId.Value, "agent", run.AgentInstanceId.ToString("D")));
-        foreach (var t in args.Targets.Select(t => (t.Permission, TenantWorkspaceRules.Scope(Owner(run, t.Path)))).Distinct()) yield return t;
+        foreach (var target in args.Targets.Select(t => (t.Permission, Owner: Owner(run, t.Path))).Distinct())
+        {
+            yield return TenantWorkspaceMutationRules.Parent(target.Owner);
+            yield return (target.Permission, TenantWorkspaceRules.Scope(target.Owner));
+        }
     }
     public static TenantWorkspaceMutationArguments Validate(AgentRun run, TenantAgent agent, AgentDefinition current, AgentRunDirectOperation operation, Guid generation, DateTimeOffset at, bool started = false)
     {
@@ -50,13 +51,13 @@ public static class TenantWorkspaceEffectRules
             || TenantWorkspaceMutationContract.Parse(run.SessionId, pending[0].Name, pending[0].ArgumentsJson).ParametersHash != operation.ParametersHash)
             throw new SecurityConflictException("workspace_checkpoint_required");
         if (started && (run.SideEffect.ExternalEffect?.DirectOperation != operation || run.SideEffect.Disposition != AgentRunSideEffectDisposition.InFlight
-            || run.SideEffect.ToolCallId != "operation:" + operation.OperationId.ToString("D") || run.SideEffect.ActionHash != TenantWorkspaceMutationContract.ActionHash(run.SessionId, operation.ParametersHash)))
+            || run.SideEffect.ToolCallId != "operation:" + operation.OperationId.ToString("D") || run.SideEffect.ActionHash != TenantWorkspaceMutationContract.ActionHash(run, operation.ParametersHash)))
             throw new SecurityConflictException("operation_mismatch");
         return args;
     }
     public static void RequireHome(StateIsolationPolicy policy, string path, bool write)
     {
-        if (!path.StartsWith("/home/", StringComparison.Ordinal)) return;
+        if (!path.StartsWith("/home/", StringComparison.Ordinal) && !path.StartsWith("/private/", StringComparison.Ordinal)) return;
         if (policy.HomeAccess == HomeAccess.Disabled) throw new AccessDeniedException("home_access_disabled");
         if (write && policy.HomeAccess != HomeAccess.ReadWrite) throw new AccessDeniedException("home_read_only");
     }
@@ -81,7 +82,7 @@ public static class TenantWorkspaceEffectRules
             || run.SideEffect.ActionHash != fence.ActionHash || run.SideEffect.ToolCallId != "operation:" + operation.OperationId.ToString("D")
             || run.SideEffect.Disposition is not (AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
             || TenantWorkspaceMutationContract.Parse(run.SessionId, operation.ToolName, operation.ArgumentsJson).ParametersHash != operation.ParametersHash
-            || fence.ActionHash != TenantWorkspaceMutationContract.ActionHash(run.SessionId, operation.ParametersHash)) throw new SecurityConflictException("operation_mismatch");
+            || fence.ActionHash != TenantWorkspaceMutationContract.ActionHash(run, operation.ParametersHash)) throw new SecurityConflictException("operation_mismatch");
     }
     public static bool Recoverable(AgentRun run, DateTimeOffset at) => run.SideEffect.Disposition == AgentRunSideEffectDisposition.Indeterminate || run.IsTerminal
         || run.Status != AgentRunStatus.Running || run.Claim is null || run.Claim.Generation != run.SideEffect.ExternalEffect?.Generation || run.Claim.LeaseExpiresAtUtc <= at;
@@ -100,7 +101,7 @@ public static class TenantWorkspaceEffectRules
     public static TenantOperationReceipt Match(TenantOperationReceipt receipt, AgentRun run, string call, string hash)
     {
         TenantLocalEffectRules.MatchDirectReceipt(receipt, run, call, hash);
-        if (receipt.ActionHash != TenantWorkspaceMutationContract.ActionHash(run.SessionId, hash)) throw new SecurityConflictException("operation_mismatch");
+        if (receipt.ActionHash != TenantWorkspaceMutationContract.ActionHash(run, hash)) throw new SecurityConflictException("operation_mismatch");
         Outcome(receipt.Outcome, receipt.ReasonCode, false); return receipt;
     }
     public static void Transaction(TenantSecurityState next, long revision, AgentRun run, AuthorizationAudit audit, TenantWorkspaceMutationArguments args, bool dispatch)

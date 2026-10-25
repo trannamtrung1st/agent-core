@@ -56,7 +56,7 @@ public sealed class DefinitionResourceInfrastructureDiTests
             var builtIns = provider.GetRequiredService<IBuiltInAgentDefinitionStore>();
             var catalog = provider.GetRequiredService<IAgentDefinitionStore>();
             Assert.Same(builtIns, catalog);
-            var baseline = (await builtIns.ListAsync()).First(d => RoleEnvironments.Of(d).KnowledgeList.Count > 0);
+            var baseline = (await builtIns.ListAsync()).First(d => DefinitionExecutionPolicies.Of(d).KnowledgeList.Count > 0);
             var expected = await builtIns.GetAsync(baseline.Id);
             var admin = provider.GetRequiredService<IAgentDefinitionAdminStore>();
             var resources = provider.GetRequiredService<IAgentDefinitionResourceAdminStore>();

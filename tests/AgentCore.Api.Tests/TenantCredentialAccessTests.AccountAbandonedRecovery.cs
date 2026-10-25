@@ -129,7 +129,7 @@ public sealed partial class TenantCredentialAccessTests
                 session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = setup.Instance, expectedRevision = await Revision(owner, setup.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
                 var steps = new List<object>();
                 if (email) steps.Add(new { tool = ToolCatalog.EmailCreateDraft, arguments = new { accountRef = setup.Alias, to = new[] { "offline@example.test" }, subject = "Exact recovery", body = "Private immutable recovery body" } });
-                if (tool == ToolCatalog.DriveUpload) await first.Services.GetRequiredService<ITenantWorkspaceMutationStore>().WriteTenantAsync(new(setup.Tenant, setup.Instance, session), "/working/recovery.bin", bytes, _ => ValueTask.CompletedTask);
+                if (tool == ToolCatalog.DriveUpload) await first.Services.GetRequiredService<ITenantWorkspaceMutationStore>().WriteTenantAsync(new TenantWorkspaceReference.SessionWorking(setup.Tenant, session), "/working/recovery.bin", bytes, _ => ValueTask.CompletedTask);
                 if (tool == ToolCatalog.DriveTrashBatch)
                     foreach (var id in new[] { "first", "second" })
                     {

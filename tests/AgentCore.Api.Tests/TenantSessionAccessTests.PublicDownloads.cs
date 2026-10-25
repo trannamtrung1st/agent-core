@@ -1,3 +1,4 @@
+using AgentCore.Infrastructure.Workspaces;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
@@ -51,7 +52,7 @@ public sealed partial class TenantSessionAccessTests
             {
                 if (proof) ((IdentityHttpOptions)services.Single(d => d.ServiceType == typeof(IdentityHttpOptions)).ImplementationInstance!).AllowedOrigins = ["http://127.0.0.1:5179"];
                 services.Replace(ServiceDescriptor.Singleton<IPublicWebFetcher>(fetcher));
-                if (mode == "unknown") services.Replace(ServiceDescriptor.Singleton<ITenantWorkspaceMutationStore>(p => new LostWorkspaceAcknowledgement((ITenantWorkspaceMutationStore)p.GetRequiredService<IAgentInstanceWorkspaceStore>(), () => { })));
+                if (mode == "unknown") services.Replace(ServiceDescriptor.Singleton<ITenantWorkspaceMutationStore>(p => new LostWorkspaceAcknowledgement((ITenantWorkspaceMutationStore)p.GetRequiredService<FileSpaceWorkspaceStore>(), () => { })));
             }
             await using WebApplicationFactory<Program> factory = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
             if (proof) factory.UseKestrel(0);

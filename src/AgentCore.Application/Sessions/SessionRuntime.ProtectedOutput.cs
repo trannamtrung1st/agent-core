@@ -10,7 +10,7 @@ public sealed partial class SessionRuntime
     private async Task RefuseProtectedOutputAsync(EventContext context, CancellationToken ct, string source)
     {
         var subject = source switch {
-            "public_web" => "public web source", "automation" => "Automation source", "experience" => "Experience", "continuity" => "historical source", "memory" => "learned-memory",
+            "resource" => "resource source", "workspace" => "workspace source", "context" => "Space/Environment variable", "public_web" => "public web source", "automation" => "Automation source", "experience" => "Experience", "continuity" => "historical source", "memory" => "learned-memory",
             "profile" => "Profile", "conversation" => "conversation", _ => "account"
         };
         var message = $"Current {subject} access{(source is "profile" or "conversation" or "account" ? "" : " or state")} no longer permits this result. Start new work after reviewing access.";

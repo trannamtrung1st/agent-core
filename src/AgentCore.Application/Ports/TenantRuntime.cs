@@ -4,6 +4,8 @@ using AgentCore.Domain.Conversation;
 namespace AgentCore.Application.Ports;
 
 // Trusted server-held ownership references. Never part of model arguments or a human cookie.
+public sealed record TenantContextContinuationAdmission(AgentRun Run, long ExpectedSecurityRevision, Guid TransitionId);
+
 public sealed record TenantConfigurationContinuationAdmission(AgentRun Run, long ExpectedSecurityRevision, Guid RequestId, Guid OperationId);
 
 public sealed record TenantRuntimeFrame(AgentRunOwner Owner, Guid SessionId, Guid RunId, Guid Generation);
@@ -41,7 +43,7 @@ public interface ITenantRuntimeStore : ITenantCompletionRuntimeStore
     ValueTask<AgentRunAdmissionResult> AdmitTenantImmediateAsync(TenantRuntimeFrame parent, SessionSnapshot snapshot,
         AgentRun child, Guid auditId, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<AgentRun> CommitTenantOutcomeAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision,
-        AgentRunCommand.Complete completion, Guid? draftEntryId, Guid diagnosticId, CancellationToken ct = default, TenantConfigurationContinuationAdmission? configurationContinuation = null) => throw new NotSupportedException();
+        AgentRunCommand.Complete completion, Guid? draftEntryId, Guid diagnosticId, CancellationToken ct = default, TenantConfigurationContinuationAdmission? configurationContinuation = null, TenantContextContinuationAdmission? contextContinuation = null) => throw new NotSupportedException();
     ValueTask<SessionSnapshot?> LoadTenantRuntimeAsync(TenantRuntimeFrame frame, CancellationToken ct = default);
     ValueTask SaveTenantRuntimeAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision, CancellationToken ct = default);
     ValueTask<ConversationHistoryPage?> ReadTenantRuntimeHistoryAsync(TenantRuntimeFrame frame, long? after, long? before, int limit, CancellationToken ct = default);

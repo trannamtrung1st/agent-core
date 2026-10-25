@@ -1,6 +1,6 @@
 import { identityReadResponse, tenantApi } from '../../services/identity';
 import { tenantAgentApi, type TenantResourceDetail } from '../../services/tenantAgentConfiguration';
-import { tenantWorkspaceApi, type TenantWorkspaceOwner } from '../../services/tenantWorkspace';
+import { sameWorkspace, tenantWorkspaceApi, type TenantWorkspaceOwner } from '../../services/tenantWorkspace';
 
 export type FileMetadata = {
   displayName: string;
@@ -9,7 +9,7 @@ export type FileMetadata = {
   sha256?: string;
 };
 export type FileRef =
-  | { kind: 'tenantWorkspace'; owner: TenantWorkspaceOwner; instanceId: string; path: string; metadata: FileMetadata }
+  | { kind: 'tenantWorkspace'; owner: TenantWorkspaceOwner; path: string; metadata: FileMetadata }
   | { kind: 'tenantResource'; tenantId: string; instanceId: string; resourceKey: string; metadata: FileMetadata }
   | { kind: 'attachment'; tenantId: string; sessionId: string; attachmentId: string }
   | { kind: 'artifact'; tenantId: string; sessionId: string; artifactId: string };
@@ -76,7 +76,7 @@ export async function resolveFile(
     const response = await fileReadResponse(`${sourcePath(ref)}/metadata?${new URLSearchParams({path: ref.path})}`, signal);
     if (!response.ok) throw readFailure(response.status);
     const item = await response.json();
-    if (item.agentInstanceId !== ref.instanceId || item.logicalPath !== ref.path || typeof item.contentType !== 'string' || !Number.isSafeInteger(item.byteSize) || item.byteSize < 0)
+    if (!sameWorkspace(ref.owner, item.workspaceOwner) || item.logicalPath !== ref.path || typeof item.contentType !== 'string' || !Number.isSafeInteger(item.byteSize) || item.byteSize < 0)
       throw new PreviewError('preview_unavailable', 'Current file metadata is unavailable. Reload the workspace.');
     return {displayName: ref.path.split('/').pop()!, contentType: item.contentType, byteSize: item.byteSize};
   }

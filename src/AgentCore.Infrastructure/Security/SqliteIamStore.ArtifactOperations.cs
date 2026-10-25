@@ -28,6 +28,7 @@ public sealed partial class SqliteIamStore : ITenantArtifactOperationStore
         var at = (clock ?? TimeProvider.System).GetUtcNow(); var args = TenantArtifactOperationRules.Validate(run, target, commit, at);
         var publication = new PreparedArtifactPublication(run.SessionId, args.CanonicalArguments, commit.Source);
         var prepared = TenantApprovalRules.PrepareArtifact(commit.OperationId, run.AgentInstanceId, publication, target.Instance.Revision, target.Instance.PersonaRevision);
+        prepared = TenantApprovalRules.ForRun(prepared, run);
         var correlated = await RootApprovalAsync(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), target.PrincipalId, prepared, ct).ConfigureAwait(false);
         if (correlated is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(correlated.Domain()));
         var definition = await TenantAgentDefinitionBaseline(db, target, ct).ConfigureAwait(false);

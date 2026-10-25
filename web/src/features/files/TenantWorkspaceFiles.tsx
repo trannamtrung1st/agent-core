@@ -20,7 +20,7 @@ function validPath(root: string, path: string) {
     && path.slice(root.length + 1).split('/').every(part => part !== '' && part !== '.' && part !== '..');
 }
 
-/** The mounted owner is keyed by tenant and actual Instance/Session in each caller. */
+/** The mounted owner is keyed by tenant and actual Space/Session in each caller. */
 export function TenantWorkspaceFiles({ owner, organization, onBusy }: { owner: TenantWorkspaceOwner; organization: string; onBusy?: (busy: boolean) => void }) {
   const root = workspaceRoot(owner); const ownerKey = JSON.stringify(owner);
   const [access, setAccess] = useState<TenantWorkspaceAccess>(); const [page, setPage] = useState<AgentWorkspacePage>();
@@ -56,7 +56,7 @@ export function TenantWorkspaceFiles({ owner, organization, onBusy }: { owner: T
     active.current = false; generation.current++; request.current?.abort(); download.current?.abort(); confirmation.current?.destroy();
   }; }, [reload, root]);
   const refresh = () => { command.clearError(); void reload(prefix); };
-  const fileRef = (item: AgentWorkspaceItem): FileRef => ({ kind: 'tenantWorkspace', owner, instanceId: access!.workspace.instanceId, path: item.logicalPath,
+  const fileRef = (item: AgentWorkspaceItem): FileRef => ({ kind: 'tenantWorkspace', owner, path: item.logicalPath,
     metadata: { displayName: item.logicalPath.split('/').at(-1)!, contentType: item.contentType, byteSize: item.byteSize } });
   const mutate = async (path: string, file?: File) => {
     if (!access || blocked || loading || command.busy || (file ? !access.canWrite : !access.canDelete)) return;
@@ -88,9 +88,9 @@ export function TenantWorkspaceFiles({ owner, organization, onBusy }: { owner: T
     const target = opener.current?.isConnected ? opener.current : reloadAction.current; target?.focus({ preventScroll: true });
   }); };
   return <Flex vertical gap="var(--ac-space-section)">
-    <Typography.Paragraph type="secondary" style={{ margin: 0 }}>{root} · {owner.kind === 'home' ? 'Live home files shared by this Instance’s Sessions.' : 'Working files owned by this Session.'} {organization}.</Typography.Paragraph>
+    <Typography.Paragraph type="secondary" style={{ margin: 0 }}>{root} · {owner.kind === 'home' ? 'Live files owned by this Space.' : 'Working files owned by this Session.'} {organization}.</Typography.Paragraph>
     <Flex wrap align="center" justify="space-between" gap="var(--ac-space-compact)">
-      <Typography.Text>{access ? owner.kind === 'home' ? access.instanceName : access.sessionTitle ?? 'Session files' : 'Workspace files'}</Typography.Text>
+      <Typography.Text>{access ? owner.kind === 'home' ? access.workspaceName : access.sessionTitle ?? 'Session files' : 'Workspace files'}</Typography.Text>
       <Flex wrap gap="var(--ac-space-compact)"><Button ref={reloadAction} aria-label="Reload workspace" loading={loading} disabled={pending} onClick={refresh}>Reload workspace</Button>
         {access?.canWrite && <Button type="primary" icon={<UploadOutlined aria-hidden />} disabled={pending || loading || blocked || editing} onClick={event => { opener.current = event.currentTarget; setEditing(true); }}>Upload file</Button>}
       </Flex>

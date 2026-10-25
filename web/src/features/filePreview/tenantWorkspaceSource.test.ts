@@ -4,15 +4,15 @@ import { fileReadLost, readFile, resolveFile, sourcePath, type FileRef } from '.
 import { readOfficePreview } from './officeSource';
 import { testPolicy } from './previewTestPolicy';
 const sources: FileRef[] = [
-  { kind: 'tenantWorkspace', owner: { tenantId: 'alpha', kind: 'home', instanceId: 'agent' }, instanceId: 'agent', path: '/home/file.txt', metadata: { displayName: 'file.txt', contentType: 'text/plain', byteSize: 3 } },
-  { kind: 'tenantWorkspace', owner: { tenantId: 'alpha', kind: 'working', sessionId: 'session' }, instanceId: 'agent', path: '/working/file.txt', metadata: { displayName: 'file.txt', contentType: 'text/plain', byteSize: 3 } },
+  { kind: 'tenantWorkspace', owner: { tenantId: 'alpha', kind: 'home', spaceId: 'space' }, path: '/home/file.txt', metadata: { displayName: 'file.txt', contentType: 'text/plain', byteSize: 3 } },
+  { kind: 'tenantWorkspace', owner: { tenantId: 'alpha', kind: 'working', sessionId: 'session' }, path: '/working/file.txt', metadata: { displayName: 'file.txt', contentType: 'text/plain', byteSize: 3 } },
 ];
 const fetchMock = vi.fn(); const signal = () => new AbortController().signal;
 beforeEach(() => { vi.clearAllMocks(); vi.stubGlobal('fetch', fetchMock); vi.stubGlobal('Blob', NodeBlob); });
 afterEach(() => { vi.unstubAllGlobals(); });
 it.each(sources)('refreshes current workspace metadata and downloads bounded actual bytes through tenant auth: $path', async file => {
   if (file.kind !== 'tenantWorkspace') throw new Error('Fixture source');
-  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ agentInstanceId: 'agent', logicalPath: file.path, contentType: 'text/plain', byteSize: 3 })))
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ workspaceOwner: file.owner.kind === 'home' ? { kind: 'spaceHome', tenantId: 'alpha', spaceId: 'space', privateAlias: false } : { kind: 'sessionWorking', tenantId: 'alpha', sessionId: 'session' }, logicalPath: file.path, contentType: 'text/plain', byteSize: 3 })))
     .mockResolvedValueOnce(new Response('abcd'));
   const metadata = await resolveFile(file, signal());
   expect(await (await readFile(file, metadata, 4, signal())).text()).toBe('abcd');

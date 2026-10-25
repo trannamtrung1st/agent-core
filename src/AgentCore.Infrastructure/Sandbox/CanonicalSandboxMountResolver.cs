@@ -11,7 +11,7 @@ namespace AgentCore.Infrastructure.Sandbox;
 internal sealed class CanonicalSandboxMountResolver(OpenSandboxOptions options)
 {
     internal sealed record Mounts(CanonicalWorkspaceFilesystem Working, CanonicalWorkspaceFilesystem? Home,
-        SandboxMountAuthority Authority, IReadOnlyList<Volume> Volumes, string? VerificationRoot = null);
+        SandboxMountAuthority Authority, IReadOnlyList<Volume> Volumes, string? VerificationRoot = null, CanonicalWorkspaceFilesystem? Private = null);
 
     internal void ValidateConfiguration()
     {
@@ -23,35 +23,44 @@ internal sealed class CanonicalSandboxMountResolver(OpenSandboxOptions options)
         if (GetUid() == 0) throw Incompatible("Run Core with a declared non-root Unix identity before direct workspace execution.");
     }
 
-    internal Mounts Resolve(Guid owner, Guid session, HomeAccess access, bool create = false,
+    internal Mounts Resolve(Guid owner, Guid session, SandboxWorkspaceAccess access, bool create = false,
         bool validateHardLinks = true, CancellationToken ct = default)
     {
-        ValidateConfiguration();
-        return Build(AgentWorkspacePhysicalPaths.WorkingDirectory(options.CanonicalRoot(), owner, session),
-            AgentWorkspacePhysicalPaths.HomeDirectory(options.CanonicalRoot(), owner), access, create, validateHardLinks, ct);
+        access.Context.Validate(); ValidateConfiguration();
+        var root = options.CanonicalRoot();
+        return Build(AgentWorkspacePhysicalPaths.WorkingDirectory(root, owner, session),
+            AgentWorkspacePhysicalPaths.SpaceHomeDirectory(root, access.Context.TenantId, access.Context.SpaceId), access.HomeAccess,
+            create, validateHardLinks, ct, access, AgentWorkspacePhysicalPaths.SpaceHomeDirectory(root, access.Context.TenantId, access.Context.PrivateSpaceId));
     }
 
-    internal Mounts Verification(Guid id, HomeAccess access = HomeAccess.ReadWrite, CancellationToken ct = default)
+    internal Mounts Verification(Guid id, HomeAccess access = HomeAccess.ReadWrite, CancellationToken ct = default, bool workingReadOnly = false)
     {
         ValidateConfiguration();
         var root = Path.Combine(options.CanonicalRoot(), ".verification", id.ToString("N"));
-        return Build(Path.Combine(root, "working"), Path.Combine(root, "home"), access, ct: ct) with { VerificationRoot = root };
+        return Build(Path.Combine(root, "working"), Path.Combine(root, "home"), access, ct: ct, privatePath: Path.Combine(root, "private"), privateAccess: access, workingReadOnly: workingReadOnly) with { VerificationRoot = root };
     }
 
     private Mounts Build(string workingPath, string homePath, HomeAccess access, bool create = true,
-        bool validateHardLinks = true, CancellationToken ct = default)
+        bool validateHardLinks = true, CancellationToken ct = default, SandboxWorkspaceAccess? workspaceAccess = null, string? privatePath = null, HomeAccess privateAccess = HomeAccess.Disabled, bool workingReadOnly = false)
     {
+        privateAccess = workspaceAccess?.PrivateAccess ?? privateAccess;
+        workingReadOnly = workspaceAccess?.WorkingReadOnly ?? workingReadOnly;
         var working = new CanonicalWorkspaceFilesystem(workingPath, "/working"); if (create) Prepare(working);
         CanonicalWorkspaceFilesystem? home = null;
         if (access != HomeAccess.Disabled) { home = new(homePath, "/home"); if (create) Prepare(home); }
+        CanonicalWorkspaceFilesystem? privateFiles = null;
+        if (privateAccess != HomeAccess.Disabled && privatePath is not null)
+        { privateFiles = new(privatePath, "/private"); if (create) Prepare(privateFiles); }
         static string Identity(CanonicalWorkspaceFilesystem files, string path)
         { var node = files.Stat(path); return $"{node.Device:x}:{node.Inode:x}"; }
-        if (validateHardLinks) { working.ValidateHardLinkOwnership(ct); home?.ValidateHardLinkOwnership(ct); }
+        if (validateHardLinks) { working.ValidateHardLinkOwnership(ct); home?.ValidateHardLinkOwnership(ct); privateFiles?.ValidateHardLinkOwnership(ct); }
         var identity = new SandboxMountAuthority(Identity(working, "/working"), home is null ? null : Identity(home, "/home"),
-            access, checked((int)GetUid()), checked((int)GetGid()), CompatibilityContract: SandboxProfileVerification.CurrentContractVersion);
-        List<Volume> volumes = [Volume(workingPath, "working", "/working", false)];
+            access, checked((int)GetUid()), checked((int)GetGid()), CompatibilityContract: SandboxProfileVerification.CurrentContractVersion, WorkspaceAccess: workspaceAccess,
+            PrivateIdentity: privateFiles is null ? null : Identity(privateFiles, "/private"), PrivateAccess: privateAccess, WorkingReadOnly: workingReadOnly);
+        List<Volume> volumes = [Volume(workingPath, "working", "/working", workingReadOnly)];
         if (home is not null) volumes.Add(Volume(homePath, "home", "/home", access == HomeAccess.ReadOnly));
-        return new(working, home, identity, volumes);
+        if (privateFiles is not null) volumes.Add(Volume(privatePath!, "private", "/private", privateAccess == HomeAccess.ReadOnly));
+        return new(working, home, identity, volumes, Private: privateFiles);
     }
 
     private static void Prepare(CanonicalWorkspaceFilesystem files)
@@ -78,7 +87,8 @@ internal sealed class CanonicalSandboxMountResolver(OpenSandboxOptions options)
         // Unknown observations fail closed. Scanning is advisory/sampled; bytes
         // already written are retained when the process is terminated.
         if (mounts.Working.Measure(ct).Bytes > workingLimit
-            || mounts.Home is not null && mounts.Home.Measure(ct).Bytes > AgentWorkspaceLimits.MaxInstanceBytes)
+            || mounts.Home is not null && mounts.Home.Measure(ct).Bytes > AgentWorkspaceLimits.MaxSpaceBytes
+            || mounts.Private is not null && mounts.Private.Measure(ct).Bytes > AgentWorkspaceLimits.MaxSpaceBytes)
             throw AgentCoreErrors.WorkspaceQuotaExceeded();
     }
     internal static AgentCoreException Incompatible(string message) => new("MountIncompatible", message, 409);

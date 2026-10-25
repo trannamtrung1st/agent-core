@@ -26,7 +26,7 @@ for (const tool of ['harness', 'configuration', 'skills.list', 'skills.inspect',
     const nonce = crypto.randomUUID().slice(0, 8); const tenant = (await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Compound inspection ${nonce}`, slug: `compound-inspection-${nonce}` })).tenantId;
     const root = `/api/v2/tenants/${tenant}`; const revision = async () => (await call<{ revision: number }>(api, root + '/access/me')).revision;
     const draft = await call<{ draftId: string; definitionId: string; candidate: Record<string, unknown> }>(api, root + '/agent-definitions', { name: 'Metadata reader', expectedRevision: await revision() });
-    draft.candidate.environment = { harness: [], knowledgeSources: [], toolAllowlist: [], capabilities: { mode: 'Selected', resolvedCapabilities: ['configuration.inspect', 'skills.list', 'skills.inspect', 'resources.list', 'resources.inspect'] }, projection: { alwaysCapabilities: [] } };
+    draft.candidate.executionPolicy = { harness: [], knowledgeSources: [], toolAllowlist: [], capabilities: { mode: 'Selected', resolvedCapabilities: ['configuration.inspect', 'skills.list', 'skills.inspect', 'resources.list', 'resources.inspect'] }, projection: { alwaysCapabilities: [] } };
     draft.candidate.selfManagement = { mode: 'Managed', scopes: ['Instructions', 'KnowledgeResources', 'ToolSelection', 'Skills', 'Settings', 'Resources', 'Connections'], sources: [], eligibleTools: [] };
     const instruction = 'Literal <script>saved inspection instruction</script>.'; const skillName = 'Review <script>literal Skill metadata</script>';
     draft.candidate.agentInstructions = instruction;

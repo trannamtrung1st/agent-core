@@ -30,7 +30,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService
             || !TenantTaskExecutionContract.Allows(run, run.Admission.Configuration!.Definition)
             || session.Snapshot.DurablyDeletedAt is not null || session.Snapshot.ArchivedAt is not null || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active
             || session.Snapshot.Status is SessionStatus.Ending or SessionStatus.Ended) throw new AccessDeniedException("resource_unavailable");
-        var current = await configurations.CurrentResourcesAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
+        var current = await configurations.CurrentResourcesForRunAsync(run, ct).ConfigureAwait(false);
         var agent = current.Snapshot.Agent;
         if (!TenantTaskExecutionContract.Allows(run, current.Definition)) throw new AccessDeniedException("capability_unavailable");
         if (agent.PrincipalId != run.Owner.ExecutorPrincipalId || !TenantWorkspaceReadContract.Allows(run.Admission.Configuration!.Definition, tool)
@@ -57,11 +57,11 @@ public sealed partial class TenantWorkspaceRuntimeReadService
         {
             if (!Within(resource.VirtualPath, args.Path) || !actual.TryGetValue(resource.Key, out var now) || now != resource
                 || resource.Key.StartsWith("definition:", StringComparison.Ordinal) && (agent.Instance.DefinitionId != run.DefinitionId || agent.Instance.ActiveVersion != run.DefinitionVersion)) continue;
-            var scope = TenantAgentChildScopes.Scope(tenant, run.AgentInstanceId, "resource", resource.Key);
+            var scope = TenantResourceScopes.Source(tenant, run.AgentInstanceId, resource.Key);
             if (!(await iam.CheckTenantAsync(state, agent.PrincipalId, PermissionCatalog.Get("resources.read"), scope, ct).ConfigureAwait(false)).Allowed) continue;
-            var revision = resource.Key.StartsWith("instance:", StringComparison.Ordinal)
+            var revision = resource.SpaceSource?.Revision ?? (resource.Key.StartsWith("instance:", StringComparison.Ordinal)
                 ? current.Snapshot.Resources.InstanceResources.Single(r => "instance:" + r.ResourceId.ToString("D") == resource.Key).Revision
-                : current.Snapshot.Resources.DefinitionStates.SingleOrDefault(r => "definition:" + r.ResourceId.ToString("D") == resource.Key)?.Revision ?? 0;
+                : current.Snapshot.Resources.DefinitionStates.SingleOrDefault(r => "definition:" + r.ResourceId.ToString("D") == resource.Key)?.Revision ?? 0);
             eligible.Add(new(tenant, run.AgentInstanceId, run.SessionId, resource, run.DefinitionId, run.DefinitionVersion, revision));
         }
         ResourceEntry Entry(TenantResourceSourceObservation source)
@@ -87,16 +87,16 @@ public sealed partial class TenantWorkspaceRuntimeReadService
             truncated = shallow.Length > WorkspaceSearchLimits.MaxFilesScanned || deep is not null;
             scanned = Math.Min(shallow.Length, WorkspaceSearchLimits.MaxFilesScanned);
         }
-        foreach (var source in selected) await Policy("resources.read", TenantAgentChildScopes.Scope(tenant, run.AgentInstanceId, "resource", source.Resource.Key)).ConfigureAwait(false);
+        foreach (var source in selected) await Policy("resources.read", TenantResourceScopes.Source(tenant, run.AgentInstanceId, source.Resource.Key)).ConfigureAwait(false);
         var members = JsonSerializer.Serialize(selected.Select(s => new PreparedResourceReadMember(s.Resource.Key, s.ResourceRevision)).OrderBy(r => r.Key, StringComparer.Ordinal));
         var fingerprint = Hash(JsonSerializer.Serialize(new { tool, args, sources = selected, entries = entries.Select(e => new { e.Path, e.Directory }), truncated, scanned }));
-        return new(run, state, session, agent, new(tenant, run.AgentInstanceId), Collection: new(entries, selected, members, fingerprint, truncated, scanned));
+        return new(run, state, session, agent, TenantWorkspaceRules.ForRun(run, "/home"), Collection: new(entries, selected, members, fingerprint, truncated, scanned));
     }
     private async ValueTask<(string Output, string Hash)> InspectCollection(TenantRuntimeFrame frame, ModelToolCall call,
         TenantWorkspaceReadArguments args, Read before, int budget, CancellationToken ct, bool approved, bool live)
     {
         var collection = before.Collection!;
-        object Witness(string hash) => new { tool = call.Name, arguments = args, resourceCollection = true, observationHash = hash };
+        object Witness(string hash) => new { tool = call.Name, arguments = args, resourceCollection = true, resourceMembers = collection.Sources.Select(s => new PreparedResourceReadMember(s.Resource.Key, s.ResourceRevision)), observationHash = hash };
         if (call.Name == ToolCatalog.WorkspaceList)
         {
             var count = Math.Min(args.Limit, collection.Entries.Count);

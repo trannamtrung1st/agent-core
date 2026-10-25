@@ -31,7 +31,7 @@ public sealed class PublicationKnowledgeRetrieveTests
 
         var candidate = AgentDefinitionCandidate.FromDefinition(builtin!) with
         {
-            Environment = (builtin!.Environment ?? RoleEnvironment.Empty) with
+            ExecutionPolicy = (builtin!.ExecutionPolicy ?? DefinitionExecutionPolicy.Empty) with
             {
                 KnowledgeSources =
                 [
@@ -88,7 +88,7 @@ public sealed class PublicationKnowledgeRetrieveTests
         var durableDocument = await knowledge.RetrieveAsync(published.Payload, "support-order-policy", CancellationToken.None);
         Assert.Equal(publishedPolicy, durableDocument.Content);
         Assert.True(published.Version > builtin!.Version);
-        Assert.Null(published.Payload.Environment!.KnowledgeList[0].ResourcePath);
+        Assert.Null(published.Payload.ExecutionPolicy!.KnowledgeList[0].ResourcePath);
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public sealed class PublicationKnowledgeRetrieveTests
         var publicationReader = new DefinitionPublicationResourceReader(resources);
         var candidate = AgentDefinitionCandidate.FromDefinition(builtin!) with
         {
-            Environment = (builtin!.Environment ?? RoleEnvironment.Empty) with
+            ExecutionPolicy = (builtin!.ExecutionPolicy ?? DefinitionExecutionPolicy.Empty) with
             {
                 KnowledgeSources =
                 [
@@ -147,7 +147,7 @@ public sealed class PublicationKnowledgeRetrieveTests
             .RetrieveAsync(published.Payload, "support-order-policy", CancellationToken.None);
 
         Assert.Equal("Explicit refund body", document.Content);
-        Assert.Equal("knowledge/refund-policy.md", published.Payload.Environment!.KnowledgeList[0].ResourcePath);
+        Assert.Equal("knowledge/refund-policy.md", published.Payload.ExecutionPolicy!.KnowledgeList[0].ResourcePath);
     }
 
     private static async Task BindAsync(

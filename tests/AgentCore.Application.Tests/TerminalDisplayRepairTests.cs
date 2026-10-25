@@ -322,7 +322,7 @@ public sealed partial class TerminalDisplayRepairTests
         string[] tools,
         SessionToolExecutor? executor = null,
         IArtifactReferenceAuthorizer? artifactAuthorizer = null,
-        Microsoft.Extensions.Logging.ILogger? logger = null, RoleEnvironment? environment = null, ExecutionBudgetPolicy? executionBudgets = null)
+        Microsoft.Extensions.Logging.ILogger? logger = null, DefinitionExecutionPolicy? environment = null, ExecutionBudgetPolicy? executionBudgets = null)
     {
         var time = clock ?? new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
@@ -342,7 +342,7 @@ public sealed partial class TerminalDisplayRepairTests
             new VoiceConfiguration(false, "default", 1.0),
             new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
             new Dictionary<string, string>(StringComparer.Ordinal),
-            environment ?? new RoleEnvironment(ToolAllowlist: tools), ExecutionBudgets: executionBudgets);
+            environment ?? new DefinitionExecutionPolicy(ToolAllowlist: tools), ExecutionBudgets: executionBudgets);
         var snapshot = new SessionSnapshot(
             1,
             ids.NewSessionId(),

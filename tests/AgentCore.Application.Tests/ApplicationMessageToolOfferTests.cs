@@ -131,5 +131,5 @@ public sealed class ApplicationMessageToolOfferTests
             new VoiceConfiguration(false, "default", 1),
             new ProviderPreferences("primary-llm", null, null),
             new Dictionary<string, string>(StringComparer.Ordinal),
-            new RoleEnvironment(ToolAllowlist: tools));
+            new DefinitionExecutionPolicy(ToolAllowlist: tools));
 }

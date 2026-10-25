@@ -41,7 +41,7 @@ public sealed class CapabilityUsageGuidanceTests
         };
         var builder = new PromptContextBuilder(ToolConfigurationGates.AllowAll);
         var request = builder.Build(context, Guid.NewGuid());
-        var environment = Assert.Single(request.Messages, m => m.Text.StartsWith(PromptContextBuilder.ToolEnvironmentPrefix)).Text;
+        var environment = Assert.Single(request.Messages, m => m.Text.StartsWith(PromptContextBuilder.AgentCapabilitiesPrefix)).Text;
         Assert.Contains("- workspace.write: Create a UTF-8 file", environment);
         Assert.Contains("- browser.fill_credential: Fill an existing-account password input", environment);
         Assert.DoesNotContain("browser.mouse", environment); // Authorized but ineligible for this model.

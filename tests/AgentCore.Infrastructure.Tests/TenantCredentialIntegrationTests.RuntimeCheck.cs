@@ -25,9 +25,9 @@ public sealed partial class TenantCredentialIntegrationTests
             new(store, (ITenantRunStore)store, (ITenantAgentStore)store, iam, new((ITenantAuthorizationAuditStore)store, f.Ids, f.Clock)), iam, verifier, f.Ids, f.Clock);
     }
     private static async Task<(RuntimeCredentialSetup Setup, TenantApprovalRequest Request, AgentRun Run)> ApprovedRuntimeCheck(Fixture f, bool use = false,
-        CredentialPurpose purpose = CredentialPurpose.GoogleDriveAccount)
+        CredentialPurpose purpose = CredentialPurpose.GoogleDriveAccount, bool contextual = false)
     {
-        var setup = await RuntimeCredential(f, use, purpose); var service = RuntimeApprovals(f);
+        var setup = await RuntimeCredential(f, use, purpose, contextual: contextual); var service = RuntimeApprovals(f);
         var request = (await service.PrepareCredentialCheckAsync(new(setup.Tenant, setup.Run.AgentRunId), "work-drive", setup.Run.Revision, setup.Run.Claim!.Generation)).Request!;
         var view = await service.ReadViewAsync(setup.Tenant, request.RequestId, setup.Owner);
         request = await service.DecideAsync(setup.Tenant, request.RequestId, setup.Owner, true, request.Operation.ActionHash, view.SecurityRevision, request.Revision);
@@ -46,6 +46,71 @@ public sealed partial class TenantCredentialIntegrationTests
             : new("tenant-client", "https://app.example.test/callback", false, true, HostEnabled);
         public ValueTask<CredentialOAuthCheck> CheckAsync(Credential current, CancellationToken ct)
         { Interlocked.Increment(ref Calls); return check(current, ct); }
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Membership_added_Credential_reaches_the_protected_consumer_without_an_Instance_binding(bool sqlite)
+    {
+        await using var f = await Fixture.Create(sqlite);
+        var (setup, request, run) = await ApprovedRuntimeCheck(f, true, contextual: true);
+        Assert.Empty((await ((ITenantCredentialBindingStore)f.Iam).ReadTenantCredentialBindingsAsync(setup.Tenant, setup.Agent.Instance.InstanceId))!.Bindings);
+        var binding = Assert.Single(run.Admission.Configuration!.CredentialBindings);
+        Assert.Equal(run.Admission.Configuration.SpaceContext!.SpaceId, binding.ContextSpaceId);
+        Assert.Equal("work-drive", binding.Reference);
+        var calls = 0;
+        var verifier = new RuntimeCheckVerifier((credential, _) => {
+            Interlocked.Increment(ref calls);
+            Assert.Contains("original-private-refresh", f.Protector.Unprotect(credential.CredentialId, credential.ProtectionVersion, credential.ProtectedPayload));
+            return ValueTask.FromResult(new CredentialOAuthCheck(f.Protector.Protect(credential.CredentialId, credential.ProtectionVersion,
+                GoogleOAuthRefreshGrant.Write("context-rotated-private-refresh", "tenant-client"))));
+        });
+        var receipt = await RuntimeChecks(f, verifier).ExecuteAsync(new(setup.Tenant, run.AgentRunId), request.RequestId,
+            request.Operation.OperationId, run.Claim!.Generation, request.Operation.ActionHash);
+        Assert.Equal(TenantOperationOutcome.Completed, receipt.Outcome);
+        Assert.Equal(receipt, await RuntimeChecks(f, verifier).ExecuteAsync(new(setup.Tenant, run.AgentRunId), request.RequestId,
+            request.Operation.OperationId, run.Claim.Generation, request.Operation.ActionHash));
+        Assert.Equal(1, calls);
+        Assert.DoesNotContain("private-refresh", JsonSerializer.Serialize(receipt));
+    }
+
+    [Theory] [InlineData(false, true)] [InlineData(true, true)] [InlineData(false, false)] [InlineData(true, false)]
+    public async Task Removing_contextual_Credential_after_consent_blocks_provider_dispatch_and_retains_safe_denial(bool sqlite, bool contextual)
+    {
+        await using var f = await Fixture.Create(sqlite);
+        var (setup, request, run) = await ApprovedRuntimeCheck(f, true, contextual: contextual);
+        var pin = run.Admission.Configuration!.SpaceContext!;
+        var spaces = new TenantSpaceService(f.Iam, (ITenantSpaceStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer, f.RunConfiguration(),
+            (ITenantCredentialBindingStore)f.Iam, f.Credentials, f.Ids, f.Clock);
+        var member = Assert.Single(await ((ITenantSpaceStore)f.Iam).ReadMembershipsAsync(setup.Tenant, pin.SpaceId));
+        var space = (await ((ITenantSpaceStore)f.Iam).FindSpaceAsync(setup.Tenant, pin.SpaceId))!;
+        await spaces.SetMemberAsync(setup.Owner.PrincipalId, setup.Tenant, space.SpaceId, setup.Agent.Instance.InstanceId, "", "",
+            contextual ? [] : ["Credential:" + setup.CredentialId.ToString("D")], [],
+            (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision, space.Revision, member.Revision);
+        var verifier = new RuntimeCheckVerifier((_, _) => throw new InvalidOperationException("Revoked context must never reach protected values."));
+        var receipt = await RuntimeChecks(f, verifier).ExecuteAsync(new(setup.Tenant, run.AgentRunId), request.RequestId,
+            request.Operation.OperationId, run.Claim!.Generation, request.Operation.ActionHash);
+        Assert.Equal(TenantOperationOutcome.Denied, receipt.Outcome);
+        Assert.Equal("credential_unavailable", receipt.ReasonCode);
+        Assert.Equal(0, verifier.Calls);
+        Assert.Null(await ((ITenantCredentialCheckStore)f.Iam).FindCredentialCheckDispatchAsync(setup.Tenant, request.Operation.OperationId));
+        Assert.Equal(pin, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(setup.Tenant, run.AgentRunId))!.Admission.Configuration!.SpaceContext);
+        if (!contextual)
+        {
+            var baseline = Assert.Single((await ((ITenantCredentialBindingStore)f.Iam).ReadTenantCredentialBindingsAsync(setup.Tenant, setup.Agent.Instance.InstanceId))!.Bindings).Binding;
+            await f.BindingService.UnbindAsync(setup.Owner.PrincipalId, setup.Tenant, setup.Agent.Instance.InstanceId, baseline.BindingId,
+                (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision, setup.Agent.Instance.Revision, baseline.Revision);
+            var reconciled = Assert.Single(await ((ITenantSpaceStore)f.Iam).ReadMembershipsAsync(setup.Tenant, pin.SpaceId));
+            Assert.Empty(reconciled.DisabledInheritedBindingKeys);
+            Assert.Equal(member.Revision + 2, reconciled.Revision);
+            Assert.Single(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Action == "space-memberships.reconcile");
+        }
+        if (sqlite)
+        {
+            await using var db = f.Contexts!.CreateDbContext();
+            await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE AgentRuns SET PayloadJson=json_set(PayloadJson,'$.admission.configuration.spaceContext.spaceId',{Guid.NewGuid().ToString("D")}) WHERE AgentRunId={run.AgentRunId.ToString("D")}"));
+            await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson=json_set(PayloadJson,'$.Operation.SpaceContext.SpaceId',{Guid.NewGuid().ToString("D")}) WHERE RequestId={request.RequestId}"));
+        }
     }
 
     [Theory]

@@ -185,6 +185,7 @@ public sealed class TenantManagementOperationTarget(ITenantManagementStore store
         {
             var reader = observed.Source.Reader;
             var operation = TenantApprovalRules.PrepareManagementMutation(ids.NewId(), reader.Run.AgentInstanceId, observed.Value, reader.Agent.Instance.Revision, reader.Agent.Instance.PersonaRevision);
+            operation = TenantApprovalRules.ForRun(operation, reader.Run);
             var commit = new TenantManagementCommandCommit(operation, frame.RunId, frame.Generation, reader.Run.Revision, call.Id,
                 TenantManagementDirectRules.ParametersHash(observed.Value.Harness?.ToolName ?? call.Name, observed.Value.Harness?.ArgumentsJson ?? observed.Value.ArgumentsJson));
             var audit = new AuthorizationAudit(ids.NewId(), reader.Security.Tenant.TenantId, reader.Agent.PrincipalId,

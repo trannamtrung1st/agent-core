@@ -97,9 +97,9 @@ internal static class AgentDefinitionCandidateValidator
             return findings;
         }
 
-        if (candidate.Environment?.Capabilities is not null)
-            foreach (var name in candidate.Environment.ToolList)
-                if (!ToolRegistry.TryGet(name, out _)) findings.Add(Blocking("environment.capabilities.resolvedCapabilities", "unregistered_capability", $"Capability '{name}' is not registered."));
+        if (candidate.ExecutionPolicy?.Capabilities is not null)
+            foreach (var name in candidate.ExecutionPolicy.ToolList)
+                if (!ToolRegistry.TryGet(name, out _)) findings.Add(Blocking("executionPolicy.capabilities.resolvedCapabilities", "unregistered_capability", $"Capability '{name}' is not registered."));
         findings.AddRange(CollectAliasFindings(candidate.ToPublished(1), aliases));
         if (findings.Count > 0)
         {
@@ -111,22 +111,22 @@ internal static class AgentDefinitionCandidateValidator
     }
 
     private static DefinitionValidationFinding[] CollectContextProjectionFindings(AgentDefinitionCandidate candidate) =>
-        (candidate.Environment?.Projection?.AlwaysCapabilities ?? [])
+        (candidate.ExecutionPolicy?.Projection?.AlwaysCapabilities ?? [])
             .Where(n => ToolRegistry.TryGet(n, out var descriptor) && !descriptor.Discoverable && n != ToolCatalog.CapabilitiesLoad)
-            .Select(n => Blocking("environment.projection.alwaysCapabilities", "context_only_capability", $"{n} is controlled by execution context.")).ToArray();
+            .Select(n => Blocking("executionPolicy.projection.alwaysCapabilities", "context_only_capability", $"{n} is controlled by execution context.")).ToArray();
 
     private static IEnumerable<DefinitionValidationFinding> CollectStructureFindings(AgentDefinitionCandidate candidate)
     {
         try
         {
             ValidateRequiredGraph(candidate);
-            if (candidate.Environment?.Capabilities is { } authority)
+            if (candidate.ExecutionPolicy?.Capabilities is { } authority)
             {
-                var always = candidate.Environment.Projection?.AlwaysCapabilities ?? [];
+                var always = candidate.ExecutionPolicy.Projection?.AlwaysCapabilities ?? [];
                 if (always.Any(n => !authority.ResolvedCapabilities.Contains(n, StringComparer.Ordinal)))
-                    return [Blocking("environment.projection.alwaysCapabilities", "unauthorized_projection", "Always projected capabilities must be authorized.")];
+                    return [Blocking("executionPolicy.projection.alwaysCapabilities", "unauthorized_projection", "Always projected capabilities must be authorized.")];
                 if (always.Count != always.Distinct(StringComparer.Ordinal).Count())
-                    return [Blocking("environment.projection.alwaysCapabilities", "duplicate_projection", "Always projected capabilities must be unique.")];
+                    return [Blocking("executionPolicy.projection.alwaysCapabilities", "duplicate_projection", "Always projected capabilities must be unique.")];
             }
             AgentDefinitionValidator.ValidateCandidate(candidate);
             return [];
@@ -137,8 +137,8 @@ internal static class AgentDefinitionCandidateValidator
         }
         catch (ToolAllowlistValidationException)
         {
-            return AgentDefinitionValidator.ToolAllowlistFindings(candidate.Environment!.ToolList)
-                .Select(f => Blocking(candidate.Environment?.Capabilities is null ? "environment.toolAllowlist" : "environment.capabilities.resolvedCapabilities", f.Code, f.Message));
+            return AgentDefinitionValidator.ToolAllowlistFindings(candidate.ExecutionPolicy!.ToolList)
+                .Select(f => Blocking(candidate.ExecutionPolicy?.Capabilities is null ? "executionPolicy.toolAllowlist" : "executionPolicy.capabilities.resolvedCapabilities", f.Code, f.Message));
         }
         catch (ArgumentException ex)
         {
@@ -214,21 +214,21 @@ internal static class AgentDefinitionCandidateValidator
         IToolConfigurationGate configurationGate,
         IReadOnlyList<string>? sourceTools)
     {
-        foreach (var name in definition.Environment?.Projection?.AlwaysCapabilities ?? [])
+        foreach (var name in definition.ExecutionPolicy?.Projection?.AlwaysCapabilities ?? [])
             if (ToolRegistry.TryGet(name, out var d) && !d.Discoverable && name != ToolCatalog.CapabilitiesLoad)
-                yield return Blocking("environment.projection.alwaysCapabilities", "context_only_capability", $"{name} is controlled by execution context.");
-        foreach (var toolName in RoleEnvironments.Of(definition).ToolList)
+                yield return Blocking("executionPolicy.projection.alwaysCapabilities", "context_only_capability", $"{name} is controlled by execution context.");
+        foreach (var toolName in DefinitionExecutionPolicies.Of(definition).ToolList)
         {
             if (!ToolRegistry.TryGet(toolName, out var descriptor))
             {
                 yield return Blocking(
-                    "environment.toolAllowlist",
+                    "executionPolicy.toolAllowlist",
                     "unregistered_tool",
                     $"Tool '{toolName}' is not registered.");
                 continue;
             }
 
-            var publishable = definition.Environment?.Capabilities is not null || descriptor.OfferRule switch
+            var publishable = definition.ExecutionPolicy?.Capabilities is not null || descriptor.OfferRule switch
             {
                 ToolOfferRule.RoleAllowlist => true,
                 ToolOfferRule.SessionAttachmentsWhenRoleAllows => true,
@@ -241,7 +241,7 @@ internal static class AgentDefinitionCandidateValidator
             if (!publishable)
             {
                 yield return Blocking(
-                    "environment.toolAllowlist",
+                    "executionPolicy.toolAllowlist",
                     "unconfigured_tool",
                     $"Tool '{toolName}' is not configured for publication.");
             }
@@ -329,40 +329,40 @@ internal static class AgentDefinitionCandidateValidator
             }
         }
 
-        if (candidate.Environment is null)
+        if (candidate.ExecutionPolicy is null)
         {
             yield break;
         }
 
-        for (var index = 0; index < candidate.Environment.HarnessList.Count; index++)
+        for (var index = 0; index < candidate.ExecutionPolicy.HarnessList.Count; index++)
         {
             foreach (var finding in CollectSecretFieldFindings(
-                         $"environment.harness[{index}]",
-                         candidate.Environment.HarnessList[index]))
+                         $"executionPolicy.harness[{index}]",
+                         candidate.ExecutionPolicy.HarnessList[index]))
             {
                 yield return finding;
             }
         }
 
-        for (var index = 0; index < candidate.Environment.KnowledgeList.Count; index++)
+        for (var index = 0; index < candidate.ExecutionPolicy.KnowledgeList.Count; index++)
         {
-            var source = candidate.Environment.KnowledgeList[index];
+            var source = candidate.ExecutionPolicy.KnowledgeList[index];
             foreach (var finding in CollectSecretFieldFindings(
-                         $"environment.knowledge[{index}].identity",
+                         $"executionPolicy.knowledge[{index}].identity",
                          source.Identity))
             {
                 yield return finding;
             }
 
             foreach (var finding in CollectSecretFieldFindings(
-                         $"environment.knowledge[{index}].title",
+                         $"executionPolicy.knowledge[{index}].title",
                          source.Title))
             {
                 yield return finding;
             }
 
             foreach (var finding in CollectSecretFieldFindings(
-                         $"environment.knowledge[{index}].citation",
+                         $"executionPolicy.knowledge[{index}].citation",
                          source.Citation))
             {
                 yield return finding;
@@ -370,8 +370,8 @@ internal static class AgentDefinitionCandidateValidator
         }
 
         foreach (var finding in CollectSecretFieldFindings(
-                     "environment.workspacePolicy.templateId",
-                     candidate.Environment.WorkspacePolicy.TemplateId))
+                     "executionPolicy.workspacePolicy.templateId",
+                     candidate.ExecutionPolicy.WorkspacePolicy.TemplateId))
         {
             yield return finding;
         }
@@ -385,7 +385,7 @@ internal static class AgentDefinitionCandidateValidator
             yield break;
         }
 
-        var allowed = RoleEnvironments.Of(candidate.ToPublished(1)).ToolList.ToHashSet(StringComparer.Ordinal);
+        var allowed = DefinitionExecutionPolicies.Of(candidate.ToPublished(1)).ToolList.ToHashSet(StringComparer.Ordinal);
         for (var index = 0; index < candidate.Skills.Count; index++)
         {
             var capabilities = candidate.Skills[index].RequiredCapabilities;

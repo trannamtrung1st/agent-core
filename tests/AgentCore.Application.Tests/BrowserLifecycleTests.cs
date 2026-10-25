@@ -181,7 +181,7 @@ public sealed class BrowserLifecycleTests
             new VoiceConfiguration(false, "default", 1.0),
             new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
             new Dictionary<string, string>(StringComparer.Ordinal),
-            new RoleEnvironment(ToolAllowlist:
+            new DefinitionExecutionPolicy(ToolAllowlist:
             [
                 ToolCatalog.BrowserNavigate,
                 ToolCatalog.BrowserSnapshot,

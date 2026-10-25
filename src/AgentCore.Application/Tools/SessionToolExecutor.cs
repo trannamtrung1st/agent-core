@@ -25,9 +25,11 @@ public sealed partial class SessionToolExecutor(
     internal IReadOnlyList<ModelToolDefinition> ProjectTools(AgentDefinition definition, AgentContext context) =>
         context.ExecutionContext is null ? [] : BrowserNavigateOffer.Apply(ToolCatalog.For(definition, context, _configurationGate), browser);
 
-    public async ValueTask<ResolvedAgentRunConfiguration> ResolveRunConfigurationAsync(SessionSnapshot session, CancellationToken ct)
+    internal ValueTask<IReadOnlyList<string>> ContextToolsAsync(AgentRun? run, CancellationToken ct) => run is null || tenantAuthorization is null ? ValueTask.FromResult<IReadOnlyList<string>>([]) : tenantAuthorization.ContextToolsAsync(run, ct);
+
+    public async ValueTask<ResolvedAgentRunConfiguration> ResolveRunConfigurationAsync(SessionSnapshot session, CancellationToken ct, AgentRun? childSource = null)
     {
-        if (tenantAuthorization is not null && await tenantAuthorization.ResolveConfigurationAsync(session, ct).ConfigureAwait(false) is { } tenantConfiguration)
+        if (tenantAuthorization is not null && await tenantAuthorization.ResolveConfigurationAsync(session, ct, childSource).ConfigureAwait(false) is { } tenantConfiguration)
             return tenantConfiguration;
         // Pure runtime fixtures can use their supplied immutable Definition. This reads no private stores
         // and grants no tool authority; production tenant configuration resolves through its owning Run.

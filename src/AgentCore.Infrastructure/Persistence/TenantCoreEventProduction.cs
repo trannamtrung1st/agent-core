@@ -14,7 +14,7 @@ internal static class TenantCoreEventProduction
         .SelectMany(a => a.Triggers.Where(t => t.Enabled && t.Configuration is CoreEventTrigger c && c.CoreEventKey == fact.Key)
             .Select(t => { var source = (CoreEventTrigger)t.Configuration;
                 return new EventSubscriptionSnapshot(a.AutomationId, a.Owner, t.Revision, source.FilterExpression, source.Dispatch)
-                    { TriggerId = t.TriggerId }; })).ToArray();
+                    { TriggerId = t.TriggerId, PinnedSpaceId = a.PinnedSpaceId, PinnedEnvironmentId = a.PinnedEnvironmentId }; })).ToArray();
 
     internal static async ValueTask<AgentRun> RootAsync(AgentCoreDbContext db, AgentRun run, CancellationToken ct) =>
         await TenantExecutionLineage.RootAsync(run, async (id, token) => {

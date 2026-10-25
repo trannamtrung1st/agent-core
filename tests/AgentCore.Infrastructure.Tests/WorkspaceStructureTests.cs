@@ -69,13 +69,14 @@ public sealed class WorkspaceStructureTests
         using var f = new Fixture(false);
         await f.Write("project/data", "exact"u8.ToArray());
         await f.Run(new WorkspaceStructuralOperation("mkdir", Path:f.Path("project/empty")));
-        await f.Working.CopyAcrossScopesAsync(f.Session, "/working/project", "/home/shared");
-        var home = new FileAgentInstanceWorkspaceStore(f.Root, f.Metadata.Instances, f.Metadata.Sandboxes);
-        Assert.Equal("exact"u8.ToArray(), (await home.ReadAsync(f.Metadata.Owner, "/home/shared/data")).Bytes);
-        Assert.Contains((await home.ListAsync(f.Metadata.Owner, "/home/shared", null, 100)).Items, i => i.Directory && i.LogicalPath.EndsWith("/empty"));
-        await f.Working.CopyAcrossScopesAsync(f.Session, "/home/shared", "/working/copied");
+        var scratch = new CanonicalWorkspaceFilesystem(await f.Working.PhysicalWorkingDirectoryAsync(f.Session), "/working");
+        await scratch.CopyToAuthorizedAsync("/working/project", f.Home, "/home/shared", _ => ValueTask.CompletedTask, default, AgentWorkspaceLimits.MaxFileBytes, AgentWorkspaceLimits.MaxSpaceBytes);
+        var home = f.Home;
+        Assert.Equal("exact"u8.ToArray(), await home.ReadAsync("/home/shared/data", AgentWorkspaceLimits.MaxFileBytes));
+        Assert.Contains(home.List("/home/shared", null, 100).Entries, i => i.Directory && i.Path.EndsWith("/empty"));
+        await home.CopyToAuthorizedAsync("/home/shared", scratch, "/working/copied", _ => ValueTask.CompletedTask, default, AgentWorkspaceLimits.MaxFileBytes, AgentWorkspaceLimits.MaxSpaceBytes);
         Assert.Equal("exact"u8.ToArray(), await f.Read("copied/data"));
-        await Assert.ThrowsAsync<AgentCoreException>(() => f.Working.CopyAcrossScopesAsync(f.Session, "/home/shared", "/working/copied").AsTask());
+        await Assert.ThrowsAsync<AgentCoreException>(() => home.CopyToAuthorizedAsync("/home/shared", scratch, "/working/copied", _ => ValueTask.CompletedTask, default, AgentWorkspaceLimits.MaxFileBytes, AgentWorkspaceLimits.MaxSpaceBytes).AsTask());
     }
 
     [Fact]
@@ -102,22 +103,24 @@ public sealed class WorkspaceStructureTests
         internal string Root { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "workspace-structure-"+Guid.NewGuid().ToString("N"));
         internal Guid Session { get; } = Guid.NewGuid(); internal WorkspaceTestSessions Metadata { get; } = new();
         internal FileSessionWorkspace Working { get; }
-        private readonly FileAgentInstanceWorkspaceStore _home;
+        internal readonly CanonicalWorkspaceFilesystem Home;
+        internal readonly Guid Tenant = Guid.NewGuid(), Space = Guid.NewGuid();
         private readonly bool _useHome;
-        internal string Physical => _useHome ? AgentWorkspacePhysicalPaths.HomeDirectory(Root,Metadata.Owner) : AgentWorkspacePhysicalPaths.WorkingDirectory(Root,Metadata.Owner,Session);
+        internal string Physical => _useHome ? AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Root,Tenant,Space) : AgentWorkspacePhysicalPaths.WorkingDirectory(Root,Metadata.Owner,Session);
         internal Fixture(bool home)
         {
             _useHome=home;
             Working = new(Root, Root+"-templates",sessions:Metadata,instances:Metadata.Instances,sandboxes:Metadata.Sandboxes);
-            _home = new(Root,Metadata.Instances,Metadata.Sandboxes);
+            Home = new(AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Root,Tenant,Space), "/home");
+            Home.Ensure();
         }
         internal string Path(string relative) => (_useHome ? "/home/" : "/working/") + relative;
         internal async Task Write(string path, byte[] bytes)
-        { if(_useHome) await _home.WriteFileAsync(Metadata.Owner,Path(path),bytes); else await Working.WriteAsync(Session,Path(path),bytes); }
-        internal async Task<byte[]> Read(string path) => _useHome ? (await _home.ReadAsync(Metadata.Owner,Path(path))).Bytes
+        { if(_useHome) await Home.WriteAsync(Path(path),bytes,AgentWorkspaceLimits.MaxFileBytes,AgentWorkspaceLimits.MaxSpaceBytes); else await Working.WriteAsync(Session,Path(path),bytes); }
+        internal async Task<byte[]> Read(string path) => _useHome ? (await Home.ReadAsync(Path(path),AgentWorkspaceLimits.MaxFileBytes))
             : (await Working.ReadAsync(Session,(await Metadata.LoadAsync(Session))!.Definition,Path(path))).Bytes;
         internal async Task<WorkspaceStructureResult> Run(params WorkspaceStructuralOperation[] operations) => _useHome
-            ? await _home.StructureAsync(Metadata.Owner,operations) : await Working.StructureAsync(Session,operations);
+            ? Home.Structure(operations,AgentWorkspaceLimits.MaxFileBytes,AgentWorkspaceLimits.MaxSpaceBytes,default) : await Working.StructureAsync(Session,operations);
         public void Dispose() { if(Directory.Exists(Root))Directory.Delete(Root,true); }
     }
 }

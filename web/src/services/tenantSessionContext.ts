@@ -1,0 +1,6 @@
+import { tenantApi } from './identity';
+import type { SpaceEnvironment, TenantSpace } from './tenantSpaces';
+export type SessionContextSelection = { tenantId: string; spaceId: string; environmentId: string | null; revision: number; effectiveAfterRunId: string | null; transitionId: string | null };
+export type SessionContextView = { selection: SessionContextSelection; state: 'applied' | 'pending_next_turn' | 'stale'; reasonCode: string | null; space: TenantSpace | null; environment: SpaceEnvironment | null; sessionRevision: number; securityRevision: number };
+export type ContextOptions = { spaces: { spaceId: string; name: string; description: string; kind: string; environmentsEnabled: boolean }[]; page: number; hasMore: boolean; spaceId: string; environmentsEnabled: boolean; environmentSelectionAllowed: boolean; canSwitch: boolean; canClearEnvironment: boolean; environments: { environmentId: string; name: string; description: string; revision: number }[]; securityRevision: number; sessionRevision: number; selectionRevision: number };
+export const sessionContextApi = (tenant: string, session: string, suffix = '') => tenantApi(tenant, `/sessions/${encodeURIComponent(session)}/context${suffix}`);

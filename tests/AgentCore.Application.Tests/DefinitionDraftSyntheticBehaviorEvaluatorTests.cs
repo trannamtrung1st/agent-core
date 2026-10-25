@@ -21,7 +21,7 @@ public sealed class DefinitionDraftSyntheticBehaviorEvaluatorTests
             ToolConfigurationGates.AllowAll);
         var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Examiner) with
         {
-            Environment = RoleEnvironment.Empty with { ToolAllowlist = [ToolCatalog.KnowledgeRetrieve] }
+            ExecutionPolicy = DefinitionExecutionPolicy.Empty with { ToolAllowlist = [ToolCatalog.KnowledgeRetrieve] }
         };
         var scenario = new DefinitionEvaluationScenario(
             Guid.NewGuid(),

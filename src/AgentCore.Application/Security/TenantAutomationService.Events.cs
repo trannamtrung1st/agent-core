@@ -10,13 +10,17 @@ public sealed partial class TenantAutomationService
     {
         var current = await EventRegistration(source.TenantId, source.Subscription, ct);
         var state = await security.ReadTenantAsync(source.TenantId, ct) ?? throw new AccessDeniedException("tenant_unavailable");
-        return await Admit(current, state, null, null, false, ct, eventDelivery: source);
+        try { return await Admit(current, state, null, null, false, ct, eventDelivery: source); }
+        catch (AccessDeniedException error) when (TenantAutomationContextRules.Failure(error.ReasonCode) is not null)
+        { await SuspendContextAsync(current, error.ReasonCode, ct).ConfigureAwait(false); throw; }
     }
     public async ValueTask<TenantAutomationAdmissionResult?> AdmitEventAsync(TenantEventBucket source, CancellationToken ct = default)
     {
         var current = await EventRegistration(source.TenantId, source.Bucket.Subscription, ct);
         var state = await security.ReadTenantAsync(source.TenantId, ct) ?? throw new AccessDeniedException("tenant_unavailable");
-        return await Admit(current, state, null, null, false, ct, eventBucket: source);
+        try { return await Admit(current, state, null, null, false, ct, eventBucket: source); }
+        catch (AccessDeniedException error) when (TenantAutomationContextRules.Failure(error.ReasonCode) is not null)
+        { await SuspendContextAsync(current, error.ReasonCode, ct).ConfigureAwait(false); throw; }
     }
     private async ValueTask<Automation> EventRegistration(Guid tenant, AgentCore.Domain.Events.EventSubscriptionSnapshot source, CancellationToken ct)
     {

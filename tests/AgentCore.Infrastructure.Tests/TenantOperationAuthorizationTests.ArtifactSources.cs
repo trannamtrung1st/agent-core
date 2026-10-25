@@ -17,7 +17,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
         byte[] original = [0, 255, 128, 1, 2, 3]; await SeedRuntimeWorkspace(f, s, working, "source.bin", original);
-        var owner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId, working ? s.Run.SessionId : null);
+        var owner = WorkspaceOwner(s, working);
         var path = owner.LogicalRoot + "/source.bin";
         var source = await WorkspaceReader(f).CaptureArtifactSourceTenantAsync(owner, path);
         Assert.Equal(owner, source.Observation.Owner); Assert.Equal(path, source.Observation.Path);
@@ -26,8 +26,8 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(64, source.Observation.ObservationHash.Length); Assert.Equal(original, source.CopyContent());
         var exposed = source.CopyContent(); exposed[0] = 42; Assert.Equal(original, source.CopyContent());
         await source.RequireCurrentAsync();
-        var physical = working ? AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), owner.InstanceId, s.Run.SessionId)
-            : AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), owner.InstanceId);
+        var physical = working ? AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), s.Agent.Instance.InstanceId, s.Run.SessionId)
+            : AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), owner.TenantId, owner.OwnerId);
         var file = Path.Combine(physical, "source.bin"); var stamp = File.GetLastWriteTimeUtc(file);
         await File.WriteAllBytesAsync(file, new byte[] { 0, 255, 128, 1, 2, 4 }); File.SetLastWriteTimeUtc(file, stamp);
         var error = await Assert.ThrowsAsync<SecurityConflictException>(() => source.RequireCurrentAsync().AsTask());
@@ -48,7 +48,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var bytes = workbook ? processor.CreateWorkbook(new([new("Dữ liệu", [[new("number", Number: 0), new("boolean", Boolean: false), new("text", Text: "Private Office body")]])]), default).Bytes
             : processor.CreateDocument(new("Exact report", [new(null, ["Private Office body: thử nghiệm"], null)]), default).Bytes;
         var name = workbook ? "source.xlsx" : "source.docx"; await SeedRuntimeWorkspace(f, s, working, name, bytes, OfficeLimits.MaxPackageBytes);
-        var owner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId, working ? s.Run.SessionId : null);
+        var owner = WorkspaceOwner(s, working);
         var source = await WorkspaceReader(f).CaptureArtifactSourceTenantAsync(owner, owner.LogicalRoot + "/" + name);
         Assert.Equal(bytes, source.CopyContent()); Assert.Equal(bytes.Length, source.Observation.ByteSize);
         Assert.Equal(workbook ? OfficeLimits.SpreadsheetMime : OfficeLimits.DocumentMime, source.Observation.ContentType);
@@ -64,11 +64,13 @@ public sealed partial class TenantOperationAuthorizationTests
         var betaActor = s.Owner with { PrincipalId = beta.Users.Single().PrincipalId };
         var other = await f.Agents.CreateAsync(betaActor.PrincipalId, beta.Tenant.TenantId, "examiner", 1, beta.Tenant.Revision);
         var sibling = await f.Agents.CreateAsync(s.Owner.PrincipalId, s.Tenant, "examiner", 1, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
-        foreach (var owner in new TenantWorkspaceReference[] { new(Guid.Empty, s.Agent.Instance.InstanceId), new(s.Tenant, Guid.Empty),
-            new(s.Tenant, s.Agent.Instance.InstanceId, Guid.Empty), new(s.Tenant, other.Instance.InstanceId), new(beta.Tenant.TenantId, s.Agent.Instance.InstanceId),
-            new(s.Tenant, sibling.Instance.InstanceId, s.Run.SessionId) })
-            await Assert.ThrowsAsync<AccessDeniedException>(() => store.CaptureArtifactSourceTenantAsync(owner, owner.LogicalRoot + "/source").AsTask());
-        var actual = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId);
+        Assert.Throws<ArgumentException>(() => new TenantWorkspaceReference.SpaceHome(Guid.Empty, Guid.NewGuid()));
+        Assert.Throws<ArgumentException>(() => new TenantWorkspaceReference.SpaceHome(s.Tenant, Guid.Empty));
+        Assert.Throws<ArgumentException>(() => new TenantWorkspaceReference.SessionWorking(s.Tenant, Guid.Empty));
+        var foreignHome = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(beta.Tenant.TenantId, other.Instance.InstanceId))!;
+        foreach (var owner in new TenantWorkspaceReference.SpaceHome[] { new(s.Tenant, foreignHome.SpaceId), new(beta.Tenant.TenantId, SpaceId(s)) })
+            await Assert.ThrowsAsync<AccessDeniedException>(() => store.CaptureArtifactSourceTenantAsync(owner, "/home/source").AsTask());
+        var actual = WorkspaceOwner(s);
         foreach (var path in new[] { "source", "/home/*", "/home/a?", "/home/[x]", "/home/../source", "/working/source", "/home" })
             await Assert.ThrowsAsync<AgentCoreException>(() => store.CaptureArtifactSourceTenantAsync(actual, path).AsTask());
         await Assert.ThrowsAsync<AgentCoreException>(() => store.CaptureArtifactSourceTenantAsync(actual, "/home/missing").AsTask());
@@ -80,19 +82,17 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Tenant_Artifact_source_applies_configured_and_global_bounds_and_revalidation_reports_missing_source_safely(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
-        await SeedRuntimeWorkspace(f, s, false, "source.bin", [0, 1, 2, 3, 4]); var owner = new TenantWorkspaceReference(s.Tenant, s.Agent.Instance.InstanceId);
-        var restricted = new FileAgentInstanceWorkspaceStore(Path.Combine(f.Root, "workspaces"), f.Instances, f.Sandboxes, maxFileBytes: 4,
-            tenantAgents: (ITenantAgentStore)f.Iam, tenantSessions: (ITenantSessionStore)f.Iam);
+        await SeedRuntimeWorkspace(f, s, false, "source.bin", [0, 1, 2, 3, 4]); var owner = WorkspaceOwner(s);
+        var restricted = new FileSpaceWorkspaceStore(Path.Combine(f.Root, "workspaces"), (ITenantSpaceStore)f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantAgentDecommissionStore)f.Iam, f.Sandboxes, maxFileBytes: 4);
         Assert.Equal("WorkspaceQuotaExceeded", (await Assert.ThrowsAsync<AgentCoreException>(() => restricted.CaptureArtifactSourceTenantAsync(owner, "/home/source.bin").AsTask())).Code);
         var source = await WorkspaceReader(f).CaptureArtifactSourceTenantAsync(owner, "/home/source.bin");
         using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => source.RequireCurrentAsync(cancellation.Token).AsTask());
-        var physical = Path.Combine(AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root, "workspaces"), owner.InstanceId), "source.bin");
+        var physical = Path.Combine(AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), owner.TenantId, owner.OwnerId), "source.bin");
         File.Delete(physical);
         Assert.Equal("workspace_source_changed", (await Assert.ThrowsAsync<SecurityConflictException>(() => source.RequireCurrentAsync().AsTask())).ReasonCode);
         using (var file = new FileStream(physical, FileMode.CreateNew)) file.SetLength(ArtifactLimits.MaxBytesEach + 1);
-        var permissive = new FileAgentInstanceWorkspaceStore(Path.Combine(f.Root, "workspaces"), f.Instances, f.Sandboxes, maxFileBytes: ArtifactLimits.MaxBytesEach * 2,
-            tenantAgents: (ITenantAgentStore)f.Iam, tenantSessions: (ITenantSessionStore)f.Iam);
+        var permissive = new FileSpaceWorkspaceStore(Path.Combine(f.Root, "workspaces"), (ITenantSpaceStore)f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantAgentDecommissionStore)f.Iam, f.Sandboxes, maxFileBytes: ArtifactLimits.MaxBytesEach * 2);
         Assert.Equal("WorkspaceQuotaExceeded", (await Assert.ThrowsAsync<AgentCoreException>(() => permissive.CaptureArtifactSourceTenantAsync(owner, "/home/source.bin").AsTask())).Code);
     }
 }

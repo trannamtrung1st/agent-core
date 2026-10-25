@@ -1,3 +1,5 @@
+using AgentCore.Domain.Conversation;
+using AgentCore.Application.Security;
 namespace AgentCore.Application.Ports;
 
 // Private source evidence, not authority. Callers separately require current IAM, ownership and a live Run/consent.
@@ -15,6 +17,8 @@ public interface ITenantWorkspaceArtifactSource
 
 public interface ITenantWorkspaceArtifactSourceStore
 {
+    ValueTask<ITenantWorkspaceArtifactSource> CaptureResourceSourceTenantAsync(TenantWorkspaceReference owner, string path, CancellationToken ct = default) =>
+        throw new AccessDeniedException("resource_source_unavailable");
     ValueTask<ITenantWorkspaceArtifactSource> CaptureArtifactSourceTenantAsync(TenantWorkspaceReference owner, string path, CancellationToken ct = default);
 }
 

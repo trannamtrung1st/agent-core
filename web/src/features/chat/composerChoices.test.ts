@@ -1,15 +1,15 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { tenantComposerChoices } from '../../services/tenantChat';
+import { tenantComposerChoices, tenantComposerSpace } from '../../services/tenantChat';
 import { loadComposerChoices, resourceCategories } from './composerChoices';
-vi.mock('../../services/tenantChat', () => ({ tenantComposerChoices: vi.fn() }));
+vi.mock('../../services/tenantChat', () => ({ tenantComposerChoices: vi.fn(), tenantComposerSpace: vi.fn() }));
 const load = vi.mocked(tenantComposerChoices);
-beforeEach(() => { load.mockReset(); });
+beforeEach(() => { load.mockReset(); vi.mocked(tenantComposerSpace).mockReset().mockResolvedValue('selected-space'); });
 it('combines all six tenant sources and preserves independent native cursors', async () => {
   load.mockImplementation(async (_id, params) => { const category = params.get('category')!; return { items: [{ id: category, category, label: category, description: '' }], nextCursor: `next-${category}` }; });
   const page = await loadComposerChoices('actual-instance', 'reference', 'review');
   expect(page.items.map(item => item.category)).toEqual(resourceCategories);
   expect(page.next).toEqual(Object.fromEntries(resourceCategories.map(category => [category, `next-${category}`])));
-  expect(page.failed).toEqual({}); expect(load.mock.calls.every(([id]) => id === 'actual-instance')).toBe(true);
+  expect(page.failed).toEqual({}); expect(load.mock.calls[0][1].get('spaceId')).toBe('selected-space'); expect(load.mock.calls.every(([id]) => id === 'actual-instance')).toBe(true);
 });
 it('keeps authorized results and retries only failed sources at their prior position', async () => {
   load.mockImplementation(async (_id, params) => { if (params.get('category') === 'artifact') throw new Error('unavailable'); return { items: [{ id: 'chat', category: 'session', label: 'Chat', description: '' }], nextCursor: null }; });
@@ -27,4 +27,13 @@ it('rejects a nonadvancing source cursor and retains retry', async () => {
 it('discovers explicit Skill invocation independently from reference inspection', async () => {
   load.mockResolvedValue({ items: [], nextCursor: null }); await loadComposerChoices('instance', 'invocation', 'review');
   expect(load).toHaveBeenCalledTimes(1); expect(load.mock.calls[0][1].get('category')).toBe('invocation');
+});
+
+it('keeps other choices available when current Space discovery is denied', async () => {
+  vi.mocked(tenantComposerSpace).mockRejectedValue(new Error('denied'));
+  load.mockResolvedValue({ items: [], nextCursor: null });
+  const page = await loadComposerChoices('instance', 'reference', '', undefined, 'session');
+  expect(page.failed).toEqual({ homeFile: null });
+  expect(load).toHaveBeenCalledTimes(5);
+  expect(tenantComposerSpace).toHaveBeenCalledWith('instance', 'session');
 });

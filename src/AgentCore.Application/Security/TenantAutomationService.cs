@@ -13,7 +13,7 @@ public sealed record TenantAutomationTriggerChange(Guid? TriggerId, AutomationTr
 public sealed record TenantAutomationChange(bool Enabled, string Name, string Instructions, TriggerSchedule? Schedule,
     string? ModelKey = null, string? ReasoningEffort = null, bool RequiresTools = true, bool RequiresVision = false,
     IReadOnlyList<TenantAutomationTriggerChange>? Events = null, Guid? ReportToSessionId = null, Guid? TargetSessionId = null,
-    string? PresetId = null, int? PresetVersion = null);
+    string? PresetId = null, int? PresetVersion = null, Guid? PinnedSpaceId = null, Guid? PinnedEnvironmentId = null);
 
 public sealed partial class TenantAutomationService(IIamStore security, ITenantAutomationStore store, ITenantAgentStore agents,
     TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer iam, IModelCatalog models, IIdGenerator ids, TimeProvider time, IEventFilterEvaluator? filters = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null, ITenantSessionStore? sessions = null)
@@ -106,6 +106,8 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
                             new(ids.NewId(), state.Tenant.TenantId, value.Owner.ExecutorPrincipalId!.Value, "automations.schedule.advance", value.AutomationId.ToString("D"), "allowed", "schedule_closed", at), ct);
                     else if (await Admit(value, state, null, null, false, ct) is { Created: true }) count++;
                 }
+                catch (AccessDeniedException error) when (TenantAutomationContextRules.Failure(error.ReasonCode) is { })
+                { await SuspendContextAsync(value, error.ReasonCode, ct).ConfigureAwait(false); }
                 catch (Exception e) when (e is AccessDeniedException or SecurityConflictException or ArgumentException) { }
             }
             if (due.Count < 100) dueCursor = null;
@@ -116,7 +118,9 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
     private async ValueTask<TenantAutomationAdmissionResult?> Admit(Automation current, TenantSecurityState state, HumanSessionReference? human, long? instanceRevision, bool manual, CancellationToken ct, TenantEventDelivery? eventDelivery = null, TenantEventBucket? eventBucket = null)
     {
         var tenant = current.Owner.TenantId!.Value; var at = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
-        var (agent, resolved) = await configurations.ResolveAsync(tenant, current.Owner.AgentInstanceId, ct);
+        var conversation = TenantAutomationConversationRules.Existing(current)
+            ? TenantAutomationConversationRules.Require(current, sessions is null ? null : await sessions.FindTenantSessionAsync(tenant, current.ExecutionTarget.SessionId!.Value, ct)) : null;
+        var (agent, resolved) = await configurations.ResolveForAutomationAsync(current, conversation, at, ct);
         if (instanceRevision is { } expected && agent.Instance.Revision != expected) throw new SecurityConflictException("stale_revision");
         PreparedEventAdmissionSource? eventSource = null;
         long? sourceRevision = null;
@@ -152,8 +156,6 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
             await TenantEventAdmissionRules.RawReadAsync(state, agent.PrincipalId, subscription, eventSource.EventIds, iam, ct, eventDelivery is not null ? TenantEventAdmissionRules.EmailAccounts(eventDelivery) : TenantEventAdmissionRules.EmailAccounts(eventBucket!));
         }
         var sourceKind = manual ? TriggerSourceKind.ManualInvocation : eventSource?.SourceKind ?? TriggerSourceKind.Schedule;
-        var conversation = TenantAutomationConversationRules.Existing(current)
-            ? TenantAutomationConversationRules.Require(current, sessions is null ? null : await sessions.FindTenantSessionAsync(tenant, current.ExecutionTarget.SessionId!.Value, ct)) : null;
         var admissionDecision = await TenantAutomationAdmissionApprovalRules.EvaluateAsync(state, current, agent, resolved.Configuration.Definition, human?.PrincipalId, iam, ct, sourceKind, eventSource, eventDelivery is not null ? TenantEventAdmissionRules.EmailAccounts(eventDelivery) : eventBucket is not null ? TenantEventAdmissionRules.EmailAccounts(eventBucket) : []);
         var model = conversation is null ? ExecutionModelPolicy.Resolve(models, resolved.Configuration.Definition, agent.Instance, current)
             : new ExecutionModelDecision(TenantAutomationConversationRules.Model(current, conversation, resolved.Configuration.Definition, models), null);
@@ -182,6 +184,7 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
             ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved.Configuration, manual ? human?.PrincipalId : null)
             : (Session: conversation.Snapshot, Run: TenantAutomationConversationRules.ForOccurrence(conversation, occurrence, agent, resolved,
                 ids.NewId(), ids.NewId(), ids.NewId(), model.Pin, at, manual ? human?.PrincipalId : null));
+        await configurations.RequireCurrentSpaceAsync(graph.Run, ct).ConfigureAwait(false);
         var initialOccurrence = occurrence;
         occurrence = occurrence.WithRouting(OccurrenceRoutingDisposition.AwaitingDurableWork, null, occurrence.RoutingRevision + 1, at, null, null)
             .WithExecutionAcceptance(graph.Session.SessionId, graph.Run.AgentRunId, occurrence.RoutingRevision + 1, at);
@@ -197,6 +200,7 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
                 TenantAutomationRules.Hash(resolved), new(model.Pin.CatalogKey, model.Pin.ProviderAlias, model.Pin.ModelId, model.Pin.ReasoningEffort), eventSource,
                 conversation is null ? null : new(conversation.Snapshot.Revision, conversation.Snapshot.DurableLastEntrySequence));
             var op = TenantApprovalRules.PrepareAutomationAdmission(ids.NewId(), agent.Instance.InstanceId, intent, agent.Instance.Revision, agent.Instance.PersonaRevision);
+            op = TenantApprovalRules.ForRun(op, graph.Run);
             var request = new TenantApprovalRequest(requestId, tenant, intent.RunId, intent.SessionId, intent.ActivationId, agent.PrincipalId, human?.PrincipalId,
                 kind, op, TenantApprovalStatus.Pending, 1, at, at.AddHours(1), new(agent.Instance.Persona.Name));
             var qualified = false;

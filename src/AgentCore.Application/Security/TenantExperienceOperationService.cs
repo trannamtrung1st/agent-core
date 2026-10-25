@@ -20,6 +20,7 @@ public sealed class TenantExperienceOperationService(ITenantExperienceStore stor
     public async ValueTask<OperationAuthorizationDecision> DecisionAsync(TenantExperienceOperationObservation observed, CancellationToken ct = default)
     {
         var reader = observed.Reader; var prepared = TenantApprovalRules.PrepareExperience(ids.NewId(), reader.Run.AgentInstanceId, observed.Value, reader.Agent.Instance.Revision, reader.Agent.Instance.PersonaRevision);
+        prepared = TenantApprovalRules.ForRun(prepared, reader.Run);
         var primary = TenantApprovalRules.Scope(reader.Security.Tenant.TenantId, prepared); var review = observed.Arguments.Tool == TenantExperienceToolContract.Consolidate;
         foreach (var (key, scope) in TenantExperienceConsentRules.Targets(observed).Distinct())
         {
@@ -63,6 +64,7 @@ public sealed class TenantExperienceOperationService(ITenantExperienceStore stor
             return Serialize(after.Source!, budget);
         }
         var target = before.Reader.Agent; var prepared = TenantApprovalRules.PrepareExperience(ids.NewId(), before.Reader.Run.AgentInstanceId, before.Value, target.Instance.Revision, target.Instance.PersonaRevision);
+        prepared = TenantApprovalRules.ForRun(prepared, before.Reader.Run);
         var prior = await approvals.FindRootApprovalAsync(reference.TenantId, before.Reader.Run.Admission.Activation.RootActivationId, target.PrincipalId, prepared, ct).ConfigureAwait(false);
         if (prior is not null) return JsonSerializer.Serialize(new { decision = prior.Status == TenantApprovalStatus.Pending ? "requiresApproval" : "denied", reasonCode = TenantApprovalRules.DuplicateReason(prior), applied = false });
         var state = before.Reader.Security;
