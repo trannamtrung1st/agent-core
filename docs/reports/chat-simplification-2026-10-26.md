@@ -1,6 +1,6 @@
 # Message, Execution and Chat Simplification
 
-Implementation baseline: `ed73a7762e4818a765438b236184824c9b9b4971` on `develop/branch-1`. The implementation uses one coordinated schema/API/browser cutover. The exact implementation and main-integration commits are recorded below after creation. Evidence is local and Synthetic; it does not renew historical milestone or deployment acceptance.
+Implementation baseline: `ed73a7762e4818a765438b236184824c9b9b4971` on `develop/branch-1`. The implementation uses one coordinated schema/API/browser cutover. The exact implementation and verified main-integration commits are recorded below. Evidence is local and Synthetic; it does not renew historical milestone or deployment acceptance.
 
 ## Dependency and removal inventory
 
@@ -65,7 +65,7 @@ Hosted CI/full solution tests, live-provider calls, production deployment/restor
 
 ## Source and main integration
 
-Baseline: `ed73a7762e4818a765438b236184824c9b9b4971`. Implementation commit and subsequent main synchronization are recorded in the final verification follow-up. No supported migration history was removed, no provider credentials were used, and no hosted Actions run was dispatched.
+Baseline: `ed73a7762e4818a765438b236184824c9b9b4971`. Implementation: `642a754ea67e116f9a3093461baa9f012535e245`. Verified main integration and final behavior source: `03e8946978e7b425ecacf7f86f4b3bac7a48f401`, whose second parent is main `0ac18c7ebcbff863b5f727fc2d2eb74e8c540aed`. The following commit updates this ledger only. No supported migration history was removed, no provider credentials were used, and no hosted Actions run was dispatched.
 
 
 ## Main synchronization qualification
@@ -83,4 +83,4 @@ Post-merge checks:
 - Browser: the four files `chat-retention.spec.ts`, `tenant-chat.spec.ts`, `tenant-management-reads.spec.ts`, `tenant-management-mutations.spec.ts` selected with `--grep 'Saved completion|Temporary long text|management read consent approve 1440|management command settings.patch approve 1440|tenant text, rendered|local queue drains|tenant Steer'`, 7 passed (3.1m). Same `TENANT_CHAT_API_PORT=5098 TENANT_CHAT_WEB_PORT=5188 CI=1 pnpm exec playwright test --config playwright.tenant-chat.config.ts` prefix as above.
 - Frontend: ChatApp, Composer, TenantAgentControls, TenantGovernance, realtime tenant/race selected 146 cases. Four files passed 132 cases on the combined run. Two Admin cases failed under concurrent build/test load (one 30s timeout and one transient modal visibility assertion); isolated `--maxWorkers=1 --no-file-parallelism` recheck passed all 14 cases in those two files. No assertion or product behavior was weakened. `pnpm run build` passed typecheck and Vite (31.16s); existing chunk-size and third-party PURE-annotation warnings remain.
 
-The merged source commit is recorded by the final documentation follow-up so it identifies all behavior changes without a self-referential commit hash. These tests qualify the combined local implementation; hosted CI, production restore/deployment, live providers and physical audio remain unrun.
+Verified merged behavior source is `03e8946978e7b425ecacf7f86f4b3bac7a48f401`; this documentation-only follow-up identifies it without a self-referential commit hash. These tests qualify the combined local implementation; hosted CI, production restore/deployment, live providers and physical audio remain unrun.
