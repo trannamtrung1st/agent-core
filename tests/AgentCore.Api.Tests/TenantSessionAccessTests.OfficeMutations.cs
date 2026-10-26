@@ -69,7 +69,7 @@ public sealed partial class TenantSessionAccessTests
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var workspace = api + (working ? $"/sessions/{session}/workspace" : $"/agents/{instance}/workspace");
             const string text = "Exact new Office content thử nghiệm";
             var processor = factory.Services.GetRequiredService<IOfficeProcessor>();
@@ -139,7 +139,7 @@ public sealed partial class TenantSessionAccessTests
             if (proof)
             {
                 await File.WriteAllTextAsync(proofPath + "-completed.json", "{}");
-                var nextSession = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+                var nextSession = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
                 var nextWorkspace = api + $"/sessions/{nextSession}/workspace"; var nextPath = "/working/exact-reviewed-Excel-change-with-long-name-thử-nghiệm-試験-2026.xlsx";
                 var sourceBytes = processor.CreateWorkbook(new([new("Quarterly results 試験 thử", [[new("text", Text: "Private original values")]])]), default).Bytes;
                 Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(nextWorkspace + $"/content?path={Uri.EscapeDataString(nextPath)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent(sourceBytes))).StatusCode);

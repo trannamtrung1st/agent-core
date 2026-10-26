@@ -32,6 +32,7 @@ import { ComposerChipNode } from "./ComposerChipNode";
 import {
   messageText,
   normalizeParts,
+  normalizeDraftParts,
   type ComposerChoice,
   type MessagePart,
 } from "../../services/messageParts";
@@ -53,7 +54,7 @@ function partsFromRoot(): MessagePart[] {
       if (i) result.push({ kind: "text", text: "\n" });
       visit(node);
     });
-  return normalizeParts(result);
+  return normalizeDraftParts(result);
 }
 function writeParts(parts: MessagePart[]) {
   const root = $getRoot();
@@ -283,7 +284,7 @@ function Controller(props: Props) {
   useEffect(() => {
     let incoming: MessagePart[];
     try {
-      incoming = normalizeParts(
+      incoming = normalizeDraftParts(
         props.parts ??
           (props.draft ? [{ kind: "text", text: props.draft }] : []),
       );
@@ -309,7 +310,9 @@ function Controller(props: Props) {
             return;
           }
           if (!parts.length) dismissed.current = null;
-          propsRef.current.onValidationChange?.(true);
+          let valid = true;
+          try { normalizeParts(parts); } catch { valid = false; }
+          propsRef.current.onValidationChange?.(valid);
           if (!pickerRef.current) setError(null);
           const serialized = JSON.stringify(parts);
           if (serialized !== last.current) {
@@ -632,6 +635,14 @@ function Controller(props: Props) {
         }
         dismissed.current = "paste";
         setPicker(null);
+        // Native focus can leave the selection on the empty root itself. Inserting
+        // there can manufacture a second paragraph and an extra trailing newline.
+        // A literal paste into an empty composer owns exactly its original bytes.
+        if (parts.every(part => part.kind === 'text') && $getRoot().getTextContent() === '') {
+          writeParts(parts);
+          $getRoot().selectEnd();
+          return true;
+        }
         // Remove the replacement range before deduplicating against retained chips.
         selection.removeText();
         const retainedSkills = new Set(

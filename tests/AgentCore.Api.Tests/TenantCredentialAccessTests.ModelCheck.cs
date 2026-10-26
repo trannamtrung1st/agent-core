@@ -97,7 +97,7 @@ public sealed partial class TenantCredentialAccessTests
         var access = factory.Services.GetRequiredService<TenantAccessService>();
         var role = await access.SaveRoleAsync(principal, tenant, null, "Model credential", use ? ["credentials.read", "credentials.use"] : ["credentials.read"], await Revision(owner, tenant));
         await access.AssignRoleAsync(principal, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForResource(tenant, "credential", credential.ToString("D")), await Revision(owner, tenant));
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision })))
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision })))
             .GetProperty("sessionId").GetGuid();
         var sourceId = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "synthetic credential check work-drive", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 })))
             .GetProperty("runId").GetGuid();

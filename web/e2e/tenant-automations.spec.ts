@@ -81,7 +81,7 @@ test('scoped Automation reader has no mutation controls and read revocation reti
 test('exact Automation admission is reviewed before any work exists and settles truthfully at narrow width', async ({ page }, info) => {
   const f = await fixture(); const observed = watch(page);
   try {
-    const target = await call<{ sessionId: string }>(f.api, f.root + '/sessions', { agentInstanceId: f.id, mode: 'text', expectedRevision: await f.revision(), expectedInstanceRevision: 1 });
+    const target = await call<{ sessionId: string }>(f.api, f.root + '/sessions', { retentionKind: "saved", agentInstanceId: f.id, mode: 'text', expectedRevision: await f.revision(), expectedInstanceRevision: 1 });
     await call(f.api, f.root + '/operation-policies/agent-runs.create', { mode: 'always', independentReview: false, expectedRevision: await f.revision(), expectedPolicyRevision: 0 }, 'PUT');
     await call(f.api, f.resource, { enabled: true, name: 'Approval before work exists', instructions: 'synthetic-automation-attention: finish this exact approved occurrence', schedule: { kind: 'daily', interval: 1, timeZone: 'UTC', localTime: '09:00' }, expectedRevision: await f.revision(), expectedInstanceRevision: 1, requiresTools: true, reportToSessionId: target.sessionId });
     await page.setViewportSize({ width: 390, height: 844 }); await signIn(page); await page.goto(f.route);
@@ -111,7 +111,7 @@ test('exact Automation admission is reviewed before any work exists and settles 
 test('configured completion uses the shared tenant picker, retains a stale destination and delivers the exact report once', async ({ page }, info) => {
   const f = await fixture(); const observed = watch(page);
   try {
-    const target = await call<{ sessionId: string; revision: number }>(f.api, f.root + '/sessions', { agentInstanceId: f.id, mode: 'text', expectedRevision: await f.revision(), expectedInstanceRevision: 1 });
+    const target = await call<{ sessionId: string; revision: number }>(f.api, f.root + '/sessions', { retentionKind: "saved", agentInstanceId: f.id, mode: 'text', expectedRevision: await f.revision(), expectedInstanceRevision: 1 });
     await call(f.api, f.root + `/sessions/${target.sessionId}`, { title: 'Quarterly research — a deliberately long conversation title for completion reports', expectedRevision: await f.revision(), expectedSessionRevision: target.revision }, 'PATCH');
     await page.setViewportSize({ width: 1440, height: 1000 }); await signIn(page); await page.goto(f.route);
     await page.getByRole('button', { name: 'New Automation', exact: true }).click();
@@ -162,7 +162,7 @@ test('configured completion uses the shared tenant picker, retains a stale desti
 test('selected-conversation execution preserves its destination through stale recovery and exact admission Review', async ({ page }, info) => {
   const f = await fixture(); const observed = watch(page);
   try {
-    const target = await call<{ sessionId: string; revision: number }>(f.api, f.root + '/sessions', { agentInstanceId: f.id, mode: 'text', expectedRevision: await f.revision(), expectedInstanceRevision: 1 });
+    const target = await call<{ sessionId: string; revision: number }>(f.api, f.root + '/sessions', { retentionKind: "saved", agentInstanceId: f.id, mode: 'text', expectedRevision: await f.revision(), expectedInstanceRevision: 1 });
     await call(f.api, f.root + `/sessions/${target.sessionId}`, { title: 'Quarterly analysis — a long existing conversation name retained for exact scheduled execution', expectedRevision: await f.revision(), expectedSessionRevision: target.revision }, 'PATCH');
     await page.setViewportSize({ width: 1440, height: 1000 }); await signIn(page); await page.goto(f.route);
     await page.getByRole('button', { name: 'New Automation', exact: true }).click(); const editor = page.getByRole('dialog', { name: 'New Automation', exact: true });

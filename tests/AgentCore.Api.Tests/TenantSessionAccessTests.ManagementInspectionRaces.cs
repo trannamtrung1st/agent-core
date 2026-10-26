@@ -44,7 +44,7 @@ public sealed partial class TenantSessionAccessTests
                         new[] { "skills.read","resources.read","credentials.read" }.Where(p=>p!=boundary).ToArray(),state.Tenant.Revision);
                 }
             };
-            var session=(await Json(await owner.PostAsJsonAsync(api+"/sessions",new { agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=6 }))).GetProperty("sessionId").GetGuid();
+            var session=(await Json(await owner.PostAsJsonAsync(api+"/sessions",new { retentionKind="saved", agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=6 }))).GetProperty("sessionId").GetGuid();
             var submitted=await owner.PostAsJsonAsync(api+$"/sessions/{session}/messages",new { messageId=Guid.NewGuid(),text="Read this exact compound snapshot before a child changes.",expectedRevision=await Revision(owner,tenant),expectedSessionRevision=1 });
             Assert.Equal(HttpStatusCode.Accepted,submitted.StatusCode);var runId=(await Json(submitted)).GetProperty("runId").GetGuid();if(factory is ApprovalExecutionFactory memory)Volatile.Write(ref memory.Enabled,true);
             var final=await AwaitManagementRun(host.Services.GetRequiredService<ITenantRunStore>(),tenant,runId);

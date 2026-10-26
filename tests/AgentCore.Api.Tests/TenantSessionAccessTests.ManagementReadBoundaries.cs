@@ -75,7 +75,7 @@ public sealed partial class TenantSessionAccessTests
                         ["agents.update"], state.Tenant.Revision);
                 }
             };
-            var created = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 })); var session = created.GetProperty("sessionId").GetGuid();
+            var created = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 })); var session = created.GetProperty("sessionId").GetGuid();
             var submitted = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Inspect the exact settings before a source boundary changes.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, submitted.StatusCode); var runId = (await Json(submitted)).GetProperty("runId").GetGuid();
             if (factory is ApprovalExecutionFactory memory) Volatile.Write(ref memory.Enabled, true);
@@ -100,7 +100,7 @@ public sealed partial class TenantSessionAccessTests
             using var owner = host.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
             var (tenant, instance) = await SetupManagementRead(host, owner, false); var api = $"/api/v2/tenants/{tenant}";
             Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/agents.read", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
-            var created = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 })); var session = created.GetProperty("sessionId").GetGuid();
+            var created = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 })); var session = created.GetProperty("sessionId").GetGuid();
             var response = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Request an exact settings observation.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             var runId = (await Json(response)).GetProperty("runId").GetGuid(); if (factory is ApprovalExecutionFactory memory) Volatile.Write(ref memory.Enabled, true);
             var pending = await AwaitManagementRun(host.Services.GetRequiredService<ITenantRunStore>(), tenant, runId, true); Assert.Equal(AgentRunStatus.WaitingForApproval, pending.Status);

@@ -22,7 +22,8 @@ public static class TenantMemoryOperationRules
         if (!TenantTaskExecutionContract.Allows(reader.Run, reader.Current) || !TenantMemoryToolContract.Allows(reader.Run.Admission.Configuration!.Definition, arguments.Tool)
             || !TenantMemoryToolContract.Allows(reader.Current, arguments.Tool)) throw new AccessDeniedException("memory_capability_unavailable");
         if (arguments.ReadOnly) return;
-        if (!HumanTask(reader) || current.StateIsolationPolicy?.CrossSessionContinuity == false
+        if (reader.Session.Snapshot.RetentionKind == SessionRetentionKind.Temporary || reader.RootSession.Snapshot.RetentionKind == SessionRetentionKind.Temporary
+            || !HumanTask(reader) || current.StateIsolationPolicy?.CrossSessionContinuity == false
             || ManagementPolicyResolver.Resolve(reader.Current, reader.Agent.Instance).Frozen
             || reader.Run.Admission.Configuration.Definition.SelfManagement?.Frozen == true
             || arguments.Tool == ToolCatalog.MemoryForget && reader.Run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse)

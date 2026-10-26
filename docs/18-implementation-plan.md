@@ -919,3 +919,8 @@ The existing speech pipeline now uses a bounded, supervised per-stream resource 
 ## Terminal cleanup and final IAM audit index — 2026-10-24
 
 The [terminal cleanup/Skill consolidation](reports/tenant-terminal-cleanup-consolidation-verification-2026-10-24.md) removes the Profile-based Runtime cleanup actor and unused unscoped Skill loading entry point, retaining canonical exact-owner cleanup and pure projection. The [original requirement matrix](reports/tenant-proposal-acceptance-matrix-2026-10-24.md) reconciles measured successor evidence and makes remaining method/effect closure and final rendered UI/design confirmation explicit. Its current 545-slot source index is navigation, not authorization acceptance; the original full goal remains active.
+
+
+## Message, execution and Chat simplification — 2026-10-26
+
+Initiative 5 implementation uses the current Session → Activation → AgentRun architecture, explicit scoped Agent completion, immutable Saved/Temporary retention, bounded existing maintenance/deletion and explicit long-text attachments. Local verification covers canonical stores, migration/reopen/refusal, Synthetic HTTP and JavaScript MessagePack, runtime/voice/context regressions, frontend behavior/build and responsive browser journeys. [The exact verification ledger](reports/chat-simplification-2026-10-26.md) owns source commits, commands, results and limits. This ordinary initiative delivery does not reopen historical milestone acceptance, certify live providers/devices or request hosted CI. Decision Intelligence remains a separate roadmap initiative.

@@ -93,7 +93,7 @@ public sealed partial class TenantSessionAccessTests
             if (mode == "frozen") Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(path + "/self-management/freeze", new {
                 expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 4 })).StatusCode);
             var expectedInstanceRevision = mode == "frozen" ? 5 : mode == "budget_no_read" ? 6 : 4;
-            var created = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision }));
+            var created = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision }));
             var session = created.GetProperty("sessionId").GetGuid();
             using var requester = host.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
             var submitter = owner; Guid? requesterPrincipal = null;

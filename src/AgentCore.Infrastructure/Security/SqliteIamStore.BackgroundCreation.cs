@@ -21,7 +21,7 @@ public sealed partial class SqliteIamStore
         await TenantBackgroundCreationRules.ExecutorAsync(state, request, new IamAuthorizer(this), ct).ConfigureAwait(false);
         return session;
     }
-    private static async ValueTask StageTenantBackgroundGraph(AgentCoreDbContext db, TenantSessionRoot root, SessionSnapshot snapshot, AgentRun child, CancellationToken ct)
+    private async ValueTask StageTenantBackgroundGraph(AgentCoreDbContext db, TenantSessionRoot root, SessionSnapshot snapshot, AgentRun child, CancellationToken ct)
     {
         var all = (await OwnedRuns(db, root.TenantId).AsNoTracking().Where(r => r.AgentInstanceId == root.AgentInstanceId.ToString("D"))
             .ToArrayAsync(ct).ConfigureAwait(false)).Select(AgentRunStoreMapping.ToDomain);

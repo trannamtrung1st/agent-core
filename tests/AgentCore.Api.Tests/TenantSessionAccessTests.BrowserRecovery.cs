@@ -61,7 +61,7 @@ public sealed partial class TenantSessionAccessTests
                 var always = capabilities.GetProperty("always").EnumerateArray().Select(v => v.GetString()!).Where(t => selected.Contains(t) && (mode != "discovery" || t != ToolCatalog.BrowserFind)).ToArray();
                 Assert.Equal(HttpStatusCode.OK, (await owner.PatchAsJsonAsync(api + $"/agents/{instance}/settings/capabilities", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision++, set = new { selected, always }, clear = Array.Empty<string>() })).StatusCode);
             }
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
             var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, tenant, null, "Native recovery authority", ["agents.read", "sessions.read", "browser.read", "browser.use"], await Revision(owner, tenant));
             await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));

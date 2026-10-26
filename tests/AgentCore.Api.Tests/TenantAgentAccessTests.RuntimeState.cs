@@ -50,7 +50,7 @@ public sealed partial class TenantAgentAccessTests
     {
         await using var factory = new RuntimeStateFactory(sqlite); using var owner = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
         var (tenant, id, isolation) = await IsolationAgent(owner); var api = $"/api/v2/tenants/{tenant}"; var root = isolation.Replace("state-isolation", "runtime-state");
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = id, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = id, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
         var role = await Json(await owner.PostAsJsonAsync(api + "/roles", new { name = "Runtime membership only", permissions = new[] { "agents.chat" }, expectedRevision = await Revision(owner, tenant) }));
         var invite = await Json(await owner.PostAsJsonAsync(api + "/members/invite", new { login = "runtime-reader@example.test", roleId = role.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(owner, tenant) }));
         using var member = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false }); await Csrf(member);

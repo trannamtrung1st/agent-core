@@ -102,7 +102,7 @@ public sealed partial class TenantCredentialAccessTests
         string[] permissions = ["automations.run", "sessions.create", "agent-runs.create", "sessions.read", "agent-runs.read", "agents.chat"];
         var role = await access.SaveRoleAsync(human, tenant, null, "Configured completion executor", permissions, await Revision(owner, tenant));
         var assignment = await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
-        async Task<Guid> Conversation(Guid targetInstance) => (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = targetInstance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+        async Task<Guid> Conversation(Guid targetInstance) => (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = targetInstance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
         var destination = await Conversation(instance); var other = await Conversation(instance); var route = api + $"/agents/{instance}/automations";
         object Timing() => mode == "frozen-fixed-destination"
             ? new { kind = "fixedInterval", interval = 3600, anchorAtUtc = clock.GetUtcNow().AddMinutes(30).ToString("O"), endAtUtc = clock.GetUtcNow().AddDays(1).ToString("O"), maxOccurrences = 10 }

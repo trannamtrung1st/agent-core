@@ -110,7 +110,7 @@ public sealed partial class TenantSessionAccessTests
                 else if (transition == "assisted") await ChangePolicy("Assisted", ["Settings", "KnowledgeResources"]);
                 else if (transition == "broaden") await ChangePolicy("Managed", ["Settings", "KnowledgeResources"]);
             };
-            var session = await Json(await human.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(human, tenant), expectedInstanceRevision = 2 }));
+            var session = await Json(await human.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(human, tenant), expectedInstanceRevision = 2 }));
             var sessionId = session.GetProperty("sessionId").GetGuid();
             var response = await human.PostAsJsonAsync(api + $"/sessions/{sessionId}/messages", new { messageId = Guid.NewGuid(), text = "Inspect the delegated Core procedure without changing configuration.", expectedRevision = await Revision(human, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, response.StatusCode); var runId = (await Json(response)).GetProperty("runId").GetGuid(); runIdentity.SetResult(runId);

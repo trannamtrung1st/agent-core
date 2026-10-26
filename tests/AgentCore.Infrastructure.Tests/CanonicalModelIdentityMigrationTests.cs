@@ -16,7 +16,7 @@ public sealed partial class TenantCredentialIntegrationTests
         await db.GetService<IMigrator>().MigrateAsync("20261025085000_TenantDynamicModels");
         var before = await IdentityGuards(db);
         Assert.Equal(186, before.Count);
-        await db.Database.MigrateAsync();
+        await db.GetService<IMigrator>().MigrateAsync("20261025090000_CanonicalModelIdentity");
         var after = await IdentityGuards(db);
         Assert.Equal(before.Keys.Order(), after.Keys.Order());
         var changed = new[] { "TR_TenantApprovals_AutomationAdmission_INSERT", "TR_TenantApprovals_ConfigurationRemedy_INSERT",

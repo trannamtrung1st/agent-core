@@ -7,6 +7,44 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed partial class InMemoryMemoryStore
 {
+    private TimeProvider tenantClock = TimeProvider.System;
+    internal InMemoryMemoryStore BindTenantClock(TimeProvider clock) { tenantClock = clock; return this; }
+    private bool RetentionAvailable(SessionSnapshot snapshot) => !SessionRetention.IsDue(snapshot, tenantClock.GetUtcNow());
+    internal IReadOnlyList<TenantSessionRetentionTarget> DueTenantSessions(TenantSessionRetentionTarget? after, int limit)
+    {
+        lock (_gate) return tenantSessions.Values.Select(owner => (owner, session: _sessions[owner.SessionId]))
+            .Where(item => item.session.DurablyDeletedAt is null && SessionRetention.IsDue(item.session, tenantClock.GetUtcNow())
+                && (after is null || item.session.RetentionDueAtUtc > after.DueAtUtc || item.session.RetentionDueAtUtc == after.DueAtUtc
+                    && string.CompareOrdinal(item.owner.SessionId.ToString("D"), after.Owner.SessionId.ToString("D")) > 0))
+            .OrderBy(item => item.session.RetentionDueAtUtc).ThenBy(item => item.owner.SessionId.ToString("D"), StringComparer.Ordinal)
+            .Take(limit).Select(item => new TenantSessionRetentionTarget(item.owner, item.session.Revision, item.session.RetentionDueAtUtc!.Value)).ToArray();
+    }
+    internal SessionSnapshot? DueTenantSession(TenantSessionRetentionTarget target)
+    {
+        lock (_gate) return tenantSessions.GetValueOrDefault(target.Owner.SessionId) == target.Owner
+            && _sessions.TryGetValue(target.Owner.SessionId, out var session) && session.Revision == target.Revision
+            && session.RetentionDueAtUtc == target.DueAtUtc && session.DurablyDeletedAt is null && !RetentionAvailable(session) ? session : null;
+    }
+    internal void DeleteDueTenantSession(TenantSessionRetentionTarget target, DateTimeOffset at)
+    {
+        lock (_gate)
+        {
+            var current = DueTenantSession(target) ?? throw new SecurityConflictException("stale_revision");
+            if (AgentRuns.Runs.Values.Any(r => r.SessionId == current.SessionId && !r.IsTerminal)) throw new SecurityConflictException("session_in_use");
+            var next = TenantSessionMutations.RetireDue(current, at);
+            if (_entries.TryGetValue(current.SessionId, out var entries)) _entries[current.SessionId] = entries.Select(TenantSessionMutations.RedactEntry).ToList();
+            Store(next);
+        }
+    }
+    internal void ExpireDueTenantSession(TenantSessionRetentionTarget target, DateTimeOffset at)
+    {
+        lock (_gate)
+        {
+            var current = DueTenantSession(target) ?? throw new SecurityConflictException("stale_revision");
+            if (!SessionLifecycle.IsTerminal(current.LifecycleStatus))
+                Store(TenantSessionMutations.ExpireDue(current, at) with { Revision = checked(current.Revision + 1) });
+        }
+    }
     private InMemoryAgentInstanceStore? tenantInstances = instances;
     internal InMemoryMemoryStore BindTenantInstances(InMemoryAgentInstanceStore backing)
     {
@@ -41,13 +79,13 @@ public sealed partial class InMemoryMemoryStore
     internal bool TenantSessionDeleted(Guid tenant, Guid id)
     { lock (_gate) return tenantSessions.TryGetValue(id, out var owner) && owner.TenantId == tenant && _sessions.TryGetValue(id, out var snapshot) && snapshot.DurablyDeletedAt is not null; }
     internal bool OwnsTenantSession(Guid tenant, Guid id)
-    { lock (_gate) return tenantSessions.TryGetValue(id, out var owner) && owner.TenantId == tenant && _sessions.TryGetValue(id, out var snapshot) && snapshot.DurablyDeletedAt is null; }
+    { lock (_gate) return tenantSessions.TryGetValue(id, out var owner) && owner.TenantId == tenant && _sessions.TryGetValue(id, out var snapshot) && snapshot.DurablyDeletedAt is null && RetentionAvailable(snapshot); }
     internal bool RequiresTenantContext(Guid session, Guid instance)
     { lock (_gate) return tenantSessions.ContainsKey(session) || tenantInstances?.IsTenantOwned(instance) == true; }
     internal TenantSession? ReadTenantSession(Guid tenant, Guid id)
     {
         lock (_gate) return tenantSessions.TryGetValue(id, out var owner) && owner.TenantId == tenant && _sessions.TryGetValue(id, out var snapshot)
-            && snapshot.DurablyDeletedAt is null ? new(owner, snapshot with { Definition = AgentDefinitionAdminSnapshots.Freeze(snapshot.Definition), Entries = [] }) : null;
+            && snapshot.DurablyDeletedAt is null && RetentionAvailable(snapshot) ? new(owner, snapshot with { Definition = AgentDefinitionAdminSnapshots.Freeze(snapshot.Definition), Entries = [] }) : null;
     }
     internal TenantSessionPage ListTenantSessions(Guid tenant, IReadOnlyList<Guid>? allowed, int page, int size, bool includeArchived = true, SessionSurface? surface = null, Guid? instanceId = null, bool recentFirst = false)
     {
@@ -55,6 +93,7 @@ public sealed partial class InMemoryMemoryStore
         {
             var roots = tenantSessions.Values.Where(s => s.TenantId == tenant && (instanceId is null || s.AgentInstanceId == instanceId) && (allowed is null || allowed.Contains(s.SessionId))
                 && _sessions.TryGetValue(s.SessionId, out var snapshot) && snapshot.DurablyDeletedAt is null && (includeArchived || snapshot.ArchivedAt is null)
+                && RetentionAvailable(snapshot) && (surface != SessionSurface.ChatList || snapshot.RetentionKind != SessionRetentionKind.Temporary)
                 && (surface is null || snapshot.Surfaces.HasFlag(surface.Value))).OrderBy(s => s.SessionId).ToArray();
             if (recentFirst) roots = roots.OrderByDescending(s => _sessions[s.SessionId].UpdatedAt).ThenBy(s => s.SessionId).ToArray();
             return new(roots.Skip(page * size).Take(size).Select(s => ReadTenantSession(tenant, s.SessionId)!).ToArray(), roots.Length, page, size);

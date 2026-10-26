@@ -55,7 +55,7 @@ public sealed partial class TenantSessionAccessTests
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var workspace = api + $"/sessions/{session}/workspace";
             Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(workspace + $"/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent("Private existing source"u8.ToArray()))).StatusCode);
             injectLoss = mode == "unknown";
@@ -149,7 +149,7 @@ public sealed partial class TenantSessionAccessTests
             {
                 await File.WriteAllTextAsync(proofPath + "-completed.json", "{}");
                 model.Batch = true;
-                var secondSession = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+                var secondSession = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
                 var secondWorkspace = api + $"/sessions/{secondSession}/workspace";
                 Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(secondWorkspace + $"/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent("Private batch source"u8.ToArray()))).StatusCode);
                 var secondSent = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{secondSession}/messages", new { messageId = Guid.NewGuid(), text = "Review exact ordered workspace changes", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }));

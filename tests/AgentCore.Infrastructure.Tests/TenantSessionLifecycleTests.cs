@@ -235,6 +235,10 @@ public sealed class TenantSessionLifecycleTests
     private static async Task<long> Revision(Fixture f, Guid tenant) => (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision;
     private sealed class MutationGate(ITenantSessionStore inner) : ITenantSessionStore
     {
+        public ValueTask<IReadOnlyList<TenantSessionRetentionTarget>> ListDueSessionsAsync(TenantSessionRetentionTarget? after, int limit, CancellationToken ct = default) => inner.ListDueSessionsAsync(after, limit, ct);
+        public ValueTask<TenantSessionRetentionTarget?> FindExpiredSessionAsync(Guid tenant, Guid session, CancellationToken ct = default) => inner.FindExpiredSessionAsync(tenant, session, ct);
+        public ValueTask<bool> RetireDueSessionAsync(TenantSessionRetentionTarget target, Guid auditId, CancellationToken ct = default) => inner.RetireDueSessionAsync(target, auditId, ct);
+
         internal TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal TaskCompletionSource Proceed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public ValueTask<TenantSession?> FindTenantSessionAsync(Guid tenantId, Guid sessionId, CancellationToken ct = default) => inner.FindTenantSessionAsync(tenantId, sessionId, ct);

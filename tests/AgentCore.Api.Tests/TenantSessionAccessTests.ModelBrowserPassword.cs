@@ -93,7 +93,7 @@ public sealed partial class TenantSessionAccessTests
             await factory.Services.GetRequiredService<TenantCredentialBindingService>().BindAsync(human, tenant, instance, credential.Credential.CredentialId,
                 "account", await Revision(owner, tenant), 1, 1);
             }
-            var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = variableReference ? 1 : 2 }));
+            var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = variableReference ? 1 : 2 }));
             var sessionId = session.GetProperty("sessionId").GetGuid(); var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, tenant, null, "Reviewed Browser", ["browser.read", "browser.use"], await Revision(owner, tenant));
             var browserRole = role;

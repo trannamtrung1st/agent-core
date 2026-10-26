@@ -2101,3 +2101,21 @@ Removing a Shared membership returns 409 `space_membership_has_active_work` whil
 ### Pinned occurrence review projection
 
 For an explicit pinned Automation, admission review adds exactly one `admissionSpace` and one `admissionEnvironment` row. Space/profile labels require the reviewing human’s current scoped metadata read; unavailable labels stay generic. Each selected identity retains its captured revision, and a null Environment is `No Environment`. These rows contain no variable values or protected references. They describe the saved exact action; approval still repeats current source, requester, executor and reviewer checks before admission. The frontend accepts the closed complete pair, retains the existing field allowlist and blocks malformed/duplicate/partial context previews.
+
+
+## Chat retention cutover
+
+Canonical v2 human Session creation requires `retentionKind: "saved" | "temporary"`; missing/invalid values are rejected. Background creation keeps its separate origin contract. Session projections expose retention kind/deadline and authoritative lifecycle. Existing Session complete/delete/messages/history and Hub owners remain canonical. Tenant governance owns `savedChatRetentionDays: null | integer 1..3650` with current human/security revision, CSRF and audit. No alternate temporary stream, compatibility request shape or unbounded direct-text route is added. Direct text/typed parts retain 8,000 UTF-16, 128 parts and 32 KiB normalized bounds.
+
+
+The existing tenant prefix is `/api/v2/tenants/{tenantId}`. Retention governance uses `GET /governance/chat-retention` and `PUT /governance/chat-retention` with `{savedChatRetentionDays, expectedRevision}`. Responses contain `savedChatRetentionDays`, `securityRevision`, and `canManage`. Values are null (Forever) or integer 1..3650; only current human governance management can write.
+
+`PUT /sessions/{sessionId}/agent-completion` takes `{allowed, expectedRevision, expectedSessionRevision}` and uses current human `sessions.manage`, `agents.chat`, executor and idle Session checks. It changes only Disabled/Allowed delegation on this active, unarchived conversation. Metadata, conversation and `session.ready` expose `retentionKind`, `retentionDueAtUtc`, `agentCompletion`, `lifecycleReason` and `lifecycleSource`. Terminal `session.state.changed` includes lifecycle reason/source/deadline. Canonical values are lowercase (`saved`, `temporary`, `disabled`, `advisory`, `allowed`, `agent`, `host`); Legacy lifecycle provenance is rejected.
+
+Example human creation payload (replace all identifiers/revisions with current authorized observations):
+
+```json
+{"agentInstanceId":"11111111-1111-1111-1111-111111111111","expectedRevision":2,"expectedInstanceRevision":1,"retentionKind":"temporary"}
+```
+
+Expired exact-link reads use `session_expired` only after current Session-read and Agent-chat authority is established. No transcript, attachments or old ready projection is returned. Temporary uses the same tenant HTTP and Hub contracts; its retention choice cannot be changed by later actions.

@@ -17,6 +17,7 @@ vi.mock('../../services/tenantChat', async original => ({ ...await original<obje
   tenantCanCreateChat: () => true, tenantRunControl: vi.fn(async () => ({canCancel: true}))
 }));
 vi.mock('./TenantConversationApprovals', () => ({ TenantConversationApprovals: () => null }));
+vi.mock('./TenantSessionContext', () => ({ TenantSessionContext: () => null }));
 const context = { tenant: {tenantId: fixtureTenant, name: 'Test organization'}, principalId: 'person' } as TenantContext;
 vi.mocked(tenantActivitySource).mockImplementation(() => source);
 

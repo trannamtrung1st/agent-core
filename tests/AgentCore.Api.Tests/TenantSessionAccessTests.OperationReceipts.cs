@@ -198,7 +198,7 @@ public sealed partial class TenantSessionAccessTests
         var policy = await owner.PutAsJsonAsync(api + $"/agents/{instance}/self-management", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
             overrides = new { mode = new { value = "Assisted" }, scopes = new { value = new[] { "Settings" } } } });
         Assert.Equal(HttpStatusCode.OK, policy.StatusCode);
-        var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }));
+        var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }));
         var id = session.GetProperty("sessionId").GetGuid();
         var admission = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{id}/messages", new { messageId = Guid.NewGuid(), text = "Save an exact approved persona", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }));
         var runId = admission.GetProperty("runId").GetGuid(); var agentStore = factory.Services.GetRequiredService<ITenantAgentStore>();

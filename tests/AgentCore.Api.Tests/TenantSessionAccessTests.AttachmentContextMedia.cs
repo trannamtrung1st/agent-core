@@ -26,7 +26,7 @@ public sealed partial class TenantSessionAccessTests
             var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
                 offeringId = format == "png" ? "dca30000-0000-4000-8000-000000000003" : null }))).GetProperty("sessionId").GetGuid();
             var office = factory.Services.GetRequiredService<IOfficeProcessor>(); byte[] bytes; string name, type;
             if (format == "docx") { bytes = office.CreateDocument(new("Private Office input", [new(null, ["Private Office input"], null)]), default).Bytes; name = "source.docx"; type = OfficeLimits.DocumentMime; }

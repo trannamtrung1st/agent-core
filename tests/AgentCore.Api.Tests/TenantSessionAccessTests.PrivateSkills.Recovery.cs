@@ -42,7 +42,7 @@ public sealed partial class TenantSessionAccessTests
                 await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForResource(tenant, "skill", instance.ToString("D") + ":" + PrivateSkillKey), await Revision(owner, tenant));
                 if (review) Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/skills.read", new { mode = "always", independentReview = false,
                     expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
-                session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 4 }))).GetProperty("sessionId").GetGuid();
+                session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 4 }))).GetProperty("sessionId").GetGuid();
                 var response = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Use the exact pinned private-procedure Skill.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
                 Assert.Equal(HttpStatusCode.Accepted, response.StatusCode); runId = (await Json(response)).GetProperty("runId").GetGuid();
                 var run = await AwaitManagementRun(first.Services.GetRequiredService<ITenantRunStore>(), tenant, runId, true);

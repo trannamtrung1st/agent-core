@@ -694,6 +694,10 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
         row.ContextSelectionJson = snapshot.ContextSelection is null ? null : JsonSerializer.Serialize(snapshot.ContextSelection, Json);
         row.PendingAgentInputIdsJson = JsonSerializer.Serialize(snapshot.PendingAgentInputIds, Json);
         row.OriginJson = JsonSerializer.Serialize(snapshot.Origin, Json);
+        SessionRetention.Validate(snapshot);
+        row.RetentionKind = (int)snapshot.RetentionKind;
+        row.RetainAfterTerminalDays = snapshot.RetainAfterTerminalDays;
+        row.RetentionDueAtUtc = snapshot.RetentionDueAtUtc?.ToUnixTimeMilliseconds();
         row.Surfaces = (int)snapshot.Surfaces;
         row.Mode = snapshot.Mode.ToString();
         row.PendingMode = snapshot.PendingMode?.ToString();
@@ -832,7 +836,8 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
             JsonSerializer.Deserialize<SessionOrigin>(row.OriginJson, Json) ?? throw AgentCoreErrors.Persistence("Session origin is missing."),
             (SessionSurface)row.Surfaces,
             JsonSerializer.Deserialize<Guid[]>(row.PendingAgentInputIdsJson, Json) ?? throw AgentCoreErrors.Persistence("Pending agent input intent is missing."),
-            row.ContextSelectionJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Spaces.SessionContextSelection>(row.ContextSelectionJson, Json));
+            row.ContextSelectionJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Spaces.SessionContextSelection>(row.ContextSelectionJson, Json),
+            (SessionRetentionKind)row.RetentionKind, row.RetainAfterTerminalDays, row.RetentionDueAtUtc is { } due ? FromUnix(due) : null);
     }
 
     internal static ConversationEntry ToEntry(EntryRecord row) =>

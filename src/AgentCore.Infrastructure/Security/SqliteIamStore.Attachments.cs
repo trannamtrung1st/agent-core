@@ -44,7 +44,7 @@ public sealed partial class SqliteIamStore : ITenantAttachmentMutationStore
         var prior = await db.Set<AuthorizationAudit>().AsNoTracking().SingleOrDefaultAsync(a => a.AuditId == proof.RequestId, ct).ConfigureAwait(false);
         if (prior is not null) return prior.TenantId == proof.Owner.TenantId && prior.ActorPrincipalId == proof.Human.PrincipalId && prior.Action == proof.Audit.Action && prior.Target == proof.Audit.Target
             ? true : throw new SecurityConflictException("identity_conflict");
-        var row = await SqliteAttachmentStore.Owned(db, proof.Owner.TenantId, proof.Owner.SessionId).SingleOrDefaultAsync(a => a.AttachmentId == attachmentId.ToString("D"), ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+        var row = await SqliteAttachmentStore.Owned(db, proof.Owner.TenantId, proof.Owner.SessionId, (clock ?? TimeProvider.System).GetUtcNow()).SingleOrDefaultAsync(a => a.AttachmentId == attachmentId.ToString("D"), ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         if (!TenantAttachmentRules.Available(SqliteAttachmentStore.Domain(row), (clock ?? TimeProvider.System).GetUtcNow())) throw new AccessDeniedException("resource_unavailable");
         await TenantAttachmentRules.PermissionsAsync(state, proof.Human.PrincipalId, proof.Owner.SessionId, attachmentId, "attachments.delete", new IamAuthorizer(this), ct).ConfigureAwait(false);
         if (row.State != nameof(AttachmentState.Pending)) throw new SecurityConflictException("attachment_already_bound");

@@ -94,7 +94,7 @@ public sealed partial class TenantCredentialAccessTests
             await environmentService.SaveVariableAsync(human, tenant, space.SpaceId, profile.EnvironmentId, "API_SECRET", EnvironmentVariableKind.SecretReference, "Unsupported generic secure use", null, secretId, null, await Revision(owner, tenant), space.Revision, profile.Revision, 0);
             profile = await environmentService.ReadAsync(human, tenant, space.SpaceId, profile.EnvironmentId);
         }
-        var created = await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 });
+        var created = await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 });
         Assert.True(created.IsSuccessStatusCode, await created.Content.ReadAsStringAsync()); var session = (await Json(created)).GetProperty("sessionId").GetGuid();
         var context = await Json(await owner.GetAsync($"{api}/sessions/{session}/context"));
         if (state == 2)

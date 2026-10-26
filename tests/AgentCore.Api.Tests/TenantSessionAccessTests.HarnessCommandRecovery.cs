@@ -41,7 +41,7 @@ public sealed partial class TenantSessionAccessTests
                 await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
                 arguments = model.Arguments = JsonSerializer.Serialize(new { expectedVersion = 32, expectedInstanceRevision = 3, policyRevision = agent.Instance.HarnessManagement!.PolicyRevision,
                     content = "DURABLE-EXACT-HARNESS-INSTRUCTIONS", expected = "Next Run uses this literal instruction.", observed = "Prepared a local draft only." });
-                session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 }))).GetProperty("sessionId").GetGuid();
+                session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 }))).GetProperty("sessionId").GetGuid();
                 var sent = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Review and retain DURABLE-EXACT-HARNESS-INSTRUCTIONS.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
                 Assert.Equal(HttpStatusCode.Accepted, sent.StatusCode); initial = (await Json(sent)).GetProperty("runId").GetGuid();
                 var pending = await AwaitManagementRun(first.Services.GetRequiredService<ITenantRunStore>(), tenant, initial, true);

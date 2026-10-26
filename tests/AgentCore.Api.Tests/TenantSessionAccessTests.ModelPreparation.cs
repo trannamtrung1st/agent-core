@@ -43,6 +43,10 @@ public sealed partial class TenantSessionAccessTests
     }
     private sealed class ModelPreparationSessions(ITenantSessionStore inner, ModelPreparationGate gate) : ITenantSessionStore
     {
+        public ValueTask<IReadOnlyList<TenantSessionRetentionTarget>> ListDueSessionsAsync(TenantSessionRetentionTarget? after, int limit, CancellationToken ct = default) => inner.ListDueSessionsAsync(after, limit, ct);
+        public ValueTask<TenantSessionRetentionTarget?> FindExpiredSessionAsync(Guid tenant, Guid session, CancellationToken ct = default) => inner.FindExpiredSessionAsync(tenant, session, ct);
+        public ValueTask<bool> RetireDueSessionAsync(TenantSessionRetentionTarget target, Guid auditId, CancellationToken ct = default) => inner.RetireDueSessionAsync(target, auditId, ct);
+
         public async ValueTask<TenantSession?> FindTenantSessionAsync(Guid tenantId, Guid sessionId, CancellationToken ct = default)
         {
             var result = await inner.FindTenantSessionAsync(tenantId, sessionId, ct);

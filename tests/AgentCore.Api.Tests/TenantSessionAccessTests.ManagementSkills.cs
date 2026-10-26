@@ -142,7 +142,7 @@ public sealed partial class TenantSessionAccessTests
             if (operation == "create") { arguments.Remove("key"); arguments.Remove("expectedRevision"); arguments["id"] = "new-authored"; }
             if (operation is not ("create" or "update" or "update_unchanged" or "set_enabled" or "definition_enabled" or "builtin_enabled" or "enabled_unchanged")) arguments.Remove("enabled");
             model.Arguments = arguments.ToJsonString();
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
             var submitted = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Inspect and perform the exact local Skill change using the current authoring policy.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, submitted.StatusCode); var runId = (await Json(submitted)).GetProperty("runId").GetGuid();
             if (factory is ApprovalExecutionFactory memory) Volatile.Write(ref memory.Enabled, true);

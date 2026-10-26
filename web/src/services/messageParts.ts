@@ -74,7 +74,7 @@ const skill =
 const emptyGuid = "00000000-0000-0000-0000-000000000000";
 const validGuid = (value: string) => guid.test(value) && value !== emptyGuid;
 const validSkill = (value: string) => skill.test(value) && value !== `instance:${emptyGuid}`;
-export function normalizeParts(raw: unknown): MessagePart[] {
+export function normalizeDraftParts(raw: unknown): MessagePart[] {
   if (!Array.isArray(raw) || raw.length > 128)
     throw new Error("Use at most 128 message parts.");
   const result: MessagePart[] = [];
@@ -176,6 +176,11 @@ export function normalizeParts(raw: unknown): MessagePart[] {
       });
     } else throw new Error("Invalid message part.");
   }
+  return result;
+}
+
+export function normalizeParts(raw: unknown): MessagePart[] {
+  const result = normalizeDraftParts(raw);
   if (
     messageText(result).length > 8000 ||
     new TextEncoder().encode(JSON.stringify(wireParts(result))).length > 32768

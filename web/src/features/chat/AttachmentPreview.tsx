@@ -69,6 +69,7 @@ export function PendingAttachmentView({
         {item.status === "error" && <Tooltip title={`Retry ${item.displayName}`}>
           <Button type="text" className="composer-icon" aria-label={`Retry ${item.displayName}`} icon={<ReloadOutlined />} onClick={onRetry} />
         </Tooltip>}
+        {item.originalText !== undefined && item.status === 'ready' ? <Button type="text" size="small" onClick={onRemove}>Restore text</Button> : null}
         <Tooltip title={`Remove ${item.displayName}`}>
           <Button type="text" className="composer-icon" aria-label={`Remove ${item.displayName}`} icon={<CloseOutlined />} onClick={onRemove} />
         </Tooltip>

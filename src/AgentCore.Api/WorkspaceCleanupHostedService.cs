@@ -14,6 +14,12 @@ public sealed class WorkspaceCleanupHostedService(
         {
             try
             {
+                await services.GetRequiredService<AgentCore.Api.Realtime.TenantSessionRuntimeHost>().RecoverRetentionAsync(stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+            catch (Exception ex) { HandledFailureLog.Warning(logger, ex, "sessions.retention", "retention_scan_failed", diagnostics: diagnosticIds); }
+            try
+            {
                 await services.GetRequiredService<AgentCore.Application.Security.TenantAgentDecommissionCleanup>().RecoverAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }

@@ -32,7 +32,7 @@ public sealed partial class TenantSessionAccessTests
             var state = (await host.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!; var human = Assert.Single(state.Users).PrincipalId;
             var access = host.Services.GetRequiredService<TenantAccessService>(); var role = await access.SaveRoleAsync(human, tenant, null, "One inherited procedure", ["skills.read"], await Revision(owner, tenant));
             await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForResource(tenant, "skill", instance.ToString("D") + ":" + key), await Revision(owner, tenant));
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 }))).GetProperty("sessionId").GetGuid();
             var response = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Load the exact definition:browser.record.lookup procedure; perform no browser effect.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, response.StatusCode); var id = (await Json(response)).GetProperty("runId").GetGuid();
             if (factory is ApprovalExecutionFactory memory) Volatile.Write(ref memory.Enabled, true);

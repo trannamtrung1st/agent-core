@@ -53,7 +53,7 @@ public sealed partial class TenantSessionAccessTests
             if (mode == "review") Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/workspaces.read", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
             var choices = await Json(await owner.GetAsync(api + $"/agents/{instance}/composer?category=homeFile&search=reference"));
             var choice = Assert.Single(choices.GetProperty("items").EnumerateArray()); Assert.Equal(path, choice.GetProperty("reference").GetProperty("path").GetString()); Assert.DoesNotContain(body, choices.ToString());
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var text = "Inspect @homeFile:" + instance.ToString("D") + path;
             object[] parts = [new { kind = "text", text = "Inspect " }, new { kind = "reference", reference = new { kind = "homeFile", agentInstanceId = instance, path } }];
             var message = Guid.NewGuid();
@@ -151,7 +151,7 @@ public sealed partial class TenantSessionAccessTests
                 references.Add(new("homeFile", AgentInstanceId: instance, Path: extra));
             }
             model.ReferencesMode = true;
-            var target = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, value.Tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            var target = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, value.Tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var parts = references.SelectMany(r => new[] { new UserMessagePart("reference", Reference: r), new UserMessagePart("text", Text: " ") }).ToArray();
             var response = await owner.PostAsJsonAsync(api + $"/sessions/{target}/messages", new { messageId = Guid.NewGuid(), text = UserMessageContent.DisplayText(parts), parts, expectedRevision = await Revision(owner, value.Tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
@@ -209,7 +209,7 @@ public sealed partial class TenantSessionAccessTests
             var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, tenant, null, "Recheck Composer reads", ["agents.read", "sessions.read", "workspaces.read"], await Revision(owner, tenant));
             var assignment = await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var reference = new UserResourceReference("homeFile", AgentInstanceId: instance, Path: path); var parts = new[] { new UserMessagePart("reference", Reference: reference) };
             var response = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = UserMessageContent.DisplayText(parts), parts, expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, response.StatusCode); var runId = (await Json(response)).GetProperty("runId").GetGuid();

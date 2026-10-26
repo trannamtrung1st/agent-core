@@ -61,7 +61,7 @@ public sealed partial class TenantSessionAccessTests
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var workspace = api + (mode == "working" ? $"/sessions/{session}/workspace" : $"/agents/{instance}/workspace");
             var processor = factory.Services.GetRequiredService<IOfficeProcessor>();
             fetcher.Bytes = processor.CreateDocument(new(null, [new(null, ["Applicant: ______", "Preserve this paragraph"], null)]), default).Bytes;

@@ -217,7 +217,7 @@ public sealed partial class TenantDefinitionAccessTests
                 var role = await access.SaveRoleAsync(actor, tenant, null, grant.Item1, [grant.Item1], await Revision(owner, tenant));
                 await access.AssignRoleAsync(actor, tenant, executor, role.RoleId, grant.Item2, await Revision(owner, tenant));
             }
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var parentSession = session;
             if (backgroundTask)
             {

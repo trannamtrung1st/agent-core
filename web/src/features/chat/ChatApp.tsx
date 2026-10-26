@@ -1,12 +1,12 @@
 import { MenuOutlined, PlusOutlined } from "@ant-design/icons";
-import { Alert, App as AntApp, Button, Drawer, Flex, Layout, Tooltip, Typography, theme } from "antd";
+import { Alert, App as AntApp, Button, Drawer, Flex, Layout, Segmented, Switch, Tooltip, Typography, theme } from "antd";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { appMessageConfig } from "../../app/appFeedback";
 import { followAppLink } from "../../app/appLink";
 import { newChatPath } from '../../app/sessionRoute';
 import { getSession, type AgentRun } from "../../services/api";
 import type { TenantContext } from '../../services/identity';
-import { applySessionModel, beginNewChat, bootstrap, cancelRenderedResponse, cancelVoice, clearRouteNotice, composerSendEnabled, composerSendLabel, composerStopEnabled, hangUp, loadMoreChatAgents, loadOlderHistory, openCatalogSession, reloadChatAgentInstances, reportCommittedEntries, requestVoice, resumeCapture, resumeLiveSessionForNavigation, resumePausedSession, retryConnection, searchChatAgents, selectChatIdentity, sendDraft, setDraft, setDraftParts, setMuted } from "../../services/realtime";
+import { applySessionModel, beginNewChat, bootstrap, cancelRenderedResponse, cancelVoice, clearRouteNotice, composerSendEnabled, composerSendLabel, composerStopEnabled, expireCurrentChat, hangUp, loadMoreChatAgents, loadOlderHistory, openCatalogSession, reloadChatAgentInstances, reportCommittedEntries, requestVoice, resumeCapture, resumeLiveSessionForNavigation, resumePausedSession, retryConnection, searchChatAgents, selectChatIdentity, sendDraft, setAgentCompletion, setDraft, setDraftParts, setMuted } from "../../services/realtime";
 import { tenantActivitySource } from "../../services/tenantActivity";
 import { tenantCanCreateChat, tenantMayManageSession, tenantRunControl } from '../../services/tenantChat';
 import { clientRecognitionSupported, clientSynthesisSupported } from "../../speech/clientSpeechSupport";
@@ -65,6 +65,22 @@ function useViewport() {
 
 export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantContext: TenantContext; tenantActions?: ReactNode; tenantError?: unknown }) {
   const state = useSessionStore();
+  const expired = state.lifecycleStatus === "expired";
+  useEffect(() => {
+    if (!state.sessionId || !state.retentionDueAtUtc) return;
+    const sessionId = state.sessionId; const deadline = new Date(state.retentionDueAtUtc).getTime();
+    if (!Number.isFinite(deadline)) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const check = () => {
+      clearTimeout(timer);
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) void expireCurrentChat(sessionId);
+      else timer = setTimeout(check, Math.min(remaining, 2_147_483_647));
+    };
+    check(); document.addEventListener('visibilitychange', check);
+    return () => { clearTimeout(timer); document.removeEventListener('visibilitychange', check); };
+  }, [state.sessionId, state.retentionDueAtUtc]);
+
   const { token } = theme.useToken();
   const [runCanCancel, setRunCanCancel] = useState(false);
   useEffect(() => {
@@ -81,7 +97,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
   const [sandboxOpen, setSandboxOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const filesButtonRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { setFilesOpen(false); }, [state.sessionId, tenantContext.tenant.tenantId]);
+  useEffect(() => { setFilesOpen(false); setSandboxOpen(false); if (expired) setWorkOpen(false); }, [state.sessionId, tenantContext.tenant.tenantId, expired]);
   const sandboxButtonRef = useRef<HTMLButtonElement>(null);
   const [attentionItems, setAttentionItems] = useState<{ run: AgentRun; delivery?: string }[]>([]);
   const [backgroundInstanceId, setBackgroundInstanceId] = useState<string | null>(null);
@@ -91,7 +107,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
   const attentionCount = attentionItems.filter(item => item.delivery === "pending" || item.delivery !== "handled" && isUnread(item.run)).length;
 
   useEffect(() => {
-    if (!state.sessionId) {
+    if (!state.sessionId || expired) {
       setAttentionItems([]);
       setBackgroundInstanceId(null);
       setWorkOpen(false);
@@ -123,7 +139,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
     void refresh();
     const timer = window.setInterval(() => void refresh(), 5_000);
     return () => { current = false; window.clearInterval(timer); };
-  }, [state.sessionId, tenantContext.tenant.tenantId, tenantContext.principalId]);
+  }, [state.sessionId, tenantContext.tenant.tenantId, tenantContext.principalId, expired]);
 
   const { isNarrow, siderWidth } = useViewport();
 
@@ -352,17 +368,17 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
               }
               inSession={inSession && !readonly && (tenantMayManageSession(state.sessionId))}
               endDisabled={state.liveResponseId != null}
-              backgroundButtonRef={workButtonRef} onBackgroundWork={state.sessionId ? () => setWorkOpen(true) : undefined}
+              backgroundButtonRef={workButtonRef} onBackgroundWork={state.sessionId && !expired ? () => setWorkOpen(true) : undefined}
               filesButtonRef={filesButtonRef}
-              onFiles={state.sessionId ? () => setFilesOpen(true) : undefined}
+              onFiles={state.sessionId && !expired ? () => setFilesOpen(true) : undefined}
               sandboxButtonRef={sandboxButtonRef}
-              onSandbox={state.sessionId ? () => setSandboxOpen(true) : undefined}
+              onSandbox={state.sessionId && !expired ? () => setSandboxOpen(true) : undefined}
               attentionCount={attentionCount}
               onEnd={() => void hangUp()}
             />
           </Header>
           <Content className="app-content">
-            {state.sessionId && <TenantSessionContext key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} session={state.sessionId} refreshKey={`${state.agentRunId ?? ''}:${state.liveResponseId ?? ''}`} />}
+            {state.sessionId && !expired && <TenantSessionContext key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} session={state.sessionId} refreshKey={`${state.agentRunId ?? ''}:${state.liveResponseId ?? ''}`} />}
             {tenantError !== undefined && <div className="conversation-column conversation-banners"><AccessError error={tenantError} /></div>}
             {state.routeNotice || state.connection === "failed" ? (
               <div className="conversation-column conversation-banners">
@@ -391,13 +407,18 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
                 ) : null}
               </div>
             ) : null}
+            {inSession && !readonly && tenantMayManageSession(state.sessionId) ? <Flex align="center" wrap gap={token.paddingXS}>
+              <Switch size="small" aria-label="Allow agent to complete this chat" checked={state.agentCompletion === 'allowed'} disabled={composerStopEnabled() || state.mode === 'voice'} onChange={allowed => void setAgentCompletion(allowed)} />
+              <Typography.Text type="secondary">Allow agent to complete this chat · {state.agentCompletion === 'allowed' ? 'On' : 'Off'}</Typography.Text>
+            </Flex> : null}
+            {inSession && state.retentionKind === 'temporary' ? <Typography.Text type="secondary" role="status">Temporary · expires {state.retentionDueAtUtc ? new Date(state.retentionDueAtUtc).toLocaleString() : '24 hours after creation'}. Explicit external effects may persist.</Typography.Text> : null}
             <div className="conversation-pane">
               <div className="conversation-scroll">
                 <div className="conversation-column">
-                  <Conversation
+                  <Conversation key={`${state.sessionId}:${expired}`}
                     activitySource={activitySource ?? undefined}
                     tenantId={tenantContext.tenant.tenantId}
-                afterEntries={state.sessionId ? <TenantConversationApprovals key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} session={state.sessionId} /> : undefined}
+                afterEntries={state.sessionId && !expired ? <TenantConversationApprovals key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} session={state.sessionId} /> : undefined}
                     agentName={state.agentName}
                     sessionId={state.sessionId}
                     entries={state.entries}
@@ -427,6 +448,11 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
                             onIdentityChange={selectChatIdentity}
                             onRetryManagedInstances={() => void reloadChatAgentInstances()}
                           />
+                          <Flex vertical gap={token.paddingXS}>
+                            <Segmented aria-label="Chat retention" value={state.newChatRetentionKind} options={[{ label: 'Saved', value: 'saved' }, { label: 'Temporary', value: 'temporary' }]}
+                              onChange={value => useSessionStore.setState({ newChatRetentionKind: value as 'saved' | 'temporary' })} />
+                            {state.newChatRetentionKind === 'temporary' ? <Typography.Text type="secondary">Expires 24 hours after creation. Explicit external effects may persist.</Typography.Text> : null}
+                          </Flex>
                           {modelSetup && <Alert type="info" showIcon className="new-chat-model-setup" title={modelSetup.title}
                             description={<Flex vertical align="start" gap="var(--ac-space-default)">
                               <Typography.Text>{modelSetup.description}</Typography.Text>
@@ -444,7 +470,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
                   {readonly ? (
                     <Flex align="center" justify="center" wrap gap={16}>
                       <Typography.Text type="secondary" className="conversation-ended-note">
-                        {terminalSessionNote(state.lifecycleStatus)}
+                        {state.lifecycleStatus === "completed" && state.lifecycleSource === "agent" ? `Conversation completed by agent${state.lifecycleReason ? ` · ${state.lifecycleReason}` : ""}` : terminalSessionNote(state.lifecycleStatus)}
                       </Typography.Text>
                       <Button aria-label="Start another chat" onClick={() => handleNewChat()}>New chat</Button>
                     </Flex>
@@ -479,6 +505,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
                     </Flex>
                   ) : (
                     <Composer
+                      modelSupportsFileTools={selectedModel?.tools}
                       draft={state.draft}
                       parts={state.draftParts}
                       instanceId={inSession ? backgroundInstanceId : parseChatIdentityKey(state.newChatIdentityKey)?.instanceId}
@@ -524,10 +551,10 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
             </div>
           </Content>
         </Layout>
-        {backgroundInstanceId && activitySource ? <BackgroundWorkDrawer source={activitySource} instanceId={backgroundInstanceId} open={workOpen} wide={!isNarrow}
+        {!expired && backgroundInstanceId && activitySource ? <BackgroundWorkDrawer source={activitySource} instanceId={backgroundInstanceId} open={workOpen} wide={!isNarrow}
           onClose={() => setWorkOpen(false)} afterClose={() => workButtonRef.current?.focus()} /> : null}
-        {state.sessionId && <TenantSessionFilesDrawer key={`files:${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={filesOpen} narrow={isNarrow} openerRef={filesButtonRef} onClose={() => setFilesOpen(false)} />}
-        {state.sessionId && <TenantSessionSandboxDrawer key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={sandboxOpen} openerRef={sandboxButtonRef} narrow={isNarrow} onClose={() => setSandboxOpen(false)} />}
+        {state.sessionId && !expired && <TenantSessionFilesDrawer key={`files:${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={filesOpen} narrow={isNarrow} openerRef={filesButtonRef} onClose={() => setFilesOpen(false)} />}
+        {state.sessionId && !expired && <TenantSessionSandboxDrawer key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={sandboxOpen} openerRef={sandboxButtonRef} narrow={isNarrow} onClose={() => setSandboxOpen(false)} />}
 
         {isNarrow ? (
           <Drawer

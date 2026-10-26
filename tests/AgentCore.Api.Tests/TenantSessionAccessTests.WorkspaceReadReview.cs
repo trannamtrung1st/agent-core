@@ -110,7 +110,7 @@ public sealed partial class TenantSessionAccessTests
                     instanceRevision = (await Json(named)).GetProperty("instanceRevision").GetInt64();
                 }
             }
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
             var workspace = api + (working ? $"/sessions/{session}/workspace" : $"/agents/{instance}/workspace");
             if (!resource) Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(workspace + $"/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent(Encoding.UTF8.GetBytes(body)))).StatusCode);
             if (search && !resource)
@@ -188,7 +188,7 @@ public sealed partial class TenantSessionAccessTests
             if (proof)
             {
                 await File.WriteAllTextAsync(proofPath + "-completed.json", "{\"completed\":true}");
-                var secondSession = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+                var secondSession = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
                 var secondSent = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{secondSession}/messages", new { messageId = Guid.NewGuid(), text = "Review the same exact path under a fresh task", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }));
                 var secondId = secondSent.GetProperty("runId").GetGuid(); var secondWaiting = await AwaitBrowserRestartRun(runs, tenant, secondId, true);
                 Assert.Equal(AgentRunStatus.WaitingForApproval, secondWaiting.Status);

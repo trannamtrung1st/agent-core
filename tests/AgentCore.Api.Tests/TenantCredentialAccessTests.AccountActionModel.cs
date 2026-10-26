@@ -45,7 +45,7 @@ public sealed partial class TenantCredentialAccessTests
             new { tool = ToolCatalog.EmailCreateDraft, arguments = new { accountRef = s.Alias, to = new[] { "friend@example.test" }, cc = new[] { "copy@example.test" }, bcc = new[] { "private-copy@example.test" }, subject, body } },
             new { tool = ToolCatalog.EmailSend, arguments = new { accountRef = s.Alias, draftId = "$draft" } }
         } });
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
         var initial = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = command,
             expectedRevision = await Revision(owner, s.Tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
         var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var approvals = factory.Services.GetRequiredService<ITenantApprovalStore>();
@@ -122,7 +122,7 @@ public sealed partial class TenantCredentialAccessTests
         var remote = factory.Services.GetRequiredService<ISyntheticDriveStore>(); byte[] bytes = [0, 255, 1, 42, 13, 10, 200];
         foreach (var id in new[] { "file", "second", "destination" })
             await remote.SaveAsync(s.Credential, new(id, id + ".bin", id == "destination" ? "application/vnd.google-apps.folder" : "application/octet-stream", id == "destination" ? 0 : bytes.Length, "1", null, ["root"], false), id == "destination" ? [] : bytes, null, default);
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
         var workspace = new TenantWorkspaceReference.SessionWorking(s.Tenant, session);
         var files = factory.Services.GetRequiredService<ITenantWorkspaceMutationStore>();
         if (tool == ToolCatalog.DriveUpload) await files.WriteTenantAsync(workspace, "/working/Original.bin", bytes, _ => ValueTask.CompletedTask);
@@ -229,7 +229,7 @@ public sealed partial class TenantCredentialAccessTests
         var role = await access.SaveRoleAsync(actor, s.Tenant, null, "Exact background account actions", ["sessions.create", "agent-runs.create", "sessions.read", "credentials.read", "credentials.use", "email.draft", "email.send", "drive.read", "drive.write", "agents.read"], await Revision(owner, s.Tenant));
         await access.AssignRoleAsync(actor, s.Tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(s.Tenant), await Revision(owner, s.Tenant));
         if (drive) await factory.Services.GetRequiredService<ISyntheticDriveStore>().SaveAsync(s.Credential, new("file", "Original.bin", "application/octet-stream", 3, "1", null, ["root"], false), [0, 255, 3], null, default);
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
         var initial = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Start exact account background test",
             expectedRevision = await Revision(owner, s.Tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
         var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var sessions = factory.Services.GetRequiredService<ITenantSessionStore>();

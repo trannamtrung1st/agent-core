@@ -96,7 +96,7 @@ public sealed partial class TenantCredentialAccessTests
                 expectedProfileRevision = profile.GetProperty("profile").GetProperty("revision").GetInt64(), values = new { preferredName = "PRIVATE_AUTOMATION_CREATOR_PROFILE" } })).StatusCode);
         }
         var explicitModel = mode is "conversation-model" or "conflicting-model";
-        var destination = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, mode = "text", offeringId = explicitModel ? "dca30000-0000-4000-8000-000000000002" : null, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+        var destination = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, mode = "text", offeringId = explicitModel ? "dca30000-0000-4000-8000-000000000002" : null, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
         var sessions = factory.Services.GetRequiredService<ITenantSessionStore>(); var runs = factory.Services.GetRequiredService<ITenantRunStore>();
         var execution = factory.Services.GetRequiredService<ITenantRunExecution>();
         if (mode == "retirement")
@@ -138,7 +138,7 @@ public sealed partial class TenantCredentialAccessTests
         if (mode == "foreign")
         {
             var foreign = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
-            var target = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = foreign, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            var target = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = foreign, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync(route, Body(target))).StatusCode); return;
         }
         if (mode == "invalid-report") { Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(route, Body(destination, destination))).StatusCode); return; }
@@ -266,7 +266,7 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Null(run.Admission.Activation.SourceSessionId); Assert.Null(run.Admission.Activation.SourceAgentRunId);
         if (mode == "frozen-target")
         {
-            var other = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            var other = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(route + $"/{automation}", Body(other, revision: 2))).StatusCode);
         }
         if (mode == "cancel-registration") Assert.Equal(HttpStatusCode.OK, (await owner.DeleteAsync(route + $"/{automation}?expectedRevision={await Revision(owner, tenant)}&expectedInstanceRevision=1&expectedAutomationRevision=2")).StatusCode);

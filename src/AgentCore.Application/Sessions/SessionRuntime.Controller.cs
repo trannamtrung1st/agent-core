@@ -442,7 +442,7 @@ public sealed partial class SessionRuntime
                         Muted: _muted,
                         _streamId,
                         pauseReason,
-                        _snapshot.LifecycleStatus)),
+                        _snapshot.LifecycleStatus, _snapshot.LifecycleReason, _snapshot.LifecycleSource, _snapshot.RetentionDueAtUtc)),
                 cancellationToken)
             .ConfigureAwait(false);
 

@@ -349,7 +349,10 @@ public sealed record SessionSnapshot(
     SessionOrigin? Origin = null,
     SessionSurface Surfaces = SessionSurface.ChatList,
     IReadOnlyList<Guid>? PendingAgentInputIds = null,
-    AgentCore.Domain.Spaces.SessionContextSelection? ContextSelection = null)
+    AgentCore.Domain.Spaces.SessionContextSelection? ContextSelection = null,
+    SessionRetentionKind RetentionKind = SessionRetentionKind.Saved,
+    int? RetainAfterTerminalDays = null,
+    DateTimeOffset? RetentionDueAtUtc = null)
 {
     private IReadOnlyList<Guid> _pendingAgentInputIds = ValidatePendingInputs(PendingAgentInputIds ?? []);
     public IReadOnlyList<Guid> PendingAgentInputIds

@@ -28,7 +28,7 @@ public sealed partial class TenantSessionAccessTests
             await using var host = factory.WithWebHostBuilder(b => b.ConfigureTestServices(s => s.Replace(ServiceDescriptor.Singleton<ILanguageModel>(model))));
             using var owner = host.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
             var (tenant, instance) = await SetupManagementMutation(host, owner); var api = $"/api/v2/tenants/{tenant}";
-            var created = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 })); var session = created.GetProperty("sessionId").GetGuid();
+            var created = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 })); var session = created.GetProperty("sessionId").GetGuid();
             var response = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Request this exact settings change before a boundary changes.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, response.StatusCode); var runId = (await Json(response)).GetProperty("runId").GetGuid();
             if (factory is ApprovalExecutionFactory memory) Volatile.Write(ref memory.Enabled, true);
@@ -75,7 +75,7 @@ public sealed partial class TenantSessionAccessTests
                 model.Arguments="""{"expectedInstanceRevision":4,"section":"conversationPolicy","set":{},"clear":["language"]}""";
             }
             if(review) Assert.Equal(HttpStatusCode.OK,(await owner.PutAsJsonAsync(api+"/operation-policies/agents.update",new { mode="always",independentReview=false,expectedRevision=await Revision(owner,tenant),expectedPolicyRevision=0 })).StatusCode);
-            var created=await Json(await owner.PostAsJsonAsync(api+"/sessions",new { agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=beforeRevision }));var session=created.GetProperty("sessionId").GetGuid();
+            var created=await Json(await owner.PostAsJsonAsync(api+"/sessions",new { retentionKind="saved", agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=beforeRevision }));var session=created.GetProperty("sessionId").GetGuid();
             var response=await owner.PostAsJsonAsync(api+$"/sessions/{session}/messages",new { messageId=Guid.NewGuid(),text="Use Vietnamese responses through the exact settings interface.",expectedRevision=await Revision(owner,tenant),expectedSessionRevision=1 });
             Assert.Equal(HttpStatusCode.Accepted,response.StatusCode);var runId=(await Json(response)).GetProperty("runId").GetGuid();if(factory is ApprovalExecutionFactory memory)Volatile.Write(ref memory.Enabled,true);
             var runs=host.Services.GetRequiredService<ITenantRunStore>();var run=await AwaitManagementRun(runs,tenant,runId,review);

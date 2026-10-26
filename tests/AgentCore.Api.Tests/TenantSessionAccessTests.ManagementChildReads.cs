@@ -46,7 +46,7 @@ public sealed partial class TenantSessionAccessTests
             var (tenant, instance) = await SetupManagementInspection(host, owner, readable);
             model.ArgumentsOverride = await ChildReadArguments(owner, tenant, instance, tool);
             var api = $"/api/v2/tenants/{tenant}";
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 6 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 6 }))).GetProperty("sessionId").GetGuid();
             var submitted = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Inspect the exact current child without loading or changing it.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, submitted.StatusCode);
             var runId = (await Json(submitted)).GetProperty("runId").GetGuid(); if (factory is ApprovalExecutionFactory memory) Volatile.Write(ref memory.Enabled, true);
@@ -115,7 +115,7 @@ public sealed partial class TenantSessionAccessTests
             model.ArgumentsOverride = await ChildReadArguments(owner, tenant, instance, tool);
             var permission = tool.StartsWith("skills.", StringComparison.Ordinal) ? "skills.read" : "resources.read";
             Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/" + permission, new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 6 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 6 }))).GetProperty("sessionId").GetGuid();
             var submitted = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Review this one exact child read.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, submitted.StatusCode);
             var runId = (await Json(submitted)).GetProperty("runId").GetGuid(); if (factory is ApprovalExecutionFactory memory) Volatile.Write(ref memory.Enabled, true);

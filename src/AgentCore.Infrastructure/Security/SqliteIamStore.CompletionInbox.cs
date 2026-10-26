@@ -24,12 +24,12 @@ public sealed partial class SqliteIamStore
         TenantCompletionRules.Require(run, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), tool);
         await RequireTenantExecutionSourcesAsync(db, run, state, new IamAuthorizer(this), this, ct).ConfigureAwait(false); return run;
     }
-    private static async ValueTask<AgentRun?> CompletionRun(AgentCoreDbContext db, Guid tenant, Guid id, CancellationToken ct)
+    private async ValueTask<AgentRun?> CompletionRun(AgentCoreDbContext db, Guid tenant, Guid id, CancellationToken ct)
     {
         var row = await OwnedRuns(db, tenant).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == id.ToString("D"), ct).ConfigureAwait(false);
         return row is null ? null : AgentRunStoreMapping.ToDomain(row);
     }
-    private static async ValueTask<TenantSession?> CompletionSession(AgentCoreDbContext db, Guid tenant, Guid id, CancellationToken ct)
+    private async ValueTask<TenantSession?> CompletionSession(AgentCoreDbContext db, Guid tenant, Guid id, CancellationToken ct)
     {
         var row = await OwnedSessions(db, tenant).AsNoTracking().SingleOrDefaultAsync(s => s.SessionId == id.ToString("D"), ct).ConfigureAwait(false);
         return row is null ? null : await SessionView(db, row, ct).ConfigureAwait(false);

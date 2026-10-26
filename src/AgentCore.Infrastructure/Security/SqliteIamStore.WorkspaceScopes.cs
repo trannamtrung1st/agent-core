@@ -7,7 +7,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore
 {
-    private static async Task<bool> OwnsWorkspace(AgentCoreDbContext db, AccessScope scope, CancellationToken ct)
+    private async Task<bool> OwnsWorkspace(AgentCoreDbContext db, AccessScope scope, CancellationToken ct)
     {
         if (!TenantWorkspaceRules.TryParse(scope, out var working, out var id)) return false;
         var key = id.ToString("D");

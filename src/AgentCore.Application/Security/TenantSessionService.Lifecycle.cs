@@ -16,7 +16,7 @@ public sealed partial class TenantSessionService
         var state = await Human(tenant, initiator, ct).ConfigureAwait(false); var scope = TenantSessionRules.Scope(tenant, change.SessionId);
         await Require(state, initiator.PrincipalId, TenantSessionMutations.Permission(change.Action), scope, ct).ConfigureAwait(false);
         if (change.Action != TenantSessionAction.Delete) await Require(state, initiator.PrincipalId, "sessions.read", scope, ct).ConfigureAwait(false);
-        if (change.Action == TenantSessionAction.Resume)
+        if (change.Action is TenantSessionAction.Resume or TenantSessionAction.SetAgentCompletion)
         {
             var parent = await agents.FindTenantAgentAsync(tenant, current.Owner.AgentInstanceId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
             await Require(state, initiator.PrincipalId, "agents.chat", AccessScope.ForResource(tenant, "agent", current.Owner.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false);

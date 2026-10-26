@@ -89,7 +89,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         var query = UnblockedTenantInput(db).AsNoTracking().Where(r => r.TenantId != null && !db.Set<TenantApprovalRecord>().Any(a => a.TenantId == r.TenantId && a.RunId == r.AgentRunId && a.Status == (int)TenantApprovalStatus.Pending)
             && db.Set<Tenant>().Any(t => t.TenantId == r.TenantId && t.Status == IdentityStatus.Active)
             && db.Set<TenantSessionRecord>().Any(s => s.SessionId == r.SessionId && s.TenantId == r.TenantId)
-            && db.Sessions.Any(s => s.SessionId == r.SessionId && s.DurablyDeletedAtUtc == null && s.ArchivedAtUtc == null)
+            && db.Sessions.Any(s => s.SessionId == r.SessionId && s.DurablyDeletedAtUtc == null && s.ArchivedAtUtc == null && (s.RetentionDueAtUtc == null || s.RetentionDueAtUtc > millis))
             && (r.Status == (int)AgentRunStatus.Queued || r.Status == (int)AgentRunStatus.WaitingToRetry && r.NextRetryAtUtc <= millis
                 || r.Status == (int)AgentRunStatus.Running && r.LeaseExpiresAtUtc <= millis || r.Status == (int)AgentRunStatus.WaitingForSignal))
             .OrderBy(r => r.CreatedAtUtc).ThenBy(r => db.ActivationSourceEntries.Where(e => e.ActivationId == r.ActivationId).Join(db.Entries, source => source.EntryId, entry => entry.EntryId, (source, entry) => (long?)entry.EntrySequence).Min() ?? long.MaxValue)

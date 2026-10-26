@@ -126,6 +126,7 @@ public sealed partial class SqliteIamStore : ITenantLearnedMemoryStore
     }
     private async Task StageLearningCommit(AgentCoreDbContext db, TenantRuntimeFrame frame, SessionSnapshot snapshot, TenantMemoryPlan? plan, CancellationToken ct)
     {
+        if (snapshot.RetentionKind == SessionRetentionKind.Temporary) return;
         if (plan is null) return;
         if (plan.Frame != frame) throw new AccessDeniedException("memory_learning_changed");
         var actual = await PrepareLearning(db, frame, snapshot, plan.Proposals, plan.CandidateIds, plan.AuditId, plan.PreparedAt, ct).ConfigureAwait(false);

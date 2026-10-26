@@ -27,7 +27,7 @@ public sealed partial class TenantSessionAccessTests
         })).StatusCode);
         var agents = factory.Services.GetRequiredService<ITenantAgentStore>(); var before = (await agents.FindTenantAgentAsync(tenant, instance))!;
         factory.Model.ProposedPersona = before.Instance.Persona with { Name = "Model-requested exact persona" };
-        var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }));
+        var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }));
         var sessionId = session.GetProperty("sessionId").GetGuid();
         var submitted = await owner.PostAsJsonAsync(api + $"/sessions/{sessionId}/messages", new { messageId = Guid.NewGuid(), text = "Update your persona after the required approval", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
         Assert.Equal(HttpStatusCode.Accepted, submitted.StatusCode); var runId = (await Json(submitted)).GetProperty("runId").GetGuid();

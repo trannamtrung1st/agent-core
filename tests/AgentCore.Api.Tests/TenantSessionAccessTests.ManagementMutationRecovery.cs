@@ -29,7 +29,7 @@ public sealed partial class TenantSessionAccessTests
             {
                 using var owner = first.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
                 (tenant, instance) = await SetupManagementMutation(first, owner); var api = $"/api/v2/tenants/{tenant}";
-                var created = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 })); session = created.GetProperty("sessionId").GetGuid();
+                var created = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 })); session = created.GetProperty("sessionId").GetGuid();
                 var response = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Keep this exact configuration change consent across restart.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
                 Assert.Equal(HttpStatusCode.Accepted, response.StatusCode); runId = (await Json(response)).GetProperty("runId").GetGuid();
                 var pending = await AwaitManagementRun(first.Services.GetRequiredService<ITenantRunStore>(), tenant, runId, true); Assert.Equal(AgentRunStatus.WaitingForApproval, pending.Status); Assert.Null(pending.Claim); requestId = pending.ApprovalRequestId!.Value;

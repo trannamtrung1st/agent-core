@@ -29,6 +29,7 @@ public static class TenantExperienceSourceProjection
     public static (TenantExperienceSourceWitness Witness, string EvidenceJson, string Title) SessionEvidence(
         SessionSnapshot snapshot, IReadOnlyList<ConversationEntry> rows, long stable, TenantExperienceSourceWitness? expected = null)
     {
+        if (snapshot.RetentionKind == SessionRetentionKind.Temporary) throw new AccessDeniedException("experience_source_unavailable");
         if (stable < 1) throw new AccessDeniedException("experience_source_unavailable");
         if (expected is not null && (expected.Kind != ExperienceSourceKind.Session
             || expected.SourceId != snapshot.SessionId || expected.SessionRevision != snapshot.Revision || expected.ThroughCursor != stable))

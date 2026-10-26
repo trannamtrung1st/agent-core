@@ -25,7 +25,7 @@ public sealed partial class TenantSessionAccessTests
         var api = $"/api/v2/tenants/{tenant}";
         var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
         var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
-        var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
+        var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
         var id = session.GetProperty("sessionId").GetGuid(); var path = api + $"/sessions/{id}/sandbox";
         var response = await owner.GetAsync(path); Assert.Equal(HttpStatusCode.OK, response.StatusCode); Assert.True(response.Headers.CacheControl?.NoStore);
         var observed = await Json(response); Assert.Equal(id, observed.GetProperty("sessionId").GetGuid());

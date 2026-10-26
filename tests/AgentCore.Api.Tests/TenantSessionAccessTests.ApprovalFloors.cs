@@ -73,7 +73,7 @@ public sealed partial class TenantSessionAccessTests
             }
             else
             {
-                var created = await human.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 });
+                var created = await human.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 });
                 Assert.True(created.StatusCode == HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
                 var session = (await Json(created)).GetProperty("sessionId").GetGuid();
                 var submitted = await human.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Inspect the exact executor action policy.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });

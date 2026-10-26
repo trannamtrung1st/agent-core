@@ -70,6 +70,7 @@ public static class ToolCatalog
     public const string CapabilitiesLoad = "capabilities.load";
     public const string SkillsLoad = "skills.load";
     public const string AppMessageSend = "app.message.send";
+    public const string SessionComplete = "session.complete";
     public const string BrowserNavigate = "browser.navigate";
     public const string BrowserSnapshot = "browser.snapshot";
     public const string BrowserClose = "browser.close";

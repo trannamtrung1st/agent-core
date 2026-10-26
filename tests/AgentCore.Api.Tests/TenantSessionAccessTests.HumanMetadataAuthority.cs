@@ -30,7 +30,7 @@ public sealed partial class TenantSessionAccessTests
         var api = $"/api/v2/tenants/{tenant}";
         var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
         var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
-        var created = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
+        var created = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
         var session = created.GetProperty("sessionId").GetGuid();
         Assert.True((await owner.PatchAsJsonAsync(api + $"/sessions/{session}", new { title = "Private metadata retirement sentinel", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 })).IsSuccessStatusCode);
         var path = api + "/sessions" + (action == "read" ? $"/{session}" : "");
@@ -76,6 +76,10 @@ public sealed partial class TenantSessionAccessTests
     }
     private sealed class SessionMetadataAuthorityStore(ITenantSessionStore inner, SessionMetadataAuthorityFactory factory) : ITenantSessionStore
     {
+        public ValueTask<IReadOnlyList<TenantSessionRetentionTarget>> ListDueSessionsAsync(TenantSessionRetentionTarget? after, int limit, CancellationToken ct = default) => inner.ListDueSessionsAsync(after, limit, ct);
+        public ValueTask<TenantSessionRetentionTarget?> FindExpiredSessionAsync(Guid tenant, Guid session, CancellationToken ct = default) => inner.FindExpiredSessionAsync(tenant, session, ct);
+        public ValueTask<bool> RetireDueSessionAsync(TenantSessionRetentionTarget target, Guid auditId, CancellationToken ct = default) => inner.RetireDueSessionAsync(target, auditId, ct);
+
         private async ValueTask After() { if (Interlocked.Exchange(ref factory.AfterRead, null) is { } hook) await hook(); }
         public async ValueTask<TenantSession?> FindTenantSessionAsync(Guid tenantId, Guid sessionId, CancellationToken ct = default)
         { var value = await inner.FindTenantSessionAsync(tenantId, sessionId, ct); await After(); return value; }

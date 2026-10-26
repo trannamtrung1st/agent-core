@@ -16,6 +16,7 @@ export type AttachmentDto = {
 };
 
 export type PendingAttachment = {
+  originalText?: string;
   localId: string;
   displayName: string;
   contentType: string;

@@ -70,7 +70,7 @@ public sealed partial class TenantSessionAccessTests
                 await host.Services.GetRequiredService<TenantAccessService>().AssignRoleAsync(state.Users.Single().PrincipalId,tenant,targetAgent.PrincipalId,state.Roles.Single(r=>r.Name=="Exact management reader").RoleId,AccessScope.ForResource(tenant,"agent",instance.ToString("D")),state.Tenant.Revision);
                 model.ArgumentsOverride=JsonSerializer.Serialize(new { target=ToolCatalog.WebFetch });
             }
-            var session=(await Json(await owner.PostAsJsonAsync(api+"/sessions",new { agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=revision }))).GetProperty("sessionId").GetGuid();
+            var session=(await Json(await owner.PostAsJsonAsync(api+"/sessions",new { retentionKind="saved", agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=revision }))).GetProperty("sessionId").GetGuid();
             var submitted=await owner.PostAsJsonAsync(api+$"/sessions/{session}/messages",new { messageId=Guid.NewGuid(),text="Diagnose only this exact requested configuration change.",expectedRevision=await Revision(owner,tenant),expectedSessionRevision=1 });
             Assert.Equal(HttpStatusCode.Accepted,submitted.StatusCode);var runId=(await Json(submitted)).GetProperty("runId").GetGuid();if(factory is ApprovalExecutionFactory memory)Volatile.Write(ref memory.Enabled,true);
             var final=await AwaitManagementRun(host.Services.GetRequiredService<ITenantRunStore>(),tenant,runId);Assert.True(final.Status==AgentRunStatus.Completed,$"{final.Status}: {final.Failure?.Code}: {final.Failure?.Summary}");

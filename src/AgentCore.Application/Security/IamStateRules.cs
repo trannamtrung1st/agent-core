@@ -41,7 +41,8 @@ public static class IamStateRules
     {
         var tenantId = state.Tenant.TenantId;
         void Require(bool ok) { if (!ok) throw new ArgumentException("Invalid tenant security aggregate.", nameof(state)); }
-        Require(tenantId != Guid.Empty && state.Tenant.Revision >= 1 && Enum.IsDefined(state.Tenant.Status));
+        Require(tenantId != Guid.Empty && state.Tenant.Revision >= 1 && Enum.IsDefined(state.Tenant.Status)
+            && state.Tenant.SavedChatRetentionDays is not (< 1 or > 3650));
         Require(state.OperationPolicies.Select(p => p.PermissionKey).Distinct(StringComparer.Ordinal).Count() == state.OperationPolicies.Count);
         Require(state.OperationPolicies.All(p => p.TenantId == tenantId && p.Revision >= 1
             && PermissionCatalog.TryGet(p.PermissionKey, out var metadata) && !metadata.SystemOnly

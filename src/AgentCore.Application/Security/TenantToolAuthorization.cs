@@ -27,8 +27,13 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
         if (resolved.Agent.PrincipalId != owner.ExecutorPrincipalId) throw new AccessDeniedException("tenant_configuration_unavailable");
         return resolved.Configuration;
     }
-    internal ValueTask<IReadOnlyList<string>> ContextToolsAsync(AgentCore.Domain.Conversation.AgentRun run, CancellationToken ct) =>
-        contextTools?.OfferedAsync(run, ct) ?? ValueTask.FromResult<IReadOnlyList<string>>([]);
+    internal async ValueTask<IReadOnlyList<string>> ContextToolsAsync(AgentCore.Domain.Conversation.AgentRun run, CancellationToken ct)
+    {
+        var offered = contextTools is null ? [] : await contextTools.OfferedAsync(run, ct).ConfigureAwait(false);
+        var boundary = await Resolve(run.SessionId, new(false, TriggerKind.UserTurn, AgentInstanceId: run.AgentInstanceId,
+            AgentRunId: run.AgentRunId, OwnedSessionId: run.SessionId, TenantId: run.Owner.TenantId, AgentRunGeneration: run.Claim?.Generation), ToolCatalog.SessionComplete, ct).ConfigureAwait(false);
+        return boundary.Allowed ? offered.Append(ToolCatalog.SessionComplete).ToArray() : offered;
+    }
     private sealed record Boundary(bool Tenant, bool Allowed, TenantRunReference? Reference, string Reason);
     private async ValueTask<Boundary> Resolve(Guid session, ToolExecutionAdmission? admission, string tool, CancellationToken ct)
     {
@@ -50,6 +55,14 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
                 return new(true, false, reference, "tenant_runtime_unavailable");
             if (claim.LeaseExpiresAtUtc <= time.GetUtcNow())
                 return new(true, false, reference, "execution_claim_expired");
+            if (SessionCompletionIntent.Reason(run) is not null) return new(true, false, reference, "session_completion_pending");
+            if (tool == ToolCatalog.SessionComplete)
+            {
+                var ownedChat = await ((ITenantSessionStore)runs).FindTenantSessionAsync(owner.TenantId, session, ct).ConfigureAwait(false);
+                var completionAllowed = ownedChat is not null && SessionCompletionIntent.Eligible(run, ownedChat.Snapshot, time.GetUtcNow())
+                    && admission is { Detached: false, TriggerKind: TriggerKind.UserTurn, ConfigurationContinuationTarget: null };
+                return new(true, completionAllowed, reference, completionAllowed ? "allowed" : "session_completion_unavailable");
+            }
             if (tool == ToolCatalog.AppMessageSend)
             {
                 var allowedMessage = ApplicationMessageToolPolicy.AllowsTenantRun(run)
@@ -394,7 +407,7 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
             ? await approvals.PreparePreferencesAsync(boundary.Reference, preferences, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false)
             : await approvals.PreparePersonaAsync(boundary.Reference, intent.Persona!, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
     }
-    private static bool IsTenantTool(string name) => TenantAutomationReadContract.IsTool(name) || IamToolContracts.IsInspection(name) || name is ToolCatalog.RequestAuthorization or TenantPreferenceToolContract.Name or ToolCatalog.AgentStateInspect;
+    private static bool IsTenantTool(string name) => TenantAutomationReadContract.IsTool(name) || IamToolContracts.IsInspection(name) || name is ToolCatalog.SessionComplete or ToolCatalog.RequestAuthorization or TenantPreferenceToolContract.Name or ToolCatalog.AgentStateInspect;
     private static object Project(OperationAuthorizationDecision decision) => new { decision = JsonNamingPolicy.CamelCase.ConvertName(decision.Decision.ToString()),
         reasonCode = decision.ReasonCode, requiredPermission = decision.Permission, targetResource = new { type = decision.Resource.ResourceType, id = decision.Resource.ResourceId },
         approvalKind = decision.ApprovalKind is { } kind ? JsonNamingPolicy.CamelCase.ConvertName(kind.ToString()) : null };

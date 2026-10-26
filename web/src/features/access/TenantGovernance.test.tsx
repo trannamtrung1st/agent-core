@@ -9,13 +9,23 @@ const baseline: GovernancePolicy = { permission: 'agents.read', approvalClass: '
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const fetchMock = vi.fn<typeof fetch>();
 let current = baseline;
+let retention: { savedChatRetentionDays: number | null; securityRevision: number; canManage: boolean };
+let retentionFailure = false;
 let put: (body: Record<string, unknown>) => Response;
 beforeEach(() => {
+  retention = { savedChatRetentionDays: null, securityRevision: 9, canManage: true }; retentionFailure = false;
   current = structuredClone(baseline); resetIdentityCsrf(); fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock);
   put = body => { current = { ...current, effective: { mode: body.mode as 'none', independentReview: body.independentReview as boolean }, policyRevision: current.policyRevision + 1, securityRevision: current.securityRevision + 1 }; return response(current); };
   fetchMock.mockImplementation(async (url, options) => {
     const path = String(url);
     if (path.endsWith('/auth/csrf')) return response({ token: 'synthetic-csrf' });
+    if (path.endsWith('/governance/chat-retention')) {
+      if (options?.method === 'PUT') {
+        if (retentionFailure) return response({ reasonCode: 'stale_revision' }, 409);
+        const body = JSON.parse(String(options.body)); retention = { ...retention, savedChatRetentionDays: body.savedChatRetentionDays, securityRevision: retention.securityRevision + 1 };
+      }
+      return response(retention);
+    }
     if (options?.method === 'PUT') return put(JSON.parse(String(options.body)));
     if (path.includes('/operation-policies?')) return response({ items: [current], total: 1, page: 0, pageSize: 20, securityRevision: current.securityRevision });
     return response(current);
@@ -95,4 +105,29 @@ it('clears protected detail after reload loses read authority', async () => {
   fireEvent.click(within(dialog).getByRole('button', { name: 'Reload saved policy' }));
   await screen.findByText('You do not have permission for this action. Contact an organization owner if you need access.'); const currentDialog = document.querySelector<HTMLElement>('[role=dialog][aria-label="Review policy"]')!;
   expect(within(currentDialog).queryByText(/^Current review\s*:?$/)).toBeNull(); expect(within(currentDialog).queryByText('agents.read')).toBeNull();
+});
+
+
+it('saves a bounded retention default with exact security evidence and refreshes the pinned-policy explanation', async () => {
+  mount(); const forever = await screen.findByRole('checkbox', { name: 'Forever' });
+  expect(forever).toBeChecked(); fireEvent.click(forever);
+  const days = screen.getByRole('spinbutton', { name: 'Saved Chat retention days' });
+  fireEvent.change(days, { target: { value: '7' } }); fireEvent.blur(days);
+  fireEvent.click(screen.getByRole('button', { name: 'Save retention' }));
+  await screen.findByText('Chat retention saved for future chats.');
+  expect(JSON.parse(String(writes()[0][1]?.body))).toEqual({ savedChatRetentionDays: 7, expectedRevision: 9 });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save retention' })).toBeDisabled());
+  expect(screen.getByText(/Existing chats keep their policy/)).toBeVisible();
+});
+
+it('blocks stale retention replay until refresh and disables governance changes for a reader', async () => {
+  retentionFailure = true; mount(); fireEvent.click(await screen.findByRole('checkbox', { name: 'Forever' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save retention' }));
+  await screen.findByText('Refresh retention to review the current policy before saving again.');
+  expect(screen.getByRole('button', { name: 'Save retention' })).toBeDisabled(); expect(writes()).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh retention' }));
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Forever' })).toBeChecked());
+  cleanup(); retention.canManage = false; mount({ ...context, permissions: ['tenant.governance.read'] });
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Forever' })).toBeDisabled());
+  expect(screen.getByRole('button', { name: 'Save retention' })).toBeDisabled();
 });

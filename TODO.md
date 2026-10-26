@@ -91,9 +91,9 @@ Implement the approved coherent cutover: Space owns situational instructions and
 
 ### 5. Message, Execution & Chat Simplification
 
-Review Messages, Activations, Agent Runs and Responses for simpler execution/conversation semantics. Evaluate removing any remaining redundant Turn concept only after dependency analysis proves execution, history, checkpoints, permissions and reporting remain intact; this is an architectural proposal requiring specification revision. The accepted `Session → Activation → AgentRun` cutover already retired the old execution engines.
+Implemented locally on 2026-10-26: retain Session → Activation → AgentRun and legitimate response/voice fences; remove privileged Legacy lifecycle provenance; add explicit scoped agent completion, governed Saved retention and fixed 24-hour Temporary chats, exact-byte long-text attachments, and expired-view cleanup. No persistent Turn replacement or second execution/UI workflow was introduced.
 
-Include explicit end-chat capability/tool, retention policies and temporary chats, long composer content represented as attachments when appropriate, and cleaner context handling. Build on existing terminal lifecycle and composer/attachment owners rather than resurrecting completed migrations.
+[Verification and source ledger](docs/reports/chat-simplification-2026-10-26.md) records the focused local/Synthetic checks and operational limits. Optional hosted CI, live-provider/device certification and deployment remain separate from this implementation. Proceed to Decision Intelligence as its own initiative.
 
 ### 6. Self-Hosted Decision Intelligence
 

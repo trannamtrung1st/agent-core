@@ -1,9 +1,12 @@
+import { IdentityError } from "./identity";
+import { normalizeDraftParts } from "./messageParts";
 import { HttpTransportType, HubConnection, HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import { newChatPath, parseSessionIdFromPath, sameSessionId, syncBrowserSessionPath } from '../app/sessionRoute';
 import { capture } from "../audio/capture";
 import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio/outputAdmission";
 import { INHERIT_MODEL, modelSelectValue } from "../features/chat/ModelPicker";
+import { longTextFile, LONG_TEXT_MESSAGE } from '../features/chat/longText';
 import { defaultChatIdentityKey, isNewChatIdentityReady, parseChatIdentityKey, resolveNewChatIdentityPresentation } from "../features/chat/chatIdentity";
 import { IMAGE_MODEL_INCOMPATIBLE_MESSAGE, imageModelCompatibility, pendingAttachmentsIncludeImage, queuedSendIncludesImage, resolveModelVision } from "../features/chat/imageModelCompatibility";
 import { sessionErrorFromMessage, sessionErrorFromWire, type WireError } from "../features/chat/sessionError";
@@ -163,7 +166,7 @@ export function setDraft(draft: string): void {
 }
 
 export function setDraftParts(parts: MessagePart[]): void {
-  const snapshot = snapshotParts(parts)!;
+  const snapshot = structuredClone(normalizeDraftParts(parts));
   useSessionStore.setState({ draft: messageText(snapshot), draftParts: snapshot });
 }
 
@@ -773,6 +776,7 @@ function handleEvent(raw: ServerEvent): void {
   }
 
   const prior = useSessionStore.getState();
+  if (prior.lifecycleStatus === "expired") return;
   if (raw.type === "session.ready") {
     if (!sameSessionId(prior.sessionId, raw.sessionId)) {
       return;
@@ -2142,7 +2146,7 @@ export async function startConversation(): Promise<boolean> {
         offeringId: snapshot.pendingOfferingId === INHERIT_MODEL ? null : snapshot.pendingOfferingId,
         reasoningEffort: snapshot.pendingReasoningEffort
       };
-      const created = await createSessionForInstance(identity.instanceId, modelChoice);
+      const created = await createSessionForInstance(identity.instanceId, modelChoice, snapshot.newChatRetentionKind);
       await startConnection(created.sessionId, { syncUrl: "replace" });
       await refreshCatalog(true);
       return useSessionStore.getState().connection === "ready";
@@ -2176,7 +2180,7 @@ export async function beginNewChat(options?: { syncUrl?: boolean; urlMode?: "pus
   useSessionStore.setState({
     ...emptySession(),
     ...catalogShell(),
-    routeNotice: null
+    routeNotice: null, newChatRetentionKind: "saved"
   });
   void refreshCatalog(true);
   disposed = false;
@@ -2250,7 +2254,13 @@ export async function openSessionById(
       },
       options
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof IdentityError && error.reasonCode === 'session_expired') {
+      useSessionStore.setState({ ...emptySession(), sessionId, status: 'ended', lifecycleStatus: 'expired' });
+      await expireCurrentChat(sessionId);
+      if (options?.syncUrl !== false) syncBrowserSessionPath(sessionId, 'replace');
+      return 'ended';
+    }
     return openCatalogSession(
       {
         sessionId,
@@ -2377,6 +2387,30 @@ export async function retryConnection(): Promise<void> {
   await startConnection(snapshot.sessionId);
 }
 
+export async function setAgentCompletion(allowed: boolean): Promise<void> {
+  const before = useSessionStore.getState();
+  if (!before.sessionId || composerOutputBusy() || before.mode === 'voice') return;
+  const { tenantSetAgentCompletion } = await import('./tenantChat');
+  try {
+    const saved = await tenantSetAgentCompletion(before.sessionId, allowed);
+    if (sameSessionId(useSessionStore.getState().sessionId, before.sessionId)) useSessionStore.setState({ agentCompletion: saved.agentCompletion });
+  } catch (error) {
+    useSessionStore.setState({ error: error instanceof Error ? error.message : 'Unable to save agent completion policy.' });
+  }
+}
+
+export async function expireCurrentChat(sessionId: string): Promise<void> {
+  if (!sameSessionId(useSessionStore.getState().sessionId, sessionId)) return;
+  beginSessionHistory(); pendingUserText = null; clearAwaitingAgentResponseStart(); committedText.clear(); committedBlocks.clear();
+  voiceEpoch += 1; voiceModeRequested = false; clientOwnsVoice = false; clientTranscriptHeldForAgent = false;
+  stopReceipts(); abortPlayback(); capture.release(); releaseAllPendingFiles();
+  // Revoke rendered/private state immediately, including while transport shutdown waits.
+  useSessionStore.setState({ ...emptySession(), sessionId, connection: 'idle', status: 'ended', lifecycleStatus: 'expired',
+    routeNotice: 'This conversation has expired. Start a new chat to continue.' });
+  await stopConnection(); await releaseClientSpeech();
+  await refreshCatalog(true);
+}
+
 export async function loadOlderHistory(): Promise<void> {
   await loadOlderHistoryPage();
 }
@@ -2449,6 +2483,8 @@ async function showPausedSession(
       agentRole: identity.role,
       voiceAvailable: Boolean(agent?.voiceAvailable),
       status: "paused",
+      retentionKind: view.retentionKind ?? "saved", retentionDueAtUtc: view.retentionDueAtUtc ?? null,
+      agentCompletion: view.agentCompletion ?? "disabled", lifecycleReason: view.lifecycleReason ?? null, lifecycleSource: view.lifecycleSource ?? null,
       lifecycleStatus: view.lifecycleStatus ?? "paused",
       pauseReason: view.pauseReason ?? null,
       lastServerSequence: view.lastEntrySequence ?? 0,
@@ -2537,6 +2573,8 @@ async function showEndedSession(
       agentRole: identity.role,
       voiceAvailable: false,
       status: "ended",
+      retentionKind: view.retentionKind ?? "saved", retentionDueAtUtc: view.retentionDueAtUtc ?? null,
+      agentCompletion: view.agentCompletion ?? "disabled", lifecycleReason: view.lifecycleReason ?? null, lifecycleSource: view.lifecycleSource ?? null,
       lifecycleStatus: view.lifecycleStatus ?? "ended",
       lastServerSequence: view.lastEntrySequence ?? 0,
       ...modelFieldsFromSelection(view.model),
@@ -2611,6 +2649,8 @@ async function refreshEndedHistory(sessionId: string): Promise<void> {
 }
 
 function restoreDraft(text: string, error: string, wire?: WireError | null, attachments?: PendingAttachment[], parts?: MessagePart[]): void {
+  const original = attachments?.find(item => item.originalText !== undefined)?.originalText;
+  if (original !== undefined && text === LONG_TEXT_MESSAGE) { text = original; parts = undefined; }
   const latest = useSessionStore.getState();
   const code = wire?.code ?? "ValidationError";
   const category = wire?.category ?? "Validation";
@@ -2738,7 +2778,20 @@ export function composerStopEnabled(): boolean {
   );
 }
 
-export async function queueComposerFiles(fileList: File[]): Promise<void> {
+export async function attachLongComposerText(): Promise<void> {
+  const snapshot = useSessionStore.getState();
+  const existing = snapshot.pendingAttachments.find(item => item.originalText === snapshot.draft);
+  if (existing) {
+    if (existing.status === 'error') await retryComposerFile(existing.localId);
+    else if (existing.status === 'ready') setDraft(LONG_TEXT_MESSAGE);
+    return;
+  }
+  if (snapshot.pendingAttachments.length >= 10) throw new Error('Remove an attachment before attaching long text. A message can contain at most 10 files.');
+  const file = longTextFile(snapshot.draft, snapshot.draftParts);
+  await queueComposerFiles([file], snapshot.draft);
+}
+
+export async function queueComposerFiles(fileList: File[], originalText?: string): Promise<void> {
   let snapshot = useSessionStore.getState();
   if (isReadonlySession(snapshot)) {
     return;
@@ -2762,6 +2815,7 @@ export async function queueComposerFiles(fileList: File[]): Promise<void> {
     const localId = uuid();
     retainPendingFile(localId, file);
     return {
+      originalText,
       localId,
       displayName: file.name,
       contentType: file.type || "application/octet-stream",
@@ -2800,6 +2854,10 @@ async function uploadQueued(sessionId: string, localId: string): Promise<void> {
       readable: uploaded.readable,
       error: null
     });
+    const current = useSessionStore.getState();
+    const source = current.pendingAttachments.find(item => item.localId === localId)?.originalText;
+    if (source !== undefined && current.sessionId === sessionId && current.draft === source)
+      setDraft(LONG_TEXT_MESSAGE);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       return;
@@ -2839,6 +2897,7 @@ export async function removeComposerFile(localId: string): Promise<void> {
   }
 
   releasePendingFile(localId);
+  if (item?.originalText !== undefined && snapshot.draft === LONG_TEXT_MESSAGE) setDraft(item.originalText);
   useSessionStore.setState({
     pendingAttachments: snapshot.pendingAttachments.filter((pending) => pending.localId !== localId)
   });
@@ -3144,7 +3203,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
         } else witness = await tenantTextWitness(snapshot.sessionId!);
         payload = { text, ...(message.parts?.length ? { parts: wireParts(message.parts) } : {}), ...(readyAttachmentIds.length ? { attachmentIds: readyAttachmentIds } : {}), ...witness, ...(behavior === 'interrupt' ? { behavior } : {}) };
       });
-      if (chatTenantId && useSessionStore.getState().sessionId !== snapshot.sessionId) return;
+      if (chatTenantId && (useSessionStore.getState().sessionId !== snapshot.sessionId || useSessionStore.getState().lifecycleStatus === "expired")) return;
       if (!ack?.accepted) {
         clearAwaitingAgentResponseStart();
         pendingUserText = null;
@@ -3183,7 +3242,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
         commitOptimisticUserEntry(eventId);
       }
     } catch (error) {
-      if (chatTenantId && useSessionStore.getState().sessionId !== snapshot.sessionId) return;
+      if (chatTenantId && (useSessionStore.getState().sessionId !== snapshot.sessionId || useSessionStore.getState().lifecycleStatus === "expired")) return;
       if (!dispatched && pendingUserText?.eventId === eventId) pendingUserText = null;
       clearAwaitingAgentResponseStart();
       const errorMessage = error instanceof Error ? error.message : "Message was not accepted.";

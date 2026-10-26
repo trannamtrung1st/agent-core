@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, App, Button, Checkbox, Descriptions, Drawer, Empty, Flex, Form, Grid, Select, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Checkbox, Descriptions, Drawer, Empty, Flex, Form, Grid, InputNumber, Select, Table, Tag, Typography } from 'antd';
 import { confirmAction } from '../../app/confirmAction';
 import { IdentityCompletionError, IdentityError, identityRequest, tenantApi, type TenantContext } from '../../services/identity';
 import { AdminCollectionToolbar, adminCollectionPagination } from '../admin/AdminCollectionToolbar';
@@ -27,6 +27,7 @@ export function TenantGovernance({ context }: { context: TenantContext }) {
   const state = useIdentityQuery<PolicyPage>(tenantApi(context.tenant.tenantId, `/operation-policies?page=${page}&pageSize=${pageSize}&q=${encodeURIComponent(search.trim())}`));
   const close = () => { setSelected(null); requestAnimationFrame(() => (opener.current?.isConnected ? opener.current : document.querySelector<HTMLElement>('[data-admin-page-heading]'))?.focus({ preventScroll: true })); };
   return <Flex vertical gap="var(--ac-space-section)">
+    <ChatRetentionSettings key={context.tenant.tenantId} context={context} />
     <Alert type="info" showIcon title="Review policy does not grant permission" description="Agents use their own authority. Organization policy can require more human review; Core minimums and people-only restrictions always apply." />
     <AdminCollectionToolbar label="operation permissions" showScrollHint={false} value={search} onChange={value => { setSearch(value.slice(0, 160)); setPage(0); }} filters={<Button disabled={state.loading} onClick={state.reload}>Refresh policies</Button>} />
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={state.reload} /> : <Table<GovernancePolicy> className="admin-collection-table" rowKey="permission" dataSource={state.data?.items}
@@ -37,6 +38,39 @@ export function TenantGovernance({ context }: { context: TenantContext }) {
         { title: 'Action', width: 104, render: (_, item) => <Button aria-label={`Inspect ${permissionTitle(item.permission)}`} onClick={event => { opener.current = event.currentTarget; setSelected(item.permission); }}>Inspect</Button> }
       ]} />}
     {selected && <PolicyInspector key={`${context.tenant.tenantId}:${selected}`} context={context} permission={selected} onClose={close} onSaved={() => { close(); state.reload(); void message.success('Review policy saved. The next protected action checks current policy.'); }} />}
+  </Flex>;
+}
+
+type ChatRetention = { savedChatRetentionDays: number | null; securityRevision: number; canManage: boolean };
+function ChatRetentionSettings({ context }: { context: TenantContext }) {
+  const url = tenantApi(context.tenant.tenantId, '/governance/chat-retention');
+  const state = useIdentityQuery<ChatRetention>(url);
+  const command = useTenantCommand(); const { message } = App.useApp();
+  const [draft, setDraft] = useState<number | null | undefined>(undefined);
+  const saved = state.data; const value = draft === undefined ? saved?.savedChatRetentionDays ?? null : draft;
+  const editable = saved?.canManage && context.permissions.includes('tenant.governance.manage');
+  const stale = command.requiresReload || command.error instanceof IdentityError && [403, 404, 409].includes(command.error.status);
+  const valid = value === null || Number.isInteger(value) && value >= 1 && value <= 3650;
+  return <Flex vertical gap="var(--ac-space-compact)">
+    <Typography.Title level={3}>Saved Chat retention</Typography.Title>
+    <Typography.Text type="secondary">Organization default · pinned when each chat is created. Existing chats keep their policy. Temporary chats always expire after 24 hours.</Typography.Text>
+    {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={state.reload} /> : saved ? <>
+      <Flex align="center" wrap gap="var(--ac-space-compact)">
+        <Checkbox checked={value === null} disabled={!editable || command.busy || stale} onChange={event => setDraft(event.target.checked ? null : 30)}>Forever</Checkbox>
+        {value !== null ? <Form.Item label="Days after completion" validateStatus={!valid ? 'error' : undefined} help={!valid ? 'Enter a whole number from 1 to 3650.' : undefined}>
+          <InputNumber aria-label="Saved Chat retention days" min={1} max={3650} precision={0} value={value} disabled={!editable || command.busy || stale} onChange={next => setDraft(next ?? 0)} />
+        </Form.Item> : null}
+        <Button type="primary" loading={command.busy} disabled={!editable || stale || !valid || value === saved.savedChatRetentionDays}
+          onClick={() => void command.run(signal => identityRequest<ChatRetention>(url, { method: 'PUT', signal, body: { savedChatRetentionDays: value, expectedRevision: saved.securityRevision } }), result => {
+            if (result.savedChatRetentionDays !== value || result.securityRevision !== saved.securityRevision + 1) throw new IdentityCompletionError();
+            setDraft(undefined); state.reload(); void message.success('Chat retention saved for future chats.');
+          })}>Save retention</Button>
+        <Button disabled={command.busy} onClick={() => { setDraft(undefined); command.clearError(); state.reload(); }}>Refresh retention</Button>
+      </Flex>
+      {!editable ? <Typography.Text type="secondary">Organization governance permission is required to change retention.</Typography.Text> : null}
+    </> : null}
+    {command.error ? <AccessError error={command.error} /> : null}
+    {stale ? <Typography.Text type="secondary">Refresh retention to review the current policy before saving again.</Typography.Text> : null}
   </Flex>;
 }
 

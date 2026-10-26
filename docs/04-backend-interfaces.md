@@ -2102,3 +2102,10 @@ Create recovery remains in the existing Space/Environment/Secret services and tr
 Membership removal commits through the existing IAM/Space transaction only after the member has no nonterminal captured Run, in-flight/indeterminate effect, unexpired unsettled Artifact publication, or live/uncertain sandbox generation that may mount this Space. It returns `space_membership_has_active_work` or `space_membership_live_sandbox` without changing membership, Space/security revisions or audit. Finish/cancel and settle work, then retire the generation through its existing owner before deliberately retrying. Binding changes and IAM revocation still take effect at every protected boundary; the existing sandbox reconciliation owner checks current Workspace access and retires generations that lost authority.
 
 Shared home cleanup repeats the captured-work/publication and exact mount-retirement checks after tombstoning. The existing bounded recovery worker retries inaccessible leftovers; it creates no second cleanup queue. Private ownership and decommission remain system-managed.
+
+
+## Chat completion and retention contracts
+
+The canonical Session snapshot/row owns `RetentionKind`, `RetainAfterTerminalDays` and `RetentionDueAtUtc`. Existing supported Sessions backfill Saved/indefinite. Creation resolves tenant governance once. The existing tenant Session store owns bounded due enumeration and system retirement with due/revision/ownership witnesses; system cleanup never forges a human principal. Existing protected source and execution boundaries check current expiry.
+
+`session.complete` accepts only a bounded reason (1..500 characters), never caller-selected Session/tenant/principal. It requires foreground UserTurn, current claimed Run, active unarchived Chat, current Agent authority and Allowed completion policy. Store intent in the existing Run checkpoint/receipt; final delivery and closure converge through the incumbent terminal owner without replaying tools. Once accepted, subsequent effects are denied. Completion policy changes require actual human sessions.manage and fresh security/Session revisions.

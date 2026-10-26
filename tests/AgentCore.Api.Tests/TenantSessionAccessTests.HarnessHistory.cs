@@ -77,7 +77,7 @@ public sealed partial class TenantSessionAccessTests
                 ? JsonSerializer.Serialize(new { expectedInstanceRevision = original.Revision, mode = "Assisted", scopes = new[] { "Instructions", "ManagementPolicy" }, managedAutoApply = Array.Empty<string>() })
                 : JsonSerializer.Serialize(new { expectedVersion = 32, expectedInstanceRevision = original.Revision, policyRevision = original.HarnessManagement.PolicyRevision,
                     content = "CURRENT-EXACT-HARNESS-INSTRUCTIONS", expected = "Next Run uses the current reviewed instruction.", observed = "Prepared the current draft, not historical consent." });
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = original.Revision }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = original.Revision }))).GetProperty("sessionId").GetGuid();
             var sent = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Review the current exact Harness instruction update.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, sent.StatusCode); var initial = (await Json(sent)).GetProperty("runId").GetGuid();
             var runs = host.Services.GetRequiredService<ITenantRunStore>(); var pending = await AwaitManagementRun(runs, tenant, initial, true);

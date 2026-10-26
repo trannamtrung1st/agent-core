@@ -28,8 +28,7 @@ public enum LifecycleTransitionSource
     Host,
     System,
     User,
-    Agent,
-    Legacy
+    Agent
 }
 
 public sealed record SessionPurpose(

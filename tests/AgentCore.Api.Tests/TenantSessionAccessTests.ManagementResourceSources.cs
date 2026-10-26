@@ -93,7 +93,7 @@ public sealed partial class TenantSessionAccessTests
             var uploaded = await Json(await owner.PostAsJsonAsync(agentPath + "/resources", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3,
                 input = new { logicalPath = "source.txt", kind = source == "knowledge" ? 1 : 2, mediaType = "text/plain", content = Encoding.UTF8.GetBytes("ORIGINAL-PINNED-RESOURCE-TEXT"), enabled = true } }));
             model.Key = uploaded.GetProperty("resource").GetProperty("key").GetString()!; model.OriginalPath = uploaded.GetProperty("resource").GetProperty("virtualPath").GetString()!;
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 4 }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 4 }))).GetProperty("sessionId").GetGuid();
             var path = source == "home" ? "/home/source.txt" : "/working/source.txt"; string sourceName = "workspace:" + path; Guid? attachment = null;
             byte[] bytes = Encoding.UTF8.GetBytes("ACTUAL-OBSERVED-SOURCE-TEXT");
             if (source == "office") { path = "/working/source.docx"; bytes = host.Services.GetRequiredService<IOfficeProcessor>().CreateDocument(new("Source", [new("Section", ["ACTUAL-OFFICE-SOURCE-TEXT"], null)]), default).Bytes; sourceName = "workspace:" + path; model.SourceTool = ToolCatalog.OfficeDocumentInspect; }

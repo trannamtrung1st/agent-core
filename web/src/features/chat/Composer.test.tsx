@@ -1,10 +1,11 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { queueComposerFiles, removeComposerFile, retryComposerFile, steerQueuedSend } from "../../services/realtime";
+import { attachLongComposerText, queueComposerFiles, removeComposerFile, retryComposerFile, steerQueuedSend } from "../../services/realtime";
 import type { PendingSendItem } from "../../state/sessionStore";
 import { Composer } from "./Composer";
 
 vi.mock("../../services/realtime", () => ({
+  attachLongComposerText: vi.fn().mockResolvedValue(undefined),
   queueComposerFiles: vi.fn().mockResolvedValue(undefined),
   removeComposerFile: vi.fn(),
   retryComposerFile: vi.fn(),
@@ -442,4 +443,22 @@ it('fences Send and form submission until the first selected file has finished c
   await act(async () => { complete(); });
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));
   expect(onSend).toHaveBeenCalledTimes(1);
+});
+
+it('retains an oversized plain draft and offers only deliberate attachment conversion', async () => {
+  const text = 'literal @text /text 😀\n'.repeat(500);
+  const onSend = vi.fn();
+  render(<Composer {...emptyComposerProps()} draft={text} canSend onSend={onSend} />);
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveTextContent('literal @text /text'));
+  expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  expect(attachLongComposerText).not.toHaveBeenCalled();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Attach long text' })); });
+  expect(attachLongComposerText).toHaveBeenCalledTimes(1); expect(onSend).not.toHaveBeenCalled();
+});
+
+it('keeps mixed oversized typed chips and guides the user to attach only literal text', () => {
+  render(<Composer {...emptyComposerProps()} draft={'x'.repeat(8_001)} parts={[{ kind: 'text', text: 'x'.repeat(8_001) }, { kind: 'invocation', invocationKind: 'skill', skillKey: 'definition:review', label: 'Review' }]} canSend />);
+  expect(screen.queryByRole('button', { name: 'Attach long text' })).toBeNull();
+  expect(screen.getByText(/Attach the large literal text separately/)).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
 });

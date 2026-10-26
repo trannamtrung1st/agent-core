@@ -6,7 +6,7 @@ const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 // live connection, an admitted command or an outstanding request in this document.
 export const chatTenantId = new RegExp(`^/t/(${uuid})(?:/?$|/c/${uuid}/?$)`, 'i').exec(window.location.pathname)?.[1].toLowerCase() ?? null;
 type Metadata = { tenantId: string; sessionId: string; agentInstanceId: string; title: string; mode: string; status: string; lifecycleStatus: string;
-  revision: number; createdAt: string; updatedAt: string; archivedAt: string | null; agentId: string; agentVersion: number; agentName: string; agentRole: string; canManage: boolean };
+  agentCompletion: string; revision: number; createdAt: string; updatedAt: string; archivedAt: string | null; agentId: string; agentVersion: number; agentName: string; agentRole: string; canManage: boolean };
 export type TenantChatCandidate = ChatAgentInstance & { revision: number; description: string };
 export type TenantChatCandidates = { items: TenantChatCandidate[]; total: number; page: number; pageSize: number; securityRevision: number; canCreateSessions: boolean };
 let requests = new AbortController();
@@ -51,12 +51,12 @@ export async function tenantSessionView(id: string): Promise<SessionResponse> {
   const [view] = await Promise.all([request<SessionResponse>(path(`/sessions/${encodeURIComponent(id)}/conversation`)), tenantSessionMetadata(id)]);
   return view;
 }
-export async function createTenantChat(instanceId: string, model?: SessionModelChoice | null): Promise<SessionResponse> {
+export async function createTenantChat(instanceId: string, model?: SessionModelChoice | null, retentionKind: 'saved' | 'temporary' = 'saved'): Promise<SessionResponse> {
   const selected = candidates.get(instanceId);
   if (!selected || !createAllowed) throw new Error('Select an available agent before starting a conversation.');
   const access = await tenantChatAccess();
   const created = await request<Metadata>(path('/sessions'), { method: 'POST', body: { agentInstanceId: instanceId,
-    expectedRevision: access.revision, expectedInstanceRevision: selected.revision, mode: 'text', offeringId: model?.offeringId === "default" ? null : model?.offeringId, reasoningEffort: model?.reasoningEffort } });
+    expectedRevision: access.revision, expectedInstanceRevision: selected.revision, retentionKind, mode: 'text', offeringId: model?.offeringId === "default" ? null : model?.offeringId, reasoningEffort: model?.reasoningEffort } });
   return tenantSessionView(created.sessionId);
 }
 function catalogItem(row: Metadata): CatalogItem {
@@ -104,4 +104,9 @@ export async function tenantSelectChatModel(id: string, offeringId: string | nul
   return request<{ sessionId: string; revision: number; model: SessionResponse['model'] }>(path(`/sessions/${encodeURIComponent(id)}/model`), {
     method: 'PUT', body: { ...witness, offeringId, reasoningEffort }
   });
+}
+
+export async function tenantSetAgentCompletion(id: string, allowed: boolean) {
+  const witness = await tenantTextWitness(id);
+  return request<Metadata>(path(`/sessions/${encodeURIComponent(id)}/agent-completion`), { method: 'PUT', body: { ...witness, allowed } });
 }

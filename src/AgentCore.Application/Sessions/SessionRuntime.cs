@@ -1917,6 +1917,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task AfterResponseTerminalizedAsync(EventContext context, CancellationToken cancellationToken)
     {
+        if (SessionLifecycle.IsTerminal(_snapshot.LifecycleStatus))
+        {
+            _deactivated = true;
+            await PublishStateAsync(context, cancellationToken).ConfigureAwait(false);
+            return;
+        }
         if (HasPendingUserBatch())
         {
             _allowQueuedSuffixAutoDispatch = true;
@@ -1942,7 +1948,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private void LaunchCompletionEvaluation(EventContext cause)
     {
-        if (_runtimeOwner is not null && _boundAgentRun is not { Status: AgentRunStatus.Running, Claim: not null }) return;
+        if (_runtimeOwner is not null) return; // Tenant Chat completion is an explicit claimed-Run capability.
         if (_deactivated
             || _headlessTransportDetached
             || _activeResponseId is not null
@@ -2783,6 +2789,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             model),
                         pageBlocked,
                         terminalBrowserContinuation, evidence.DialogPending);
+                if (SessionCompletionIntent.Reason(messages) is not null) working = working with { Tools = null, ToolChoice = ModelToolChoice.Auto, ToolChoiceName = null };
                 if (IsInitialBackgroundRun) working = working with { ResponseContract = null };
                 if (checkpointCapacityReached) working = working with { Tools = IsInitialBackgroundRun ? [AgentCore.Application.Work.WorkCompletionRequest.Contract] : null };
                 if (trigger.Kind == TriggerKind.BackgroundCompleted) working = working with { Tools = null };
@@ -3444,7 +3451,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     && currentDescriptor.DefinitionAuthorizable && !RolePermissions.AllowsTool(currentDefinition, call.Name))
                                     policy = ToolPolicyDecision.Deny;
                             }
-                            if (trigger.Kind == TriggerKind.BackgroundCompleted) policy = ToolPolicyDecision.Deny;
+                            if (trigger.Kind == TriggerKind.BackgroundCompleted || SessionCompletionIntent.Reason(messages) is not null) policy = ToolPolicyDecision.Deny;
                             if (policy == ToolPolicyDecision.Deny || string.IsNullOrWhiteSpace(call.Name))
                             {
                                 if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
@@ -3470,6 +3477,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             else if (evidence.Refuse(call, args) is { } evidenceRefusal)
                             {
                                 executionResult = ToolExecutionResult.FromText(evidenceRefusal);
+                            }
+                            else if (call.Name == ToolCatalog.SessionComplete)
+                            {
+                                executionResult = ToolExecutionResult.FromText(SessionCompletionIntent.Accept(args));
                             }
                             else if (ToolCatalog.IsCompletionTool(call.Name))
                             {
@@ -4396,8 +4407,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             MarkAgentRunPendingTerminal();
         }
 
+        if (!failed && _boundAgentRun is { } completingRun && SessionCompletionIntent.Reason(completingRun) is { } completionReason)
+            _snapshot = LifecycleTransition.Apply(_snapshot, SessionLifecycleStatus.Completed, LifecycleTransitionSource.Agent,
+                _time.GetUtcNow(), completionReason);
         RequestPersist(
             _snapshot,
+            kind: !failed && _snapshot.LifecycleSource == LifecycleTransitionSource.Agent && _snapshot.LifecycleStatus == SessionLifecycleStatus.Completed
+                ? PersistKind.AgentCompletion : PersistKind.Normal,
             userConversationTerminal: userTerminal,
             then: async ct =>
             {
@@ -5607,7 +5623,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         await TerminalizeAsync(
                 input.Context,
                 SessionLifecycleStatus.Ended,
-                LifecycleTransitionSource.Legacy,
+                LifecycleTransitionSource.Host,
                 "ended",
                 input.Persisted,
                 cancellationToken)
@@ -5956,6 +5972,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         Pause,
         Resume,
         TerminalEnd,
+        AgentCompletion,
         ModelSelection
     }
 
@@ -6131,6 +6148,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
             if (input.Error is not null)
             {
+                if (job.Kind == PersistKind.AgentCompletion)
+                    _snapshot = _snapshot with { Status = _durableSnapshot.Status, LifecycleStatus = _durableSnapshot.LifecycleStatus,
+                        LifecycleReason = _durableSnapshot.LifecycleReason, LifecycleSource = _durableSnapshot.LifecycleSource,
+                        LifecycleChangedAt = _durableSnapshot.LifecycleChangedAt, RetentionDueAtUtc = _durableSnapshot.RetentionDueAtUtc };
                 if (job.Receipt is not null || job.Foreground is not null || job.HumanInput is not null || job.ContextSwitch is not null)
                 {
                     // A refused human receipt/surface change must not fail the independently
@@ -6269,6 +6290,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         kind switch
         {
             PersistKind.TerminalEnd => true,
+            PersistKind.AgentCompletion => true,
             PersistKind.Pause => _snapshot.Status is not SessionStatus.Ended and not SessionStatus.Ending,
             PersistKind.Resume => _snapshot.Status is not SessionStatus.Ended and not SessionStatus.Ending,
             PersistKind.ModelSelection => _snapshot.Status is not SessionStatus.Ended and not SessionStatus.Ending,
@@ -6541,7 +6563,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         else if (job.UserConversationTerminal && tenantTerminalRun is { Status: AgentRunStatus.Running, Claim: { } terminalClaim } terminalRun
             && !terminalRun.CancellationRequested
-            && (AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(terminalRun) || terminalRun.Admission.OutputContract == AgentRunOutputContract.CompletionReport || AgentCore.Application.Security.TenantCredentialReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountActionReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantSpaceResourceReadRules.Read(terminalRun).Count > 0 || TenantContextToolContract.HasObservationOrTransition(terminalRun) || AgentCore.Application.Security.TenantConfigurationContinuationRules.HasRemedyAttempt(terminalRun) || job.LearningPlan is not null || await _agentRuns.HasCompletionAcknowledgmentAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false))
+            && (SessionCompletionIntent.Reason(terminalRun) is not null || AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(terminalRun) || terminalRun.Admission.OutputContract == AgentRunOutputContract.CompletionReport || AgentCore.Application.Security.TenantCredentialReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountActionReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantSpaceResourceReadRules.Read(terminalRun).Count > 0 || TenantContextToolContract.HasObservationOrTransition(terminalRun) || AgentCore.Application.Security.TenantConfigurationContinuationRules.HasRemedyAttempt(terminalRun) || job.LearningPlan is not null || await _agentRuns.HasCompletionAcknowledgmentAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false))
             && toSave.Entries.LastOrDefault(e => e.Role == ConversationRole.Assistant && e.ResponseId == terminalRun.ResponseId) is { Status: EntryStatus.Completed } finalEntry)
         {
             var current = await _agentRuns.GetAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false)
@@ -6583,7 +6605,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private void AdoptPersisted(SessionSnapshot proposed, SessionSnapshot saved, PersistKind kind)
     {
-        if (kind is PersistKind.TerminalEnd)
+        if (kind is PersistKind.TerminalEnd or PersistKind.AgentCompletion)
         {
             _snapshot = MergePersisted(saved, _snapshot) with
             {

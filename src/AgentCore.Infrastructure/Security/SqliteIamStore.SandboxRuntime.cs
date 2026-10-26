@@ -28,11 +28,11 @@ public sealed partial class SqliteIamStore
         var row = await db.Set<SandboxExecutionRow>().AsNoTracking().SingleOrDefaultAsync(e => e.TenantId == tenant && e.SessionId == session.ToString("D") && e.AgentRunId == run.ToString("D") && e.ToolCallId == toolCallId, ct).ConfigureAwait(false);
         return row is null ? null : SandboxRuntimePersistence.Value(row);
     }
-    private static async ValueTask<TenantSession?> ReadSandboxSession(AgentCoreDbContext db, Guid tenant, Guid session, CancellationToken ct)
+    private async ValueTask<TenantSession?> ReadSandboxSession(AgentCoreDbContext db, Guid tenant, Guid session, CancellationToken ct)
     {
         var root = await db.Set<TenantSessionRecord>().AsNoTracking().SingleOrDefaultAsync(s => s.TenantId == tenant && s.SessionId == session.ToString("D"), ct).ConfigureAwait(false);
         if (root is null) return null;
-        var row = await db.Sessions.AsNoTracking().Include(s => s.Snapshot).SingleOrDefaultAsync(s => s.SessionId == root.SessionId && s.DurablyDeletedAtUtc == null, ct).ConfigureAwait(false);
+        var row = await db.Sessions.AsNoTracking().Include(s => s.Snapshot).SingleOrDefaultAsync(s => s.SessionId == root.SessionId && s.DurablyDeletedAtUtc == null && (s.RetentionDueAtUtc == null || s.RetentionDueAtUtc > (clock ?? TimeProvider.System).GetUtcNow().ToUnixTimeMilliseconds()), ct).ConfigureAwait(false);
         return row is null ? null : new(root.Domain(), SqliteMemoryStore.ToSnapshot(row, []));
     }
     private async ValueTask<AgentRun> RequireSandboxReservation(AgentCoreDbContext db, TenantSandboxRuntimeWrite write, SandboxProfile source,

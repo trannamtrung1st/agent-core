@@ -100,7 +100,7 @@ public sealed partial class TenantCredentialAccessTests
             "recent-empty" or "recent-blank" => new { accountRef = s.Alias, query = choice == "recent-empty" ? "" : "   ", limit = 10 },
             "file" => new { accountRef = s.Alias, fileId = "exact-file" }, _ => new { accountRef = s.Alias, query = purpose == "EmailAccount" ? "harness" : "Exact", limit = 1 } };
         var command = ScriptedLanguageModel.AccountReadMarker + " " + JsonSerializer.Serialize(new { tool, arguments });
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
         var initial = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = command,
             expectedRevision = await Revision(owner, s.Tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
         var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var waiting = await AwaitCredentialRun(runs, s.Tenant, initial, true);

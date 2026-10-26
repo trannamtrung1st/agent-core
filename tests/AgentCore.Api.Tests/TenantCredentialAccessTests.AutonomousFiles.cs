@@ -152,7 +152,7 @@ public sealed partial class TenantCredentialAccessTests
                 using var policy = await owner.PutAsJsonAsync(api + "/operation-policies/" + permission, new { mode = "always", independentReview = origin == "scheduled", expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 });
                 Assert.Equal(HttpStatusCode.OK, policy.StatusCode);
             }
-        Guid? targetSessionId = conversation ? (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid() : null;
+        Guid? targetSessionId = conversation ? (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid() : null;
         var route = api + $"/agents/{instance}/automations";
         var automation = (await Json(await owner.PostAsJsonAsync(route, new { enabled = true, name = "Independent exact files", instructions = "Write, read and publish exact owned task files.", targetSessionId, schedule = new { kind = "oneShot", timeZone = "UTC", atUtc = clock.GetUtcNow().AddMinutes(30).ToString("O") }, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1, requiresTools = true }))).GetProperty("automationId").GetGuid();
         Guid initialId;

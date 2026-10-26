@@ -40,3 +40,8 @@ Loading, transient failure, malformed acknowledgement and read-loss presentation
 This extension matches the incumbent system and needs no system-file rewrite. `antdTheme.ts`, `AppShell.tsx`, `AdminShell.tsx` and `AdminCollectionToolbar.tsx` still match the sidecar's historical inspection hashes. Preserve `.agents/context/DESIGN.md`, `.agents/context/PRODUCT.md` and `.impeccable/design.json`, including their normative tokens, previews and provenance.
 
 Existing drift remains explicit: the sidecar's earlier inspection hashes for DESIGN, PRODUCT, `app.css`, `AccessApp.tsx` and `accessRoute.ts` differ from the current tree, and the retained Resources/Instance/Session context and sidecar open-scope summaries still name Governance as pending. Those historical snapshots do not describe this new bounded surface; this record and the focused report supply its current evidence. No historical fingerprint or broader pending-proposal summary is rebased here. No observed presentation defect is promoted into a system rule, and no pre-existing drift is repaired within this surface-only write boundary.
+
+
+## Chat retention synchronization — 2026-10-26
+
+Reuse direct Ant Design Saved/Temporary, scoped Agent completion and governed Forever/days controls. Overflow stays in the existing composer/file queue, preserving literal text and typed chips. Expired content unmounts private file/sandbox drawers. Local Synthetic verification and responsive observations belong to [the cutover report](../../docs/reports/chat-simplification-2026-10-26.md); older screenshots/evidence remain historical.

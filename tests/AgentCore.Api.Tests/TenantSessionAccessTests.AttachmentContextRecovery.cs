@@ -56,7 +56,7 @@ public sealed partial class TenantSessionAccessTests
                 budgets = new AgentCore.Domain.Definitions.ExecutionBudgetPolicy(Standard: new(24, 600), InteractiveBrowser: new(48, 600), UnattendedBoundBrowser: new(32, 600)) }));
             instanceRevision = changed.GetProperty("instance").GetProperty("revision").GetInt64();
         }
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
         using var body = new MultipartFormDataContent(); var file = new ByteArrayContent("Private checkpoint attachment body"u8.ToArray()); file.Headers.ContentType = new MediaTypeHeaderValue("text/plain"); body.Add(file, "file", "Checkpoint source.txt");
         var id = (await Json(await owner.PostAsync(api + $"/sessions/{session}/attachments?uploadId={Guid.NewGuid()}&expectedRevision={await Revision(owner, tenant)}&expectedSessionRevision=1", body))).GetProperty("attachmentId").GetGuid();
         var login = (await services.GetRequiredService<IdentityService>().SignInAsync("owner@example.test", "explicit-synthetic-test-password"))!;

@@ -20,7 +20,7 @@ public sealed partial class SqliteIamStore
         if (request.Operation.ArtifactPublication?.Source is { ResourceKey: { } key } saved) await RequireResourcePin(db, key, saved.ResourceRevision, run, agent, ct).ConfigureAwait(false);
         if (request.Operation.ArtifactPublication?.Source is { AttachmentId: { } attachmentId } attachmentSource)
         {
-            var attachment = await SqliteAttachmentStore.Owned(db, run.Owner.TenantId!.Value, run.SessionId).SingleOrDefaultAsync(a => a.AttachmentId == attachmentId.ToString("D") && a.ContentDeletedAtUtc == null, ct).ConfigureAwait(false);
+            var attachment = await SqliteAttachmentStore.Owned(db, run.Owner.TenantId!.Value, run.SessionId, (clock ?? TimeProvider.System).GetUtcNow()).SingleOrDefaultAsync(a => a.AttachmentId == attachmentId.ToString("D") && a.ContentDeletedAtUtc == null, ct).ConfigureAwait(false);
             TenantAttachmentArtifactRules.Require(attachmentSource, session.Owner, attachment is null ? null : SqliteAttachmentStore.Domain(attachment));
         }
         return args;

@@ -26,7 +26,7 @@ public sealed partial class TenantAgentAccessTests
         var agent = await Json(await client.GetAsync(api + $"/agents/{instance}"));
         var role = await Json(await client.PostAsJsonAsync(api + "/roles", new { name = "Retention request", permissions = new[] { "agents.chat" }, expectedRevision = await Revision(client, tenant) }));
         await Json(await client.PostAsJsonAsync(api + "/role-assignments", new { principalId = agent.GetProperty("principalId").GetGuid(), roleId = role.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(client, tenant) }));
-        var session = (await Json(await client.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedInstanceRevision = 2, expectedRevision = await Revision(client, tenant) }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await client.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedInstanceRevision = 2, expectedRevision = await Revision(client, tenant) }))).GetProperty("sessionId").GetGuid();
         var sessions = factory.Services.GetRequiredService<ITenantSessionStore>(); var owner = (await sessions.FindTenantSessionAsync(tenant, session))!.Owner;
         var store = factory.Services.GetRequiredService<ITenantWorkingCleanupStore>(); var cleanup = factory.Services.GetRequiredService<TenantWorkingCleanupService>();
         var root = factory.Services.GetRequiredService<PersistenceOptions>().WorkspaceRoot;
@@ -79,7 +79,7 @@ public sealed partial class TenantAgentAccessTests
         await using var factory = new RequestIsolationFactory(sqlite); using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, isolation) = await IsolationAgent(client); var api = $"/api/v2/tenants/{tenant}";
         var preview = await WorkingRetention(client, isolation, true); Assert.Equal(HttpStatusCode.OK, (await ApplyIsolation(client, isolation, preview)).StatusCode);
-        var session = (await Json(await client.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedInstanceRevision = 2, expectedRevision = await Revision(client, tenant) }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await client.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedInstanceRevision = 2, expectedRevision = await Revision(client, tenant) }))).GetProperty("sessionId").GetGuid();
         var owner = (await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(tenant, session))!.Owner;
         var path = AgentWorkspacePhysicalPaths.WorkingDirectory(factory.Services.GetRequiredService<PersistenceOptions>().WorkspaceRoot, instance, session); Directory.CreateDirectory(path); await File.WriteAllTextAsync(Path.Combine(path, "private.txt"), "unused");
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(api + $"/sessions/{session}/{action}", new { expectedRevision = await Revision(client, tenant), expectedSessionRevision = 1 })).StatusCode);
@@ -93,7 +93,7 @@ public sealed partial class TenantAgentAccessTests
         var root = Path.Combine(Path.GetTempPath(), "tenant-working-restart-" + Guid.NewGuid().ToString("N"));
         await using var first = new RequestIsolationFactory(true, root); using var client = first.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, _) = await IsolationAgent(client); var api = $"/api/v2/tenants/{tenant}";
-        var session = (await Json(await client.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedInstanceRevision = 1, expectedRevision = await Revision(client, tenant) }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await client.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedInstanceRevision = 1, expectedRevision = await Revision(client, tenant) }))).GetProperty("sessionId").GetGuid();
         var path = AgentWorkspacePhysicalPaths.WorkingDirectory(first.Services.GetRequiredService<PersistenceOptions>().WorkspaceRoot, instance, session); Directory.CreateDirectory(path); await File.WriteAllTextAsync(Path.Combine(path, "retained.txt"), "commit-to-bytes gap");
         Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync(api + $"/sessions/{session}?expectedRevision={await Revision(client, tenant)}&expectedSessionRevision=1")).StatusCode);
         Assert.True(Directory.Exists(path)); await first.DisposeAsync();

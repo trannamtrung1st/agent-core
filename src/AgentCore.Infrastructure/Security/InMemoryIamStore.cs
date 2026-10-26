@@ -12,7 +12,7 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
 {
     private readonly InMemoryAttachmentStore? attachmentBacking = attachments?.BindTenantAuthority(definitionReferences);
     private readonly InMemoryArtifactStore? artifactBacking = artifacts?.BindTenantAuthority(definitionReferences);
-    private readonly InMemoryMemoryStore sessionBacking = definitionReferences.BindTenantInstances(instances);
+    private readonly InMemoryMemoryStore sessionBacking = definitionReferences.BindTenantInstances(instances).BindTenantClock(clock ?? TimeProvider.System);
     private readonly InMemorySandboxStore sandboxBacking = (sandboxProfiles ?? new()).BindTenantAuthority(definitionReferences, instances);
     private readonly InMemoryBrowserPrivacyStore browserPrivacyBacking = browserPrivacy ?? new();
     private readonly BrowserPrivacyAuthority privacyAuthority = BrowserPrivacyRules.FreezeAuthority(browserPrivacyAuthority ?? new(true, false, [], []));

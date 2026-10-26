@@ -334,6 +334,7 @@ public sealed partial class InMemoryMemoryStore(InMemoryAgentInstanceStore? inst
 
     private void Store(SessionSnapshot snapshot, bool replaceEntries = false)
     {
+        SessionRetention.Validate(snapshot);
         var merged = MergeEntries(snapshot.SessionId, snapshot.Entries, replaceEntries);
         _entries[snapshot.SessionId] = merged;
         _sessions[snapshot.SessionId] = snapshot with

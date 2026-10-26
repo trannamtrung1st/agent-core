@@ -45,6 +45,7 @@ const reasons: Record<string, string> = {
   human_only: 'This role includes permissions reserved for people. It cannot be assigned to an agent.',
   account_exists: 'An account already uses this email. Sign in to accept the invitation.',
   invalid_request: 'Some values could not be saved. Check the fields and try again.',
+  session_expired: 'This conversation has expired. Start a new chat to continue.',
   resource_unavailable: 'This item is unavailable or you no longer have access. Return to the list or contact an organization owner.',
   workspace_read_only: 'This workspace is read-only. Reload its current lifecycle and access before making changes.',
   workspace_effect_unknown: 'The file may have changed. Reload current files before deciding whether to try again. No operation was repeated.',

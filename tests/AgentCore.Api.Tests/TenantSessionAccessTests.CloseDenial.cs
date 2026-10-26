@@ -66,7 +66,7 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Equal(HttpStatusCode.OK, (await owner.PatchAsJsonAsync(api + $"/agents/{instance}/settings/capabilities", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
                     set = new { selected }, clear = Array.Empty<string>() })).StatusCode); revision++;
             }
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = revision }))).GetProperty("sessionId").GetGuid();
+            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = revision }))).GetProperty("sessionId").GetGuid();
             var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, tenant, null, "Current close-refusal execution", ["agents.read", "sessions.read", "browser.read", "browser.use"], await Revision(owner, tenant));
             await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));

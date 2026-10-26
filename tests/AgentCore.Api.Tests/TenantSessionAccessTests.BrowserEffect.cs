@@ -57,7 +57,7 @@ public sealed partial class TenantSessionAccessTests
                     budgets = new ExecutionBudgetPolicy(new(24, 180, 1), new(48, 300, 1), new(32, 240, 1)) }));
                 instanceRevision = changed.GetProperty("instance").GetProperty("revision").GetInt64();
             }
-            var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }));
+            var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }));
             var sessionId = session.GetProperty("sessionId").GetGuid(); var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, tenant, null, "Execute reviewed Browser", ["browser.read", "browser.use"], await Revision(owner, tenant));
             var use = await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForResource(tenant, "agent", instance.ToString("D")), await Revision(owner, tenant));

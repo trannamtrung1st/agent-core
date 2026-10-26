@@ -57,7 +57,7 @@ public sealed partial class TenantCredentialAccessTests
         var role = await access.SaveRoleAsync(human, tenant, null, "Completion recovery executor",
             ["automations.run", "sessions.create", "agent-runs.create", "agents.read", "agents.chat", "sessions.read", "agent-runs.read", "workspaces.read", "workspaces.write", "artifacts.read", "artifacts.create"], await Revision(owner, tenant));
         await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
-        var destination = reporting ? (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid() : Guid.Empty;
+        var destination = reporting ? (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid() : Guid.Empty;
         var route = api + $"/agents/{instance}/automations";
         using var response = await owner.PostAsJsonAsync(route, new { enabled = true, name = "Verified artifact", instructions = "Save a verified fixture and report its result",
             reportToSessionId = reporting ? (Guid?)destination : null, requiresTools = true,

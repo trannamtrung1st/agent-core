@@ -58,6 +58,11 @@ export type ModelCatalog = {
 };
 
 export type SessionResponse = {
+  retentionKind?: "saved" | "temporary";
+  retentionDueAtUtc?: string | null;
+  agentCompletion?: string;
+  lifecycleReason?: string | null;
+  lifecycleSource?: string | null;
   sessionId: string;
   agentId: string;
   agentVersion: number;
@@ -206,7 +211,7 @@ export type InstanceActivitySession = { session: CatalogItem; origin: string; su
 
 export async function listChatAgentInstances(): Promise<ChatAgentInstance[]> { return (await tenantChatCandidates()).items; }
 export const listModels = (instanceId?: string): Promise<ModelCatalog> => tenantChatModels(instanceId);
-export const createSessionForInstance = (id: string, model?: SessionModelChoice | null): Promise<SessionResponse> => createTenantChat(id, model);
+export const createSessionForInstance = (id: string, model?: SessionModelChoice | null, retentionKind: 'saved' | 'temporary' = 'saved'): Promise<SessionResponse> => createTenantChat(id, model, retentionKind);
 export async function endSession(id: string): Promise<void> { await tenantChatMutation(id, 'complete'); }
 export const listCatalog = (options?: { cursor?: string | null; includeArchived?: boolean; limit?: number }): Promise<CatalogPage> => tenantChatCatalog(options);
 export const renameSession = (id: string, title: string): Promise<CatalogItem> => tenantChatMutation(id, 'rename', title);

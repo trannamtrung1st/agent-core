@@ -80,7 +80,7 @@ public sealed partial class TenantCredentialAccessTests
         var spaces = factory.Services.GetRequiredService<TenantSpaceService>();
         var shared = await spaces.CreateAsync(human, tenant, Guid.NewGuid(), "Successor destination", "", "Use the new Space for the remaining work.", await Revision(owner, tenant));
         await spaces.SetMemberAsync(human, tenant, shared.SpaceId, instance, "Worker", "Retain the original task.", [], [], await Revision(owner, tenant), shared.Revision, 0); model.Destination = shared.SpaceId;
-        var created = await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 });
+        var created = await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 });
         Assert.True(created.IsSuccessStatusCode, await created.Content.ReadAsStringAsync()); var session = (await Json(created)).GetProperty("sessionId").GetGuid();
         var before = await Json(await owner.GetAsync($"{api}/sessions/{session}/context")); var originalSpace = before.GetProperty("selection").GetProperty("spaceId").GetGuid();
         var submitted = await owner.PostAsJsonAsync($"{api}/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Switch to Successor destination" + (continueTask ? " and continue this task." : "."), expectedRevision = await Revision(owner, tenant), expectedSessionRevision = before.GetProperty("sessionRevision").GetInt64() });

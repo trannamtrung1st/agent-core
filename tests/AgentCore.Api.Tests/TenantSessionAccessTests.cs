@@ -22,9 +22,9 @@ public sealed partial class TenantSessionAccessTests
         var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
         var root = api + "/sessions";
         owner.DefaultRequestHeaders.Remove("X-AgentCore-CSRF");
-        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(root, new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(root, new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 })).StatusCode);
         await Csrf(owner);
-        var response = await owner.PostAsJsonAsync(root, new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 });
+        var response = await owner.PostAsJsonAsync(root, new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode); Assert.True(response.Headers.CacheControl?.NoStore);
         var created = await Json(response); var id = created.GetProperty("sessionId").GetGuid();
         Assert.Equal(tenant, created.GetProperty("tenantId").GetGuid()); Assert.Equal(executor, created.GetProperty("executorPrincipalId").GetGuid());
@@ -41,9 +41,9 @@ public sealed partial class TenantSessionAccessTests
         var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Beta Sessions", slug = "beta-sessions" }))).GetProperty("tenantId").GetGuid();
         Assert.Equal(0, (await Json(await owner.GetAsync($"/api/v2/tenants/{beta}/sessions"))).GetProperty("total").GetInt32());
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{beta}/sessions/{id}")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync($"/api/v2/tenants/{beta}/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, beta), expectedInstanceRevision = 1 })).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(root, new { agentInstanceId = instance, expectedRevision = 1, expectedInstanceRevision = 1 })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(root, new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1, mode = "invalid" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync($"/api/v2/tenants/{beta}/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, beta), expectedInstanceRevision = 1 })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(root, new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = 1, expectedInstanceRevision = 1 })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(root, new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1, mode = "invalid" })).StatusCode);
         Assert.Equal(1, (await Json(await owner.GetAsync(root))).GetProperty("total").GetInt32());
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.PatchAsJsonAsync($"/api/v2/tenants/{beta}/sessions/{id}", new { title = "Foreign", expectedRevision = 1, expectedSessionRevision = 1 })).StatusCode);
         var renamed = await owner.PatchAsJsonAsync(root + $"/{id}", new { title = "  Session review  ", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
@@ -67,7 +67,7 @@ public sealed partial class TenantSessionAccessTests
         Assert.Equal(HttpStatusCode.NoContent, (await owner.DeleteAsync(deletion)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync(root + $"/{id}")).StatusCode);
         Assert.Equal(0, (await Json(await owner.GetAsync(root))).GetProperty("total").GetInt32());
-        var another = await Json(await owner.PostAsJsonAsync(root, new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
+        var another = await Json(await owner.PostAsJsonAsync(root, new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
         var cancelled = await owner.PostAsJsonAsync(root + $"/{another.GetProperty("sessionId").GetGuid()}/cancel", new { expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
         Assert.Equal(HttpStatusCode.OK, cancelled.StatusCode); Assert.Equal("cancelled", (await Json(cancelled)).GetProperty("lifecycleStatus").GetString());
     }

@@ -82,7 +82,6 @@ describe("realtime race handling", () => {
     capture.release();
     hooks.resetOutput();
     hooks.setConnection(null);
-    window.localStorage.clear();
     useSessionStore.setState({
       ...emptySession(), agentRunId: "run-current",
       agents: [],
@@ -1132,7 +1131,6 @@ describe("realtime race handling", () => {
   });
 
   it("ends through the tenant HTTP command without invoking a Hub EndSession method", async () => {
-    window.localStorage.setItem("agent-core.owner-capability", "tok");
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
     vi.stubGlobal("fetch", fetchMock);
     const invoke = vi.fn().mockResolvedValue({ accepted: false, error: { message: "Persistent save failed." } });
@@ -1155,7 +1153,6 @@ describe("realtime race handling", () => {
   });
 
   it("keeps the session when tenant HTTP completion fails", async () => {
-    window.localStorage.setItem("agent-core.owner-capability", "tok");
     vi.mocked(endSession).mockRejectedValue(new Error("Unable to end the session."));
     const invoke = vi.fn().mockResolvedValue({ accepted: false, error: { message: "Persistent save failed." } });
     hooks.setConnection({ invoke, send: vi.fn(), stop: vi.fn() } as never);
