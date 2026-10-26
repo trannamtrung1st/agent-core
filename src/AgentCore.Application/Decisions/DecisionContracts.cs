@@ -23,9 +23,13 @@ public sealed record DecisionResult(DecisionStatus Status, string? SelectedCandi
 
 public interface IDecisionEngine
 {
+    // Local host policy, no readiness I/O. Admission snapshots it once for both decision stages.
+    DecisionExecutionPolicy Policy { get; }
     ValueTask<DecisionResult> DecideAsync(DecisionRequest request, CancellationToken ct = default);
     ValueTask<DecisionEngineStatus> StatusAsync(CancellationToken ct = default);
 }
+
+public sealed record DecisionExecutionPolicy(bool ShadowMode, int AdmissionTimeoutMs, string EngineId = "decision", string EngineVersion = "unknown");
 
 public sealed record DecisionEngineStatus(DecisionStatus Status, string EngineId, string EngineVersion, bool PreAdmissionSupported, bool ShadowMode);
 

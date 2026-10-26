@@ -96,7 +96,7 @@ public sealed class TenantBackgroundCompletionService(ITenantRuntimeStore storag
                     ModelSelectionSource.Host, captured.ReasoningEffort, Binding: captured.Binding, Decision: captured.Decision)
                     : routing is null ? SessionModelBinder.BindPreference(models, source.Parent!.Snapshot.ModelPreference ?? AgentCore.Domain.Models.ModelPreference.Inherit, definition.ModelDefaults)
                     : await routing.ResolveAsync(models, source.Parent!.Snapshot.ModelPreference ?? AgentCore.Domain.Models.ModelPreference.Inherit,
-                        definition.ModelDefaults, false, true, "completionReport", new Dictionary<string, string> { ["inputMode"] = "completionReport" }, ct).ConfigureAwait(false);
+                        definition.ModelDefaults, false, true, "completionReport", RoutingTaskSignals.Project(null, "completionReport"), ct).ConfigureAwait(false);
                 if (!ExecutionModelPolicy.Matches(models, new(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort,
                     ExecutionModelSource.ConversationDefault, model.Binding, model.Decision), out _)) throw new AccessDeniedException("target_model_unavailable");
                 _ = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);

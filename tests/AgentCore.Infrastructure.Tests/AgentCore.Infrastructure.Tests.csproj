@@ -30,6 +30,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AgentCore.Infrastructure\AgentCore.Infrastructure.csproj" />
+    <None Include="../../scripts/fixtures/kev-routing-v2.json" Link="kev-routing-v2.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

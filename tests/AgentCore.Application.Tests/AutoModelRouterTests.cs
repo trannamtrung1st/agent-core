@@ -82,6 +82,34 @@ public sealed class AutoModelRouterTests
         Assert.Throws<AgentCore.Application.Security.SecurityConflictException>(() => ExecutionModelPolicy.RequireCurrentDecision(pin, 4));
         ExecutionModelPolicy.RequireCurrentDecision(new AgentCore.Domain.Conversation.AgentRunModelPin(A, B, "fixture", null, decision: pin.Decision! with { Basis = "fixed" }), 4);
     }
+    [Fact]
+    public async Task Model_and_effort_share_one_budget_and_never_probe_status_between_decisions()
+    {
+        var engine = new Engine(B) { DelayMs = 100, TimeoutMs = 150 };
+        var error = await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() =>
+            new AutoModelRouter(engine).ResolveAsync(new Catalog(), ModelPreference.Auto, null, false, true, "session", Signals).AsTask());
+        Assert.Equal("ModelRoutingUnavailable", error.Code); Assert.Contains("Timeout", error.Message);
+        Assert.Equal(2, engine.Calls); Assert.Equal(0, engine.StatusCalls);
+    }
+    [Fact]
+    public async Task Caller_cancellation_is_preserved_and_shadow_policy_is_local()
+    {
+        var engine = new Engine(B) { DelayMs = 100 };
+        using var cancellation = new CancellationTokenSource(20);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new AutoModelRouter(engine)
+            .ResolveAsync(new Catalog(), new("auto"), null, false, true, "session", Signals, cancellation.Token).AsTask());
+        Assert.Equal(0, engine.StatusCalls);
+    }
+    [Fact]
+    public async Task Exhausted_budget_still_allows_only_the_explicit_deterministic_default()
+    {
+        var engine = new Engine(B) { DelayMs = 100, TimeoutMs = 50 };
+        var selected = await new AutoModelRouter(engine).ResolveAsync(new Catalog { RoutingPolicy = new(true, true) },
+            ModelPreference.Auto, null, false, true, "session", Signals);
+        Assert.Equal(A, selected.OfferingId); Assert.Equal("configuredDefault", selected.Decision!.Basis);
+        Assert.Equal("Timeout", selected.Decision.DiagnosticCode);
+        Assert.Equal(1, engine.Calls); Assert.Equal(0, engine.StatusCalls);
+    }
     private sealed class Catalog : IModelCatalog
     {
         public string DefaultOfferingId { get; init; } = A;
@@ -96,9 +124,16 @@ public sealed class AutoModelRouterTests
     }
     private sealed class Engine(string selected) : IDecisionEngine
     {
+        public int DelayMs { get; init; } public int TimeoutMs { get; init; } = 1000; public int StatusCalls;
+        public DecisionExecutionPolicy Policy => new(Shadow, TimeoutMs);
         public int Calls { get; private set; } public DecisionStatus Status { get; init; } = DecisionStatus.Ready; public bool Shadow { get; init; }
-        public ValueTask<DecisionEngineStatus> StatusAsync(CancellationToken ct = default) => ValueTask.FromResult(new DecisionEngineStatus(DecisionStatus.Ready,"fixture","v1",true,Shadow));
-        public ValueTask<DecisionResult> DecideAsync(DecisionRequest request, CancellationToken ct = default)
-        { Calls++; return ValueTask.FromResult(Status == DecisionStatus.Ready ? new DecisionResult(Status, selected, request.Candidates.ToDictionary(c=>c.Id,c=>c.Id==selected?1d:0d),null,"fixture","v1") : DecisionResult.Failure(Status,"fixture","v1")); }
+        public ValueTask<DecisionEngineStatus> StatusAsync(CancellationToken ct = default)
+        { StatusCalls++; return ValueTask.FromResult(new DecisionEngineStatus(DecisionStatus.Ready,"fixture","v1",true,Shadow)); }
+        public async ValueTask<DecisionResult> DecideAsync(DecisionRequest request, CancellationToken ct = default)
+        {
+            Calls++; if (DelayMs > 0) await Task.Delay(DelayMs, ct);
+            var winner = request.Candidates.Any(c => c.Id == selected) ? selected : request.Candidates[^1].Id;
+            return Status == DecisionStatus.Ready ? new DecisionResult(Status, winner, request.Candidates.ToDictionary(c=>c.Id,c=>c.Id==winner?1d:0d),null,"fixture","v1") : DecisionResult.Failure(Status,"fixture","v1");
+        }
     }
 }

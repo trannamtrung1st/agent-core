@@ -93,8 +93,7 @@ public static class ExecutionModelPolicy
             var preference = Preference(definition, instance, registration);
             var selection = await router.ResolveAsync(catalog, preference, definition.ModelDefaults, registration?.RequiresVision == true, true,
                 registration?.ModelPreference?.Mode is "fixed" or "auto" ? "automation" : instance.UnattendedModel?.Mode is "fixed" or "auto" ? "unattended" : "agentDefault",
-                new Dictionary<string, string> { ["inputMode"] = "unattended", ["requiresVision"] = (registration?.RequiresVision == true).ToString(),
-                    ["inputCharacters"] = (registration?.Instructions.Length ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture) }, ct).ConfigureAwait(false);
+                RoutingTaskSignals.Project(registration?.Instructions, "unattended", requiresVision: registration?.RequiresVision == true), ct).ConfigureAwait(false);
             return new(new(selection.OfferingId, selection.ConnectionId, selection.ExternalModelId, selection.ReasoningEffort,
                 registration?.ModelPreference?.Mode is "fixed" or "auto" ? ExecutionModelSource.TriggerOverride : instance.UnattendedModel?.Mode is "fixed" or "auto" ? ExecutionModelSource.UnattendedDefault : ExecutionModelSource.ConversationDefault,
                 selection.Binding, selection.Decision), null);

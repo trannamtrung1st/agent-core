@@ -45,7 +45,7 @@ public static partial class TenantAutomationConversationRules
     {
         var preference = ExecutionModelPolicy.MergePreference(target.Snapshot.ModelPreference, value.ModelPreference);
         var selection = await routing.ResolveAsync(models, preference, definition.ModelDefaults, value.RequiresVision, true, "automation",
-            new Dictionary<string, string> { ["inputMode"] = "automationExistingSession", ["inputCharacters"] = value.Instructions.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) }, ct);
+            RoutingTaskSignals.Project(value.Instructions, "automationExistingSession", requiresVision: value.RequiresVision), ct);
         return new(selection.OfferingId, selection.ConnectionId, selection.ExternalModelId, selection.ReasoningEffort,
             ExecutionModelSource.ConversationDefault, selection.Binding, selection.Decision);
     }

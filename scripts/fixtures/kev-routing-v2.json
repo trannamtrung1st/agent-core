@@ -1,0 +1,257 @@
+{
+  "schemaVersion": 1,
+  "policyRevision": "routing-v2",
+  "threshold": 0.7,
+  "admissionBudgetMs": 2000,
+  "baseline": "Always choose the configured direct model / low reasoning effort",
+  "cases": [
+    {
+      "id": "ModelRouting-cal-0",
+      "split": "calibration",
+      "purpose": "ModelRouting",
+      "task": "Say hello in a short friendly sentence.",
+      "inputMode": "text",
+      "expected": "direct"
+    },
+    {
+      "id": "ModelRouting-cal-1",
+      "split": "calibration",
+      "purpose": "ModelRouting",
+      "task": "Diagnose the root cause of a deadlock and compare two safe fixes.",
+      "inputMode": "text",
+      "expected": "reasoning"
+    },
+    {
+      "id": "ModelRouting-light-0",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "task": "Greet the team.",
+      "language": "en",
+      "inputMode": "text",
+      "expected": "direct"
+    },
+    {
+      "id": "ModelRouting-light-1",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "task": "What is the capital of Japan?",
+      "language": "en",
+      "inputMode": "unattended",
+      "expected": "direct"
+    },
+    {
+      "id": "ModelRouting-light-2",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "task": "Translate this short sentence into English.",
+      "language": "en",
+      "inputMode": "text",
+      "expected": "direct"
+    },
+    {
+      "id": "ModelRouting-light-3",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "task": "Viết một lời chào ngắn và thân thiện.",
+      "language": "vi",
+      "inputMode": "unattended",
+      "expected": "direct"
+    },
+    {
+      "id": "ModelRouting-light-4",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "task": "Saluda al equipo con una frase breve.",
+      "language": "es",
+      "inputMode": "text",
+      "expected": "direct"
+    },
+    {
+      "id": "ModelRouting-light-5",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "task": "Dis bonjour en une phrase courte.",
+      "language": "fr",
+      "inputMode": "unattended",
+      "expected": "direct"
+    },
+    {
+      "id": "ModelRouting-substantial-0",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "task": "Debug the code.",
+      "language": "en",
+      "inputMode": "text",
+      "expected": "reasoning"
+    },
+    {
+      "id": "ModelRouting-substantial-1",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "task": "Compare transaction isolation trade-offs and prove which invariant prevents the lost-update race.",
+      "language": "en",
+      "inputMode": "unattended",
+      "expected": "reasoning"
+    },
+    {
+      "id": "ModelRouting-substantial-2",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "task": "Derive the recurrence and prove the algorithm terminates for every finite input.",
+      "language": "en",
+      "inputMode": "text",
+      "expected": "reasoning"
+    },
+    {
+      "id": "ModelRouting-substantial-3",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "task": "Chứng minh tính đúng đắn của thuật toán và phân tích trường hợp biên.",
+      "language": "vi",
+      "inputMode": "unattended",
+      "expected": "reasoning"
+    },
+    {
+      "id": "ModelRouting-substantial-4",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "task": "Demuestra por qué el invariante evita una condición de carrera entre dos transacciones.",
+      "language": "es",
+      "inputMode": "text",
+      "expected": "reasoning"
+    },
+    {
+      "id": "ModelRouting-substantial-5",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "task": "Démontrez la terminaison de cet algorithme et comparez les compromis de concurrence.",
+      "language": "fr",
+      "inputMode": "unattended",
+      "expected": "reasoning"
+    },
+    {
+      "id": "ReasoningEffort-cal-0",
+      "split": "calibration",
+      "purpose": "ReasoningEffort",
+      "task": "Say hello in a short friendly sentence.",
+      "inputMode": "text",
+      "expected": "low"
+    },
+    {
+      "id": "ReasoningEffort-cal-1",
+      "split": "calibration",
+      "purpose": "ReasoningEffort",
+      "task": "Diagnose the root cause of a deadlock and compare two safe fixes.",
+      "inputMode": "text",
+      "expected": "high"
+    },
+    {
+      "id": "ReasoningEffort-light-0",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "task": "Greet the team.",
+      "language": "en",
+      "inputMode": "text",
+      "expected": "low"
+    },
+    {
+      "id": "ReasoningEffort-light-1",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "task": "What is the capital of Japan?",
+      "language": "en",
+      "inputMode": "unattended",
+      "expected": "low"
+    },
+    {
+      "id": "ReasoningEffort-light-2",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "task": "Translate this short sentence into English.",
+      "language": "en",
+      "inputMode": "text",
+      "expected": "low"
+    },
+    {
+      "id": "ReasoningEffort-light-3",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "task": "Viết một lời chào ngắn và thân thiện.",
+      "language": "vi",
+      "inputMode": "unattended",
+      "expected": "low"
+    },
+    {
+      "id": "ReasoningEffort-light-4",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "task": "Saluda al equipo con una frase breve.",
+      "language": "es",
+      "inputMode": "text",
+      "expected": "low"
+    },
+    {
+      "id": "ReasoningEffort-light-5",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "task": "Dis bonjour en une phrase courte.",
+      "language": "fr",
+      "inputMode": "unattended",
+      "expected": "low"
+    },
+    {
+      "id": "ReasoningEffort-substantial-0",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "task": "Debug the code.",
+      "language": "en",
+      "inputMode": "text",
+      "expected": "high"
+    },
+    {
+      "id": "ReasoningEffort-substantial-1",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "task": "Compare transaction isolation trade-offs and prove which invariant prevents the lost-update race.",
+      "language": "en",
+      "inputMode": "unattended",
+      "expected": "high"
+    },
+    {
+      "id": "ReasoningEffort-substantial-2",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "task": "Derive the recurrence and prove the algorithm terminates for every finite input.",
+      "language": "en",
+      "inputMode": "text",
+      "expected": "high"
+    },
+    {
+      "id": "ReasoningEffort-substantial-3",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "task": "Chứng minh tính đúng đắn của thuật toán và phân tích trường hợp biên.",
+      "language": "vi",
+      "inputMode": "unattended",
+      "expected": "high"
+    },
+    {
+      "id": "ReasoningEffort-substantial-4",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "task": "Demuestra por qué el invariante evita una condición de carrera entre dos transacciones.",
+      "language": "es",
+      "inputMode": "text",
+      "expected": "high"
+    },
+    {
+      "id": "ReasoningEffort-substantial-5",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "task": "Démontrez la terminaison de cet algorithme et comparez les compromis de concurrence.",
+      "language": "fr",
+      "inputMode": "unattended",
+      "expected": "high"
+    }
+  ]
+}

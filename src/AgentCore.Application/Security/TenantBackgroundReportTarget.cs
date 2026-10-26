@@ -33,7 +33,7 @@ public sealed class TenantBackgroundReportTarget(ITenantRuntimeStore runtime, IT
         }
         else model = routing is null ? SessionModelBinder.BindPreference(models, source.Parent!.Snapshot.ModelPreference ?? AgentCore.Domain.Models.ModelPreference.Inherit, definition.ModelDefaults)
             : await routing.ResolveAsync(models, source.Parent!.Snapshot.ModelPreference ?? AgentCore.Domain.Models.ModelPreference.Inherit,
-                definition.ModelDefaults, false, true, "completionReport", new Dictionary<string, string> { ["inputMode"] = "completionReport" }, ct).ConfigureAwait(false);
+                definition.ModelDefaults, false, true, "completionReport", RoutingTaskSignals.Project(null, "completionReport"), ct).ConfigureAwait(false);
         _ = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         return (source, state, current.Agent, current.Configuration, model);
     }

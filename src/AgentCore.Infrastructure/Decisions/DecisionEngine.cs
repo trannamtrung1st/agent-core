@@ -7,6 +7,7 @@ namespace AgentCore.Infrastructure.Decisions;
 
 public sealed class DecisionEngine(IDecisionBackend backend, DecisionIntelligenceOptions options) : IDecisionEngine, IDisposable
 {
+    public DecisionExecutionPolicy Policy => new(options.ShadowMode, options.RequestTimeoutMs, backend.Id, backend.Version);
     private readonly SemaphoreSlim slots = new(options.MaxConcurrentRequests);
     private static readonly Meter Meter = new("AgentCore.Runtime");
     private static readonly Histogram<double> Duration = Meter.CreateHistogram<double>("decision.duration", "ms");

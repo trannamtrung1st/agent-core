@@ -49,7 +49,7 @@ public sealed partial class SessionRuntime
             var selection = _snapshot.ModelSelection;
             if (source.Owner.TenantId is not null)
                 selection = await (_runAuthority as AgentCore.Application.Security.TenantRunExecutionAuthority ?? throw new AccessDeniedException("tenant_context_required"))
-                    .BindNewRunModelAsync(source, resolved.Configuration.Definition, selection, ct, _snapshot.ModelPreference).ConfigureAwait(false);
+                    .BindNewRunModelAsync(source, resolved.Configuration.Definition, selection, ct, _snapshot.ModelPreference, objective.GetString()!.Trim()).ConfigureAwait(false);
             else if (_catalog is not null && selection?.SelectionSource is not (ModelSelectionSource.User or ModelSelectionSource.Host))
                 selection = AgentCore.Application.Models.SessionModelBinder.RefreshDefault(_catalog, resolved.Configuration.Definition, selection);
             var childModel = selection is null ? source.PinnedModel : new AgentRunModelPin(selection.OfferingId, selection.ConnectionId, selection.ExternalModelId, selection.ReasoningEffort, selection.Binding, selection.Decision);

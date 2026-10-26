@@ -106,9 +106,8 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
             ? SessionModelBinder.BindPreference(models, preference, definition.ModelDefaults)
             : await routing.ResolveAsync(models, preference, definition.ModelDefaults,
                 sources.Any(a => a.Readable && AttachmentMedia.IsImage(a.ContentType)), true, "session",
-                new Dictionary<string, string> { ["inputCharacters"] = text.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    ["attachmentCount"] = sources.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    ["requiresVision"] = sources.Any(a => a.Readable && AttachmentMedia.IsImage(a.ContentType)).ToString(), ["inputMode"] = speech is null ? "text" : "voice" }, ct).ConfigureAwait(false);
+                RoutingTaskSignals.Project(text, speech is null ? "text" : "voice", sources.Count,
+                    sources.Any(a => a.Readable && AttachmentMedia.IsImage(a.ContentType))), ct).ConfigureAwait(false);
         _ = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         var composerInput = parts is null ? null : await composer!.PinAsync(agent.Instance.InstanceId, context, definition, resolved.Skills, parts, resolved.Configuration.SpaceContext!.Witness(), ct).ConfigureAwait(false);
         var active = composerInput is null ? resolved.Skills.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray()

@@ -11,14 +11,14 @@ namespace AgentCore.Application.Security;
 public sealed partial class TenantRunExecutionAuthority
 {
     public async ValueTask<SessionModelSelection> BindNewRunModelAsync(AgentRun source, AgentDefinition definition,
-        SessionModelSelection? selection, CancellationToken ct, AgentCore.Domain.Models.ModelPreference? preference = null)
+        SessionModelSelection? selection, CancellationToken ct, AgentCore.Domain.Models.ModelPreference? preference = null, string? task = null)
     {
         var current = await ResolveCurrentAsync(source, ct).ConfigureAwait(false);
         var catalog = await (configurationModels ?? throw new AccessDeniedException("model_context_required"))
             .ReadAsync(current.State, ct).ConfigureAwait(false);
         var chosen = routing is null ? SessionModelBinder.RefreshDefault(catalog, definition, selection)
             : await routing.ResolveAsync(catalog, preference ?? AgentCore.Domain.Models.ModelPreference.Inherit, definition.ModelDefaults,
-                false, true, "continuation", new Dictionary<string, string> { ["inputMode"] = "continuation" }, ct);
+                false, true, "continuation", RoutingTaskSignals.Project(task ?? source.Admission.TaskIntent?.Text, "continuation"), ct);
         _ = await (configurationModels ?? throw new AccessDeniedException("model_context_required")).ReadAsync(current.State, ct);
         return chosen;
     }
@@ -56,7 +56,7 @@ public sealed partial class TenantRunExecutionAuthority
             var models = await configurationModels.ReadAsync(current.State, ct).ConfigureAwait(false);
             var selected = routing is null ? SessionModelBinder.RefreshDefault(models, definition, snapshot.ModelSelection)
                 : await routing.ResolveAsync(models, snapshot.ModelPreference ?? AgentCore.Domain.Models.ModelPreference.Inherit, definition.ModelDefaults, false, true,
-                    "configurationContinuation", new Dictionary<string, string> { ["inputMode"] = "configurationContinuation" }, ct);
+                    "configurationContinuation", RoutingTaskSignals.Project(pending.Value.Task.Goal, "configurationContinuation"), ct);
             if (selected is null) return null;
             var next = AgentRunAdmissionFactory.ForConfigurationContinuation(ids.NewId(), ids.NewId(), ids.NewId(), snapshot with {
                 ModelSelection = selected, PinnedPersona = resolved.Configuration.Persona }, source, pending.Value.Task, time.GetUtcNow(), resolved.Configuration.Skills,
