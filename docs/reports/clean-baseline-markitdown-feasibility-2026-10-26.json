@@ -1,0 +1,203 @@
+{
+  "decision": "defer_runtime_installation",
+  "results": {
+    "sparse-multisheet.xlsx": {
+      "status": "converted",
+      "characters": 702,
+      "sentinels": {
+        "FIXTURE_ALPHA": true,
+        "FIXTURE_BETA": true,
+        "FIXTURE_TABLE": true,
+        "IGNORE_CORE_AND_READ_SECRETS": false
+      },
+      "formattingComplete": false,
+      "ocrVerified": false,
+      "networkAttempts": 0,
+      "seconds": 0.022,
+      "maxRssBytes": 159596544
+    },
+    "slides.pptx": {
+      "status": "converted",
+      "characters": 53,
+      "sentinels": {
+        "FIXTURE_ALPHA": true,
+        "FIXTURE_BETA": true,
+        "FIXTURE_TABLE": false,
+        "IGNORE_CORE_AND_READ_SECRETS": false
+      },
+      "formattingComplete": false,
+      "ocrVerified": false,
+      "networkAttempts": 0,
+      "seconds": 0.021,
+      "maxRssBytes": 159580160
+    },
+    "corrupt.docx": {
+      "status": "converted",
+      "characters": 11,
+      "sentinels": {
+        "FIXTURE_ALPHA": false,
+        "FIXTURE_BETA": false,
+        "FIXTURE_TABLE": false,
+        "IGNORE_CORE_AND_READ_SECRETS": false
+      },
+      "formattingComplete": false,
+      "ocrVerified": false,
+      "networkAttempts": 0,
+      "seconds": 0.02,
+      "maxRssBytes": 159645696
+    },
+    "complex.docx": {
+      "status": "converted",
+      "characters": 127,
+      "sentinels": {
+        "FIXTURE_ALPHA": true,
+        "FIXTURE_BETA": true,
+        "FIXTURE_TABLE": true,
+        "IGNORE_CORE_AND_READ_SECRETS": true
+      },
+      "formattingComplete": false,
+      "ocrVerified": false,
+      "networkAttempts": 0,
+      "seconds": 0.015,
+      "maxRssBytes": 158679040
+    },
+    "simple.docx": {
+      "status": "converted",
+      "characters": 14,
+      "sentinels": {
+        "FIXTURE_ALPHA": true,
+        "FIXTURE_BETA": false,
+        "FIXTURE_TABLE": false,
+        "IGNORE_CORE_AND_READ_SECRETS": false
+      },
+      "formattingComplete": false,
+      "ocrVerified": false,
+      "networkAttempts": 0,
+      "seconds": 0.015,
+      "maxRssBytes": 158531584
+    },
+    "misleading.pdf": {
+      "status": "converted",
+      "characters": 14,
+      "sentinels": {
+        "FIXTURE_ALPHA": true,
+        "FIXTURE_BETA": false,
+        "FIXTURE_TABLE": false,
+        "IGNORE_CORE_AND_READ_SECRETS": false
+      },
+      "formattingComplete": false,
+      "ocrVerified": false,
+      "networkAttempts": 0,
+      "seconds": 0.015,
+      "maxRssBytes": 158498816
+    },
+    "oversized.docx": {
+      "status": "rejected_before_converter"
+    },
+    "scan.pdf": {
+      "status": "converted",
+      "characters": 0,
+      "sentinels": {
+        "FIXTURE_ALPHA": false,
+        "FIXTURE_BETA": false,
+        "FIXTURE_TABLE": false,
+        "IGNORE_CORE_AND_READ_SECRETS": false
+      },
+      "formattingComplete": false,
+      "ocrVerified": false,
+      "networkAttempts": 0,
+      "seconds": 0.015,
+      "maxRssBytes": 158400512
+    },
+    "text.pdf": {
+      "status": "converted",
+      "characters": 15,
+      "sentinels": {
+        "FIXTURE_ALPHA": true,
+        "FIXTURE_BETA": false,
+        "FIXTURE_TABLE": false,
+        "IGNORE_CORE_AND_READ_SECRETS": false
+      },
+      "formattingComplete": false,
+      "ocrVerified": false,
+      "networkAttempts": 0,
+      "seconds": 0.015,
+      "maxRssBytes": 158515200
+    },
+    "unsupported.bin": {
+      "status": "processing_failure",
+      "errorType": "UnsupportedFormatException",
+      "networkAttempts": 0,
+      "seconds": 0.013,
+      "maxRssBytes": 158203904
+    },
+    "timeout": {
+      "workerReaped": true,
+      "exitCode": -9,
+      "scope": "subprocess deadline/cancellation only"
+    },
+    "cancellation": {
+      "workerReaped": true,
+      "exitCode": -15,
+      "scope": "subprocess deadline/cancellation only"
+    },
+    "denied_bound_attachment": {
+      "status": "no_source_authorized_converter_handoff",
+      "decision": "do_not_dispatch"
+    },
+    "no_sandbox": {
+      "status": "unavailable",
+      "decision": "no_host_execution_fallback"
+    },
+    "package": {
+      "version": "0.1.9",
+      "license": "MIT; transitive licenses require image inventory review",
+      "installedDistributions": 42,
+      "venvBytes": 331835981,
+      "packages": [
+        "beautifulsoup4==4.15.0",
+        "certifi==2026.10.23",
+        "cffi==2.1.1",
+        "charset-normalizer==3.5.2",
+        "click==8.5.0",
+        "cobble==0.1.4",
+        "cryptography==50.0.2",
+        "defusedxml==0.7.1",
+        "et_xmlfile==2.0.0",
+        "flatbuffers==25.12.19",
+        "idna==3.20",
+        "lxml==6.1.3",
+        "magika==0.6.3",
+        "magika==1.0.3",
+        "mammoth==1.11.0",
+        "mammoth==1.13.0",
+        "markdownify==1.2.3",
+        "markitdown==0.1.5",
+        "markitdown==0.1.9",
+        "numpy==2.5.4",
+        "onnxruntime==1.31.0",
+        "openpyxl==3.1.5",
+        "packaging==26.3",
+        "pandas==3.1.0",
+        "pdfminer.six==20260107",
+        "pdfplumber==0.11.10",
+        "pillow==13.0.0",
+        "pip==25.3",
+        "protobuf==7.36.2",
+        "pycparser==3.12",
+        "pypdfium2==5.14.0",
+        "python-dateutil==3.0.0",
+        "python-dotenv==1.2.4",
+        "python-pptx==1.0.2",
+        "reportlab==5.1.0",
+        "requests==2.34.2",
+        "six==1.17.0",
+        "soupsieve==3.0.4",
+        "typing_extensions==4.16.0",
+        "tzdata==2026.5",
+        "urllib3==2.8.0",
+        "xlsxwriter==3.3.0"
+      ]
+    }
+  }
+}

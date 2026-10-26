@@ -27,8 +27,25 @@ if (args.Length > 0 && args[0] == "migrate-context")
     return;
 }
 
+if (args.Length > 0 && args[0] == "audit-google-grants")
+{
+    if (args.Length != 4) throw new ArgumentException("Usage: audit-google-grants <database-path> <existing-key-directory> <canonical-client-id>");
+    try
+    {
+        var report = await AgentCore.Infrastructure.Credentials.GoogleGrantAudit.ReadAsync(args[1], args[2], args[3]);
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(report));
+    }
+    catch (Exception)
+    {
+        Console.Error.WriteLine("Google grant audit could not read the matching database/key set. No values were printed or records changed.");
+        Environment.ExitCode = 1;
+    }
+    return;
+}
+
 var identityBootstrapCommand = args.Length == 1 && args[0] == "bootstrap-identity";
 var builder = WebApplication.CreateBuilder(identityBootstrapCommand ? [] : args);
+AgentCore.Infrastructure.Configuration.ConfigurationCutover.Validate(builder.Configuration);
 // Hosting request diagnostics include raw query strings. OAuth codes/state must never enter logs.
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 

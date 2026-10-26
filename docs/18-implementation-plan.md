@@ -1,5 +1,9 @@
 # Implementation Plan
 
+The [clean baseline delivery](reports/clean-baseline-delivery-2026-10-26.md) records the completed local stabilization scope and focused verification. Its external limits remain open; it neither accepts a new application milestone nor starts Decision Intelligence.
+
+The owner-requested clean baseline pass covers canonical host configuration, deliberate Google reconnect, corrected Core roots, immutable General Assistant v34, measured document-converter deferral, real PNG/file qualification and targeted shared feedback. [Cutover runbook](clean-baseline-cutover.md) owns deployment; the dated delivery report owns exact local evidence. This is scoped stabilization and does not reopen historical milestone acceptance or start initiative 6.
+
 ## Dynamic model management (authorized 2026-10-25)
 
 The updated owner proposal requests one coherent tenant model-management and runtime cutover on baseline `6a71dd1`. Local implementation and the final requirement audit are complete; no new milestone acceptance or dependent initiative is started. [Delivery ledger and UI brief](reports/dynamic-model-management-delivery-2026-10-25.md) track canonical storage/IAM, provider adapters/discovery, all Run consumers, administration and final no-legacy verification. Earlier static-catalog reports remain historical; current runtime facts are owned by the canonical tenant cutover. Live-provider service qualification and optional CI remain unrun.

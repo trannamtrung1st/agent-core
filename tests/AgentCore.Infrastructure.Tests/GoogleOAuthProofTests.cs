@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using AgentCore.Infrastructure.Credentials;
 using AgentCore.Infrastructure.Email;
 
@@ -15,5 +16,5 @@ public sealed class GoogleOAuthProofTests
     [InlineData("https://trusted.example.test/?returnUrl=https://evil.example")]
     [InlineData("https://trusted.example.test/#fragment")]
     public void OAuth_public_origin_rejects_unsafe_or_ambiguous_configuration(string value)
-    { Assert.False(new GoogleEmailOAuthOptions { ClientId = "client", ClientSecret = "secret", PublicAppUrl = value }.Configured); }
+    { Assert.Throws<InvalidOperationException>(() => new GoogleOAuthConfiguration(new Microsoft.Extensions.Configuration.ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["GoogleOAuth:ClientId"] = "client", ["GoogleOAuth:ClientSecret"] = "secret", ["GoogleOAuth:PublicAppUrl"] = value }).Build())); }
 }

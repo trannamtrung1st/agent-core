@@ -135,11 +135,11 @@ PYTHON''')
         self.assertFalse((self.root / 'local/dev/api.pid').exists())
         self.assertFalse((self.root / 'local/dev/web.pid').exists())
 
-    def test_dotenv_reaches_backend_with_hyphenated_keys_and_keeps_secrets_out_of_vite(self):
+    def test_dotenv_reaches_backend_with_canonical_keys_and_keeps_secrets_out_of_vite(self):
         import json
         (self.root / '.env').write_text("""OPENAI_API_KEY='literal-$value-$(touch should-not-exist)'
-Providers__SpeechRecognizers__primary-stt__Model=operator-selected-speech-model
-Providers__SpeechSynthesizers__primary-tts__Model=operator-selected-voice-model
+Providers__Speech__Recognition__DefaultModel=operator-selected-speech-model
+Providers__Speech__Synthesis__DefaultModel=operator-selected-voice-model
 VITE_AGENTCORE_REALTIME_PROTOCOL=json
 AGENTCORE_DEV_STATE_DIR=local/env-state
 """)
@@ -150,8 +150,8 @@ AGENTCORE_DEV_STATE_DIR=local/env-state
         dotnet.write_text(f'#!{sys.executable}\n' + '''import json, os, pathlib, sys, time
 pathlib.Path('backend-env.json').write_text(json.dumps({
  'key': os.environ.get('OPENAI_API_KEY'),
- 'model': os.environ.get('Providers__SpeechRecognizers__primary-stt__Model'),
- 'catalog': os.environ.get('Providers__SpeechSynthesizers__primary-tts__Model'),
+ 'model': os.environ.get('Providers__Speech__Recognition__DefaultModel'),
+ 'catalog': os.environ.get('Providers__Speech__Synthesis__DefaultModel'),
  'args': sys.argv[1:]}))
 time.sleep(300)
 ''')

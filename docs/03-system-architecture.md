@@ -1,5 +1,7 @@
 # System Architecture
 
+Host Sandbox readiness is infrastructure reachability and mount readiness only. It does not enumerate a global profile catalog or confer authority. Each tenant Run retains its admitted profile/Instance verification, captured Space mounts, current IAM and exact approval checks. Filesystem and retirement adapters ship together at contract 5. [Cutover](clean-baseline-cutover.md).
+
 ## Dynamic model management
 
 Model reference inspection is a current-human, read-only projection through `TenantModelManagementService` and the existing model store. It filters resource visibility before counting/paging and repeats the security revision fence; it grants no execution or mutation authority. Safe retirement retains model rows, assignments and captured Run/approval provenance. Physical model/connection deletion is not exposed. Configuration confirmation previews readable references, while the existing mutation transaction remains authoritative for default/credential references and current revisions.

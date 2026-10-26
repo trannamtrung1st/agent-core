@@ -13,7 +13,7 @@ OWNER = ("a" * 32, "b" * 32, "c" * 32, "d" * 32)
 
 
 def labels(owner=OWNER):
-    return {**dict(zip(retirement.LABELS, owner)), retirement.CONTRACT: "4", "opensandbox.io/id": "owned-provider"}
+    return {**dict(zip(retirement.LABELS, owner)), retirement.CONTRACT: "5", "opensandbox.io/id": "owned-provider"}
 
 
 class RetirementTests(unittest.TestCase):
@@ -65,7 +65,7 @@ class RetirementTests(unittest.TestCase):
             value = labels(); value.pop(key)
             with self.assertRaises(ValueError):
                 retirement.scope(value)
-        value = labels(); value[retirement.CONTRACT] = "3"
+        value = labels(); value[retirement.CONTRACT] = "4"
         with self.assertRaises(ValueError): retirement.scope(value)
 
     def test_cleanup_rechecks_exact_owner_and_never_deletes_a_foreign_filtered_entry(self):
@@ -108,7 +108,7 @@ class VerificationRetirementTests(unittest.TestCase):
     owner = (OWNER[0], OWNER[-1])
 
     def labels(self):
-        return {"agent-core-image-verification": self.owner[1], retirement.VERIFICATION_TENANT: self.owner[0], retirement.CONTRACT: "4", "opensandbox.io/id": "verification-provider"}
+        return {"agent-core-image-verification": self.owner[1], retirement.VERIFICATION_TENANT: self.owner[0], retirement.CONTRACT: "5", "opensandbox.io/id": "verification-provider"}
 
     def test_sequential_probes_then_durable_attempt_seal_with_independent_runtime_scope(self):
         with tempfile.TemporaryDirectory() as root:
@@ -155,15 +155,15 @@ class VerificationRetirementTests(unittest.TestCase):
         self.assertIsNone(retirement.verification_scope({"agent-core-image-verification": OWNER[-1]}))
         self.assertEqual(self.owner, retirement.verification_scope(self.labels()))
         self.assertTrue(all(len(value) <= 63 for value in self.labels().values()))
-        with self.assertRaises(ValueError): retirement.verification_scope({"agent-core-image-verification": ".".join(self.owner), retirement.CONTRACT: "4"})
+        with self.assertRaises(ValueError): retirement.verification_scope({"agent-core-image-verification": ".".join(self.owner), retirement.CONTRACT: "5"})
         for key in retirement.LABELS:
             with self.assertRaises(ValueError): retirement.verification_scope({**self.labels(), key: OWNER[0]})
         for value in ("bad", ".".join(self.owner).upper(), 5):
             with self.assertRaises(ValueError): retirement.verification_scope({**self.labels(), "agent-core-image-verification": value})
-        with self.assertRaises(ValueError): retirement.verification_scope({**self.labels(), retirement.CONTRACT: "3"})
+        with self.assertRaises(ValueError): retirement.verification_scope({**self.labels(), retirement.CONTRACT: "4"})
 
     def test_historical_long_label_is_cleanup_only_and_requires_the_exact_old_owner(self):
-        old = {"agent-core-image-verification": ".".join(self.owner), retirement.CONTRACT: "4", "opensandbox.io/id": "old-provider"}
+        old = {"agent-core-image-verification": ".".join(self.owner), retirement.CONTRACT: "5", "opensandbox.io/id": "old-provider"}
         with self.assertRaises(ValueError): retirement.verification_scope(old)
         pending = [{"Id": "old-container", "Labels": old}]; deleted = []
         def listing(**options):
@@ -179,8 +179,8 @@ class VerificationRetirementTests(unittest.TestCase):
         current = [{"Id": str(i), "Labels": {**self.labels(), "opensandbox.io/id": str(i)}} for i in range(102)]
         foreign = True; deleted = []
         def listing(**options):
-            if options["filters"]["label"] == ["agent-core-image-verification=" + ".".join(self.owner), retirement.CONTRACT + "=4"]: return []
-            self.assertEqual(["agent-core-image-verification=" + self.owner[1], retirement.VERIFICATION_TENANT + "=" + self.owner[0], retirement.CONTRACT + "=4"], options["filters"]["label"])
+            if options["filters"]["label"] == ["agent-core-image-verification=" + ".".join(self.owner), retirement.CONTRACT + "=5"]: return []
+            self.assertEqual(["agent-core-image-verification=" + self.owner[1], retirement.VERIFICATION_TENANT + "=" + self.owner[0], retirement.CONTRACT + "=5"], options["filters"]["label"])
             return current[:options["limit"]]
         def get(identity):
             labels = next(item["Labels"] for item in current if item["Id"] == identity)

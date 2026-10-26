@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+from urllib.parse import urlsplit
 
 
 def read_env(path):
@@ -36,13 +37,87 @@ def read_env(path):
         if '\0' in value:
             raise ValueError(f'Invalid dotenv value at line {number}.')
         # Deliberately no shell commands, variable substitution or interpolation.
+        if any(normalize(key) == normalize(previous) for previous in values):
+            raise ValueError(f'Duplicate configuration key {key}; keep one assignment. Values are redacted.')
         values[key] = value
     return values
 
 
+TRANSLATIONS = {
+    'GOOGLE_OAUTH_CLIENT_ID': 'GoogleOAuth__ClientId',
+    'GOOGLE_OAUTH_CLIENT_SECRET': 'GoogleOAuth__ClientSecret',
+    'GOOGLE_OAUTH_PUBLIC_APP_URL': 'GoogleOAuth__PublicAppUrl',
+    'AGENTCORE_DRIVE_ENABLED': 'GoogleDrive__Enabled',
+}
+RETIRED = {
+    'googleemailoauth': 'GoogleOAuth__*; reconnect unproven grants',
+    'googledriveoauth': 'GoogleOAuth__*; reconnect unproven grants',
+    'google_email_oauth_': 'GOOGLE_OAUTH_*; reconnect unproven grants',
+    'google_drive_oauth_': 'GOOGLE_OAUTH_*; reconnect unproven grants',
+    'providers:speechrecognizers': 'Providers__Speech__Recognition__*',
+    'providers:speechsynthesizers': 'Providers__Speech__Synthesis__*',
+    'filepreview:limits:csvbytes': 'FilePreview__Limits__DelimitedBytes',
+}
+
+
+def normalize(key):
+    return key.replace('__', ':').lower()
+
+
+def validate(values, compose=False):
+    """Names only in diagnostics. Called before launch or Compose interpolation."""
+    seen = {}
+    for key, value in values.items():
+        normalized = normalize(key)
+        if normalized in seen:
+            raise ValueError(f'Duplicate configuration keys {seen[normalized]} and {key}. Values are redacted.')
+        seen[normalized] = key
+        for prefix, replacement in RETIRED.items():
+            if normalized == prefix or normalized.startswith(prefix if prefix.endswith('_') else prefix + ':'):
+                raise ValueError(f'Retired configuration key {key}; use {replacement}. Values are redacted.')
+        if value and (normalized.endswith(':enabled') or normalized in ('googleDrive:enabled'.lower(),)
+                      or key == 'AGENTCORE_DRIVE_ENABLED') and value.lower() not in ('true', 'false'):
+            raise ValueError(f'{key} must be true or false. Values are redacted.')
+        if value and key in ('AGENTCORE_DEV_API_PORT', 'AGENTCORE_DEV_WEB_PORT', 'AGENTCORE_SANDBOX_PORT', 'AGENTCORE_COMPOSE_PORT'):
+            if not value.isascii() or not value.isdecimal() or not 1 <= int(value) <= 65535:
+                raise ValueError(f'{key} must be a port in 1..65535. Values are redacted.')
+        if value and (normalized.startswith('filepreview:') or normalized.endswith(':timeoutseconds')):
+            if not value.isascii() or not value.isdecimal() or int(value) < 1:
+                raise ValueError(f'{key} must be a positive integer. Values are redacted.')
+        if value and key == 'AGENTCORE_TLS_CERTIFICATE_PATH' and not Path(value).is_file():
+            raise ValueError(f'{key} must identify a readable certificate file. Values are redacted.')
+    for external, canonical in TRANSLATIONS.items():
+        other = seen.get(normalize(canonical))
+        if values.get(external) and other and values[other]:
+            raise ValueError(f'Ambiguous configuration keys {external} and {other}; set one input. Values are redacted.')
+        if compose and other and values[other]:
+            raise ValueError(f'{other} is a native input; Compose uses {external}. Values are redacted.')
+    origin = values.get('GOOGLE_OAUTH_PUBLIC_APP_URL') or values.get(seen.get('googleoauth:publicappurl', ''))
+    if origin:
+        try:
+            url = urlsplit(origin)
+            valid = url.scheme == 'https' or url.scheme == 'http' and url.hostname in ('localhost', '127.0.0.1', '::1')
+            valid = valid and url.hostname and not url.username and not url.password and url.path in ('', '/') and not url.query and not url.fragment
+            valid = valid and (url.port is None or 1 <= url.port <= 65535)
+        except ValueError:
+            valid = False
+        if not valid:
+            raise ValueError('GoogleOAuth PublicAppUrl must be an HTTPS or loopback HTTP origin. Values are redacted.')
+
+
+def translate(values):
+    result = dict(values)
+    validate(result)
+    for external, canonical in TRANSLATIONS.items():
+        value = result.pop(external, None)
+        if value:
+            result[canonical] = value
+    return result
+
+
 def environment(root, path, inherited):
     profile = root / 'src/AgentCore.Api/Properties/launchSettings.json'
-    explicit = {**inherited, **read_env(path)}
+    explicit = translate({**inherited, **read_env(path)})
     defaults = {'ASPNETCORE_ENVIRONMENT': 'Development', 'AgentCore__Profile': 'Real'}
     if profile.exists():
         selected = 'http' if explicit.get('AgentCore__Profile', 'Real').lower() == 'synthetic' else 'http-real'
@@ -77,7 +152,9 @@ def main():
         parser.error('Supply the child command after --.')
     try:
         env = environment(args.root.resolve(), args.env_file.resolve(), os.environ)
-    except (ValueError, OSError, KeyError):
+    except ValueError as error:
+        parser.exit(2, "Cannot load native .env configuration. " + str(error) + "\n")
+    except (OSError, KeyError):
         # Never echo a dotenv line/value or a parser traceback containing secrets.
         parser.exit(2, 'Cannot load native .env configuration. Check assignment syntax and quoting; values were not printed.\n')
     os.execvpe(command[0], command, env)

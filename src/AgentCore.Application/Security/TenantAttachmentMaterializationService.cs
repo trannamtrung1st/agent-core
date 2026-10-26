@@ -54,10 +54,11 @@ public sealed class TenantAttachmentMaterializationService(IIamStore security, I
         async ValueTask Guard(CancellationToken token)
         {
             var now = await Require(tenant, session, attachment, human, revision, token).ConfigureAwait(false);
-            if (now.Source != before.Source || now.Session.Owner != before.Session.Owner || now.Agent.Instance.Revision != before.Agent.Instance.Revision)
+            if (now.Source != before.Source || now.Session.Owner != before.Session.Owner || now.Session.Snapshot.Revision != before.Session.Snapshot.Revision
+                || now.Agent.Instance.Revision != before.Agent.Instance.Revision)
                 throw new SecurityConflictException("stale_revision");
             TenantAttachmentRules.Content(before.Source, await attachments.ReadTenantContentAsync(tenant, session, attachment, token).ConfigureAwait(false));
-            if (!await audits.TryRecordWorkspaceAuthorizationAsync(new(workspace, human, revision, before.Agent.Instance.Revision, "workspaces.write",
+            if (!await audits.TryRecordWorkspaceAuthorizationAsync(new(workspace, human, revision, before.Session.Snapshot.Revision, "workspaces.write",
                 new(ids.NewId(), tenant, human.PrincipalId, "workspaces.write", TenantWorkspaceRules.Scope(workspace).ResourceId!, "allowed", "human_workspace_authorized",
                     DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds()))), token).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
         }

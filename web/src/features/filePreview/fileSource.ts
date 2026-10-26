@@ -1,4 +1,4 @@
-import { identityReadResponse, tenantApi } from '../../services/identity';
+import { IdentityError, identityReadResponse, tenantApi } from '../../services/identity';
 import { tenantAgentApi, type TenantResourceDetail } from '../../services/tenantAgentConfiguration';
 import { sameWorkspace, tenantWorkspaceApi, type TenantWorkspaceOwner } from '../../services/tenantWorkspace';
 
@@ -57,6 +57,12 @@ export function readFailure(status: number): PreviewError {
     'preview_failed',
     'The file could not be loaded. Retry when the connection is available.',
   );
+}
+/** Safe source-owned feedback; arbitrary exception text must never reach file cards. */
+export function fileFailureMessage(error: unknown, fallback = 'Download failed. Try again.'): string {
+  if (error instanceof IdentityError) return readFailure(error.status).message;
+  if (error instanceof PreviewError) return error.message;
+  return fallback;
 }
 export async function resolveFile(
   ref: FileRef,
@@ -171,7 +177,8 @@ export async function readFile(
 export function fileReadResponse(path: string, signal: AbortSignal): Promise<Response> {
   return identityReadResponse(path, signal);
 }
-export const fileReadLost = (error: unknown) => error instanceof PreviewError && ['preview_forbidden', 'preview_unavailable'].includes(error.code);
+export const fileReadLost = (error: unknown) => error instanceof PreviewError && ['preview_forbidden', 'preview_unavailable'].includes(error.code)
+  || error instanceof IdentityError && [401, 403, 404].includes(error.status);
 export async function downloadFile(
   ref: FileRef,
   signal: AbortSignal,

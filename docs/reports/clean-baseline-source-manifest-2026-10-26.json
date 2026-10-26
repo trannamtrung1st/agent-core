@@ -1,0 +1,281 @@
+{
+  "baseCommit": "42258913c0f4176bf218673df747c57e6f0469cf",
+  "scope": "Changed shipped source/configuration/tests/docs; delivery report and this manifest excluded to avoid recursive hashing. Test ledger names exact focused executions.",
+  "files": [
+    {
+      "path": ".agents/context/DESIGN.md",
+      "sha256": "a109ed54302c6837a5ca0933fee4590c4e5cac69dfe9a2b02b47542f61001b12"
+    },
+    {
+      "path": ".env.example",
+      "sha256": "4aa5fd8b63be3cd5512672be4055a7bd128fad3f87257afcf5bde6fd9e04b3a5"
+    },
+    {
+      "path": "README.md",
+      "sha256": "70b8b9a2965e50ae99b199f6852ff9cf0168f343a95174a4c36a337ef2e59c11"
+    },
+    {
+      "path": "TODO.md",
+      "sha256": "7597c4f02eb3f4fff5220855cde64dee46a0f7ad378aa8064b3664899f9484f3"
+    },
+    {
+      "path": "agents/general-assistant-v34.json",
+      "sha256": "a58d93f51bf3e79ec4de755b2abb8edee0f0064f9e0866b6a64f395d3999948b"
+    },
+    {
+      "path": "deploy/sandbox/retirement.py",
+      "sha256": "5bfeef4fbfd3779fd9ef8e53be170f9cc9fe969b36e5f6712c51f8fb3a081629"
+    },
+    {
+      "path": "docker-compose.real.yml",
+      "sha256": "ff1c1b3dec2c8c6d29b493b7f2266b801f1d802584efde4ded06581e9b86da7d"
+    },
+    {
+      "path": "docs/03-system-architecture.md",
+      "sha256": "1ee5e022f6f00bb8ae9991d5b61f92048bbd7524abc8865b2e56946d72a7462e"
+    },
+    {
+      "path": "docs/13-frontend-implementation-spec.md",
+      "sha256": "cf400d7be5cbca711ecb4584a69b9e2e9a88a09badc7f55ce9e6578c7debedf8"
+    },
+    {
+      "path": "docs/15-persistence-and-configuration.md",
+      "sha256": "fac4667e1eb5e6d1651c636a9ef47f83a83c2182a7c9fc4fda4657c26e242ec7"
+    },
+    {
+      "path": "docs/16-testing-strategy.md",
+      "sha256": "38c00c0b11c0a5c7f94e190b7b5a4aa99a9b71b6ad1015d41f077addbf457267"
+    },
+    {
+      "path": "docs/17-observability-and-operations.md",
+      "sha256": "a9392b8f73810c7d788dee6b91220aad6f5e58306c5eb3626841b3ca299cbbed"
+    },
+    {
+      "path": "docs/18-implementation-plan.md",
+      "sha256": "1dc4fd28090c5398cbafbcec313ad3d4c4287231b15685fcaeec12354290888e"
+    },
+    {
+      "path": "docs/clean-baseline-cutover.md",
+      "sha256": "bb319e08a54e3176dc6ce34f364f8961a596e2285059696a1e931e529434b959"
+    },
+    {
+      "path": "docs/host-configuration-reference.md",
+      "sha256": "040772ba38f11fbaa161ed1893055ea1212d33e17603da4bc74652d3855b9225"
+    },
+    {
+      "path": "docs/reports/clean-baseline-configuration-inventory-2026-10-26.json",
+      "sha256": "a70d05b6456138af1f2e83753416f9c92cd965c8ae95a2be165a27e2cd08cc75"
+    },
+    {
+      "path": "docs/reports/clean-baseline-markitdown-feasibility-2026-10-26.json",
+      "sha256": "5631d116af00542c571a20b46b9debf41f9ac3eb22102a6983e85391b1dc2bac"
+    },
+    {
+      "path": "docs/reports/clean-baseline-png-proof-2026-10-26.json",
+      "sha256": "7da1533784b8d607c4d52b3d81a3cf6a67712dbfd8532af79d03380b3a282018"
+    },
+    {
+      "path": "scripts/compose.py",
+      "sha256": "942842bb8201b82d98362add64a367df9af76bba1fbcff692a77bce60cd15fbd"
+    },
+    {
+      "path": "scripts/dev-env.py",
+      "sha256": "7dd7c3cb577fd135c122c12e5437b11db0f230d4acb2f516f165947553b9c458"
+    },
+    {
+      "path": "scripts/qualification/configuration-compose.py",
+      "sha256": "5031b2f12528d19577c81e4cbaa43a0af35e2f3fa5304c848ca3a264c9c0cb1a"
+    },
+    {
+      "path": "scripts/qualification/host-config-inventory.py",
+      "sha256": "eb0231326d76c6f0bf7d62b490f16b289b192d231dfe707de16d2c57ee02d7dc"
+    },
+    {
+      "path": "scripts/qualification/markitdown-feasibility.py",
+      "sha256": "42a2b84c341584858f9f4a102cd8af94707d398bf5c9783a3465c47ea5c68bda"
+    },
+    {
+      "path": "scripts/qualification/png-artifact-setup.py",
+      "sha256": "9f7bf7b44f06d5ed2453e5559ce3d51d4b9b9a51e16bc00db3137ede6cb93ff3"
+    },
+    {
+      "path": "scripts/tests/test_configuration_cutover.py",
+      "sha256": "83756f60301783f7e80e29b7cb2391605997835110181adefb0b03a564bcdb8f"
+    },
+    {
+      "path": "scripts/tests/test_dev_real.py",
+      "sha256": "53f96953203377b6774d205a61a8ebaab6e703cb25d64de33e1da43031854c8c"
+    },
+    {
+      "path": "scripts/tests/test_sandbox_retirement.py",
+      "sha256": "d4a57a4753a9135364447ff355a3481e1960515426d66c739e1c7b7d9bc6ed24"
+    },
+    {
+      "path": "src/AgentCore.Api/FilePreviewOptions.cs",
+      "sha256": "3a3ee14ba64370143a84b0d59d4d369399d555b721d061bc0a7d5cf1f60d4160"
+    },
+    {
+      "path": "src/AgentCore.Api/Program.cs",
+      "sha256": "ca3a7184070bb6f773b6d5948075d0b32911bcff52c2477473c4f47f94be54f6"
+    },
+    {
+      "path": "src/AgentCore.Application/Context/CoreContracts.cs",
+      "sha256": "2fb4f513b0caf9090edaa102dace386897523d048aa999e160587eb589b30e7e"
+    },
+    {
+      "path": "src/AgentCore.Application/Security/TenantAttachmentMaterializationService.cs",
+      "sha256": "fdacbb64ec7c0e89888ab705bf67feec54e927939ccdf9862c9a8612c0d64946"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Configuration/ConfigurationCutover.cs",
+      "sha256": "42c1e5c468ca19c93149553cf227bd6e16a2ec5a6e3633a4b87af4085c99f3ed"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Credentials/GoogleGrantAudit.cs",
+      "sha256": "bfd69af25c3a657ecf1644257eb5113fa832f8a43693647386595250b0db3118"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Credentials/GoogleOAuthConfiguration.cs",
+      "sha256": "9aff516abf9317909307e301b4782ff33e35a6605eb45add88768104749f6bd5"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Credentials/TenantGoogleOAuthProvider.Check.cs",
+      "sha256": "77f0f07248728ccb0bd08a388c7bad84409f848d5c8c81762bce7c091d695bb9"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Credentials/TenantGoogleOAuthProvider.Runtime.cs",
+      "sha256": "c5b3d914aa5126b977709edb77d2d829f63c2226942ee0480798f2f180a757ae"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Drive/DriveRegistration.cs",
+      "sha256": "1d82979ec907879ceddbc6fa33878d0ae75d50ad0bd58ed0966864ccbd9a545f"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Drive/GoogleDriveOptions.cs",
+      "sha256": "dac7771bb561105fb0bb76acc984a7ba3e3c73a3881279468c67280a7c166e21"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Email/EmailProviderRegistration.cs",
+      "sha256": "ae7902960d5a409c8832e8e989b275f063c9775099f3835146d300310833e877"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Providers/SpeechProviderBinder.cs",
+      "sha256": "b89154f6cda1a5e1e2ea8c31eb8c9b4ed0d73b22f706a983fe28d35af3372a36"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Providers/Synthetic/ScriptedLanguageModel.cs",
+      "sha256": "eb7f9186e99b43c2e639d2fb3a30a9da3cb88596ce89b1a36c71ef381c15cc79"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Providers/Synthetic/TenantPngArtifactScript.cs",
+      "sha256": "e2665f54bcda89be43b0298fa202b630cb6cfe57f1dd8fb0da6c30b71ec8f1b7"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/OpenSandboxReadiness.cs",
+      "sha256": "3650474c9dd5e367aad5d40c8d0951a3575d72ed17f3607e25edf5f52191a89d"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.MountProbe.cs",
+      "sha256": "4864ffb39873eb8a6b04b938b5562462c6029af9a973335c684e3caabd603508"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/FilePreviewPolicyTests.cs",
+      "sha256": "9864e49a2aa43895429439ef8bccc1be2ca401656631f2ccf2d4dc0cbcd36ea5"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/HostingTopologyOptionsTests.cs",
+      "sha256": "7ba184af63b107a9d006ed5dbede2167b34738a62dcdf3ba19b7b6581bddc815"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/SpeechProviderBinderTests.cs",
+      "sha256": "608f6d776ca64abc906f54cf45e89f25d58df5e7ec4b0d0333662c31cbb66dfa"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/TenantSessionAccessTests.MaterializationRecovery.cs",
+      "sha256": "31ece94451025ab6afd78801ed89567ec1f467d8d77b3949f77314f868d9b7ac"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/ContextAssemblerTests.cs",
+      "sha256": "dab02af14a8ad6c6ce232f852ffc010e5f489cb5a2ff3b20bbe6e9e2dea09ceb"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/AgentDefinitionStoreTests.cs",
+      "sha256": "7ab0108203ee30627e6b69787444d004642a0705174977116fa28fe23d8a411a"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/DriveHostGateTests.cs",
+      "sha256": "eb58e2b4b2af1715111cbed93e140f528d6677fb0aa134ac40fdcd2ec526d1f3"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/GoogleOAuthConfigurationTests.cs",
+      "sha256": "868b2015dda087d18be850254ff402d2161fcdf27ec659920161dd08acc04701"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/GoogleOAuthProofTests.cs",
+      "sha256": "20dacbf2449c09119246c179b3cdcc472e46519968417e03eb1c5718402ccb43"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/OpenSandboxReadinessTests.cs",
+      "sha256": "52850ffbb08d0de5e77bcfd00a2df0068d2dc407bbae7684d218b3f050c4d707"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/TenantCredentialIntegrationTests.Cutover.cs",
+      "sha256": "d789a43fad3dfb17e1123b0501871b12f6125f91139aa2bab2ffd3a03326dadf"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/TenantCredentialIntegrationTests.OAuthCheck.cs",
+      "sha256": "81d1c5717e072461b8e3abde8389c8ade051e7e94b9111e66b511acf3845c067"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/TenantCredentialIntegrationTests.OAuthProvider.cs",
+      "sha256": "5cd2e1d0e5735ef4952352c2dff3b9a567ce5c0f1edc3e6328723a16d4b6313a"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/TenantDefinitionIntegrationTests.SpaceMigrations.cs",
+      "sha256": "69fd784510cc33fdd227f2b7c492da2c6b1953b2dc3e19dc2185e1aa7f14f088"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/TenantPngArtifactScriptTests.cs",
+      "sha256": "9078797362293d6d59641dbb96369abb82e69f3f184cca29ccd54a7587e5c9c0"
+    },
+    {
+      "path": "web/e2e/clean-baseline-files.spec.ts",
+      "sha256": "1099c310a2d6d70789c16ee8927b03a1bab988e26219ad7c191ac0fb51fea6a9"
+    },
+    {
+      "path": "web/playwright.clean-baseline.config.ts",
+      "sha256": "3d5dcc6a08bfdfdd008f50636de0f7e8866ecb38a7de34ef135ea551c41a34a8"
+    },
+    {
+      "path": "web/src/features/chat/ArtifactView.test.tsx",
+      "sha256": "7be2d6984c674a82caa75fd75b60def0153f377f2cbfeb395b1d7bac1d8e754b"
+    },
+    {
+      "path": "web/src/features/chat/ArtifactView.tsx",
+      "sha256": "cd27d8c823d5ea6f007459862e5682e9b79294b331dc470c5631015367101d24"
+    },
+    {
+      "path": "web/src/features/chat/AttachmentPreview.test.tsx",
+      "sha256": "39bafa15b5877a38ad9d6df814b9660c12f39943f271f93087030bd8fda51e42"
+    },
+    {
+      "path": "web/src/features/chat/AttachmentPreview.tsx",
+      "sha256": "ae54cc454e6202893fc9749fe3bfaf8e9351f01295885e470628b5c00ab8ab54"
+    },
+    {
+      "path": "web/src/features/chat/ChatFileCard.tsx",
+      "sha256": "c7bd029aecff43faafe4561d8066cfae7aece4223a1ff4e155f28c9289319c07"
+    },
+    {
+      "path": "web/src/features/filePreview/FilePreview.tsx",
+      "sha256": "8403ea81472d46881839a11373b46c197fe2723194be7ef34b58a7cbd2c5e83f"
+    },
+    {
+      "path": "web/src/features/filePreview/fileSource.ts",
+      "sha256": "a15133aa09fadca5648a93cdeecf8b920bd05514a31a61d756722ecd40793754"
+    }
+  ],
+  "removed": [
+    "src/AgentCore.Infrastructure/Email/GoogleEmailOAuthOptions.cs"
+  ]
+}

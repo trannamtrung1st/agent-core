@@ -2,7 +2,7 @@ import { loadPreviewOptions } from "../filePreview/previewOptions";
 import { testPolicy } from "../filePreview/previewTestPolicy";
 import { Blob as NodeBlob } from "node:buffer";
 import { readFileSync } from "node:fs";
-import { downloadFile, readFile, resolveFile } from "../filePreview/fileSource";
+import { downloadFile, readFile, resolveFile, readFailure } from "../filePreview/fileSource";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HistoryAttachmentView, PendingAttachmentView } from "./AttachmentPreview";
@@ -62,6 +62,14 @@ describe("AttachmentPreview", () => {
     await waitFor(() => expect(button).toBeEnabled());
     expect(downloadFile).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it.each([401, 403, 404])("gives precise feedback for a refused download (%i)", async (status) => {
+    vi.mocked(downloadFile).mockRejectedValueOnce(readFailure(status));
+    render(<HistoryAttachmentView tenantId="tenant" sessionId="s1" file={{ attachmentId: "a1", displayName: "provided.txt", contentType: "text/plain" }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Download provided.txt" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(readFailure(status).message);
+    expect(screen.queryByText("Download failed. Try again.")).not.toBeInTheDocument();
   });
 
   it("aborts an attachment download when the message is removed", async () => {

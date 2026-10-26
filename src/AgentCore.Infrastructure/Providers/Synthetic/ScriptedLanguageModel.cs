@@ -210,6 +210,11 @@ public sealed partial class ScriptedLanguageModel : ILanguageModel
             foreach (var item in officeEvents) yield return item;
             yield break;
         }
+        if (TenantPngArtifactScript.Generate(request) is { } pngEvents)
+        {
+            foreach (var item in pngEvents) yield return item;
+            yield break;
+        }
         if (OpenSandboxScript.Generate(request) is { } sandboxEvents)
         {
             foreach (var item in sandboxEvents) yield return item;

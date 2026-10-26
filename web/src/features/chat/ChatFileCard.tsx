@@ -11,6 +11,8 @@ export function ChatFileCard({
   fileRef,
   downloading = false,
   downloadFailed = false,
+  downloadError,
+  metadataError,
   metadataFailed = false,
   onDownload,
   onRetryMetadata,
@@ -23,10 +25,12 @@ export function ChatFileCard({
   fileRef?: FileRef;
   downloading?: boolean;
   downloadFailed?: boolean;
+  downloadError?: string;
+  metadataError?: string;
   metadataFailed?: boolean;
   onDownload: () => void;
   onRetryMetadata?: () => void;
-  onReadLost?: () => void;
+  onReadLost?: (reason?: unknown) => void;
 }) {
   return (
     <div
@@ -53,13 +57,14 @@ export function ChatFileCard({
             </Typography.Text>
             {downloadFailed && (
               <Typography.Text type="danger" role="status">
-                Download failed. Try again.
+                {downloadError ?? 'Download failed. Try again.'}
               </Typography.Text>
             )}
           </>
         ) : (
           <Typography.Text type="secondary" role="status">
             {metadataFailed ? 'File unavailable' : 'Preparing file…'}
+            {metadataFailed && metadataError && <span className="artifact-description">{metadataError}</span>}
           </Typography.Text>
         )}
       </div>

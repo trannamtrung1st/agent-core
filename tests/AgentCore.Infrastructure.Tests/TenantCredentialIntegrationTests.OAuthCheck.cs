@@ -162,6 +162,7 @@ public sealed partial class TenantCredentialIntegrationTests
     [InlineData("scope", true)]
     [InlineData("identity", true)]
     [InlineData("client")]
+    [InlineData("unstamped")]
     [InlineData("mode")]
     [InlineData("profile-unavailable")]
     public async Task OAuth_check_provider_bounds_refresh_and_never_exposes_provider_values(string failure, bool reconnect = false)
@@ -172,6 +173,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var id = await ConnectForCheck(f, owner.TenantId, new(owner.AccountId, session.SessionId, owner.OwnerPrincipalId), CredentialPurpose.GoogleDriveAccount);
         var current = (await f.Credentials.FindTenantCredentialAsync(owner.TenantId, id))!.Value;
         if (failure == "client") current = current with { ProtectedPayload = f.Protector.Protect(id, 1, GoogleOAuthRefreshGrant.Write("private-refresh", "legacy-client")) };
+        if (failure == "unstamped") current = current with { ProtectedPayload = f.Protector.Protect(id, 1, "private-unstamped-refresh") };
         if (failure == "mode") current = current with { DriveAccount = current.DriveAccount! with { Synthetic = true } };
         var calls = 0;
         using var http = new OAuthHttp(request =>
@@ -189,10 +191,10 @@ public sealed partial class TenantCredentialIntegrationTests
         else
         {
             var error = await Assert.ThrowsAsync<AgentCoreException>(() => provider.CheckAsync(current, default).AsTask());
-            Assert.Equal(failure == "client" ? "oauth_client_changed" : "oauth_check_unavailable", error.Code);
+            Assert.Equal(failure is "client" or "unstamped" ? "oauth_reconnect_required" : "oauth_check_unavailable", error.Code);
             Assert.DoesNotContain("private-refresh", error.Message); Assert.DoesNotContain("private-check-access", error.Message); Assert.DoesNotContain("private-malformed", error.Message);
         }
-        Assert.Equal(failure is "client" or "mode" ? 0 : failure is "identity" or "profile-unavailable" ? 2 : 1, calls);
+        Assert.Equal(failure is "client" or "unstamped" or "mode" ? 0 : failure is "identity" or "profile-unavailable" ? 2 : 1, calls);
     }
 
     private static TenantCredentialOAuthCheckService CheckService(Fixture f, ITenantCredentialOAuthVerifier verifier) => new(f.Iam, f.Credentials,

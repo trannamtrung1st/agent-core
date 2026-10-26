@@ -5,7 +5,7 @@ import { CloseOutlined, FileOutlined, ReloadOutlined } from "@ant-design/icons";
 import { type PendingAttachment } from "../../services/attachments";
 import type { HistoryAttachment } from "../../state/sessionStore";
 
-import { downloadFile, readFile, resolveFile, type FileRef } from "../filePreview/fileSource";
+import { downloadFile, readFile, resolveFile, fileFailureMessage, fileReadLost, type FileRef } from "../filePreview/fileSource";
 import { previewFormat, formatLimit, validateImageDimensions, validateSignature } from "../filePreview/previewPolicy";
 import { loadPreviewOptions } from "../filePreview/previewOptions";
 import { AttachmentMaterializeAction } from "./AttachmentMaterializeAction";
@@ -18,9 +18,11 @@ export function HistoryAttachmentView({ sessionId, tenantId, file }: { sessionId
 function HistoryFile({ sessionId, tenantId, file }: { sessionId: string; tenantId: string; file: HistoryAttachment }) {
   const [href, setHref] = useState<string | null>(null); const [failed, setFailed] = useState(false); const [busy, setBusy] = useState(false);
   const downloads = useRef<AbortController | null>(null);
+  const imageRead = useRef<AbortController | null>(null);
+  const [downloadError, setDownloadError] = useState<string>();
   const ref: FileRef = { kind: 'attachment', sessionId, attachmentId: file.attachmentId, tenantId };
   useEffect(() => {
-    const controller = new AbortController(); let url: string | null = null;
+    const controller = new AbortController(); imageRead.current = controller; let url: string | null = null;
     if (file.contentType.startsWith('image/')) void (async () => {
       const metadata = await resolveFile(ref, controller.signal);
       if (previewFormat(metadata) !== 'image') return;
@@ -31,17 +33,28 @@ function HistoryFile({ sessionId, tenantId, file }: { sessionId: string; tenantI
     })().catch(() => undefined);
     return () => { controller.abort(); downloads.current?.abort(); if (url) URL.revokeObjectURL(url); };
   }, [tenantId, sessionId, file.attachmentId, file.contentType]);
+  function forgetThumbnail() {
+    imageRead.current?.abort();
+    setHref(current => { if (current) URL.revokeObjectURL(current); return null; });
+  }
   async function save() {
     if (downloads.current) return;
     const controller = new AbortController(); downloads.current = controller; setBusy(true); setFailed(false);
     try { await downloadFile(ref, controller.signal); }
-    catch { if (!controller.signal.aborted) setFailed(true); }
+    catch (error) {
+      if (!controller.signal.aborted) {
+        setFailed(true); setDownloadError(fileFailureMessage(error));
+        if (fileReadLost(error)) {
+          forgetThumbnail();
+        }
+      }
+    }
     finally { if (!controller.signal.aborted) { setBusy(false); downloads.current = null; } }
   }
   return <div className="history-file-actions">
     {href && <a className="entry-file" href={href} target="_blank" rel="noreferrer noopener" aria-label={`Open ${file.displayName}`}><img className="entry-preview" loading="lazy" decoding="async" src={href} alt={file.displayName} /></a>}
     <ChatFileCard displayName={file.displayName} description={artifactKind(file.contentType)} fileRef={ref}
-      downloading={busy} downloadFailed={failed} onDownload={() => void save()}
+      downloading={busy} downloadFailed={failed} downloadError={downloadError} onReadLost={forgetThumbnail} onDownload={() => void save()}
       sourceAction={tenantId && <AttachmentMaterializeAction key={`${tenantId}:${sessionId}:${file.attachmentId}`} tenantId={tenantId} sessionId={sessionId} attachmentId={file.attachmentId} displayName={file.displayName} />} />
   </div>;
 }

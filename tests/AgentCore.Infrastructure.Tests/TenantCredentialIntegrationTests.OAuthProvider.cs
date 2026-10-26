@@ -135,7 +135,6 @@ public sealed partial class TenantCredentialIntegrationTests
     private static GoogleOAuthConfiguration SharedOAuth() => new(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
     {
         ["GoogleOAuth:ClientId"] = "tenant-client", ["GoogleOAuth:ClientSecret"] = "private-client-secret", ["GoogleOAuth:PublicAppUrl"] = "https://app.example.test",
-        ["GoogleEmailOAuth:ClientId"] = "legacy-client", ["GoogleEmailOAuth:ClientSecret"] = "legacy-private-secret", ["GoogleEmailOAuth:PublicAppUrl"] = "https://legacy.example.test"
     }).Build());
     private static Dictionary<string, string> OAuthQuery(string query) => query.Split('&').Select(p => p.Split('=', 2))
         .ToDictionary(p => Uri.UnescapeDataString(p[0].Replace('+', ' ')), p => Uri.UnescapeDataString(p[1].Replace('+', ' ')));

@@ -20,7 +20,8 @@ public sealed partial class TenantGoogleOAuthProvider
         try
         {
             var grant = GoogleOAuthRefreshGrant.Read(credentials.Unprotect(current.CredentialId, current.ProtectionVersion, current.ProtectedPayload));
-            if (grant.ClientId != descriptor.ClientId) throw RuntimeFailure("oauth_client_changed");
+            if (grant.ClientId != descriptor.ClientId)
+            { throw RuntimeFailure("oauth_reconnect_required"); }
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://oauth2.googleapis.com/token") {
                 Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["grant_type"] = "refresh_token", ["refresh_token"] = grant.Token,
                     ["client_id"] = client.ClientId, ["client_secret"] = client.ClientSecret }) };
@@ -53,10 +54,13 @@ public sealed partial class TenantGoogleOAuthProvider
             await recheck(ct).ConfigureAwait(false); return access;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (AgentCoreException ex) when (ex.Code == "google_oauth_grant_invalid")
+        { throw RuntimeFailure("oauth_reconnect_required"); }
         catch (Exception e) when (e is HttpRequestException or IOException or JsonException or InvalidOperationException or ArgumentException
             or FormatException or System.Security.Cryptography.CryptographicException or OperationCanceledException)
         { throw RuntimeFailure("oauth_provider_unavailable"); }
     }
     private static AgentCoreException RuntimeFailure(string code) => new(code,
-        "The connected account could not be read. Check its connection and current access before retrying the read.", code == "oauth_reconnect_required" ? 403 : 503);
+        code == "oauth_reconnect_required" ? "Reconnect this account using the current Google setup before reading it again."
+            : "The connected account could not be read. Check its connection and current access before retrying the read.", code == "oauth_reconnect_required" ? 403 : 503);
 }

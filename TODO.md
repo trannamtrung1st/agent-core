@@ -55,6 +55,8 @@ The [OpenSandbox main-integration ledger](docs/reports/opensandbox-integration-v
 
 ## Open work and acceptance gaps
 
+The bounded clean baseline stabilization is locally complete; [delivery evidence](docs/reports/clean-baseline-delivery-2026-10-26.md) covers canonical configuration, retained-grant reconnect, v34, real contract-5 Sandbox PNG publication and focused Chat/file fixes. MarkItDown is explicitly deferred with no runtime installation. This does not close the live Google, hosted speech/model, production deployment/restore, physical-device or actual browser 200% zoom obligations below. Initiative 6 remains a separate request; no Decision Intelligence implementation starts here.
+
 - [ ] **IAM deployment and external qualification:** when explicitly requested, qualify the deployment's TLS/certificate and backup/restore arrangements, dedicated live-provider/customer UAT and physical devices. Optional hosted CI is unrun unless requested; it does not reopen completed local proposal acceptance. See [final delivery](docs/reports/tenant-final-delivery-2026-10-24.md) and [stabilization](docs/reports/iam-stabilization-2026-10-24.md).
 
 - [ ] **Office/Drive manual and Real acceptance:** implementation and all seven automated Synthetic/Compose gates passed on `a451600a`. Dedicated real Google UAT, desktop Office-client fidelity and actual native browser 200% zoom remain unverified; see the [successor ledger](docs/reports/office-file-preview-drive-verification-2026-10-13.md).

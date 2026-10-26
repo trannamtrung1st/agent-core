@@ -43,6 +43,15 @@ describe('Artifact card', () => {
     expect(downloadArtifact).toHaveBeenCalledWith('s1', 'id', expect.any(AbortSignal), 'tenant-a');
   });
 
+  it.each([401, 403, 404])('keeps the refusal reason after retiring protected metadata (%i)', async (status) => {
+    vi.mocked(downloadArtifact).mockRejectedValueOnce(new IdentityError(status, 'resource_unavailable'));
+    render(<ArtifactView tenantId="tenant-a" sessionId="s1" artifactId="id" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Download scrum-project-plan.md' }));
+    await screen.findByText('File unavailable');
+    expect(screen.getByRole('status')).toHaveTextContent(status === 401 ? 'session has expired' : status === 403 ? 'no longer have permission' : 'Reload the source list');
+    expect(screen.queryByText('scrum-project-plan.md')).not.toBeInTheDocument();
+  });
+
   it('loads quietly then shows Core metadata and an accessible Download without fetching content', async () => {
     let resolve!: (value: typeof file) => void;
     vi.mocked(getArtifact).mockReturnValue(

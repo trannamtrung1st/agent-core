@@ -7,6 +7,7 @@ public static class SpeechProviderBinder
 {
     public static SpeechProviderSelection Bind(IConfiguration configuration)
     {
+        Configuration.ConfigurationCutover.Validate(configuration);
         var recognition = BindRecognition(configuration);
         var synthesis = BindSynthesis(configuration);
         ApplyOpenAiKey(configuration, recognition, synthesis);
@@ -27,22 +28,8 @@ public static class SpeechProviderBinder
         };
     }
 
-    private static SpeechRecognitionProviderOptions BindRecognition(IConfiguration configuration)
-    {
-        var nested = configuration.GetSection("Providers:Speech:Recognition");
-        var map = configuration.GetSection("Providers:SpeechRecognizers:primary-stt");
-        if (HasAdapter(nested))
-        {
-            return BindRecognitionFrom(nested);
-        }
-
-        if (HasAdapter(map))
-        {
-            return BindRecognitionFrom(map);
-        }
-
-        return new SpeechRecognitionProviderOptions { Adapter = SpeechAdapterCatalog.Synthetic };
-    }
+    private static SpeechRecognitionProviderOptions BindRecognition(IConfiguration configuration) =>
+        BindRecognitionFrom(configuration.GetSection("Providers:Speech:Recognition"));
 
     private static SpeechRecognitionProviderOptions BindRecognitionFrom(IConfigurationSection section)
     {
@@ -56,22 +43,8 @@ public static class SpeechProviderBinder
         return options;
     }
 
-    private static SpeechSynthesisProviderOptions BindSynthesis(IConfiguration configuration)
-    {
-        var nested = configuration.GetSection("Providers:Speech:Synthesis");
-        var map = configuration.GetSection("Providers:SpeechSynthesizers:primary-tts");
-        if (HasAdapter(nested))
-        {
-            return BindSynthesisFrom(nested);
-        }
-
-        if (HasAdapter(map))
-        {
-            return BindSynthesisFrom(map);
-        }
-
-        return new SpeechSynthesisProviderOptions { Adapter = SpeechAdapterCatalog.Synthetic };
-    }
+    private static SpeechSynthesisProviderOptions BindSynthesis(IConfiguration configuration) =>
+        BindSynthesisFrom(configuration.GetSection("Providers:Speech:Synthesis"));
 
     private static SpeechSynthesisProviderOptions BindSynthesisFrom(IConfigurationSection section)
     {
@@ -84,9 +57,6 @@ public static class SpeechProviderBinder
 
         return options;
     }
-
-    private static bool HasAdapter(IConfigurationSection section) =>
-        section.Exists() && !string.IsNullOrWhiteSpace(section["Adapter"]);
 
     private static void ApplyOpenAiKey(
         IConfiguration configuration,

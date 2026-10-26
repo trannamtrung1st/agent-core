@@ -8,6 +8,7 @@ import {
 } from '../../services/artifacts';
 
 import { ChatFileCard } from './ChatFileCard';
+import { fileFailureMessage } from '../filePreview/fileSource';
 import { IdentityError } from '../../services/identity';
 
 export function ArtifactView({
@@ -21,6 +22,8 @@ export function ArtifactView({
 }) {
   const [file, setFile] = useState<ArtifactMetadata | null>(null);
   const [metadataFailed, setMetadataFailed] = useState(false);
+  const [metadataError, setMetadataError] = useState<string>();
+  const [downloadError, setDownloadError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
   const [downloading, setDownloading] = useState(false);
   const [downloadFailed, setDownloadFailed] = useState(false);
@@ -30,6 +33,7 @@ export function ArtifactView({
     let cancelled = false;
     const metadataRequest = new AbortController();
     setFile(null);
+    setMetadataError(undefined);
     setMetadataFailed(!sessionId || !tenantId);
     setDownloadFailed(false);
     setDownloading(false);
@@ -38,8 +42,8 @@ export function ArtifactView({
         .then((value) => {
           if (!cancelled) setFile(value);
         })
-        .catch(() => {
-          if (!cancelled) setMetadataFailed(true);
+        .catch((error: unknown) => {
+          if (!cancelled) { setMetadataFailed(true); setMetadataError(fileFailureMessage(error, 'The file could not be loaded. Retry when the connection is available.')); }
         });
     return () => {
       cancelled = true;
@@ -59,8 +63,8 @@ export function ArtifactView({
       await downloadArtifact(sessionId, artifactId, controller.signal, tenantId);
     } catch (error) {
       if (!controller.signal.aborted) {
-        if (error instanceof IdentityError && [401, 403, 404].includes(error.status)) { setFile(null); setMetadataFailed(true); }
-        else setDownloadFailed(true);
+        if (error instanceof IdentityError && [401, 403, 404].includes(error.status)) { setFile(null); setMetadataFailed(true); setMetadataError(fileFailureMessage(error)); }
+        else { setDownloadFailed(true); setDownloadError(fileFailureMessage(error)); }
       }
     } finally {
       if (!controller.signal.aborted) {
@@ -86,8 +90,10 @@ export function ArtifactView({
       downloading={downloading}
       downloadFailed={downloadFailed}
       metadataFailed={metadataFailed}
+      metadataError={metadataError}
+      downloadError={downloadError}
       onDownload={() => void startDownload()}
-      onReadLost={() => { setFile(null); setMetadataFailed(true); }}
+      onReadLost={(error) => { setFile(null); setMetadataFailed(true); setMetadataError(fileFailureMessage(error, 'File access is no longer available. Check access and retry.')); }}
       onRetryMetadata={
         sessionId && tenantId ? () => setAttempt((value) => value + 1) : undefined
       }

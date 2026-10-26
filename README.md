@@ -61,6 +61,8 @@ Agent Core is proprietary software. Source availability does not grant permissio
 
 ## Implementation baseline
 
+The [clean baseline delivery](docs/reports/clean-baseline-delivery-2026-10-26.md) records the canonical configuration cutover, retained Google grant/reconnect policy, General Assistant v34 and real local Sandbox PNG publication proof. Follow the [cutover runbook](docs/clean-baseline-cutover.md) before deploying this binary with existing configuration and state. MarkItDown remains deferred and absent from runtime dependencies.
+
 The Space/Environment successor replaces persistent Instance home ownership with tenant Spaces, protected Private Spaces, per-Session context and immutable Run captures. Membership controls contextual resource availability; optional Environments contain on-demand typed variables, and Secrets remain protected tenant resources. [Current implementation evidence](docs/reports/space-environment-implementation-2026-10-25.md) tracks qualification and remaining integration; [operator cutover](docs/space-environment-cutover.md) covers matching code/schema/root deployment and recoverable backups. Historical IAM/MVP delivery reports do not accept this successor.
 
 The original MVP and post-MVP freeze summaries are historical records. Their old authentication/route examples are not current interfaces. Milestone status and links to their frozen evidence belong to the [Implementation Plan](docs/18-implementation-plan.md) and [dated reports](docs/reports/); see the [MVP handoff](docs/reports/m12-mvp-handoff.md) for that original scope.
@@ -95,7 +97,7 @@ Current code uses .NET 10/C# 14, the composed provider-neutral speech pipeline, 
 - [P0 agent-lifecycle handoff](docs/reports/p0-agent-lifecycle-handoff.md)
 - [P1 replaceable speech handoff](docs/reports/p1-replaceable-speech-handoff.md)
 
-Run commands and recovery guidance are documented in [Operations](docs/17-observability-and-operations.md#running-after-implementation). Native `scripts/dev-real.sh` loads the private root `.env` automatically; [`.env.example`](.env.example) includes the complete application configuration reference and fresh identity setup fields. No manual shell export or user-secrets setup is needed for that launcher.
+Run commands and recovery guidance are documented in [Operations](docs/17-observability-and-operations.md#running-after-implementation). Native `scripts/dev-real.sh` loads the private root `.env` automatically; [`.env.example`](.env.example) contains the startup preset; [the host reference](docs/host-configuration-reference.md) documents advanced options and boundary translations and fresh identity setup fields. No manual shell export or user-secrets setup is needed for that launcher.
 
 ## Working with Codex and Cursor
 

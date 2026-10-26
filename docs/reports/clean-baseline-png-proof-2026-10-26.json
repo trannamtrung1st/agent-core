@@ -1,0 +1,17 @@
+{
+  "tenantId": "01a1764d-02de-7019-bfe5-aba512a00ca7",
+  "sessionId": "f9fdc37b-3a37-470d-a7ac-aac7db9f9507",
+  "width": 64,
+  "height": 32,
+  "bytes": 135,
+  "sha256": "adee397aaa6aaaaae217c5f0b2cd278e9b114f79b7bce066354d9e62ad29bbab",
+  "artifactIds": [
+    "01a1766d-f70c-7b50-acc0-0bc225b3e9d4",
+    "01a1766d-78d8-77c2-a616-c2bd5cea4588"
+  ],
+  "workspaceEqualsBothArtifactsBeforeMutation": true,
+  "artifactsUnchangedAfterSourceMutation": true,
+  "readbackAfterHostRestart": true,
+  "foreignTenantDenied": 403,
+  "anonymousDenied": 401
+}

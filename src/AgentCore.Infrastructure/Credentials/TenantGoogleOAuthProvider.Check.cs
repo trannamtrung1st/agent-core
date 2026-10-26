@@ -20,7 +20,7 @@ public sealed partial class TenantGoogleOAuthProvider
         {
             var client = configuration.Tenant!;
             var grant = GoogleOAuthRefreshGrant.Read(credentials.Unprotect(current.CredentialId, current.ProtectionVersion, current.ProtectedPayload));
-            if (grant.ClientId != client.ClientId) throw new AgentCoreException("oauth_client_changed", "Google setup changed. Reconnect the saved account.", 409);
+            if (grant.ClientId != client.ClientId) throw ReconnectFailure();
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://oauth2.googleapis.com/token") {
                 Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["grant_type"] = "refresh_token", ["refresh_token"] = grant.Token,
                     ["client_id"] = client.ClientId, ["client_secret"] = client.ClientSecret }) };
@@ -55,10 +55,12 @@ public sealed partial class TenantGoogleOAuthProvider
             return new(replacement);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (AgentCoreException ex) when (ex.Code == "google_oauth_grant_invalid") { throw ReconnectFailure(); }
         catch (AgentCoreException ex) when (ex.Code.StartsWith("oauth_provider_", StringComparison.Ordinal)) { throw CheckFailure(); }
         catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or InvalidOperationException or ArgumentException
             or KeyNotFoundException or FormatException or System.Security.Cryptography.CryptographicException or OperationCanceledException) { throw CheckFailure(); }
     }
+    private static AgentCoreException ReconnectFailure() => new("oauth_reconnect_required", "The saved Google client binding cannot be proven. Explicitly reconnect this account using the current Google setup. The saved grant was retained.", 409);
     private static AgentCoreException CheckFailure() => new("oauth_check_unavailable", "Google access could not be checked. The saved connection was retained. Try again.", 503);
     private static async Task<JsonDocument> ReadCheckBody(HttpResponseMessage response, CancellationToken ct)
     {

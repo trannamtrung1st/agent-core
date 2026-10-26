@@ -52,7 +52,9 @@ public sealed partial class TenantDefinitionIntegrationTests
         var migrator = db.GetService<IMigrator>();
         await migrator.MigrateAsync("20261025030000_ContextualExecutionSources");
         var instance = Guid.NewGuid(); var at = DateTimeOffset.UtcNow;
-        await f.Instances.InsertAsync(new(instance, "examiner", 1, new("Retained", "Role", "Description", "Tone"), AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active, at, at));
+        // Seed the predecessor schema directly: the current store includes later model columns.
+        var persona = System.Text.Json.JsonSerializer.Serialize(new AgentCore.Domain.Definitions.AgentIdentity("Retained", "Role", "Description", "Tone"));
+        await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO AgentInstances (InstanceId,DefinitionId,ActiveVersion,PersonaJson,Lifecycle,CreatedAtUtc,UpdatedAtUtc,Revision,PersonaRevision) VALUES ({instance.ToString("D")},{"examiner"},{1},{persona},{"Active"},{at.ToUnixTimeMilliseconds()},{at.ToUnixTimeMilliseconds()},{1},{1})");
         var rejected = await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => migrator.MigrateAsync());
         Assert.Equal(275, rejected.SqliteExtendedErrorCode); Assert.Contains("ExistingRows=0", rejected.Message);
         Assert.True(await f.Instances.HasBackingInstanceAsync(instance));

@@ -8,6 +8,23 @@ public sealed class ContextAssemblerTests(Xunit.Abstractions.ITestOutputHelper o
     private static EffectiveContextSnapshot Platform(IEnumerable<ContextSection> sections, IReadOnlyList<ModelMessage>? interaction = null) =>
         new(sections, interaction, purpose: ContextPurpose.Platform);
 
+    [Fact]
+    public void Workspace_contract_keeps_all_three_source_owners_in_Core()
+    {
+        var request = ContextAssembler.Create(Guid.Empty, Platform([
+            ContextSection.Core(CoreProcedure.OperatingContract), ContextSection.Core(CoreProcedure.Workspace),
+            ContextSection.Runtime(ContextSectionId.AgentInstructions, ContextSourceKind.Definition, "Riley persona"),
+            ContextSection.Evidence(ContextSectionId.Memory, ContextSourceKind.Memory, "untrusted /home claim")
+        ]));
+        var core = string.Join("\n", request.Messages.Where(m => m.Role == ModelRole.System).Select(m => m.Text));
+        Assert.Contains("/home is the captured Space's", core);
+        Assert.Contains("/private is the Agent Instance's", core);
+        Assert.Contains("/working is the current Session's", core);
+        Assert.Contains("independently enforced at each source", core);
+        Assert.DoesNotContain("Riley persona", core);
+        Assert.DoesNotContain("untrusted /home claim", core);
+    }
+
     [Theory]
     [InlineData(ContextSectionId.AgentIdentity)]
     [InlineData(ContextSectionId.AgentInstructions)]

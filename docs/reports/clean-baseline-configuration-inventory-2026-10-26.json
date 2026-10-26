@@ -1,0 +1,3483 @@
+{
+  "scope": "Public source audit: effective static readers, JSON defaults, startup preset and advanced option shapes. Section/map/array entries remain shapes, not invented finite keys. Private process/env/database values are never read.",
+  "translations": {
+    "GOOGLE_OAUTH_CLIENT_ID": "GoogleOAuth__ClientId",
+    "GOOGLE_OAUTH_CLIENT_SECRET": "GoogleOAuth__ClientSecret",
+    "GOOGLE_OAUTH_PUBLIC_APP_URL": "GoogleOAuth__PublicAppUrl",
+    "AGENTCORE_DRIVE_ENABLED": "GoogleDrive__Enabled"
+  },
+  "settings": [
+    {
+      "name": "A",
+      "owner": "launcher/Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "scripts/dev-real.sh:367",
+        "scripts/dev-real.sh:373"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AgentCore",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/Program.cs:82"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AgentCore__AgentDirectory",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        ".env.example",
+        "src/AgentCore.Api/Program.cs:223"
+      ],
+      "default": "agents",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AgentCore__DetachGracePeriodSeconds",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "30",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AgentCore__MaxActiveSessions",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "10",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AgentCore__MaxEntriesPerSession",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "1000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AgentCore__PendingVoiceTimeoutMs",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "30000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AgentCore__Profile",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        ".env.example",
+        "src/AgentCore.Api/Program.cs:63",
+        "src/AgentCore.Api/Program.cs:213"
+      ],
+      "default": "Real",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_BOOTSTRAP_",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/Program.cs:336"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_BOOTSTRAP_DISPLAY_NAME",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_BOOTSTRAP_LOGIN",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_BOOTSTRAP_PASSWORD",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "secret",
+      "sources": [
+        ".env.example"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_BOOTSTRAP_TENANT_NAME",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_BOOTSTRAP_TENANT_SLUG",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_COMPOSE_PORT",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example",
+        "docker-compose.https.yml:7",
+        "docker-compose.yml:19"
+      ],
+      "default": "5080",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_DEV_API_DATA_DIR",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example",
+        "scripts/dev-real.sh:259"
+      ],
+      "default": "data/native",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_DEV_API_PORT",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example",
+        "scripts/dev-real.sh:32",
+        "scripts/dev-real.sh:343"
+      ],
+      "default": "5080",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_DEV_ENV_FILE",
+      "owner": "launcher/Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "scripts/dev-real.sh:24"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_DEV_ENV_LOADED",
+      "owner": "launcher/Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "scripts/dev-real.sh:22"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_DEV_STATE_DIR",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example",
+        "scripts/dev-real.sh:26"
+      ],
+      "default": "local/dev",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_DEV_WEB_PORT",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example",
+        "scripts/dev-real.sh:33",
+        "scripts/dev-real.sh:343"
+      ],
+      "default": "5173",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_DRIVE_ENABLED",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example",
+        "docker-compose.yml:22"
+      ],
+      "default": "true",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_EMAIL_SEND_ENABLED",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example",
+        "docker-compose.real.yml:20"
+      ],
+      "default": "true",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_EMAIL_SMTP_ENABLED",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example",
+        "docker-compose.real.yml:20",
+        "docker-compose.real.yml:21"
+      ],
+      "default": "true",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_ALLOW_LOCAL_IMAGE_IDS",
+      "owner": "launcher/Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docker-compose.app-sandbox.yml:18"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_CONFIG_FILE",
+      "owner": "launcher/Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docker-compose.sandbox.yml:23"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_GID",
+      "owner": "launcher/Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docker-compose.app-sandbox.yml:9",
+        "docker-compose.app-sandbox.yml:10",
+        "docker-compose.sandbox.yml:11"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_KEY_FILE",
+      "owner": "launcher/Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docker-compose.sandbox.yml:61"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_PORT",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example",
+        "docker-compose.sandbox.yml:15",
+        "scripts/dev-real.sh:39",
+        "scripts/dev-real.sh:347",
+        "scripts/dev-real.sh:396",
+        "scripts/dev-real.sh:420"
+      ],
+      "default": "18080",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_PROJECT",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example",
+        "scripts/dev-real.sh:38",
+        "scripts/dev-real.sh:346",
+        "scripts/dev-real.sh:395",
+        "scripts/dev-real.sh:419"
+      ],
+      "default": "agent-core-sandbox",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_SERVER_IMAGE",
+      "owner": "launcher/Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docker-compose.sandbox.yml:6",
+        "docker-compose.sandbox.yml:9"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_UID",
+      "owner": "launcher/Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docker-compose.app-sandbox.yml:8",
+        "docker-compose.app-sandbox.yml:10",
+        "docker-compose.sandbox.yml:10"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_WORKSPACE_ROOT",
+      "owner": "launcher/Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docker-compose.app-sandbox.yml:17",
+        "docker-compose.app-sandbox.yml:23",
+        "docker-compose.sandbox.yml:40",
+        "docker-compose.sandbox.yml:40"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_TLS_CERTIFICATE_PATH",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example",
+        "docker-compose.https.yml:13"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_TLS_PASSWORD",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "secret",
+      "sources": [
+        ".env.example",
+        "docker-compose.https.yml:11"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_WEBHOOK_TOKEN",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "secret",
+      "sources": [
+        ".env.example",
+        "docker-compose.nopcommerce.yml:49"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AGENTCORE_WEBHOOK_URL",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example",
+        "docker-compose.nopcommerce.yml:48"
+      ],
+      "default": "http://host.docker.internal:5080/api/v1/hooks/EXACT_EVENT_KEY",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "AllowedHosts",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "'*'",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "askOneQuestionAtATime",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Application/Tools/TenantPreferenceToolContract.cs:46"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "ASPNETCORE_ENVIRONMENT",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example"
+      ],
+      "default": "Development",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "ASPNETCORE_Kestrel__Certificates__Default__Password",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "ASPNETCORE_Kestrel__Certificates__Default__Path",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "/absolute/server.pfx",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "ASPNETCORE_URLS",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "http://127.0.0.1:5080",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "BRAVE_SEARCH_API_KEY",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "secret",
+      "sources": [
+        ".env.example",
+        "src/AgentCore.Infrastructure/PublicWeb/BraveWebSearchProvider.cs:15"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "BraveSearch__ApiKey",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "secret",
+      "sources": [
+        "docs/host-configuration-reference.md",
+        "src/AgentCore.Infrastructure/PublicWeb/BraveWebSearchProvider.cs:15"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__AllowUnmaskedCaptures",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "false",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Channel",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example"
+      ],
+      "default": "chrome",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Enabled",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "true",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Environment__Device",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Environment__DeviceScaleFactor",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Environment__HasTouch",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Environment__IsMobile",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Environment__Locale",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Environment__TimezoneId",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Environment__ViewportHeight",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Environment__ViewportWidth",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__FixtureEnabled",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        ".env.example"
+      ],
+      "default": "false",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__FixturePort",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "5091",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Headless",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        ".env.example"
+      ],
+      "default": "false",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__InteractionMode",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        ".env.example"
+      ],
+      "default": "InteractiveDemo",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__InteractionOrigins__0",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "http://127.0.0.1:5091",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Limits__AutomaticSettleMs",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "1600",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Limits__CaptureBytes",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "1500000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Limits__CapturesPerScope",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "4",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Limits__DownloadBytes",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "5242880",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Limits__DownloadsPerScope",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "2",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Limits__FindMatches",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "20",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Limits__OperationTimeoutMs",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "25000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Limits__SnapshotBytes",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "8000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Limits__TextInputLength",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "500",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__Limits__WaitTimeoutMs",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "5000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__NavigationOrigins__0",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "http://127.0.0.1:5091",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__PolicyMode",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        ".env.example"
+      ],
+      "default": "OpenWeb",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__ProfileMode",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        ".env.example"
+      ],
+      "default": "PersistentAgent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__ProfileRoot",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        ".env.example"
+      ],
+      "default": "data/native/browser-profiles",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__ResourceOrigins__0",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__ScreenshotPrivacy",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "Protected",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__TargetOrigins__0",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__TrustedVisualCaptureOrigins__0",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Browser__UnmaskedCaptureOrigins__0",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "COMPOSE_PROJECT_NAME",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example"
+      ],
+      "default": "agent-core",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "configurationHash",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Persistence/ContextCutover.cs:93"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "default",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Providers/OpenAI/OpenAiSpeechSynthesizer.cs:206"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "definition",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Persistence/ContextCutover.cs:89",
+        "src/AgentCore.Infrastructure/Persistence/ContextCutover.cs:90"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "DOTNET_ENVIRONMENT",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "Development",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "DOTNET_RUNNING_IN_CONTAINER",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/Http/TrustedLocalCaller.cs:78"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "DOTNET_RUNNING_IN_CONTAINERS",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/Http/TrustedLocalCaller.cs:79"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Email",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Email/EmailProviderRegistration.cs:23"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Email__AllowedCustomEndpoints__0",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Email__Enabled",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        ".env.example"
+      ],
+      "default": "true",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Email__SendEnabled",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Email__SmtpEnabled",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        ".env.example"
+      ],
+      "default": "true",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Email__TimeoutSeconds",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "20",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "EmailMonitoring",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Email/EmailProviderRegistration.cs:24"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "EmailMonitoring__Enabled",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "true",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "fieldSources",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Persistence/ContextCutover.cs:94"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Image__MaxDimension",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "32768",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Image__MaxPixels",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "40000000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Limits__AudioBytes",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "33554432",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Limits__DelimitedBytes",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "5242880",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Limits__DocxBytes",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "10485760",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Limits__ImageBytes",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "15728640",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Limits__MaxBytes",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "33554432",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Limits__TextBytes",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "2097152",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Limits__VideoBytes",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "33554432",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Limits__XlsxBytes",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "10485760",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Spreadsheet__ColumnsPerWindow",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "64",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Spreadsheet__CsvMaxParsedColumns",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "256",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Spreadsheet__CsvMaxParsedRows",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "50000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Spreadsheet__MaxCellCharacters",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "4096",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Spreadsheet__MaxCellsPerWindow",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "12800",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Spreadsheet__MaxWindowCharacters",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "64000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Spreadsheet__RowsPerWindow",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "200",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Text__HighlightMaxBytes",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "262144",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Text__HighlightMaxLines",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "3000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__Text__MaxLines",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "10000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "FilePreview__WorkerTimeoutMs",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "5000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "GOOGLE_OAUTH_CLIENT_ID",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example",
+        "docker-compose.real.yml:17"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "GOOGLE_OAUTH_CLIENT_SECRET",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "secret",
+      "sources": [
+        ".env.example",
+        "docker-compose.real.yml:18"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "GOOGLE_OAUTH_PUBLIC_APP_URL",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example",
+        "docker-compose.real.yml:19"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "GoogleDrive",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Drive/DriveRegistration.cs:14"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "GoogleDrive__Enabled",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "true",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "GoogleOAuth__ClientId",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "GoogleOAuth__ClientSecret",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "GoogleOAuth__PublicAppUrl",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Hosting",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/Program.cs:91"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Hosting__AllowedOrigins__0",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "http://127.0.0.1:5173",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Hosting__BindUrl",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "http://127.0.0.1:5080",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Hosting__TrustPublishedPortGateway",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "false",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Hosting__UseViteProxy",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "true",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "includeHistorical",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/Security/TenantExperienceEndpoints.cs:64"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Interaction__BackchannelMaxMs",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md",
+        "src/AgentCore.Api/Program.cs:72"
+      ],
+      "default": "700",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Interaction__DegradedInterruptMs",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md",
+        "src/AgentCore.Api/Program.cs:70"
+      ],
+      "default": "250",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Interaction__PendingVoiceTimeoutMs",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md",
+        "src/AgentCore.Api/Program.cs:71"
+      ],
+      "default": "30000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "language",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Application/Tools/TenantPreferenceToolContract.cs:45"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Logging__Console__FormatterOptions__IncludeScopes",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "true",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Logging__Console__FormatterOptions__TimestampFormat",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "'yyyy-MM-ddTHH:mm:ss.fffZ '",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Logging__Console__FormatterOptions__UseUtcTimestamp",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "true",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Logging__LogLevel__Default",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.Development.json",
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "Information",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Logging__LogLevel__Microsoft.AspNetCore",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.Development.json",
+        "src/AgentCore.Api/appsettings.json"
+      ],
+      "default": "Warning",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.Development.json",
+        "src/AgentCore.Api/appsettings.json"
+      ],
+      "default": "Warning",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Models__AllowedLocalOrigins",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs:109"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Models__AllowedLocalOrigins__0",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "http://127.0.0.1:8000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "NOPCOMMERCE_ADMIN_EMAIL",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example",
+        "scripts/nopcommerce-demo.sh:368"
+      ],
+      "default": "demo-owner@example.com",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "NOPCOMMERCE_ADMIN_PASSWORD",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "secret",
+      "sources": [
+        ".env.example"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "NOPCOMMERCE_DB_PASSWORD",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "secret",
+      "sources": [
+        ".env.example",
+        "docker-compose.nopcommerce.yml:22",
+        "docker-compose.nopcommerce.yml:23"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "NOPCOMMERCE_ORIGIN",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example"
+      ],
+      "default": "http://127.0.0.1:5088",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Observability",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/Program.cs:84",
+        "src/AgentCore.Api/Program.cs:94"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Observability__HttpErrorResponses",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Http/HttpErrorDiagnostics.cs:96"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Observability__HttpErrorResponses__Enabled",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "true",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Observability__LogConversationContent",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "false",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Observability__LogLevel",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "Information",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Observability__OtlpEnabled",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "false",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Observability__OtlpEndpoint",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "http://127.0.0.1:4317",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Observability__TimelineCapacity",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "64",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OPENAI_API_KEY",
+      "owner": "launcher/Compose/platform/external integration",
+      "secretClassification": "secret",
+      "sources": [
+        ".env.example",
+        "src/AgentCore.Infrastructure/Providers/SpeechProviderBinder.cs:66"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs:58"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__AllowedImagePrefixes__0",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "docker.io",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__AllowedImagePrefixes__1",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "ghcr.io",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__AllowedImagePrefixes__2",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "mcr.microsoft.com",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__AllowedImagePrefixes__3",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "quay.io",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__AllowedImagePrefixes__4",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "public.ecr.aws",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__AllowedRegistryTokenOrigins__0",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__AllowLocalImageIds",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "false",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__ApiKey",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__ApiKeyFile",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__Enabled",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "true",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__Endpoint",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "http://127.0.0.1:18080",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__InsecureRegistryHosts__0",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__MaxWorkingStorageBytes",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "17179869184",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__RequireHardStorageQuota",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "false",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__TrustLocalComposeEndpoint",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "false",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "OpenSandbox__WorkspaceDockerHostRoot",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "orderReference",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Application/Sessions/SessionRuntime.Initiative.cs:671"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "P",
+      "owner": "launcher/Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "scripts/dev-real.sh:263",
+        "scripts/dev-real.sh:263",
+        "scripts/dev-real.sh:264",
+        "scripts/dev-real.sh:264",
+        "scripts/dev-real.sh:265",
+        "scripts/dev-real.sh:265",
+        "scripts/dev-real.sh:266",
+        "scripts/dev-real.sh:462",
+        "scripts/dev-real.sh:463"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Persistence",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/Program.cs:279"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Persistence__ArtifactRoot",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "data/artifacts",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Persistence__AttachmentRoot",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "data/attachments",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Persistence__BusyTimeoutMs",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "5000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Persistence__CheckpointMs",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "1000",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Persistence__ConnectionString",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "'Data Source=data/agent-core.db'",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Persistence__CredentialProtectionKeyRoot",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "data/credential-protection-keys",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Persistence__DefinitionResourceRoot",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "data/definition-resources",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Persistence__Provider",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        ".env.example",
+        "src/AgentCore.Api/Program.cs:282"
+      ],
+      "default": "Sqlite",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Persistence__TemplateRoot",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "agents/templates",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Persistence__WorkspaceRoot",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "data/workspaces",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "preferredName",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Domain/Conversation/ConversationModels.cs:159",
+        "src/AgentCore.Domain/Conversation/ConversationModels.cs:162"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "profileId",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Application/Security/TenantAgentConfigurationService.Sandbox.cs:57"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Recognition",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Providers/SpeechProviderBinder.cs:32"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Recognition__Adapter",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "Synthetic",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Recognition__AdditionalHeaders__ENTRY_NAME",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Recognition__ApiKey",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Recognition__BaseUrl",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Recognition__DefaultModel",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "gpt-live-transcribe",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Recognition__DisabledCapabilities__ENTRY_NAME",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "false",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Recognition__IncludeTranscriptionDelay",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "false",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Recognition__Timeouts__SetupSeconds",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "10",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Recognition__Timeouts__StreamIdleSeconds",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "60",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Recognition__Timeouts__TotalSeconds",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "120",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Synthesis",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Providers/SpeechProviderBinder.cs:47"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Synthesis__Adapter",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/appsettings.json",
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "Synthetic",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Synthesis__AdditionalHeaders__ENTRY_NAME",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Synthesis__ApiKey",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Synthesis__BaseUrl",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "https://api.openai.com/v1/",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Synthesis__DefaultModel",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "tts-1",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Synthesis__DefaultVoice",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "alloy",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Synthesis__DisabledCapabilities__ENTRY_NAME",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "false",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Synthesis__Timeouts__SetupSeconds",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "10",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Synthesis__Timeouts__StreamIdleSeconds",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "60",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Synthesis__Timeouts__TotalSeconds",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "120",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Providers__Speech__Synthesis__Voices__ENTRY_NAME",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "PublicWeb__DownloadTimeoutSeconds",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md",
+        "src/AgentCore.Infrastructure/PublicWeb/WebSearchProviderRegistration.cs:21"
+      ],
+      "default": "15",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "PublicWeb__MaxDownloadBytes",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md",
+        "src/AgentCore.Infrastructure/PublicWeb/WebSearchProviderRegistration.cs:20"
+      ],
+      "default": "10485760",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "realm",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Sandbox/RegistryAuthorizationProbe.cs:65"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "response_format",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Providers/OpenAICompatible/OpenAICompatibleLanguageModel.Responses.cs:98"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "responseFormat",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Providers/Native/NativeLanguageModel.Requests.cs:46"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "responseLength",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Application/Tools/TenantPreferenceToolContract.cs:44"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Security__EphemeralBootstrap__DisplayName",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Security__EphemeralBootstrap__Login",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Security__EphemeralBootstrap__Password",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "[redacted]",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Security__EphemeralBootstrap__TenantName",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Security__EphemeralBootstrap__TenantSlug",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Security__Http",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/Security/IdentityHttp.cs:33"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Security__Http__AllowedOrigins__0",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "http://localhost:5173",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Security__Http__AllowedOrigins__1",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "http://127.0.0.1:5173",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Security__Http__AllowInsecureLocalHttp",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md"
+      ],
+      "default": "true",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "service",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Sandbox/RegistryAuthorizationProbe.cs:72"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "sessionId",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/Security/TenantMemoryEndpoints.cs:39"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "status",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Application/Sessions/SessionRuntime.Initiative.cs:673"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "temperature",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Providers/Native/NativeLanguageModel.Requests.cs:42"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "tenantId",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Api/Security/IdentityHttp.cs:108"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "TERM",
+      "owner": "launcher/Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "scripts/nopcommerce-demo.sh:13"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "thinkingConfig",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Infrastructure/Providers/Native/NativeLanguageModel.Requests.cs:44"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "timeZone",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Application/Agents/PromptContextBuilder.cs:326"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "topic",
+      "owner": ".NET section/lookup",
+      "secretClassification": "non-secret",
+      "sources": [
+        "src/AgentCore.Application/Sessions/SessionRuntime.Initiative.cs:686"
+      ],
+      "default": "option-owner default when absent",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "VITE_AGENTCORE_REALTIME_PROTOCOL",
+      "owner": "browser build/tooling",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example"
+      ],
+      "default": "messagepack",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "VITE_API_PROXY_TARGET",
+      "owner": "browser build/tooling",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example"
+      ],
+      "default": "http://127.0.0.1:5080  # derived by dev-real.sh",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "VITE_CACHE_DIR",
+      "owner": "browser build/tooling",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example"
+      ],
+      "default": "/absolute/private-cache",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "VITE_DEV_PORT",
+      "owner": "browser build/tooling",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example"
+      ],
+      "default": "5173                  # derived by dev-real.sh",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "VITE_PREVIEW_PORT",
+      "owner": "browser build/tooling",
+      "secretClassification": "non-secret",
+      "sources": [
+        ".env.example"
+      ],
+      "default": "4173",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    },
+    {
+      "name": "Voice__MaxUtteranceSeconds",
+      "owner": ".NET binder; native or explicitly forwarded Compose",
+      "secretClassification": "non-secret",
+      "sources": [
+        "docs/host-configuration-reference.md",
+        "src/AgentCore.Api/Program.cs:73"
+      ],
+      "default": "120",
+      "precedence": "JSON < inherited environment < native dotenv < launcher-derived; Compose environment > dotenv before explicit service forwarding",
+      "invalidOrContradictory": "boundary preflight and option-owner validation; retired/dual inputs rejected with key names only"
+    }
+  ],
+  "entries": [
+    {
+      "name": "AGENTCORE_SANDBOX_UID",
+      "consumer": "docker-compose.app-sandbox.yml",
+      "line": 8,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_GID",
+      "consumer": "docker-compose.app-sandbox.yml",
+      "line": 9,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_UID",
+      "consumer": "docker-compose.app-sandbox.yml",
+      "line": 10,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_GID",
+      "consumer": "docker-compose.app-sandbox.yml",
+      "line": 10,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_WORKSPACE_ROOT",
+      "consumer": "docker-compose.app-sandbox.yml",
+      "line": 17,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_ALLOW_LOCAL_IMAGE_IDS",
+      "consumer": "docker-compose.app-sandbox.yml",
+      "line": 18,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_WORKSPACE_ROOT",
+      "consumer": "docker-compose.app-sandbox.yml",
+      "line": 23,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_COMPOSE_PORT",
+      "consumer": "docker-compose.https.yml",
+      "line": 7,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_TLS_PASSWORD",
+      "consumer": "docker-compose.https.yml",
+      "line": 11,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_TLS_CERTIFICATE_PATH",
+      "consumer": "docker-compose.https.yml",
+      "line": 13,
+      "kind": "orchestration"
+    },
+    {
+      "name": "NOPCOMMERCE_DB_PASSWORD",
+      "consumer": "docker-compose.nopcommerce.yml",
+      "line": 22,
+      "kind": "orchestration"
+    },
+    {
+      "name": "NOPCOMMERCE_DB_PASSWORD",
+      "consumer": "docker-compose.nopcommerce.yml",
+      "line": 23,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_WEBHOOK_URL",
+      "consumer": "docker-compose.nopcommerce.yml",
+      "line": 48,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_WEBHOOK_TOKEN",
+      "consumer": "docker-compose.nopcommerce.yml",
+      "line": 49,
+      "kind": "orchestration"
+    },
+    {
+      "name": "GOOGLE_OAUTH_CLIENT_ID",
+      "consumer": "docker-compose.real.yml",
+      "line": 17,
+      "kind": "orchestration"
+    },
+    {
+      "name": "GOOGLE_OAUTH_CLIENT_SECRET",
+      "consumer": "docker-compose.real.yml",
+      "line": 18,
+      "kind": "orchestration"
+    },
+    {
+      "name": "GOOGLE_OAUTH_PUBLIC_APP_URL",
+      "consumer": "docker-compose.real.yml",
+      "line": 19,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_EMAIL_SEND_ENABLED",
+      "consumer": "docker-compose.real.yml",
+      "line": 20,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_EMAIL_SMTP_ENABLED",
+      "consumer": "docker-compose.real.yml",
+      "line": 20,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_EMAIL_SMTP_ENABLED",
+      "consumer": "docker-compose.real.yml",
+      "line": 21,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_SERVER_IMAGE",
+      "consumer": "docker-compose.sandbox.yml",
+      "line": 6,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_SERVER_IMAGE",
+      "consumer": "docker-compose.sandbox.yml",
+      "line": 9,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_UID",
+      "consumer": "docker-compose.sandbox.yml",
+      "line": 10,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_GID",
+      "consumer": "docker-compose.sandbox.yml",
+      "line": 11,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_PORT",
+      "consumer": "docker-compose.sandbox.yml",
+      "line": 15,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_CONFIG_FILE",
+      "consumer": "docker-compose.sandbox.yml",
+      "line": 23,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_WORKSPACE_ROOT",
+      "consumer": "docker-compose.sandbox.yml",
+      "line": 40,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_WORKSPACE_ROOT",
+      "consumer": "docker-compose.sandbox.yml",
+      "line": 40,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_KEY_FILE",
+      "consumer": "docker-compose.sandbox.yml",
+      "line": 61,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_COMPOSE_PORT",
+      "consumer": "docker-compose.yml",
+      "line": 19,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_DRIVE_ENABLED",
+      "consumer": "docker-compose.yml",
+      "line": 22,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_DEV_ENV_LOADED",
+      "consumer": "scripts/dev-real.sh",
+      "line": 22,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_DEV_ENV_FILE",
+      "consumer": "scripts/dev-real.sh",
+      "line": 24,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_DEV_STATE_DIR",
+      "consumer": "scripts/dev-real.sh",
+      "line": 26,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_DEV_API_PORT",
+      "consumer": "scripts/dev-real.sh",
+      "line": 32,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_DEV_WEB_PORT",
+      "consumer": "scripts/dev-real.sh",
+      "line": 33,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_PROJECT",
+      "consumer": "scripts/dev-real.sh",
+      "line": 38,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_PORT",
+      "consumer": "scripts/dev-real.sh",
+      "line": 39,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_DEV_API_DATA_DIR",
+      "consumer": "scripts/dev-real.sh",
+      "line": 259,
+      "kind": "orchestration"
+    },
+    {
+      "name": "P",
+      "consumer": "scripts/dev-real.sh",
+      "line": 263,
+      "kind": "orchestration"
+    },
+    {
+      "name": "P",
+      "consumer": "scripts/dev-real.sh",
+      "line": 263,
+      "kind": "orchestration"
+    },
+    {
+      "name": "P",
+      "consumer": "scripts/dev-real.sh",
+      "line": 264,
+      "kind": "orchestration"
+    },
+    {
+      "name": "P",
+      "consumer": "scripts/dev-real.sh",
+      "line": 264,
+      "kind": "orchestration"
+    },
+    {
+      "name": "P",
+      "consumer": "scripts/dev-real.sh",
+      "line": 265,
+      "kind": "orchestration"
+    },
+    {
+      "name": "P",
+      "consumer": "scripts/dev-real.sh",
+      "line": 265,
+      "kind": "orchestration"
+    },
+    {
+      "name": "P",
+      "consumer": "scripts/dev-real.sh",
+      "line": 266,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_DEV_API_PORT",
+      "consumer": "scripts/dev-real.sh",
+      "line": 343,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_DEV_WEB_PORT",
+      "consumer": "scripts/dev-real.sh",
+      "line": 343,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_PROJECT",
+      "consumer": "scripts/dev-real.sh",
+      "line": 346,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_PORT",
+      "consumer": "scripts/dev-real.sh",
+      "line": 347,
+      "kind": "orchestration"
+    },
+    {
+      "name": "A",
+      "consumer": "scripts/dev-real.sh",
+      "line": 367,
+      "kind": "orchestration"
+    },
+    {
+      "name": "A",
+      "consumer": "scripts/dev-real.sh",
+      "line": 373,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_PROJECT",
+      "consumer": "scripts/dev-real.sh",
+      "line": 395,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_PORT",
+      "consumer": "scripts/dev-real.sh",
+      "line": 396,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_PROJECT",
+      "consumer": "scripts/dev-real.sh",
+      "line": 419,
+      "kind": "orchestration"
+    },
+    {
+      "name": "AGENTCORE_SANDBOX_PORT",
+      "consumer": "scripts/dev-real.sh",
+      "line": 420,
+      "kind": "orchestration"
+    },
+    {
+      "name": "P",
+      "consumer": "scripts/dev-real.sh",
+      "line": 462,
+      "kind": "orchestration"
+    },
+    {
+      "name": "P",
+      "consumer": "scripts/dev-real.sh",
+      "line": 463,
+      "kind": "orchestration"
+    },
+    {
+      "name": "TERM",
+      "consumer": "scripts/nopcommerce-demo.sh",
+      "line": 13,
+      "kind": "orchestration"
+    },
+    {
+      "name": "NOPCOMMERCE_ADMIN_EMAIL",
+      "consumer": "scripts/nopcommerce-demo.sh",
+      "line": 368,
+      "kind": "orchestration"
+    },
+    {
+      "name": "DOTNET_RUNNING_IN_CONTAINER",
+      "consumer": "src/AgentCore.Api/Http/TrustedLocalCaller.cs",
+      "line": 78,
+      "kind": "process env"
+    },
+    {
+      "name": "DOTNET_RUNNING_IN_CONTAINERS",
+      "consumer": "src/AgentCore.Api/Http/TrustedLocalCaller.cs",
+      "line": 79,
+      "kind": "process env"
+    },
+    {
+      "name": "AgentCore:Profile",
+      "consumer": "src/AgentCore.Api/Program.cs",
+      "line": 63,
+      "kind": "lookup"
+    },
+    {
+      "name": "Interaction:DegradedInterruptMs",
+      "consumer": "src/AgentCore.Api/Program.cs",
+      "line": 70,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "Interaction:PendingVoiceTimeoutMs",
+      "consumer": "src/AgentCore.Api/Program.cs",
+      "line": 71,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "Interaction:BackchannelMaxMs",
+      "consumer": "src/AgentCore.Api/Program.cs",
+      "line": 72,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "Voice:MaxUtteranceSeconds",
+      "consumer": "src/AgentCore.Api/Program.cs",
+      "line": 73,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "AgentCore",
+      "consumer": "src/AgentCore.Api/Program.cs",
+      "line": 82,
+      "kind": "section"
+    },
+    {
+      "name": "Observability",
+      "consumer": "src/AgentCore.Api/Program.cs",
+      "line": 84,
+      "kind": "section"
+    },
+    {
+      "name": "Hosting",
+      "consumer": "src/AgentCore.Api/Program.cs",
+      "line": 91,
+      "kind": "section"
+    },
+    {
+      "name": "Observability",
+      "consumer": "src/AgentCore.Api/Program.cs",
+      "line": 94,
+      "kind": "section"
+    },
+    {
+      "name": "AgentCore:Profile",
+      "consumer": "src/AgentCore.Api/Program.cs",
+      "line": 213,
+      "kind": "lookup"
+    },
+    {
+      "name": "AgentCore:AgentDirectory",
+      "consumer": "src/AgentCore.Api/Program.cs",
+      "line": 223,
+      "kind": "lookup"
+    },
+    {
+      "name": "Persistence",
+      "consumer": "src/AgentCore.Api/Program.cs",
+      "line": 279,
+      "kind": "section"
+    },
+    {
+      "name": "Persistence__Provider",
+      "consumer": "src/AgentCore.Api/Program.cs",
+      "line": 282,
+      "kind": "process env"
+    },
+    {
+      "name": "AGENTCORE_BOOTSTRAP_",
+      "consumer": "src/AgentCore.Api/Program.cs",
+      "line": 336,
+      "kind": "process env"
+    },
+    {
+      "name": "Security:Http",
+      "consumer": "src/AgentCore.Api/Security/IdentityHttp.cs",
+      "line": 33,
+      "kind": "section"
+    },
+    {
+      "name": "tenantId",
+      "consumer": "src/AgentCore.Api/Security/IdentityHttp.cs",
+      "line": 108,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "includeHistorical",
+      "consumer": "src/AgentCore.Api/Security/TenantExperienceEndpoints.cs",
+      "line": 64,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "sessionId",
+      "consumer": "src/AgentCore.Api/Security/TenantMemoryEndpoints.cs",
+      "line": 39,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "timeZone",
+      "consumer": "src/AgentCore.Application/Agents/PromptContextBuilder.cs",
+      "line": 326,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "profileId",
+      "consumer": "src/AgentCore.Application/Security/TenantAgentConfigurationService.Sandbox.cs",
+      "line": 57,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "orderReference",
+      "consumer": "src/AgentCore.Application/Sessions/SessionRuntime.Initiative.cs",
+      "line": 671,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "status",
+      "consumer": "src/AgentCore.Application/Sessions/SessionRuntime.Initiative.cs",
+      "line": 673,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "topic",
+      "consumer": "src/AgentCore.Application/Sessions/SessionRuntime.Initiative.cs",
+      "line": 686,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "responseLength",
+      "consumer": "src/AgentCore.Application/Tools/TenantPreferenceToolContract.cs",
+      "line": 44,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "language",
+      "consumer": "src/AgentCore.Application/Tools/TenantPreferenceToolContract.cs",
+      "line": 45,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "askOneQuestionAtATime",
+      "consumer": "src/AgentCore.Application/Tools/TenantPreferenceToolContract.cs",
+      "line": 46,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "preferredName",
+      "consumer": "src/AgentCore.Domain/Conversation/ConversationModels.cs",
+      "line": 159,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "preferredName",
+      "consumer": "src/AgentCore.Domain/Conversation/ConversationModels.cs",
+      "line": 162,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "GoogleDrive",
+      "consumer": "src/AgentCore.Infrastructure/Drive/DriveRegistration.cs",
+      "line": 14,
+      "kind": "section"
+    },
+    {
+      "name": "Email",
+      "consumer": "src/AgentCore.Infrastructure/Email/EmailProviderRegistration.cs",
+      "line": 23,
+      "kind": "section"
+    },
+    {
+      "name": "EmailMonitoring",
+      "consumer": "src/AgentCore.Infrastructure/Email/EmailProviderRegistration.cs",
+      "line": 24,
+      "kind": "section"
+    },
+    {
+      "name": "Observability:HttpErrorResponses",
+      "consumer": "src/AgentCore.Infrastructure/Http/HttpErrorDiagnostics.cs",
+      "line": 96,
+      "kind": "section"
+    },
+    {
+      "name": "OpenSandbox",
+      "consumer": "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+      "line": 58,
+      "kind": "section"
+    },
+    {
+      "name": "definition",
+      "consumer": "src/AgentCore.Infrastructure/Persistence/ContextCutover.cs",
+      "line": 89,
+      "kind": "lookup"
+    },
+    {
+      "name": "definition",
+      "consumer": "src/AgentCore.Infrastructure/Persistence/ContextCutover.cs",
+      "line": 90,
+      "kind": "lookup"
+    },
+    {
+      "name": "configurationHash",
+      "consumer": "src/AgentCore.Infrastructure/Persistence/ContextCutover.cs",
+      "line": 93,
+      "kind": "lookup"
+    },
+    {
+      "name": "fieldSources",
+      "consumer": "src/AgentCore.Infrastructure/Persistence/ContextCutover.cs",
+      "line": 94,
+      "kind": "lookup"
+    },
+    {
+      "name": "temperature",
+      "consumer": "src/AgentCore.Infrastructure/Providers/Native/NativeLanguageModel.Requests.cs",
+      "line": 42,
+      "kind": "lookup"
+    },
+    {
+      "name": "thinkingConfig",
+      "consumer": "src/AgentCore.Infrastructure/Providers/Native/NativeLanguageModel.Requests.cs",
+      "line": 44,
+      "kind": "lookup"
+    },
+    {
+      "name": "responseFormat",
+      "consumer": "src/AgentCore.Infrastructure/Providers/Native/NativeLanguageModel.Requests.cs",
+      "line": 46,
+      "kind": "lookup"
+    },
+    {
+      "name": "default",
+      "consumer": "src/AgentCore.Infrastructure/Providers/OpenAI/OpenAiSpeechSynthesizer.cs",
+      "line": 206,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "response_format",
+      "consumer": "src/AgentCore.Infrastructure/Providers/OpenAICompatible/OpenAICompatibleLanguageModel.Responses.cs",
+      "line": 98,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "Providers:Speech:Recognition",
+      "consumer": "src/AgentCore.Infrastructure/Providers/SpeechProviderBinder.cs",
+      "line": 32,
+      "kind": "section"
+    },
+    {
+      "name": "Providers:Speech:Synthesis",
+      "consumer": "src/AgentCore.Infrastructure/Providers/SpeechProviderBinder.cs",
+      "line": 47,
+      "kind": "section"
+    },
+    {
+      "name": "OPENAI_API_KEY",
+      "consumer": "src/AgentCore.Infrastructure/Providers/SpeechProviderBinder.cs",
+      "line": 66,
+      "kind": "lookup"
+    },
+    {
+      "name": "BRAVE_SEARCH_API_KEY",
+      "consumer": "src/AgentCore.Infrastructure/PublicWeb/BraveWebSearchProvider.cs",
+      "line": 15,
+      "kind": "lookup"
+    },
+    {
+      "name": "BraveSearch:ApiKey",
+      "consumer": "src/AgentCore.Infrastructure/PublicWeb/BraveWebSearchProvider.cs",
+      "line": 15,
+      "kind": "lookup"
+    },
+    {
+      "name": "PublicWeb:MaxDownloadBytes",
+      "consumer": "src/AgentCore.Infrastructure/PublicWeb/WebSearchProviderRegistration.cs",
+      "line": 20,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "PublicWeb:DownloadTimeoutSeconds",
+      "consumer": "src/AgentCore.Infrastructure/PublicWeb/WebSearchProviderRegistration.cs",
+      "line": 21,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "realm",
+      "consumer": "src/AgentCore.Infrastructure/Sandbox/RegistryAuthorizationProbe.cs",
+      "line": 65,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "service",
+      "consumer": "src/AgentCore.Infrastructure/Sandbox/RegistryAuthorizationProbe.cs",
+      "line": 72,
+      "kind": "typed lookup"
+    },
+    {
+      "name": "Models:AllowedLocalOrigins",
+      "consumer": "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+      "line": 109,
+      "kind": "section"
+    }
+  ]
+}

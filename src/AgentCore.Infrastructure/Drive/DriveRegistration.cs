@@ -10,18 +10,13 @@ internal static class DriveRegistration
 {
     private static GoogleDriveOptions DriveHostOptions(IConfiguration? configuration)
     {
-        var options = configuration?.GetSection("GoogleDrive").Get<GoogleDriveOptions>() ?? new();
-        if (configuration?["AGENTCORE_DRIVE_ENABLED"] is { Length: > 0 } external)
-        {
-            if (!bool.TryParse(external, out var enabled)) throw new InvalidOperationException("AGENTCORE_DRIVE_ENABLED must be true or false.");
-            options.Enabled = enabled;
-        }
-        return options;
+        if (configuration is not null) Configuration.ConfigurationCutover.Validate(configuration);
+        return configuration?.GetSection("GoogleDrive").Get<GoogleDriveOptions>() ?? new();
     }
     internal static void AddDrive(IServiceCollection services)
     {
         services.TryAddSingleton<GoogleDriveOptions>(sp => DriveHostOptions(sp.GetService<IConfiguration>()));
-        services.TryAddSingleton<GoogleOAuthConfiguration>(sp => new(sp.GetService<IConfiguration>() ?? new ConfigurationBuilder().Build(), sp.GetService<Microsoft.Extensions.Logging.ILogger<GoogleOAuthConfiguration>>()));
+        services.TryAddSingleton<GoogleOAuthConfiguration>(sp => new(sp.GetService<IConfiguration>() ?? new ConfigurationBuilder().Build()));
         services.AddHttpClient(GoogleDriveProvider.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30)).WithErrorDiagnostics().RemoveAllLoggers().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, MaxConnectionsPerServer = 4 });
     }
 }

@@ -9,6 +9,19 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class AgentDefinitionStoreTests
 {
     [Fact]
+    public async Task General_assistant_v34_preserves_v33_bytes_and_policy_until_explicit_adoption()
+    {
+        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var old = (await store.GetAsync("general-assistant", 33))!;
+        var latest = (await store.GetAsync("general-assistant"))!;
+        Assert.Equal(34, latest.Version);
+        Assert.Equal("634515c2225df4ee021dde76254fd7378aa5355de92eeab720e06f340ba9f0c6", Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(Path.Combine(FindAgents(), "general-assistant-v33.json")))));
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(old), System.Text.Json.JsonSerializer.Serialize(latest with { Version = 33, AgentInstructions = old.AgentInstructions }));
+        Assert.Contains("captured Space", latest.AgentInstructions);
+        Assert.DoesNotContain("durable Agent Workspace", latest.AgentInstructions);
+    }
+
+    [Fact]
     public async Task Demo_definitions_deserialize_and_unknown_version_is_missing()
     {
         var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
@@ -24,7 +37,8 @@ public sealed class AgentDefinitionStoreTests
         Assert.NotNull(general);
         Assert.Equal("Riley", general!.Identity.Name);
         var latest = await store.GetAsync("general-assistant");
-        Assert.Equal(33, latest!.Version);
+        Assert.Equal(34, latest!.Version);
+        Assert.Equal(33, (await store.GetAsync("general-assistant", 33))!.Version);
         // Retired browser instructions are absent from the executable catalog.
         Assert.Null(await store.GetAsync("general-assistant", 20));
         Assert.Null(await store.GetAsync("secretary", 7));

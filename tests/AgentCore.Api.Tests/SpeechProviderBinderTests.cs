@@ -54,32 +54,16 @@ public sealed class SpeechProviderBinderTests
         Assert.True(bound.SynthesisKnown);
     }
 
-    [Fact]
-    public void Map_aliases_bind_when_nested_speech_adapter_is_unset()
+    [Theory]
+    [InlineData("Providers:SpeechRecognizers:primary-stt:Adapter")]
+    [InlineData("Providers:SpeechSynthesizers:primary-tts:Adapter")]
+    public void Retired_speech_maps_fail_even_with_canonical_configuration(string key)
     {
-        var bound = SpeechProviderBinder.Bind(Build(new Dictionary<string, string?>
+        var error = Assert.Throws<InvalidOperationException>(() => SpeechProviderBinder.Bind(Build(new()
         {
-            ["Providers:SpeechRecognizers:primary-stt:Adapter"] = "OpenAICompatibleBatch",
-            ["Providers:SpeechSynthesizers:primary-tts:Adapter"] = "OpenAI"
-        }));
-        Assert.Equal("OpenAICompatibleBatch", bound.Options.Recognition.Adapter);
-        Assert.Equal("OpenAI", bound.Options.Synthesis.Adapter);
-    }
-
-    [Fact]
-    public void Nested_speech_wins_over_map_aliases()
-    {
-        var bound = SpeechProviderBinder.Bind(Build(new Dictionary<string, string?>
-        {
-            ["Providers:Speech:Recognition:Adapter"] = "Browser",
-            ["Providers:Speech:Synthesis:Adapter"] = "Browser",
-            ["Providers:SpeechRecognizers:primary-stt:Adapter"] = "OpenAI",
-            ["Providers:SpeechSynthesizers:primary-tts:Adapter"] = "OpenAI"
-        }));
-        Assert.Equal("Browser", bound.Options.Recognition.Adapter);
-        Assert.Equal("Browser", bound.Options.Synthesis.Adapter);
-        Assert.False(bound.RecognitionMissingHostedKey);
-        Assert.False(bound.SynthesisMissingHostedKey);
+            [key] = "private-sentinel", ["Providers:Speech:Recognition:Adapter"] = "Browser"
+        })));
+        Assert.Contains(key, error.Message); Assert.DoesNotContain("private-sentinel", error.Message);
     }
 
     [Fact]

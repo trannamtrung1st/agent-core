@@ -1,5 +1,7 @@
 # Observability and Operations
 
+Current host input naming, native/Compose translation and retired-name rejection are specified in the [host reference](host-configuration-reference.md). Use the [clean baseline cutover](clean-baseline-cutover.md) for grant audit, backup, explicit reconnect and coherent rollback. Application Compose deployments use `python3 scripts/compose.py` for preflight before Docker interpolation.
+
 ## Canonical host shutdown and worker cutover
 
 `SessionShutdownHostedService` stops the same canonical tenant runtime singleton used for execution/control. Its cached drain closes shared capacity admission, cancels supervised Runs and retires Voice and recipient output. Repeated stop/dispose does not start another drain. Cancellation of a stop caller's wait does not reopen capacity or abandon the underlying cleanup. Pending durable work retains its canonical recovery rules; shutdown is not permission to replay effects.
@@ -244,8 +246,8 @@ scripts/dev-real.sh restart --api-only
 If Vite is managed independently, its own `web/.env.local` or process environment remains available; that does not bootstrap or start the backend. For a packaged JSON diagnostic image, first configure the private PFX/password and initialize the volume using the [HTTPS Compose setup](#docker-compose-integration-and-demo), then use the same overlay for build and launch:
 
 ```sh
-docker compose -f docker-compose.yml -f docker-compose.https.yml build --build-arg VITE_AGENTCORE_REALTIME_PROTOCOL=json
-docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
+python3 scripts/compose.py -f docker-compose.yml -f docker-compose.https.yml build --build-arg VITE_AGENTCORE_REALTIME_PROTOCOL=json
+python3 scripts/compose.py -f docker-compose.yml -f docker-compose.https.yml up -d
 ```
 
 Durable trigger telemetry on meter `AgentCore.Runtime` is `trigger_scheduler_events`, `trigger_registration_events`, and `trigger_due_lag_ms`. Canonical execution adds `activation_events`, `agent_run_events` and `background_session_events` with bounded outcome tags described below. Do not log schedule intent, occurrence evidence, result text, prepared action JSON, or secrets. `GET /health` confirms the configured profile; isolated Synthetic verification reports `{"status":"healthy","profile":"Synthetic","protocolVersion":1,"buildVersion":"1.0.0+<source-revision>"}`. After authenticated startup, open `http://localhost:5173` (or the configured UI origin), sign in, start a conversation, and send text over `/hubs/session`. Voice click preflights capture, then streams PCM after Mode=voice. In voice mode, streamed assistant text is segmented and played through the output AudioWorklet (not an HTML audio element); microphone capture remains active during playback. Mute stops PCM only; End or disconnect releases capture, recognition and synthesis. Saying Wait (or sending a new turn) supersedes live playback after a worklet flush. Idle and environment initiative stay in-process (`IEnvironmentEventIngress`); there is no public arbitrary-event inject endpoint. Playwright: `cd web && CI=1 pnpm exec playwright test` (text pending-voice, fake-device capture, playback while capture stays active, duplex mute/disconnect, voice interrupt). Kestrel JavaScript protocol fixtures run under `dotnet test`. The synthetic STT/TTS scripts emit deterministic transcripts and PCM; use Real with an explicitly configured tenant model offering/default and independently configured streaming STT/TTS for actual microphone transcription and speech. Inference credentials come from the protected tenant Credential owner. Supply independent speech credentials through their documented settings or `OPENAI_API_KEY`. Opt-in OpenAI TTS uses `AGENTCORE_LIVE_OPENAI_TTS=1`. [Configuration](15-persistence-and-configuration.md) defines all profile overrides. Default test commands remain Synthetic and must not require these keys.
@@ -283,9 +285,9 @@ Both 10.0 runtime entries must meet the floor above. Preserve the existing provi
 For an existing Real Compose deployment, use its same overlay and environment on every command. These are **operator instructions**, not an automatic restart performed by the stabilization task:
 
 ```sh
-docker compose -f docker-compose.yml -f docker-compose.real.yml -f docker-compose.https.yml build --pull agent-core
-docker compose -f docker-compose.yml -f docker-compose.real.yml -f docker-compose.https.yml run --rm --no-deps --entrypoint dotnet agent-core --list-runtimes
-docker compose -f docker-compose.yml -f docker-compose.real.yml -f docker-compose.https.yml up -d --no-deps --force-recreate agent-core
+python3 scripts/compose.py -f docker-compose.yml -f docker-compose.real.yml -f docker-compose.https.yml build --pull agent-core
+python3 scripts/compose.py -f docker-compose.yml -f docker-compose.real.yml -f docker-compose.https.yml run --rm --no-deps --entrypoint dotnet agent-core --list-runtimes
+python3 scripts/compose.py -f docker-compose.yml -f docker-compose.real.yml -f docker-compose.https.yml up -d --no-deps --force-recreate agent-core
 ```
 
 Check both runtime versions before replacing the application container. Synthetic omits only the Real overlay and retains the HTTPS overlay and configured certificate/password. Preserve the existing named volumes and backup; do not remove volumes as part of this update. A fresh image/runtime check does not replace application readiness checks or real-file fidelity verification. [The local ledger](reports/office-small-stabilization-verification-2026-10-14.md) records the images actually inspected and the native-runtime gap left for the owner.
@@ -300,13 +302,13 @@ Cookie authentication requires HTTPS. The base file exposes HTTP health/static c
 
 ```sh
 # Set private TLS values and the five operator-supplied AGENTCORE_BOOTSTRAP_* values first.
-docker compose -f docker-compose.yml -f docker-compose.https.yml build
-docker compose -f docker-compose.yml -f docker-compose.https.yml run --rm --no-deps \
+python3 scripts/compose.py -f docker-compose.yml -f docker-compose.https.yml build
+python3 scripts/compose.py -f docker-compose.yml -f docker-compose.https.yml run --rm --no-deps \
   -e AGENTCORE_BOOTSTRAP_LOGIN -e AGENTCORE_BOOTSTRAP_DISPLAY_NAME \
   -e AGENTCORE_BOOTSTRAP_PASSWORD -e AGENTCORE_BOOTSTRAP_TENANT_NAME \
   -e AGENTCORE_BOOTSTRAP_TENANT_SLUG agent-core bootstrap-identity
 unset AGENTCORE_BOOTSTRAP_PASSWORD
-docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
+python3 scripts/compose.py -f docker-compose.yml -f docker-compose.https.yml up -d
 ```
 
 Sign in through `/sign-in`; Account, System and `/api/v2/tenants/{tenantId}` operations require the resulting cookie and CSRF for mutations. Keep the same Compose files, environment, certificate and volume when recreating/stopping. Back up SQLite and all private roots together. The default provider profile stays Synthetic and key-free.
@@ -649,7 +651,7 @@ Custom IMAP/SMTP retains masked protected Password, TLS and explicit public host
 
 ### Canonical tenant Google OAuth backend
 
-The [tenant backend consent flow](reports/tenant-oauth-flow-verification-2026-10-17.md) uses only shared `GoogleOAuth` / `GOOGLE_OAUTH_*` settings; it never borrows a legacy owner's Gmail/Drive client or unstamped refresh grant. Register `/api/v2/integrations/tenant-google/oauth/callback` exactly on the configured PublicAppUrl origin for this flow. PublicAppUrl must be an HTTPS root origin or explicit loopback HTTP root origin; request Host, forwarded values and caller return URLs never choose it. Enable the Gmail/Drive API for the requested purpose and retain Drive's host enable gate. Synthetic consent ignores real client settings for transport and makes no Google calls.
+The [tenant backend consent flow](reports/tenant-oauth-flow-verification-2026-10-17.md) uses only shared `GoogleOAuth` settings (launcher/Compose translates `GOOGLE_OAUTH_*` once); it never borrows a legacy owner's Gmail/Drive client or unstamped refresh grant. Register `/api/v2/integrations/tenant-google/oauth/callback` exactly on the configured PublicAppUrl origin for this flow. PublicAppUrl must be an HTTPS root origin or explicit loopback HTTP root origin; request Host, forwarded values and caller return URLs never choose it. Enable the Gmail/Drive API for the requested purpose and retain Drive's host enable gate. Synthetic consent ignores real client settings for transport and makes no Google calls.
 
 Start/disconnect use canonical cookie/CSRF endpoints with current Credential read/manage authority and logical/security witnesses. The callback has separate purpose-specific state plus a narrow HttpOnly Lax cookie and revalidates the original server-side Account session, even when its Strict browser cookie is absent. Preserve the entire CredentialProtectionKeyRoot: saved grant protection, `account-sessions` and the separate `credential-oauth` private-proof key ring serve different purposes. Missing proof fails closed and requires a new start; a consumed attempt cannot replay after a crash. Proof expiry runs in bounded batches at startup and each minute; current schema qualification is recorded in the final delivery.
 
@@ -661,11 +663,7 @@ Disconnect removes local authority first and reports remote revocation separatel
 
 **Historical reference only:** the following pre-IAM owner procedure and its callback routes are retired. Use only the canonical tenant Google flow above. The historical integration reports preserve their original source and live-UAT limits.
 
-1. Enable Gmail API in one Google Cloud project and create a confidential Web application OAuth client. Configure the permitted audience/test users and exact redirect URI.
-2. Supply backend-only `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` and `GOOGLE_OAUTH_PUBLIC_APP_URL` through process environment; both native and Real Compose consume them. Equivalent .NET section variables are `GoogleOAuth__ClientId`, `GoogleOAuth__ClientSecret`, `GoogleOAuth__PublicAppUrl`; if both naming forms are set, nonblank values must agree. PublicAppUrl is a root HTTPS origin, permitting loopback HTTP for development. For Vite use `http://127.0.0.1:5173/` and register both `/api/v2/integrations/google-email/oauth/callback` and `/api/v2/integrations/google-drive/oauth/callback` exactly on that origin. Enable each API separately. The existing /api proxy handles callback/cookies. Shared Real hosting still requires the existing trusted owner boundary and HTTPS.
-3. Request only openid, email, gmail.readonly and gmail.send. Readonly is restricted and send is sensitive; establish applicable Google verification/security assessment requirements for the actual audience. External Testing refresh tokens with Gmail scopes generally expire after seven days and do not prove a persistent production connection. Google can also revoke tokens through owner actions, password changes, inactivity, policy or token limits. See [Google offline OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [token lifetime constraints](https://developers.google.com/identity/protocols/oauth2), and [Gmail scope classes](https://developers.google.com/workspace/gmail/api/auth/scopes).
-4. Real Compose maps the same backend settings from GOOGLE_EMAIL_OAUTH_CLIENT_ID / GOOGLE_EMAIL_OAUTH_CLIENT_SECRET / GOOGLE_EMAIL_OAUTH_PUBLIC_APP_URL. Native .NET does not automatically load root .env. Missing config yields explicit setup guidance without password fallback. Never configure a process-global mailbox refresh token.
-5. Set Email__SendEnabled=false to disable all dispatch. When unspecified in Real, it inherits Email__SmtpEnabled (default true); Custom additionally requires SMTP enablement. AGENTCORE_EMAIL_SEND_ENABLED and AGENTCORE_EMAIL_SMTP_ENABLED supply the Compose equivalents. Consent does not override either gate.
+The shared Google client cutover rejects retired integration-specific configuration. Audit the coherent backup and reconnect accounts without a proven canonical binding; do not restore old client aliases or relabel protected tokens. See [the clean baseline runbook](clean-baseline-cutover.md) and [host configuration reference](host-configuration-reference.md).
 
 Hosting request diagnostics that include raw query strings are suppressed; OAuth/Gmail named HttpClient loggers are removed. Do not enable body/query tracing at a reverse proxy for callback or token traffic. Retain no authorization URL/code/state, protected payload, OAuth response, bearer headers, MIME or personal message content in logs/screenshots. Record only safe opaque account outcome/phase diagnostics. Restore keys/database together; missing protection must fail closed. Rollback requires a pre-upgrade database backup and its key ring; schema rollback alone cannot recover removed legacy Gmail passwords.
 
@@ -708,7 +706,7 @@ Official contracts: [scope boundaries](https://developers.google.com/workspace/d
 
 ### Shared Google client staged migration
 
-Retain `GOOGLE_EMAIL_OAUTH_*` / `GOOGLE_DRIVE_OAUTH_*` (or their original .NET sections) while introducing `GOOGLE_OAUTH_*` for new consent. Each old account refreshes only under its own original client; new consent and rotated grants store encrypted client provenance. Reconnect each account explicitly to migrate it, inspect the saved connection/epoch, and reapprove stale actions. Remove legacy inputs only after their dependent grants have been reconnected. Distinct legacy clients are retained with a safe warning; conflicting values for one section/environment alias fail rather than choosing arbitrarily. A missing old client blocks refresh without deleting the saved grant or attempting the new client; restore old settings or reconnect. Do not merge account IDs/scopes or manually transplant tokens.
+The shared Google client cutover rejects retired integration-specific configuration. Audit the coherent backup and reconnect accounts without a proven canonical binding; do not restore old client aliases or relabel protected tokens. See [the clean baseline runbook](clean-baseline-cutover.md) and [host configuration reference](host-configuration-reference.md).
 
 For the Compose survival gate, install the existing JavaScript protocol fixture with `npm ci --prefix tests/realtime-js`; `scripts/verify-compose-drive-transfer.mjs` exercises admitted conversational upload before recreation instead of removed source-save endpoints. Use a disposable `COMPOSE_PROJECT_NAME` and unused `AGENTCORE_COMPOSE_PORT`. Real Trash UAT requires an explicitly authorized disposable account/file manifest; without that scope record blocked, never use existing user files.
 
@@ -770,9 +768,9 @@ Packaged application deployment is separate and explicit. For container Core, pr
 ```bash
 python3 scripts/opensandbox-compose.py prepare
 # Ordinary key-free Synthetic (no Sandbox dependency):
-docker compose -f docker-compose.yml up -d --build
+python3 scripts/compose.py -f docker-compose.yml up -d --build
 # Real without Sandbox (provider key in private .env):
-docker compose -f docker-compose.yml -f docker-compose.real.yml up -d --build
+python3 scripts/compose.py -f docker-compose.yml -f docker-compose.real.yml up -d --build
 # Explicit Synthetic app with Sandbox (not used by dev-real):
 docker compose --project-name agent-core-sandbox --env-file .env \
   --env-file local/opensandbox-compose/agent-core-sandbox/compose.env \

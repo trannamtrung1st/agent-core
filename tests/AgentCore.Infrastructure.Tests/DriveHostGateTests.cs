@@ -24,17 +24,6 @@ public sealed class DriveHostGateTests
         options.Enabled = false; Assert.False(gate.IsConfigured("drive.list"));
     }
 
-    [Fact]
-    public void Conflicting_legacy_clients_never_advertise_a_canonical_connection()
-    {
-        var config = new GoogleOAuthConfiguration(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> {
-            ["GoogleEmailOAuth:ClientId"] = "email", ["GoogleEmailOAuth:ClientSecret"] = "email-secret", ["GoogleEmailOAuth:PublicAppUrl"] = "https://app.example.test",
-            ["GoogleDriveOAuth:ClientId"] = "drive", ["GoogleDriveOAuth:ClientSecret"] = "drive-secret", ["GoogleDriveOAuth:PublicAppUrl"] = "https://app.example.test" }).Build());
-        Assert.True(config.Drive.Configured); Assert.Null(config.Tenant);
-        var provider = new TenantGoogleOAuthProvider(config, new(), null!, null!, new NoHttp(), false);
-        Assert.False(new ToolConfigurationGate(null, null, oauth: provider).IsConfigured("drive.accounts"));
-        Assert.False(new ToolConfigurationGate(null, null).IsConfigured("drive.accounts"));
-    }
     private sealed class NoHttp : IHttpClientFactory
     { public HttpClient CreateClient(string name) => throw new InvalidOperationException("Readiness cannot perform HTTP or resolve account secrets."); }
 }

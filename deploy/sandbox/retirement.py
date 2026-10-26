@@ -24,7 +24,7 @@ def scope(metadata):
     if not any(key in metadata for key in LABELS[:3]):
         return None
     values = tuple(metadata.get(key, "") for key in LABELS)
-    if metadata.get(CONTRACT) != "4" or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{32}", value) for value in values):
+    if metadata.get(CONTRACT) != "5" or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{32}", value) for value in values):
         raise GenerationFenceError("tenant_generation_scope")
     return values
 
@@ -85,7 +85,7 @@ class GenerationRetirement(ProviderRetirement):
             db.execute("CREATE TABLE IF NOT EXISTS generation_fences (generation TEXT PRIMARY KEY, tenant TEXT NOT NULL, session TEXT NOT NULL, executor TEXT NOT NULL, retired INTEGER NOT NULL CHECK(retired IN (0,1)))")
 
     def _record(self, owner, retire=False):
-        if scope({**dict(zip(LABELS, owner)), CONTRACT: "4"}) != owner:
+        if scope({**dict(zip(LABELS, owner)), CONTRACT: "5"}) != owner:
             raise GenerationFenceError("tenant_generation_scope")
         tenant, session, executor, generation = owner
         with self._db() as db:
@@ -107,7 +107,7 @@ def verification_scope(metadata):
     tenant = metadata.get(VERIFICATION_TENANT)
     if tenant is None and (value is None or isinstance(value, str) and re.fullmatch(r"[0-9a-f]{32}", value)):
         return None
-    if any(not isinstance(v, str) or not re.fullmatch(r"[0-9a-f]{32}", v) for v in (tenant, value)) or metadata.get(CONTRACT) != "4" or any(key in metadata for key in LABELS):
+    if any(not isinstance(v, str) or not re.fullmatch(r"[0-9a-f]{32}", v) for v in (tenant, value)) or metadata.get(CONTRACT) != "5" or any(key in metadata for key in LABELS):
         raise GenerationFenceError("tenant_verification_scope")
     return tenant, value
 
@@ -116,7 +116,7 @@ def _historical_verification_scope(metadata):
     # Cleanup-only decoder; the 65-character label cannot be submitted to the
     # pinned server. Existing exact evidence is never adopted for creation.
     value = metadata.get("agent-core-image-verification")
-    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{32}\.[0-9a-f]{32}", value) or metadata.get(CONTRACT) != "4" or VERIFICATION_TENANT in metadata or any(key in metadata for key in LABELS):
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{32}\.[0-9a-f]{32}", value) or metadata.get(CONTRACT) != "5" or VERIFICATION_TENANT in metadata or any(key in metadata for key in LABELS):
         raise GenerationFenceError("tenant_verification_scope")
     return tuple(value.split("."))
 
@@ -128,7 +128,7 @@ class VerificationRetirement(ProviderRetirement):
             db.execute("CREATE TABLE IF NOT EXISTS verification_fences (attempt TEXT PRIMARY KEY, tenant TEXT NOT NULL, retired INTEGER NOT NULL CHECK(retired IN (0,1)))")
 
     def _record(self, owner, retire=False):
-        if verification_scope({"agent-core-image-verification": owner[1], VERIFICATION_TENANT: owner[0], CONTRACT: "4"}) != owner:
+        if verification_scope({"agent-core-image-verification": owner[1], VERIFICATION_TENANT: owner[0], CONTRACT: "5"}) != owner:
             raise GenerationFenceError("tenant_verification_scope")
         tenant, attempt = owner
         with self._db() as db:
@@ -151,12 +151,12 @@ def retire_verification(service, owner, limit=100):
 
 
 def _retire_matching(service, owner, filters, resolve, limit):
-    filters = [*filters, CONTRACT + "=4"]
+    filters = [*filters, CONTRACT + "=5"]
     summaries = service.docker_client.api.containers(all=True, filters={"label": filters}, trunc=False, limit=limit + 1)
     for summary in summaries[:limit]:
         # An untrusted or stale filtered result cannot turn generation-only equality into ownership.
         labels = summary.get("Labels") or {}
-        if resolve(labels) != owner or labels.get(CONTRACT) != "4" or not labels.get("opensandbox.io/id"):
+        if resolve(labels) != owner or labels.get(CONTRACT) != "5" or not labels.get("opensandbox.io/id"):
             return False
         container = service.docker_client.containers.get(summary["Id"])
         actual = container.attrs.get("Config", {}).get("Labels") or {}

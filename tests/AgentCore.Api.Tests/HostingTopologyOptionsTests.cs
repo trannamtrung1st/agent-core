@@ -12,8 +12,8 @@ public sealed class HostingTopologyOptionsTests
     {
         var hosted = Build(new Dictionary<string, string?>
         {
-            ["Providers:SpeechRecognizers:primary-stt:Adapter"] = "OpenAI",
-            ["Providers:SpeechSynthesizers:primary-tts:Adapter"] = "OpenAI",
+            ["Providers:Speech:Recognition:Adapter"] = "OpenAI",
+            ["Providers:Speech:Synthesis:Adapter"] = "OpenAI",
             ["Observability:TimelineCapacity"] = "64",
             ["Observability:LogConversationContent"] = "false",
             ["Observability:OtlpEnabled"] = "false",
@@ -22,19 +22,19 @@ public sealed class HostingTopologyOptionsTests
         });
         var hybrid = Build(new Dictionary<string, string?>
         {
-            ["Providers:SpeechRecognizers:primary-stt:Adapter"] = "Local",
-            ["Providers:SpeechRecognizers:primary-stt:BaseUrl"] = "http://127.0.0.1:9000/v1/",
-            ["Providers:SpeechSynthesizers:primary-tts:Adapter"] = "Local",
-            ["Providers:SpeechSynthesizers:primary-tts:BaseUrl"] = "http://127.0.0.1:9001/v1/"
+            ["Providers:Speech:Recognition:Adapter"] = "Local",
+            ["Providers:Speech:Recognition:BaseUrl"] = "http://127.0.0.1:9000/v1/",
+            ["Providers:Speech:Synthesis:Adapter"] = "Local",
+            ["Providers:Speech:Synthesis:BaseUrl"] = "http://127.0.0.1:9001/v1/"
         });
         var onPrem = Build(new Dictionary<string, string?>
         {
-            ["Providers:SpeechRecognizers:primary-stt:Adapter"] = "Local",
-            ["Providers:SpeechSynthesizers:primary-tts:Adapter"] = "Local",
+            ["Providers:Speech:Recognition:Adapter"] = "Local",
+            ["Providers:Speech:Synthesis:Adapter"] = "Local",
             ["Observability:OtlpEnabled"] = "false"
         });
 
-        Assert.Equal("Local", hybrid["Providers:SpeechRecognizers:primary-stt:Adapter"]);
+        Assert.Equal("Local", hybrid["Providers:Speech:Recognition:Adapter"]);
         var nestedSpeech = SpeechProviderBinder.Bind(Build(new Dictionary<string, string?>
         {
             ["Providers:Speech:Recognition:Adapter"] = "Browser",

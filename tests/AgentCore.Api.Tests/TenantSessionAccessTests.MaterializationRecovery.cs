@@ -15,6 +15,21 @@ namespace AgentCore.Api.Tests;
 public sealed partial class TenantSessionAccessTests
 {
     [Fact]
+    public async Task Human_materialization_uses_current_Session_workspace_revision_after_rename()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tenant-materialize-revision-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            await using var factory = new NativeTenantSqliteFactory(root, new ApprovalRecordingModel());
+            using var owner = factory.CreateClient(); var v = await PrepareMaterialization(owner, root);
+            Assert.Equal(HttpStatusCode.OK, (await owner.PatchAsJsonAsync(v.SessionUrl, new { title = "Renamed source chat", expectedRevision = await Revision(owner, v.Tenant), expectedSessionRevision = 1 })).StatusCode);
+            var result = await Json(await owner.PostAsJsonAsync(v.Url, new { expectedRevision = await Revision(owner, v.Tenant) }));
+            Assert.Equal(v.Bytes, await owner.GetByteArrayAsync(v.SessionUrl + $"/artifacts/{result.GetProperty("artifactId").GetGuid()}/content"));
+        }
+        finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public async Task Human_materialization_actual_SQLite_host_recreation_preserves_provenance_independent_copy_and_deleted_owner_cleanup()
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-materialize-reopen-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);

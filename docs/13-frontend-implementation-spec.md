@@ -1,5 +1,7 @@
 # Frontend Implementation Specification
 
+Shared Chat file feedback distinguishes expired authentication, denied reads, missing files and ordinary transfer failure using source-owned safe messages. Artifact metadata is retired on read loss; historical Attachment thumbnail URLs are revoked on download read loss. Draft content and the existing explicit Retry actions remain intact. File cards and shared previews reuse Ant Design v6 without layout/token changes.
+
 ## Dynamic model administration
 
 New Chat waits for identity and catalog loading to settle before explaining setup. An empty scoped catalog offers **Connect a provider** only to a current connection administrator; other users see owner guidance. An unavailable inherited default with selectable offerings explains **Choose a model for this chat** and optionally links an authorized administrator to Defaults. Explicit selection hides the guide. Missing inherited labels remain **Organization default** or **Agent default**, never a raw default token. The guide reuses the identity composition width and native Alert/Flex/Button; narrow actions retain forty-pixel hits.

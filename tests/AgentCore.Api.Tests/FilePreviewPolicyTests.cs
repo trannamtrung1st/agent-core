@@ -33,7 +33,7 @@ public sealed class FilePreviewPolicyTests
     public void Defaults_bind_and_standard_environment_override_is_supported()
     {
         var defaults = new FilePreviewOptions(); Assert.True(defaults.IsValid()); Assert.Equal(12800, defaults.Spreadsheet.MaxCellsPerWindow);
-        const string key = "AGENTCORE_PREVIEW_TEST_FilePreview__Limits__CsvBytes";
+        const string key = "AGENTCORE_PREVIEW_TEST_FilePreview__Limits__DelimitedBytes";
         Environment.SetEnvironmentVariable(key, "12345");
         try {
             var config = new ConfigurationBuilder().AddEnvironmentVariables("AGENTCORE_PREVIEW_TEST_").Build();

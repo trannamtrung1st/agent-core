@@ -51,9 +51,6 @@ public sealed class PreviewByteLimits
     public int MaxBytes { get; set; } = 33554432;
     public int TextBytes { get; set; } = 2097152;
     public int DelimitedBytes { get; set; } = 5242880;
-    // Standard environment alias for operators using FilePreview__Limits__CsvBytes.
-    [System.Text.Json.Serialization.JsonIgnore]
-    public int CsvBytes { get => DelimitedBytes; set => DelimitedBytes = value; }
     public int DocxBytes { get; set; } = 10485760;
     public int XlsxBytes { get; set; } = 10485760;
     public int ImageBytes { get; set; } = 15728640;

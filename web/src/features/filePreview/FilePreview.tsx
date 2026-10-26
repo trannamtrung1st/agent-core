@@ -34,6 +34,7 @@ import {
   type FileMetadata,
   type FileRef,
   fileReadLost,
+  fileFailureMessage,
   fileTenantId,
 } from './fileSource';
 import { loadPreviewOptions, mib, type PreviewOptions } from './previewOptions';
@@ -65,7 +66,7 @@ export function FilePreviewButton({
   disabled?: boolean;
   iconOnly?: boolean;
   label?: string;
-  onReadLost?: () => void;
+  onReadLost?: (reason?: unknown) => void;
 }) {
   return (
     <PreviewEntry
@@ -89,7 +90,7 @@ function PreviewEntry({
   disabled: boolean;
   iconOnly: boolean;
   label?: string;
-  onReadLost?: () => void;
+  onReadLost?: (reason?: unknown) => void;
 }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -124,7 +125,7 @@ export function FilePreview({
   file: FileRef;
   open?: boolean;
   onClose: () => void;
-  onReadLost?: () => void;
+  onReadLost?: (reason?: unknown) => void;
 }) {
   const { token } = theme.useToken();
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -136,13 +137,13 @@ export function FilePreview({
   const WordPreview = useMemo(() => lazy(loadWordPreview), [attempt]);
   const SpreadsheetPreview = useMemo(() => lazy(loadSpreadsheetPreview), [attempt]);
   const [busy, setBusy] = useState(false);
-  const [downloadError, setDownloadError] = useState(false);
+  const [downloadError, setDownloadError] = useState<string>();
   const identity = JSON.stringify(file);
   const download = useRef<AbortController | null>(null);
   const previewShell = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     setBusy(false);
-    setDownloadError(false);
+    setDownloadError(undefined);
     if (!open) {
       setLoaded(null);
       setMetadata(null);
@@ -205,7 +206,7 @@ export function FilePreview({
       }
     })().catch((reason) => {
       if (!controller.signal.aborted) {
-        if (fileReadLost(reason)) { setMetadata(null); onReadLost?.(); }
+        if (fileReadLost(reason)) { setMetadata(null); onReadLost?.(reason); }
         setError(
           reason instanceof PreviewError
             ? reason
@@ -242,11 +243,11 @@ export function FilePreview({
     const controller = new AbortController();
     download.current = controller;
     setBusy(true);
-    setDownloadError(false);
+    setDownloadError(undefined);
     try {
       await downloadFile(file, controller.signal);
     } catch (reason) {
-      if (!controller.signal.aborted) { if (fileReadLost(reason)) { setLoaded(null); setMetadata(null); onReadLost?.(); } setDownloadError(true); }
+      if (!controller.signal.aborted) { if (fileReadLost(reason)) { setLoaded(null); setMetadata(null); onReadLost?.(reason); } setDownloadError(fileFailureMessage(reason)); }
     } finally {
       if (!controller.signal.aborted) {
         setBusy(false);
@@ -319,7 +320,7 @@ export function FilePreview({
         </Flex>
         {(file.kind === 'tenantWorkspace') && <Typography.Text type="secondary">Live file · current content can change. Reload preview to read this path again.</Typography.Text>}
         {downloadError && (
-          <Alert type="error" showIcon title="Download failed. Try again." />
+          <Alert type="error" showIcon title={downloadError} />
         )}
         <div className="file-preview-content" onKeyDownCapture={event => { if (event.key === 'Escape') { event.stopPropagation(); onClose(); } }}>
           <PreviewRenderBoundary key={`${identity}:${attempt}:${open}`} onRetry={() => setAttempt(value => value + 1)}>
@@ -458,6 +459,7 @@ function ImagePreview({
       <Slider
         aria-label="Image zoom"
         ariaLabelForHandle="Image zoom"
+        tooltip={{ open: false }}
         min={1}
         max={200}
         step={1}
