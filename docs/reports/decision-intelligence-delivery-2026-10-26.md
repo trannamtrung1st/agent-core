@@ -2,6 +2,8 @@
 
 ## Overall verdict
 
+**Subsequent evidence:** [Native MLX, held-out and external Compose verification](kev-native-verification-2026-10-26.md) now completes the requested available-hardware qualification. It supersedes the original hardware/quality blockers below: real Kev-4B, frozen calibration/held-out cases, current admission/replay/reopen and the container-to-native bridge pass on Apple M2. This original delivery record preserves its historical test scope. Only NVIDIA-specific latency/throughput qualification remains pending, without blocking local completion.
+
 The S1 foundation and S2 canonical preference/routing cutover are delivered and locally verified. **Production Auto and full proposal v1 acceptance remain unqualified**: this machine has no NVIDIA Docker runtime, so no real Kev checkpoint inference, held-out routing quality/calibration, warm latency or GPU footprint was measured. Host inference remains disabled/shadow and tenant Auto remains off by default. No application milestone acceptance or CI acceptance is claimed.
 
 Exact implementation code SHA: **33d2e8857b2b2fbec4a661f1b9d96c2a8d75307a**. This report is a subsequent documentation-only commit. Baseline: `aab065eaabe8be27d5fd0480e1e8cdccae76b468` on `main`.
