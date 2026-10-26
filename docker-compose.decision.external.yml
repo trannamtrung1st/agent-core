@@ -1,0 +1,12 @@
+# Optional app-to-native-service bridge. No inference container, CUDA or GPU reservation.
+# Docker Desktop provides host.docker.internal. Do not combine with the CUDA sidecar overlay.
+services:
+  agent-core:
+    environment:
+      DecisionIntelligence__Enabled: "${DecisionIntelligence__Enabled:-false}"
+      DecisionIntelligence__Backend: LocalKev
+      DecisionIntelligence__Endpoint: "${DecisionIntelligence__Endpoint:-http://host.docker.internal:8009}"
+      DecisionIntelligence__ApiKey: "${KEV_API_KEY:?Configure the private decision-service key}"
+      DecisionIntelligence__ShadowMode: "${DecisionIntelligence__ShadowMode:-true}"
+      DecisionIntelligence__RequestTimeoutMs: "${DecisionIntelligence__RequestTimeoutMs:-500}"
+      DecisionIntelligence__MaxConcurrentRequests: "${DecisionIntelligence__MaxConcurrentRequests:-4}"

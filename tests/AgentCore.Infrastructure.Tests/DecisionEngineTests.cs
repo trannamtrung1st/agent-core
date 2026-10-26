@@ -105,7 +105,19 @@ public sealed class DecisionEngineTests
     [InlineData("http://127.0.0.1:8009/x")]
     [InlineData("http://user:secret@127.0.0.1:8009")]
     [InlineData("http://127.0.0.1:8009?key=secret")]
+    [InlineData("http://host.docker.internal:8009/x")]
+    [InlineData("http://host.docker.internal:8009?key=secret")]
+    [InlineData("http://metadata.google.internal:8009")]
+    [InlineData("http://127.0.0.1:0")]
     public void Unsafe_endpoints_refuse(string endpoint) => Assert.Throws<InvalidOperationException>(() => new DecisionIntelligenceOptions { Endpoint = endpoint }.Validate(true));
+
+    [Theory]
+    [InlineData("http://host.docker.internal:8009")]
+    [InlineData("http://host.docker.internal:18009")]
+    [InlineData("http://127.0.0.1:18009")]
+    [InlineData("http://decision:18009")]
+    public void Explicit_local_service_endpoints_support_native_and_Docker_callers(string endpoint)
+        => new DecisionIntelligenceOptions { Endpoint = endpoint }.Validate(false);
 
     [Theory]
     [InlineData(DecisionKind.YesNo)] [InlineData(DecisionKind.Score)]

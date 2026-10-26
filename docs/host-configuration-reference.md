@@ -240,7 +240,7 @@ The active startup preset is [`.env.example`](../.env.example). Optional shapes 
 | --- | --- |
 | `Enabled` | `false`; optional service is never an application startup dependency |
 | `Backend` | `LocalKev`; closed `Disabled`, `LocalKev`, `AuthorizedLlm`, `Synthetic` (Synthetic profile only) |
-| `Endpoint` | `http://127.0.0.1:8009`; HTTP literal loopback or internal `decision:8009`, no path/credentials/query/fragment/redirect/proxy |
+| `Endpoint` | `http://127.0.0.1:8009`; configurable HTTP port (1–65535) on literal loopback, `decision`, or Docker Desktop's `host.docker.internal`; no path/credentials/query/fragment/redirect/proxy. Named Docker destinations must resolve to private IPv4/loopback addresses. |
 | `ApiKey` | Private optional bearer; configured values must be 16–256 printable non-space ASCII. Missing reports notConfigured |
 | `ModelId` | `jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52`; exact pinned artifact only |
 | `RequestTimeoutMs` | `500`, allowed 50–10000; cancellation bound, no latency SLA |

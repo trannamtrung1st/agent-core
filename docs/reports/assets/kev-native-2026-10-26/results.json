@@ -1,0 +1,596 @@
+{
+  "source": "6b719c3c3f367295f6ef336f4f751cf5ff970abc",
+  "checkpoint": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52",
+  "prefixCache": false,
+  "results": [
+    {
+      "status": 200,
+      "elapsedMs": 11870.17,
+      "body": {
+        "model": "kev-latest",
+        "answers": {
+          "decision": {
+            "type": "choice",
+            "choice": "paris",
+            "confidence": 0.9926,
+            "probabilities": {
+              "paris": 0.9963,
+              "finance": 0.0037
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 51,
+          "output_tokens": 54
+        },
+        "latency_ms": 11235.5
+      },
+      "name": "cold-choice",
+      "kind": "choice",
+      "expected": "paris"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 399.38,
+      "body": {
+        "model": "kev-latest",
+        "answers": {
+          "decision": {
+            "type": "choice",
+            "choice": "paris",
+            "confidence": 0.9926,
+            "probabilities": {
+              "paris": 0.9963,
+              "finance": 0.0037
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 51,
+          "output_tokens": 54
+        },
+        "latency_ms": 397.2
+      },
+      "name": "warm-choice-0",
+      "kind": "choice",
+      "expected": "paris"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 423.96,
+      "body": {
+        "model": "kev-latest",
+        "answers": {
+          "decision": {
+            "type": "choice",
+            "choice": "paris",
+            "confidence": 0.9949,
+            "probabilities": {
+              "paris": 0.9974,
+              "finance": 0.0026
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 52,
+          "output_tokens": 54
+        },
+        "latency_ms": 396.9
+      },
+      "name": "warm-choice-1",
+      "kind": "choice",
+      "expected": "paris"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 414.21,
+      "body": {
+        "model": "kev-latest",
+        "answers": {
+          "decision": {
+            "type": "choice",
+            "choice": "paris",
+            "confidence": 0.9936,
+            "probabilities": {
+              "paris": 0.9968,
+              "finance": 0.0032
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 52,
+          "output_tokens": 54
+        },
+        "latency_ms": 392.2
+      },
+      "name": "warm-choice-2",
+      "kind": "choice",
+      "expected": "paris"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 397.25,
+      "body": {
+        "model": "kev-latest",
+        "answers": {
+          "decision": {
+            "type": "choice",
+            "choice": "paris",
+            "confidence": 0.9928,
+            "probabilities": {
+              "paris": 0.9964,
+              "finance": 0.0036
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 51,
+          "output_tokens": 54
+        },
+        "latency_ms": 391.6
+      },
+      "name": "warm-choice-3",
+      "kind": "choice",
+      "expected": "paris"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 413.72,
+      "body": {
+        "model": "kev-latest",
+        "answers": {
+          "decision": {
+            "type": "choice",
+            "choice": "paris",
+            "confidence": 0.995,
+            "probabilities": {
+              "paris": 0.9975,
+              "finance": 0.0025
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 52,
+          "output_tokens": 53
+        },
+        "latency_ms": 392.8
+      },
+      "name": "warm-choice-4",
+      "kind": "choice",
+      "expected": "paris"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 399.19,
+      "body": {
+        "model": "kev-latest",
+        "answers": {
+          "decision": {
+            "type": "choice",
+            "choice": "paris",
+            "confidence": 0.9935,
+            "probabilities": {
+              "paris": 0.9967,
+              "finance": 0.0033
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 52,
+          "output_tokens": 54
+        },
+        "latency_ms": 390.8
+      },
+      "name": "warm-choice-5",
+      "kind": "choice",
+      "expected": "paris"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 392.85,
+      "body": {
+        "model": "kev-latest",
+        "answers": {
+          "decision": {
+            "type": "choice",
+            "choice": "paris",
+            "confidence": 0.9956,
+            "probabilities": {
+              "finance": 0.0022,
+              "paris": 0.9978
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 51,
+          "output_tokens": 54
+        },
+        "latency_ms": 390.9
+      },
+      "name": "choice-reversed",
+      "kind": "choice",
+      "expected": "paris"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 501.12,
+      "body": {
+        "model": "kev-latest",
+        "answers": {
+          "decision": {
+            "type": "noul",
+            "noul": 0.0175
+          }
+        },
+        "usage": {
+          "input_tokens": 63,
+          "output_tokens": 22
+        },
+        "latency_ms": 411.3
+      },
+      "name": "noul",
+      "kind": "noul",
+      "expected": false
+    },
+    {
+      "status": 200,
+      "elapsedMs": 434.47,
+      "body": {
+        "model": "kev-latest",
+        "answers": {
+          "decision": {
+            "type": "score",
+            "score": 1.9539,
+            "legend": {
+              "0": "Can wait a month.",
+              "1": "Handle this week.",
+              "2": "Critical: handle immediately."
+            },
+            "probabilities": {
+              "0": 0.0067,
+              "1": 0.0326,
+              "2": 0.9607
+            },
+            "confidence": 0.9309
+          }
+        },
+        "usage": {
+          "input_tokens": 50,
+          "output_tokens": 98
+        },
+        "latency_ms": 382.7
+      },
+      "name": "score",
+      "kind": "score",
+      "expected": 2
+    },
+    {
+      "status": 200,
+      "elapsedMs": 847.74,
+      "body": {
+        "model": "kev-latest",
+        "answers": {
+          "decision": {
+            "type": "choice",
+            "choice": "dca30000-0000-4000-8000-000000000001",
+            "confidence": 0.1502,
+            "probabilities": {
+              "dca30000-0000-4000-8000-000000000001": 0.5751,
+              "dca30000-0000-4000-8000-000000000002": 0.4249
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 191,
+          "output_tokens": 154
+        },
+        "latency_ms": 812.3
+      },
+      "name": "production-features-0",
+      "kind": "choice",
+      "expected": null
+    },
+    {
+      "status": 200,
+      "elapsedMs": 812.63,
+      "body": {
+        "model": "kev-latest",
+        "answers": {
+          "decision": {
+            "type": "choice",
+            "choice": "dca30000-0000-4000-8000-000000000001",
+            "confidence": 0.1502,
+            "probabilities": {
+              "dca30000-0000-4000-8000-000000000001": 0.5751,
+              "dca30000-0000-4000-8000-000000000002": 0.4249
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 191,
+          "output_tokens": 154
+        },
+        "latency_ms": 810.1
+      },
+      "name": "production-features-1",
+      "kind": "choice",
+      "expected": null
+    },
+    {
+      "status": 200,
+      "elapsedMs": 812.11,
+      "body": {
+        "model": "kev-latest",
+        "answers": {
+          "decision": {
+            "type": "choice",
+            "choice": "dca30000-0000-4000-8000-000000000001",
+            "confidence": 0.1502,
+            "probabilities": {
+              "dca30000-0000-4000-8000-000000000001": 0.5751,
+              "dca30000-0000-4000-8000-000000000002": 0.4249
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 191,
+          "output_tokens": 154
+        },
+        "latency_ms": 809.8
+      },
+      "name": "production-features-2",
+      "kind": "choice",
+      "expected": null
+    },
+    {
+      "status": 200,
+      "elapsedMs": 812.55,
+      "body": {
+        "model": "kev-latest",
+        "answers": {
+          "decision": {
+            "type": "choice",
+            "choice": "dca30000-0000-4000-8000-000000000001",
+            "confidence": 0.1502,
+            "probabilities": {
+              "dca30000-0000-4000-8000-000000000001": 0.5751,
+              "dca30000-0000-4000-8000-000000000002": 0.4249
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 191,
+          "output_tokens": 154
+        },
+        "latency_ms": 810.3
+      },
+      "name": "production-features-3",
+      "kind": "choice",
+      "expected": null
+    }
+  ],
+  "unauthenticated": {
+    "status": 401,
+    "elapsedMs": 318.03,
+    "body": {
+      "httpError": 401
+    }
+  },
+  "models": {
+    "status": 200,
+    "elapsedMs": 33.89,
+    "body": {
+      "models": [
+        {
+          "name": "kev-latest",
+          "description": "Kev pointer head on Qwen/Qwen3.5-4B-Base, serving jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52 at temperature 2.41",
+          "release_date": "2026-10-26",
+          "run": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52",
+          "base": "Qwen/Qwen3.5-4B-Base",
+          "lora": 16,
+          "device": "mps",
+          "backend": "mlx",
+          "dtype": "bfloat16",
+          "temperature": 2.406050072164233,
+          "max_state_tokens": 65536,
+          "truncate_states": false,
+          "cuda_graphs": null,
+          "prefix_cache": {
+            "size": 0,
+            "min_state_tokens": 0,
+            "max_tokens": 65536,
+            "hits": 0,
+            "misses": 0,
+            "cached_states": 0,
+            "oom_retries": 0
+          },
+          "batches": {
+            "count": 0,
+            "requests": 0,
+            "queued": 0
+          }
+        },
+        {
+          "name": "jev-latest",
+          "description": "Kev pointer head on Qwen/Qwen3.5-4B-Base, serving jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52 at temperature 2.41",
+          "release_date": "2026-10-26",
+          "run": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52",
+          "base": "Qwen/Qwen3.5-4B-Base",
+          "lora": 16,
+          "device": "mps",
+          "backend": "mlx",
+          "dtype": "bfloat16",
+          "temperature": 2.406050072164233,
+          "max_state_tokens": 65536,
+          "truncate_states": false,
+          "cuda_graphs": null,
+          "prefix_cache": {
+            "size": 0,
+            "min_state_tokens": 0,
+            "max_tokens": 65536,
+            "hits": 0,
+            "misses": 0,
+            "cached_states": 0,
+            "oom_retries": 0
+          },
+          "batches": {
+            "count": 0,
+            "requests": 0,
+            "queued": 0
+          }
+        }
+      ]
+    }
+  },
+  "modelsAfter": {
+    "status": 200,
+    "elapsedMs": 1.27,
+    "body": {
+      "models": [
+        {
+          "name": "kev-latest",
+          "description": "Kev pointer head on Qwen/Qwen3.5-4B-Base, serving jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52 at temperature 2.41",
+          "release_date": "2026-10-26",
+          "run": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52",
+          "base": "Qwen/Qwen3.5-4B-Base",
+          "lora": 16,
+          "device": "mps",
+          "backend": "mlx",
+          "dtype": "bfloat16",
+          "temperature": 2.406050072164233,
+          "max_state_tokens": 65536,
+          "truncate_states": false,
+          "cuda_graphs": null,
+          "prefix_cache": {
+            "size": 0,
+            "min_state_tokens": 0,
+            "max_tokens": 65536,
+            "hits": 0,
+            "misses": 0,
+            "cached_states": 0,
+            "oom_retries": 0
+          },
+          "batches": {
+            "count": 14,
+            "requests": 14,
+            "queued": 0
+          }
+        },
+        {
+          "name": "jev-latest",
+          "description": "Kev pointer head on Qwen/Qwen3.5-4B-Base, serving jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52 at temperature 2.41",
+          "release_date": "2026-10-26",
+          "run": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52",
+          "base": "Qwen/Qwen3.5-4B-Base",
+          "lora": 16,
+          "device": "mps",
+          "backend": "mlx",
+          "dtype": "bfloat16",
+          "temperature": 2.406050072164233,
+          "max_state_tokens": 65536,
+          "truncate_states": false,
+          "cuda_graphs": null,
+          "prefix_cache": {
+            "size": 0,
+            "min_state_tokens": 0,
+            "max_tokens": 65536,
+            "hits": 0,
+            "misses": 0,
+            "cached_states": 0,
+            "oom_retries": 0
+          },
+          "batches": {
+            "count": 14,
+            "requests": 14,
+            "queued": 0
+          }
+        }
+      ]
+    }
+  },
+  "machine": {
+    "chip": "Apple M2",
+    "unifiedMemoryBytes": 25769803776,
+    "nativeBackend": "mlx",
+    "dtype": "bfloat16",
+    "macOS": "27.0.1"
+  },
+  "baseRevision": "1001bb4d826a52d1f399e183466143f4da7b741b",
+  "memoryAtFirstServerExit": {
+    "mlxPeakBytes": 15867964940,
+    "mlxActiveBytes": 8411510280,
+    "mlxCacheBytes": 550834747,
+    "sampledProcessRssKiB": 691728
+  },
+  "summaries": {
+    "warm-choice": {
+      "n": 6,
+      "p50Ms": 406.55,
+      "p95NearestRankMs": 423.96,
+      "minMs": 397.25,
+      "maxMs": 423.96
+    },
+    "production-features": {
+      "n": 4,
+      "p50Ms": 812.5899999999999,
+      "p95NearestRankMs": 847.74,
+      "minMs": 812.11,
+      "maxMs": 847.74
+    }
+  },
+  "limitations": [
+    "Public toy fixtures, not held-out routing calibration.",
+    "Single-request sequential HTTP samples, prefix cache disabled.",
+    "M2 results do not qualify CUDA or production deployment.",
+    "The first-choice sample was the first inference after initial model load."
+  ],
+  "dotnetChecks": {
+    "passed": 21,
+    "offlineTests": 19,
+    "liveTests": 2,
+    "contractFirstRequestAfterRestartMs": 16786.0124,
+    "contractYesNoMs": 441.4782,
+    "contractScoreMs": 398.5115,
+    "uncertainAutoRefusalMs": 835.2,
+    "explicitFallbackBasis": "configuredDefault",
+    "explicitFallbackDiagnostic": "LowConfidence",
+    "deadlineBudgetMs": 500,
+    "deadlineObservedMs": 504.9,
+    "deadlineOutcome": "Timeout",
+    "defaultOptOut": {
+      "offlinePassed": 19,
+      "liveSkipped": 2
+    }
+  },
+  "runtimePackages": {
+    "torch": "2.8.0",
+    "mlx": "0.32.2",
+    "mlx-lm": "0.31.3",
+    "transformers": "5.17.0",
+    "fastapi": "0.141.1",
+    "uvicorn": "0.53.0"
+  },
+  "composeBridge": {
+    "ports": [
+      8009,
+      18009
+    ],
+    "endpointHost": "host.docker.internal",
+    "actualDotnetAdapter": "Ready",
+    "choice": "paris",
+    "probability": 0.9963,
+    "gpuReservation": false,
+    "inferenceContainer": false,
+    "disposableProjectCleanedUp": true
+  },
+  "finalIntegration": {
+    "focusedPassed": 42,
+    "liveTests": 3,
+    "alternatePortLivePassed": 3,
+    "syntheticHttpPassed": 1,
+    "defaultOptOut": {
+      "offlinePassed": 27,
+      "liveSkipped": 3
+    }
+  }
+}

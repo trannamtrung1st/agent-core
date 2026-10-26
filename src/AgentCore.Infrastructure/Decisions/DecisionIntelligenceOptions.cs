@@ -24,12 +24,12 @@ public sealed class DecisionIntelligenceOptions
             || Backend == DecisionBackendKind.Synthetic && !synthetic)
             throw new InvalidOperationException("Invalid DecisionIntelligence configuration. Use bounded canonical options and the pinned Kev-4B checkpoint; Synthetic is test-profile only.");
         if (!Uri.TryCreate(Endpoint, UriKind.Absolute, out var endpoint) || endpoint.Scheme != "http"
-            || endpoint.Port != 8009 || endpoint.UserInfo.Length != 0 || endpoint.Query.Length != 0
+            || endpoint.Port is < 1 or > 65535 || endpoint.UserInfo.Length != 0 || endpoint.Query.Length != 0
             || endpoint.Fragment.Length != 0 || endpoint.AbsolutePath != "/" || !AllowedHost(endpoint.Host))
-            throw new InvalidOperationException("DecisionIntelligence endpoint must be HTTP loopback or the internal decision service on port 8009, without path, user info, query or fragment.");
+            throw new InvalidOperationException("DecisionIntelligence endpoint must be HTTP loopback, the internal decision service, or Docker's local host bridge, without path, user info, query or fragment.");
         if (ApiKey is not null && (ApiKey is not { Length: >= 16 and <= 256 } || ApiKey.Any(c => c is < '!' or > '~')))
             throw new InvalidOperationException("A configured LocalKev key must be private and DecisionIntelligence:ApiKey containing 16–256 printable non-space ASCII characters.");
     }
 
-    internal static bool AllowedHost(string host) => host is "127.0.0.1" or "[::1]" or "::1" or "decision";
+    internal static bool AllowedHost(string host) => host is "127.0.0.1" or "[::1]" or "::1" or "decision" or "host.docker.internal";
 }

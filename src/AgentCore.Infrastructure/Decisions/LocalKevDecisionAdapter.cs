@@ -34,9 +34,9 @@ public sealed class LocalKevDecisionAdapter(HttpClient client, DecisionIntellige
     private static bool AllowedAddress(string host, IPAddress address)
     {
         if (IPAddress.IsLoopback(address)) return true;
-        if (host != "decision" || address.AddressFamily != AddressFamily.InterNetwork) return false;
+        if (host is not ("decision" or "host.docker.internal") || address.AddressFamily != AddressFamily.InterNetwork) return false;
         var bytes = address.GetAddressBytes();
-        // Only Docker's explicitly named private service; never link-local/metadata/public DNS targets.
+        // Only explicitly named Docker private services/host bridge; never metadata/public DNS targets.
         return bytes[0] == 10 || bytes[0] == 172 && bytes[1] is >= 16 and <= 31 || bytes[0] == 192 && bytes[1] == 168;
     }
 

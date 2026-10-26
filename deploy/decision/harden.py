@@ -1,6 +1,11 @@
 """Bound the pinned server queue; fail the build if the reviewed source changes."""
+import argparse
 from pathlib import Path
-path = Path('/opt/kev/kev/serve.py')
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--source', type=Path, default=Path('/opt/kev/kev/serve.py'),
+                    help='Pinned serving source; override for a native checkout.')
+path = parser.parse_args().source
 source = path.read_text()
 patches = {
     'self.queue, self.stopping = queue.Queue(), threading.Event()': 'self.queue, self.stopping = queue.Queue(maxsize=4), threading.Event()',
