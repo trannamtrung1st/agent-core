@@ -1,9 +1,9 @@
 # Agent Core — Self-Hosted Decision Intelligence
 
-**Final implementation proposal | Initiative 6 | 26 October 2026**  
-**Repository:** https://github.com/trannamtrung1st/agent-core  
-**Inspected baseline:** `main` — `aab065eaabe8be27d5fd0480e1e8cdccae76b468` (26 October 2026)  
-**Status:** Approved-direction implementation brief; **not yet implemented or runtime-verified**.  
+**Final implementation proposal | Initiative 6 | 26 October 2026**
+**Repository:** https://github.com/trannamtrung1st/agent-core
+**Inspected baseline:** `main` — `aab065eaabe8be27d5fd0480e1e8cdccae76b468` (26 October 2026)
+**Status at proposal authoring:** Approved-direction implementation brief; implementation and runtime verification had not run. The subsequent [delivery ledger](../reports/decision-intelligence-delivery-2026-10-26.md) records the implemented local scope and open production qualification gates.
 **Destination in repository:** `docs/proposals/self-hosted-decision-intelligence.md` (or equivalent canonical proposal location approved by the maintainer).
 
 > **Mandate:** Add one lightweight, optional and self-hostable intelligence capability that makes bounded decisions across existing Agent Core owners. Complete the affected contracts, persistence, API, frontend, deployments, tests and documentation together. Use a **clean cutover**—no legacy decision adapters, deprecated fields, aliases, dual reads/writes, silent model substitution or lingering compatibility routes. Preserve current IAM, exact approvals, immutable execution history and existing execution ownership. Do not expand into a new agent framework, workflow engine or general-purpose orchestration service.
