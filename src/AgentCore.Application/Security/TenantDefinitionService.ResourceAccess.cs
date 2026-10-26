@@ -1,4 +1,4 @@
-using AgentCore.Application.Admin;
+using AgentCore.Domain.Evaluations;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
@@ -8,7 +8,7 @@ namespace AgentCore.Application.Security;
 public sealed record DefinitionResourcePermission(Guid ResourceId, AccessScope Scope, bool CanManage, bool CanDelete);
 public sealed record DefinitionResourceAccess(bool AllRead, bool CanCreate, bool CanEvaluate, bool CanPublish, IReadOnlyList<DefinitionResourcePermission> Items);
 public sealed record TenantDefinitionDraftState(AgentDefinitionDraft Draft, IReadOnlyList<AgentDefinitionDraftResource> Resources,
-    IReadOnlyList<DefinitionEvaluationScenario> Scenarios, IReadOnlyList<DefinitionEvaluationResult> Results, DefinitionResourceAccess ResourceAccess);
+    IReadOnlyList<EvaluationSuiteVersion> Suites, IReadOnlyList<EvaluationAttempt> Attempts, DefinitionResourceAccess ResourceAccess);
 public sealed record TenantPublicationResourceState(IReadOnlyList<AgentDefinitionPublicationResource> Items, bool AllRead);
 
 public sealed partial class TenantDefinitionService

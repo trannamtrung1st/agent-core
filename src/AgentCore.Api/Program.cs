@@ -19,6 +19,14 @@ using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.SignalR;
 
+if (args.Length > 0 && args[0] == "migrate-evaluations")
+{
+    if (args.Length != 3) throw new ArgumentException("Usage: migrate-evaluations <database-path> <new-backup-path>");
+    var migrated = await EvaluationCutover.MigrateAsync(args[1], args[2]);
+    Console.WriteLine($"Evaluation cutover committed ({migrated} historical results). Backup: {Path.GetFullPath(args[2])}");
+    return;
+}
+
 if (args.Length > 0 && args[0] == "migrate-context")
 {
     if (args.Length != 3) throw new ArgumentException("Usage: migrate-context <database-path> <new-backup-path>");
@@ -187,6 +195,7 @@ TenantActivityEndpoints.Map(app);
 TenantOperationPolicyEndpoints.Map(app);
 TenantApprovalEndpoints.Map(app);
 TenantDefinitionEndpoints.Map(app);
+TenantEvaluationEndpoints.Map(app);
 
 
 var spaIndex = ResolveSpaIndex(app);

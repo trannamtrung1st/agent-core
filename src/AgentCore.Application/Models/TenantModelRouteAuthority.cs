@@ -10,7 +10,7 @@ public sealed class TenantModelRouteAuthority(IIamStore security, ITenantModelSt
 {
     public async ValueTask<ModelRouteSnapshot> RequireAsync(ModelRoutePin route, ModelInvocation invocation, ModelPurpose purpose, CancellationToken ct = default)
     {
-        if (invocation is null || invocation.Context.TenantId != route.TenantId || invocation.Route != route || !Enum.IsDefined(purpose))
+        if (invocation is null || invocation.TenantId != route.TenantId || invocation.Route != route || !Enum.IsDefined(purpose))
             throw new AccessDeniedException("model_route_scope_mismatch");
         await invocation.RequireCurrent(ct).ConfigureAwait(false);
         var current = await models.FindModelRouteAsync(route.TenantId, route.OfferingId, ct).ConfigureAwait(false)

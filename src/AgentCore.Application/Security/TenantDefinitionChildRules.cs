@@ -6,13 +6,6 @@ namespace AgentCore.Application.Security;
 
 public static class TenantDefinitionChildRules
 {
-    public const int MaxScenarios = 100;
-    public static void ValidateScenario(DefinitionEvaluationScenarioUpsert scenario)
-    {
-        ArgumentNullException.ThrowIfNull(scenario);
-        if (scenario.Prompt is null) throw new ArgumentException("Scenario prompt is required.");
-        DefinitionEvaluationScenarioValidator.Validate(scenario);
-    }
     public static string Fingerprint(TenantDefinitionDraftSnapshot snapshot) => DefinitionDraftConfigurationFingerprint.Compute(snapshot.Draft.Candidate, snapshot.Resources);
     public static void ValidateResourceBatch(Guid draftId, IReadOnlyList<AgentDefinitionDraftResource> current, IReadOnlyList<AgentDefinitionDraftResource> incoming)
     {

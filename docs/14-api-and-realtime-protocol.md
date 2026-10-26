@@ -2136,3 +2136,25 @@ Once a Session has an observed Run decision, a preference-only edit retains that
 Tenant `agent.response.started.model` carries the safe concrete model/connection labels and IDs, selection source and effort from that exact immutable Run pin. It updates the observed last-Run selection without replacing saved preference. Attachment, ordering and response tombstone fences apply before this projection; no late superseded event can restore an older selection.
 
 The model projection carries `observedFromRun`: true only for the retained immutable Run selection, false for a deterministic configuration preview before admission. Preference edits preserve this observation; Chat can label the previous Run accurately after switching between fixed, inherit and Auto. The response-start model projection always sets this flag to true.
+
+## Unified tenant evaluation HTTP
+
+All resources below use `/api/v2/tenants/{tenantId}` with signed-in tenant context and existing CSRF mutation protection. Enums in these bounded evaluation records serialize as numeric values: evaluator Script/Agent/Manual = 0/1/2; status Pending/Running/Completed/Cancelled/Indeterminate = 0/1/2/3/4; outcome Passed/Failed/Inconclusive = 0/1/2. Lifecycle BeforeRun/AfterRun/OnFailure/Manual = 0/1/2/3; Publication = 4 is the Definition gate. Policies RecordOnly/RequirePassBeforeRun/RequirePassForVerifiedOutcome/RequirePassBeforePublication/RequestManualAssessment = 0/1/2/3/4.
+
+| Resource | Actual contract |
+| --- | --- |
+| `GET/POST /scripts` | Paged readable catalog / save initial immutable version; human manage permission and expected security revision |
+| `GET /scripts/{id}?version=`; `POST /scripts/{id}/versions` | Exact version inspection / append with expected catalog version and security revision; archive is another version |
+| `GET/POST /evaluation-suites` | Paged readable reusable catalog / initial immutable criteria version |
+| `GET /evaluation-suites/{id}?version=`; `POST /evaluation-suites/{id}/versions` | Exact criteria inspection / append; current Script references validated |
+| `PUT /definition-drafts/{id}/evaluation-suite` | `{ suite: { name, checks, expectedVersion, expectedRevision }, expectedDraftRevision }`; saves common Suite and advances draft atomically |
+| `GET /evaluation-subjects/{kind}/{id}` | Current permission-fenced subject identity/revision/fingerprint and eligibility; no source body |
+| `POST /evaluation-attempts` | `{ subjectKind, subjectId, subjectRevision, suiteId, suiteVersion, dedupKey, expectedRevision, hook }`; reserve then bounded evaluation; duplicate returns exact stored facts |
+| `GET /evaluation-attempts/{id}`; `GET /evaluation-attempts?subjectKind=&subjectId=&page=&pageSize=` | Current subject/catalog/source read required; visibility filtering precedes paging/counts |
+| `POST /evaluation-attempts/{id}/review` | `{ checkId, outcome, reason, expectedRevision, expectedAttemptRevision }`; one attributable pending Manual finding, human-only |
+| `GET/PUT /governance/evaluation-policies` | Read / `{ defaults, expectedRevision, expectedPolicyRevision }`; narrowly typed automatic Run bindings, current governance manage |
+| `GET /agents/{id}/evaluation-bindings` | Read-only inherited Definition and organization defaults with independently readable Suite names |
+
+Suite writes carry name, bounded checks, expected catalog/security versions and optional archival. Script writes carry name, Assertion/Sandbox kind, typed predicate/expected value, optional bounded body, allowed hooks and expected versions. A saved Script is invoked through a Suite attempt; this release exposes no standalone native dispatch endpoint. Publication maps to an allowed Manual Script observation, not an arbitrary new event hook. Old tenant `/evaluation-scenarios` and `/evaluation-results` routes are removed; they are not aliases. Non-tenant Synthetic authoring fixtures remain isolated.
+
+Failures distinguish denied/unavailable source (403), stale/conflicting or reused request identity (409), and invalid request/publication requirement (400). `evaluation_source_changed`, `evaluation_suite_unavailable`, `script_unavailable`, `evaluation_immutable`, `evaluation_capacity`, `evaluation_attempt_limit` and `dedup_key_reused` have refresh/readback guidance. Technical cancellation/unknown state is an explicit stored status and Inconclusive assessment. No SignalR wire event or response identity changes are introduced.

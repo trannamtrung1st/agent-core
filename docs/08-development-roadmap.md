@@ -63,3 +63,7 @@ The approved Instance Skills migration replaces keyword activation and Harness S
 ## Account-scoped Email follow-on
 
 The bounded post-MVP Email slice adds typed protected accounts, IMAP/SMTP, durable dispatch and owner selection. It does not reopen historical P3 freezes or P10/P11. Current local evidence and deferred live/hosted gates belong to the [implementation plan](18-implementation-plan.md#account-scoped-email-follow-on) and [dated report](reports/email-account-verification-2026-10-12.md).
+
+## Initiative 7 — unified evaluation cutover
+
+The common tenant Suite/Script/attempt capability, transactional publication conversion, Run hooks/verification, model-capability admission, Manual assessment and native Admin UI are implemented locally. [The delivery ledger](reports/unified-scripts-evaluation-2026-10-27.md) owns exact-source local evidence and pending qualifications. Executable Sandbox scripts remain explicitly unavailable pending independent approved dispatch and isolated inputs. This status does not accept a new application milestone, hosted CI, real provider quality or production/native isolation. Future Session Goals consume immutable evaluation references rather than another execution engine.

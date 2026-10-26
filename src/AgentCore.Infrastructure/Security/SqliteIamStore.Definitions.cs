@@ -11,6 +11,11 @@ public sealed partial class SqliteIamStore
 {
     public async ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
+        if (AgentCore.Application.Evaluations.EvaluationStoreRules.TryScope(scope, out _))
+        {
+            await using var db = await contexts.CreateDbContextAsync(ct);
+            return await OwnsEvaluation(db, scope, ct);
+        }
         if (AgentCore.Application.Models.TenantModelRules.TryId(scope, out _))
         {
             await using var db = await contexts.CreateDbContextAsync(ct);
@@ -170,11 +175,26 @@ public sealed partial class SqliteIamStore
             AgentDefinitionValidator.ValidateCandidate(draft.Candidate);
             if (draft.Candidate.DefinitionId != draft.DefinitionId || !Guid.TryParseExact(draft.DefinitionId, "D", out var definitionId)
                 || !await Root(db, next.Tenant.TenantId, definitionId).AnyAsync(ct).ConfigureAwait(false)) throw new AccessDeniedException("resource_unavailable");
+            foreach (var binding in draft.Candidate.EvaluationBindings ?? [])
+            {
+                var target = await Suite(db, next.Tenant.TenantId, binding.SuiteId, binding.Version, ct);
+                if (target is null || target.Archived || (await Suite(db, next.Tenant.TenantId, binding.SuiteId, null, ct))?.Archived != false
+                    || target.DraftId is not null && (binding.Hook != AgentCore.Domain.Evaluations.EvaluationHook.Publication || target.DefinitionId != Guid.Parse(draft.DefinitionId)))
+                    throw new AccessDeniedException("evaluation_suite_unavailable");
+                AgentCore.Domain.Evaluations.EvaluationRules.ValidatePolicy(binding, target);
+            }
             var row = await Draft(db, next.Tenant.TenantId, draft.DraftId).SingleOrDefaultAsync(ct).ConfigureAwait(false);
             if (expectedDraftRevision is null)
             {
                 if (row is not null || draft.Revision != 1 || draft.SourceKind != DefinitionDraftSourceKind.ForkDurable || draft.SourceVersion is not { } sourceVersion || draft.SourceDefinitionId is not null) return null;
                 if (!await Publication(db, next.Tenant.TenantId, definitionId, sourceVersion).AnyAsync(ct).ConfigureAwait(false)) return null;
+                foreach (var binding in draft.Candidate.EvaluationBindings ?? [])
+                    if (binding.Hook == AgentCore.Domain.Evaluations.EvaluationHook.Publication && await Suite(db, next.Tenant.TenantId, binding.SuiteId, binding.Version, ct) is { DraftId: not null } source)
+                    {
+                        var clone = AgentCore.Domain.Evaluations.EvaluationRules.Freeze(source with { SuiteId = draft.DraftId, DraftId = draft.DraftId, Version = 1, CreatedBy = audit.ActorPrincipalId, CreatedAt = audit.At, Archived = false });
+                        db.Add(EvaluationPersistence.Row(clone));
+                        draft = draft with { Candidate = draft.Candidate with { EvaluationBindings = (draft.Candidate.EvaluationBindings ?? []).Where(b => b != binding).ToArray() } };
+                    }
                 db.AgentDefinitionDrafts.Add(AgentDefinitionAdminMapping.MapDraft(draft));
                 var resources = await db.AgentDefinitionPublicationResources.IgnoreQueryFilters().AsNoTracking().Where(r => r.DefinitionId == draft.DefinitionId && r.Version == sourceVersion).ToArrayAsync(ct).ConfigureAwait(false);
                 foreach (var r in resources) db.AgentDefinitionDraftResources.Add(new() { DraftId = draft.DraftId.ToString("D"), ResourceId = r.ResourceId,
@@ -198,16 +218,15 @@ public sealed partial class SqliteIamStore
             var draft = AgentDefinitionAdminMapping.MapDraft(row); var key = draftId.ToString("D");
             TenantDefinitionResourceScopes.RequireNoDraftGrants(next, draftId);
             var resources = await db.AgentDefinitionDraftResources.IgnoreQueryFilters().AsNoTracking().Where(r => r.DraftId == key).ToArrayAsync(ct).ConfigureAwait(false);
-            var scenarios = await db.AgentDefinitionDraftEvaluationScenarios.IgnoreQueryFilters().AsNoTracking().Where(s => s.DraftId == key).ToArrayAsync(ct).ConfigureAwait(false);
-            var results = await LatestDefinitionResults(db, key, ct).ConfigureAwait(false);
-            TenantDefinitionPublicationRules.RequireReady(draft, new(resources.Select(DefinitionResourcePersistence.MapDraftResource).ToArray(), scenarios.Select(DefinitionDraftEvaluationPersistence.MapScenario).ToArray(), results.Select(DefinitionDraftEvaluationPersistence.MapResult).ToArray()));
+            var snapshot = (await DefinitionSnapshot(db, next.Tenant.TenantId, draftId, ct))!;
+            TenantDefinitionPublicationRules.RequireReady(draft, new(snapshot.Resources, snapshot.Suites, snapshot.Attempts));
             if (resources.Length > 0)
             {
                 if (definitionContent is null) throw new AccessDeniedException("resource_content_unavailable");
                 await DefinitionResourcePersistence.VerifyDraftResourcesAsync(db, definitionContent, draftId, ct, includeTenant: true).ConfigureAwait(false);
             }
             var maxVersion = await db.AgentDefinitionPublications.IgnoreQueryFilters().Where(p => p.DefinitionId == draft.DefinitionId).Select(p => (int?)p.Version).MaxAsync(ct).ConfigureAwait(false) ?? 0;
-            var version = checked(maxVersion + 1); var payload = draft.Candidate.ToPublished(version); AgentDefinitionValidator.Validate(payload);
+            var version = checked(maxVersion + 1); var payload = TenantDefinitionPublicationRules.FreezeDraftSuite(draft.Candidate.ToPublished(version), snapshot.Suites, draftId); AgentDefinitionValidator.Validate(payload);
             var publication = new AgentDefinitionPublication(draft.DefinitionId, version, payload, draft.Revision, DefinitionPublicationStatus.Active, 1, at);
             db.AgentDefinitionPublications.Add(AgentDefinitionAdminMapping.MapPublication(publication));
             DefinitionResourcePersistence.BindDraftResourcesToPublication(db, draftId, draft.DefinitionId, version, includeTenant: true);

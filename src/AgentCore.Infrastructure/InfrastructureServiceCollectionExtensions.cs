@@ -451,7 +451,7 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<AgentCore.Application.Security.TenantExperienceService>(),
                 string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase) ? provider.GetRequiredService<ILanguageModel>() : null,
                 string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase) ? provider.GetRequiredService<IModelCatalog>() : null,
-                provider.GetRequiredService<IDiagnosticIdSource>());
+                provider.GetRequiredService<IDiagnosticIdSource>(), provider.GetRequiredService<AgentCore.Application.Evaluations.TenantEvaluationService>());
         });
         return services;
     }

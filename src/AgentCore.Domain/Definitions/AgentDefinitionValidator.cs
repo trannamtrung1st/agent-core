@@ -20,6 +20,7 @@ public static class AgentDefinitionValidator
     public static void Validate(AgentDefinition definition)
     {
         definition.StateIsolationPolicy?.Validate();
+        AgentCore.Domain.Evaluations.EvaluationRules.ValidateBindings(definition.EvaluationBindings);
         if (definition.StateIsolationPolicy?.ConversationContextScope == ConversationContextScope.CurrentRequest && definition.Voice.Enabled)
             throw new ArgumentException("Request-isolated Sessions currently support text input. Disable Voice before selecting CurrentRequest.");
         if (definition.SchemaVersion != 2)

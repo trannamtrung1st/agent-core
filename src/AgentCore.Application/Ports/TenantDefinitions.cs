@@ -1,5 +1,6 @@
 using AgentCore.Domain.Definitions;
 using AgentCore.Application.Admin;
+using AgentCore.Domain.Evaluations;
 using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Ports;
@@ -9,11 +10,9 @@ public sealed record TenantDefinitionSummary(TenantDefinition Definition, int Dr
 public sealed record TenantDefinitionPage(IReadOnlyList<TenantDefinitionSummary> Items, int Total, int Page, int PageSize);
 
 public sealed record TenantDefinitionDraftSnapshot(AgentDefinitionDraft Draft, IReadOnlyList<AgentDefinitionDraftResource> Resources,
-    IReadOnlyList<DefinitionEvaluationScenario> Scenarios, IReadOnlyList<DefinitionEvaluationResult> Results);
+    IReadOnlyList<EvaluationSuiteVersion> Suites, IReadOnlyList<EvaluationAttempt> Attempts);
 public sealed record TenantDefinitionResourceUpload(Guid? ResourceId, string LogicalPath, AgentDefinitionResourceKind Kind, string MediaType, byte[]? Content);
 public sealed record TenantDefinitionResourceContent(string LogicalPath, string MediaType, byte[] Content);
-public sealed record TenantDefinitionScenarioSaved(DefinitionEvaluationScenario Scenario, long Revision);
-public sealed record TenantDefinitionDraftRevision(long Revision);
 public sealed record TenantDefinitionDeleted(bool DefinitionRetired);
 public sealed record BuiltInDefinitionResource(string LogicalPath, AgentDefinitionResourceKind Kind, string MediaType, byte[] Content);
 public sealed record BuiltInDefinitionTemplate(AgentDefinition Definition, IReadOnlyList<BuiltInDefinitionResource> Resources);
@@ -40,12 +39,6 @@ public interface ITenantDefinitionStore
         Guid draftId, long expectedDraftRevision, IReadOnlyList<AgentDefinitionDraftResource> resources, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
     ValueTask<AgentDefinitionDraftResourceBatchBound?> TryRemoveDefinitionResourceAsync(TenantSecurityState next, long expectedSecurityRevision,
         Guid draftId, long expectedDraftRevision, Guid resourceId, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
-    ValueTask<TenantDefinitionScenarioSaved?> TrySaveDefinitionScenarioAsync(TenantSecurityState next, long expectedSecurityRevision,
-        long expectedDraftRevision, DefinitionEvaluationScenarioUpsert scenario, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
-    ValueTask<TenantDefinitionDraftRevision?> TryRemoveDefinitionScenarioAsync(TenantSecurityState next, long expectedSecurityRevision,
-        Guid draftId, long expectedDraftRevision, string scenarioId, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
-    ValueTask<DefinitionEvaluationResult?> TrySaveDefinitionEvaluationAsync(TenantSecurityState next, long expectedSecurityRevision,
-        DefinitionEvaluationResult result, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
     ValueTask<TenantDefinition?> FindDefinitionAsync(Guid tenantId, Guid definitionId, CancellationToken ct = default);
     ValueTask<TenantDefinitionPage> ListDefinitionsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default);
     ValueTask<IReadOnlyList<AgentDefinitionDraft>> ListDefinitionDraftsAsync(Guid tenantId, Guid definitionId, CancellationToken ct = default);

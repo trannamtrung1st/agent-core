@@ -10,6 +10,14 @@ export type InvitationProof = { tenantId: string; invitationId: string; token: s
 export type Invitation = { invitationId: string; tenantId: string; organizationName: string; login: string; expiresAt: string };
 
 const reasons: Record<string, string> = {
+  evaluation_source_changed: 'The saved subject or evaluation source changed. Refresh the exact source and status before a deliberate new evaluation.',
+  evaluation_suite_unavailable: 'This Suite version is unavailable, archived or outside your current access. Select a readable available version.',
+  script_unavailable: 'This exact Script version is unavailable or outside your current access. Inspect its saved version and access before continuing.',
+  evaluation_immutable: 'This assessment is already final or has changed. Refresh its exact status; finalized evidence cannot be overwritten.',
+  evaluation_capacity: 'Evaluation capacity is currently in use. Refresh status before submitting another deliberate request.',
+  evaluation_attempt_limit: 'This subject reached its bounded evaluation history limit. Inspect retained evidence before creating new work.',
+  dedup_key_reused: 'This request identity belongs to a different saved evaluation. Refresh status before starting a new request.',
+
   completion_destination_unavailable: 'This report destination is unavailable or you no longer have access. Choose an active conversation for this instance, or select no report.',
   completion_destination_permission_required: 'The agent no longer has access to communicate in the selected conversation. Review its conversation and agent access.',
   automation_admission_review_required: 'This occurrence requires admission review. No work was admitted. Keep the saved Automation and check organization policy.',

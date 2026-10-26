@@ -79,8 +79,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             foreach (var draftId in draftIds)
             {
                 Assert.Null(admin.ResourceStore!.CopyDraftResources(draftId));
-                var evidence = admin.EvaluationStore!.TenantEvidence(draftId);
-                Assert.Empty(evidence.Scenarios); Assert.Empty(evidence.Results);
+                Assert.Empty(await f.Evaluation.ListScenariosAsync(draftId)); Assert.Empty(await f.Evaluation.ListResultsAsync(draftId));
             }
             Assert.Null(admin.ResourceStore!.CopyPublicationResources(definitionId, 1));
         }

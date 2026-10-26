@@ -54,16 +54,14 @@ public sealed partial class InMemoryAgentDefinitionAdminStore
             || before.Revision != expected || draft.Revision != checked(expected + 1) || !TenantDefinitionCreationRules.SameSource(before, draft)) return false;
         _drafts[draft.DraftId] = frozen; return true;
     }
-    internal AgentDefinitionPublication? PublishTenantDraft(Guid tenant, Guid draftId, long expected, DateTimeOffset at)
+    internal AgentDefinitionPublication? PublishTenantDraft(Guid tenant, Guid draftId, long expected, DateTimeOffset at, TenantDefinitionEvidence evidence)
     {
         var draft = TenantDraft(tenant, draftId); if (draft is null || draft.Revision != expected) return null;
         var resources = ResourceStore?.CopyDraftResources(draftId) ?? [];
-        var evidence = EvaluationStore?.TenantEvidence(draftId);
-        var scenarios = evidence?.Scenarios ?? []; var results = evidence?.Results ?? [];
-        TenantDefinitionPublicationRules.RequireReady(draft, new(resources, scenarios, results));
+        TenantDefinitionPublicationRules.RequireReady(draft, evidence);
         ResourceStore?.EnsureReadyForPublication(draftId);
         var version = checked(_publications.Keys.Where(k => k.DefinitionId == draft.DefinitionId).Select(k => k.Version).DefaultIfEmpty(0).Max() + 1);
-        var payload = draft.Candidate.ToPublished(version); AgentDefinitionValidator.Validate(payload);
+        var payload = TenantDefinitionPublicationRules.FreezeDraftSuite(draft.Candidate.ToPublished(version), evidence.Suites, draftId); AgentDefinitionValidator.Validate(payload);
         var publication = AgentDefinitionAdminSnapshots.Freeze(new AgentDefinitionPublication(draft.DefinitionId, version, payload, draft.Revision, DefinitionPublicationStatus.Active, 1, at));
         ResourceStore?.SnapshotPublicationOnPublish(draftId, draft.DefinitionId, version);
         _publications[(draft.DefinitionId, version)] = publication; _drafts.TryRemove(draftId, out _);

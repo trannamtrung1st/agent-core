@@ -59,6 +59,8 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
         var migrations = db.Database.GetMigrations().ToArray();
         if (applied.Any(id => !migrations.Contains(id, StringComparer.Ordinal)))
             throw ResetRequired("data_reset_required: Installed schema predates the canonical filesystem baseline.");
+        if (migrations.LastOrDefault() == "20261027010000_UnifiedEvaluations" && applied.Length > 0 && applied.Length < migrations.Length)
+            throw new InvalidOperationException(EvaluationCutover.Recovery);
         var isModelUpgrade = migrations.LastOrDefault() == "20261025090000_CanonicalModelIdentity"
             && applied.LastOrDefault() is "20261025085000_TenantDynamicModels" or "20261025080000_SpaceResourceApprovals"
             && applied.SequenceEqual(migrations.Take(applied.Length), StringComparer.Ordinal);
@@ -72,6 +74,11 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
         try { await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false); }
         catch (SqliteException error) when (error.Message.Contains("LegacyModelDataResetRequired", StringComparison.Ordinal))
         { throw ResetRequired("data_reset_required: Installed model references cannot be converted automatically."); }
+        if (await db.AgentDefinitionDraftEvaluationScenarios.IgnoreQueryFilters().AnyAsync(s => db.AgentDefinitionDrafts.IgnoreQueryFilters().Any(d => d.DraftId == s.DraftId
+            && db.Set<AgentCore.Infrastructure.Security.TenantDefinitionRecord>().Any(t => t.DefinitionId == d.DefinitionId)), cancellationToken)
+            || await db.AgentDefinitionDraftEvaluationResults.IgnoreQueryFilters().AnyAsync(r => db.AgentDefinitionDrafts.IgnoreQueryFilters().Any(d => d.DraftId == r.DraftId
+                && db.Set<AgentCore.Infrastructure.Security.TenantDefinitionRecord>().Any(t => t.DefinitionId == d.DefinitionId)), cancellationToken))
+            throw new InvalidOperationException(EvaluationCutover.Recovery);
         await ValidateCanonicalSchemaAsync(db, cancellationToken).ConfigureAwait(false);
         await ContextCutover.ValidateAsync(db, cancellationToken).ConfigureAwait(false);
         await ValidateStoredSkillContractAsync(db, cancellationToken).ConfigureAwait(false);

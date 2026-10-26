@@ -1,3 +1,4 @@
+import { followAppLink } from '../../app/appLink';
 import { CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, LoadingOutlined, RedoOutlined, StopOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Collapse, Descriptions, Drawer, Empty, Flex, Spin, Tag, Typography, theme } from "antd";
 import { useEffect, useRef, useState } from "react";
@@ -79,6 +80,11 @@ export function AgentRunDetails({ run, onChange, showContextProvenance = false, 
       <Typography.Text type="secondary">{runActivationLabel(run.activationKind)}</Typography.Text>
       {run.outcome?.attentionRequired ? <Typography.Text><ExclamationCircleOutlined /> Needs attention</Typography.Text> : null}
     </Flex>
+    {run.verificationSummary && <section aria-label="Verification" className="background-work-detail-section"><Flex vertical gap={token.paddingXS}>
+      <Typography.Text strong>Verification · {run.verificationSummary.status.replace(/([a-z])([A-Z])/g, '$1 $2')}</Typography.Text>
+      <Typography.Text type="secondary">{run.verificationSummary.passedChecks} of {run.verificationSummary.requiredChecks} required checks passed. Execution outcome and evaluation evidence are separate.</Typography.Text>
+      {run.evaluationUrl && <Typography.Link href={run.evaluationUrl} onClick={followAppLink}>Inspect evaluation evidence</Typography.Link>}
+    </Flex></section>}
     {run.sourceBackgroundSessionId ? <Typography.Text type="secondary">Background result from <ConversationDestination sessionId={run.sourceBackgroundSessionId} /></Typography.Text> : null}
     {run.taskIntent ? <ReadingRegion label="Original task" text={run.taskIntent} /> : null}
     {run.progress ? <Typography.Paragraph className="background-work-progress" style={{ marginBottom: 0 }}>{run.progress}</Typography.Paragraph> : null}

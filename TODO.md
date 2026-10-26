@@ -105,6 +105,8 @@ S3 tool/Skill and context/memory relevance, S4 initiative/event relevance and S5
 
 ### 7. Unified Scripts & Evaluation
 
+The common local capability and tenant cutover are implemented. [Delivery ledger](docs/reports/unified-scripts-evaluation-2026-10-27.md) records exact-source verification and remaining qualification. Sandbox bodies remain nonexecuting/Inconclusive until independent exact Review and isolated dispatch are qualified; no unsafe substitute or native success claim is made. Goals/Delegation should consume versioned results/verification summaries through existing owners.
+
 Consolidate lifecycle scripts/hooks, structured results/evidence, Script/Agent/Manual evaluation, Agent Run and execution verification, evaluation configuration/management and Action Policies. Outcomes should be usable by Goals and Delegation through existing execution owners. Extend current evaluation facilities where appropriate. Automated evaluation remains separate from future human organizational review roles.
 
 ### 8. Session Goals

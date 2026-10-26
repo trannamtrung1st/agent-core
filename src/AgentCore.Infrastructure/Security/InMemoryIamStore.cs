@@ -160,6 +160,8 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
         if (audit.TenantId != state.Tenant.TenantId || state.Users.Any(u => !_accounts.ContainsKey(u.AccountId)))
             throw new ArgumentException("Invalid Account or audit ownership.");
         EnsureActiveAccountOwner(state);
+        if (state.Assignments.Any(a => AgentCore.Application.Evaluations.EvaluationStoreRules.TryScope(a.Scope, out _) && !OwnsEvaluation(a.Scope)))
+            throw new ArgumentException("An evaluation assignment requires its current tenant owner.");
         if (state.Assignments.Any(a => AgentCore.Application.Models.TenantModelRules.TryId(a.Scope, out _) && !OwnsModelResource(a.Scope)))
             throw new ArgumentException("A model assignment requires a current owned resource.");
         if (state.Assignments.Any(a => TenantDefinitionResourceScopes.TryParse(a.Scope, out var reference) && !OwnsDefinitionResource(state.Tenant.TenantId, reference)))

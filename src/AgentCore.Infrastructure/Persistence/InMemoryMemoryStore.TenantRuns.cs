@@ -77,6 +77,12 @@ public sealed partial class InMemoryMemoryStore
             AgentRuns.Runs[runId] = saved; return saved;
         }
     }
+    internal IReadOnlyList<AgentRun> TenantEvaluationCandidates(int limit, Func<AgentRun, bool> needsEvaluation, int offset = 0)
+    {
+        lock (_gate) return AgentRuns.Runs.Values.Where(r => r.Owner.TenantId is { } tenant && r.IsTerminal && OwnsTenantSession(tenant, r.SessionId)
+            && (r.Admission.Configuration?.Definition.EvaluationBindings ?? []).Any(b => b.Hook is AgentCore.Domain.Evaluations.EvaluationHook.AfterRun or AgentCore.Domain.Evaluations.EvaluationHook.OnFailure)
+            && needsEvaluation(r)).OrderBy(r => r.UpdatedAtUtc).ThenBy(r => r.AgentRunId).Skip(Math.Clamp(offset, 0, 100_000)).Take(Math.Clamp(limit, 1, 32)).ToArray();
+    }
     internal AgentRun? ReadTenantRun(Guid tenant, Guid runId)
     {
         lock (_gate) return AgentRuns.Runs.TryGetValue(runId, out var run) && run.Owner.TenantId == tenant && OwnsTenantSession(tenant, run.SessionId) ? run : null;

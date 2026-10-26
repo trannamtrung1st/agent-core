@@ -10,7 +10,8 @@ public sealed partial class InMemoryIamStore
     public ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (instances.CredentialGate) lock (definitions.TenantGate)
-            return ValueTask.FromResult(AgentCore.Application.Models.TenantModelRules.TryId(scope, out _) ? OwnsModelResource(scope)
+            return ValueTask.FromResult(AgentCore.Application.Evaluations.EvaluationStoreRules.TryScope(scope, out _) ? OwnsEvaluation(scope)
+                : AgentCore.Application.Models.TenantModelRules.TryId(scope, out _) ? OwnsModelResource(scope)
                 : TenantSecretService.TryId(scope, out var secret) ? _secrets.GetValueOrDefault((scope.TenantId!.Value, secret)) is { Status: not AgentCore.Domain.Spaces.SecretStatus.Deleted }
                 : TenantSpaceService.TryId(scope, out var space) ? _spaces.GetValueOrDefault((scope.TenantId!.Value, space)) is { DeletedAt: null }
                 : TenantEventAdmissionRules.TryId(scope, out var coreEvent) ? sessionBacking.CoreEvents.OwnsTenantEvent(scope.TenantId!.Value, coreEvent)
@@ -63,12 +64,36 @@ public sealed partial class InMemoryIamStore
         IReadOnlyList<AgentDefinitionDraftResource> initialResources, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         ValueTask.FromResult(WriteDefinition(next, expectedSecurityRevision, audit, () => definition.TenantId == next.Tenant.TenantId && definitions.CreateTenantDefinition(definition, draft, initialResources, ct) ? definition : null, ct, initiator) is not null);
     public ValueTask<bool> TrySaveDefinitionDraftAsync(TenantSecurityState next, long expectedSecurityRevision, AgentDefinitionDraft draft, long? expectedDraftRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
-        ValueTask.FromResult(WriteDefinition(next, expectedSecurityRevision, audit, () => definitions.SaveTenantDraft(next.Tenant.TenantId, draft, expectedDraftRevision) ? draft : null, ct, initiator) is not null);
+        ValueTask.FromResult(WriteDefinition(next, expectedSecurityRevision, audit, () => {
+            AgentCore.Domain.Evaluations.EvaluationSuiteVersion? clone = null;
+            if (expectedDraftRevision is null)
+            {
+                foreach (var binding in draft.Candidate.EvaluationBindings ?? [])
+                    if (binding.Hook == AgentCore.Domain.Evaluations.EvaluationHook.Publication && Suite(next.Tenant.TenantId, binding.SuiteId, binding.Version) is { DraftId: not null } source)
+                    {
+                        clone = AgentCore.Domain.Evaluations.EvaluationRules.Freeze(source with { SuiteId = draft.DraftId, DraftId = draft.DraftId, Version = 1, CreatedBy = audit.ActorPrincipalId, CreatedAt = audit.At, Archived = false });
+                        draft = draft with { Candidate = draft.Candidate with { EvaluationBindings = (draft.Candidate.EvaluationBindings ?? []).Where(b => b != binding).ToArray() } };
+                    }
+            }
+            foreach (var binding in draft.Candidate.EvaluationBindings ?? [])
+            {
+                var target = Suite(next.Tenant.TenantId, binding.SuiteId, binding.Version);
+                if (target is null || target.Archived || Suite(next.Tenant.TenantId, binding.SuiteId)?.Archived != false
+                    || target.DraftId is not null && (binding.Hook != AgentCore.Domain.Evaluations.EvaluationHook.Publication || target.DefinitionId != Guid.Parse(draft.DefinitionId)))
+                    throw new AccessDeniedException("evaluation_suite_unavailable");
+                AgentCore.Domain.Evaluations.EvaluationRules.ValidatePolicy(binding, target);
+            }
+            if (!definitions.SaveTenantDraft(next.Tenant.TenantId, draft, expectedDraftRevision)) return null;
+            if (clone is not null) evaluationSuites.Add((clone.TenantId, clone.SuiteId, 1), clone);
+            return draft;
+        }, ct, initiator) is not null);
     public ValueTask<AgentDefinitionPublication?> TryPublishDefinitionDraftAsync(TenantSecurityState next, long expectedSecurityRevision, Guid draftId, long expectedDraftRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         ValueTask.FromResult(WriteDefinition(next, expectedSecurityRevision, audit, () =>
         {
             TenantDefinitionResourceScopes.RequireNoDraftGrants(next, draftId);
-            return definitions.PublishTenantDraft(next.Tenant.TenantId, draftId, expectedDraftRevision, at);
+            var snapshot = EvaluationSnapshot(next.Tenant.TenantId, draftId);
+            if (snapshot is null) return null;
+            return definitions.PublishTenantDraft(next.Tenant.TenantId, draftId, expectedDraftRevision, at, new(snapshot.Resources, snapshot.Suites, snapshot.Attempts));
         }, ct, initiator));
     public ValueTask<AgentDefinitionPublication?> TryDeprecateDefinitionPublicationAsync(TenantSecurityState next, long expectedSecurityRevision, Guid definitionId, int version, long expectedMetadataRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         ValueTask.FromResult(WriteDefinition(next, expectedSecurityRevision, audit, () => definitions.DeprecateTenantPublication(next.Tenant.TenantId, definitionId, version, expectedMetadataRevision), ct, initiator));

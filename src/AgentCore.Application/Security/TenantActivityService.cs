@@ -12,14 +12,14 @@ public sealed record TenantActivityPage<T>(IReadOnlyList<T> Items, int Total, in
 public sealed record TenantActivityRun(Guid RunId, Guid SessionId, Guid AgentInstanceId, TrustedExecutionContext Context,
     AgentRunStatus Status, long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, ActivationKind ActivationKind,
     AgentRunOutputContract OutputContract, string ModelOfferingId, int AttemptCount, int MaxAttempts, string? ProgressSummary, string? Objective, string? OutcomeText, AgentRunOutcomeKind? OutcomeKind,
-    string? FailureCode, string? FailureSummary, Guid? DiagnosticId, bool CancellationRequested, bool CanCancel, AgentCore.Domain.Models.ModelDecisionEvidence? ModelDecision = null, string? ReasoningEffort = null);
+    string? FailureCode, string? FailureSummary, Guid? DiagnosticId, bool CancellationRequested, bool CanCancel, AgentCore.Domain.Models.ModelDecisionEvidence? ModelDecision = null, string? ReasoningEffort = null, AgentCore.Application.Evaluations.RunVerificationSummary? VerificationSummary = null);
 public sealed record TenantActivityDelivery(string Status, Guid? TargetSessionId, string? Reason);
 public sealed record TenantBackgroundDetail(TenantActivitySession Session, TenantActivityRun? InitialRun,
     string? InitialTitle, TenantActivityDelivery? CompletionDelivery);
 
 // Original-human Activity inspection is independent from communication and executor authority.
 public sealed class TenantActivityService(IIamStore security, ITenantSessionStore sessions, ITenantAgentStore agents,
-    ITenantRunStore runs, IdentityService identity, IamAuthorizer authorizer)
+    ITenantRunStore runs, IdentityService identity, IamAuthorizer authorizer, AgentCore.Application.Evaluations.TenantEvaluationService? evaluations = null)
 {
     public async ValueTask<TenantActivityPage<TenantActivitySession>> ListSessionsAsync(Guid tenant, Guid instance, TenantSessionInitiator human,
         int page = 0, int pageSize = 30, bool backgroundOnly = false, CancellationToken ct = default)
@@ -148,7 +148,13 @@ public sealed class TenantActivityService(IIamStore security, ITenantSessionStor
         new(run.AgentRunId, run.SessionId, run.AgentInstanceId, run.Admission.ExecutionContext!, run.Status, run.Revision, run.CreatedAtUtc, run.UpdatedAtUtc,
             run.Admission.Activation.Kind, run.Admission.OutputContract, run.PinnedModel.OfferingId, run.AttemptCount, run.MaxAttempts, run.Progress?.Summary, TenantExperienceReviewRules.DisplayObjective(run), run.Result?.Text, run.Result?.OutcomeKind,
             run.Failure?.Code, run.Failure?.Summary, run.Failure?.DiagnosticId, run.CancellationRequested, !run.IsTerminal && !run.CancellationRequested && await Can(state, human.PrincipalId, "agent-runs.cancel", TenantRunRules.Scope(state.Tenant.TenantId, run.AgentRunId), ct).ConfigureAwait(false)
-                && await Can(state, human.PrincipalId, "agents.chat", AccessScope.ForResource(state.Tenant.TenantId, "agent", run.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false), run.PinnedModel.Decision, run.PinnedModel.ReasoningEffort);
+                && await Can(state, human.PrincipalId, "agents.chat", AccessScope.ForResource(state.Tenant.TenantId, "agent", run.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false), run.PinnedModel.Decision, run.PinnedModel.ReasoningEffort, await Verification(state, run, human, ct));
+    private async ValueTask<AgentCore.Application.Evaluations.RunVerificationSummary?> Verification(TenantSecurityState state, AgentRun run, TenantSessionInitiator human, CancellationToken ct)
+    {
+        if (evaluations is null) return null;
+        try { return await evaluations.SummaryAsync(human.PrincipalId, state.Tenant.TenantId, run, human, ct); }
+        catch (AccessDeniedException) { return null; }
+    }
     private delegate bool ResourceId(AccessScope scope, out Guid id);
     private async ValueTask<IReadOnlyList<Guid>?> Readable(TenantSecurityState state, Guid actor, string permission, ResourceId parse, CancellationToken ct)
     {

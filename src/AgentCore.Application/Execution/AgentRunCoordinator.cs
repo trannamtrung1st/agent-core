@@ -6,8 +6,11 @@ namespace AgentCore.Application.Execution;
 
 /// <summary>One claim/recovery path for both immediate admission and scheduler dispatch.</summary>
 public sealed class AgentRunCoordinator(IAgentRunStore store, IAgentRunDispatcher dispatcher,
-    IIdGenerator ids, TimeProvider time)
+    IIdGenerator ids, TimeProvider time, AgentCore.Application.Evaluations.TenantEvaluationService? evaluations = null, Microsoft.Extensions.Logging.ILogger<AgentRunCoordinator>? logger = null) : IAsyncDisposable
 {
+    private Task? evaluationSweep;
+    private readonly CancellationTokenSource evaluationShutdown = new();
+    private readonly object evaluationGate = new();
     public const int DefaultBatchSize = 8;
     public static readonly TimeSpan ClaimDuration = TimeSpan.FromMinutes(5);
 
@@ -30,7 +33,26 @@ public sealed class AgentRunCoordinator(IAgentRunStore store, IAgentRunDispatche
             cancellationToken.ThrowIfCancellationRequested();
             if (await PrepareAndDispatchAsync(run, cancellationToken).ConfigureAwait(false)) dispatched++;
         }
+        if (evaluations is not null) lock (evaluationGate)
+            if (evaluationSweep is null || evaluationSweep.IsCompleted) evaluationSweep = SweepEvaluationsAsync(limit, cancellationToken);
         return dispatched;
+    }
+
+    private async Task SweepEvaluationsAsync(int limit, CancellationToken ct)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, evaluationShutdown.Token);
+        try { await evaluations!.ObserveTerminalsAsync(limit, linked.Token).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested || evaluationShutdown.IsCancellationRequested) { }
+        catch (Exception) { Microsoft.Extensions.Logging.LoggerExtensions.LogWarning(logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentRunCoordinator>.Instance, "Attached evaluation sweep did not complete; durable attempts retain their no-replay recovery facts."); }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        evaluationShutdown.Cancel();
+        Task? pending; lock (evaluationGate) pending = evaluationSweep;
+        if (pending is null) { evaluationShutdown.Dispose(); return; }
+        try { await pending.WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false); }
+        catch (TimeoutException) { /* Bounded shutdown leaves any durable reservation for no-replay recovery. */ }
+        finally { evaluationShutdown.Dispose(); }
     }
 
     private async ValueTask<bool> PrepareAndDispatchAsync(AgentRun run, CancellationToken cancellationToken)

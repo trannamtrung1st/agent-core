@@ -1,4 +1,5 @@
 using AgentCore.Application.Admin;
+using AgentCore.Domain.Evaluations;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Definitions;
@@ -64,58 +65,35 @@ public sealed partial class SqliteIamStore
             return new AgentDefinitionDraftResourceBatchBound(draft.Revision, rows.Where(r => r.ResourceId != id).Select(DefinitionResourcePersistence.MapDraftResource).OrderBy(r => r.LogicalPath, StringComparer.Ordinal).ToArray());
         }, ct, initiator);
 
-    public ValueTask<TenantDefinitionScenarioSaved?> TrySaveDefinitionScenarioAsync(TenantSecurityState next, long expectedSecurityRevision,
-        long expectedDraftRevision, DefinitionEvaluationScenarioUpsert scenario, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
-        WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
-        {
-            TenantDefinitionChildRules.ValidateScenario(scenario);
-            var draft = await Draft(db, next.Tenant.TenantId, scenario.DraftId).SingleOrDefaultAsync(ct).ConfigureAwait(false);
-            if (draft is null || draft.Revision != expectedDraftRevision) return null;
-            var key = scenario.DraftId.ToString("D");
-            var rows = await db.AgentDefinitionDraftEvaluationScenarios.IgnoreQueryFilters().Where(s => s.DraftId == key).ToArrayAsync(ct).ConfigureAwait(false);
-            var before = rows.SingleOrDefault(s => s.ScenarioId == scenario.ScenarioId);
-            if (before is null && rows.Length >= TenantDefinitionChildRules.MaxScenarios) throw new ArgumentException("This draft has reached its evaluation scenario limit.");
-            var saved = new DefinitionEvaluationScenario(scenario.DraftId, scenario.ScenarioId, (before?.ScenarioVersion ?? 0) + 1,
-                scenario.Title, scenario.Prompt, scenario.RequirementLevel, scenario.CheckType, scenario.ToolName, audit.At);
-            if (before is null) db.Add(DefinitionDraftEvaluationPersistence.MapScenario(saved));
-            else db.Entry(before).CurrentValues.SetValues(DefinitionDraftEvaluationPersistence.MapScenario(saved));
-            draft.Revision++; draft.UpdatedAtUtc = audit.At.ToUnixTimeMilliseconds();
-            return new TenantDefinitionScenarioSaved(saved, draft.Revision);
-        }, ct, initiator);
-    public ValueTask<TenantDefinitionDraftRevision?> TryRemoveDefinitionScenarioAsync(TenantSecurityState next, long expectedSecurityRevision,
-        Guid draftId, long expectedDraftRevision, string scenarioId, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
-        WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
-        {
-            var draft = await Draft(db, next.Tenant.TenantId, draftId).SingleOrDefaultAsync(ct).ConfigureAwait(false);
-            if (draft is null || draft.Revision != expectedDraftRevision) return null;
-            var key = draftId.ToString("D");
-            var row = await db.AgentDefinitionDraftEvaluationScenarios.IgnoreQueryFilters().SingleOrDefaultAsync(s => s.DraftId == key && s.ScenarioId == scenarioId, ct).ConfigureAwait(false)
-                ?? throw new AccessDeniedException("resource_unavailable");
-            db.Remove(row); draft.Revision++; draft.UpdatedAtUtc = audit.At.ToUnixTimeMilliseconds();
-            return new TenantDefinitionDraftRevision(draft.Revision);
-        }, ct, initiator);
-    public ValueTask<DefinitionEvaluationResult?> TrySaveDefinitionEvaluationAsync(TenantSecurityState next, long expectedSecurityRevision,
-        DefinitionEvaluationResult result, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
-        WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
-        {
-            var snapshot = await DefinitionSnapshot(db, next.Tenant.TenantId, result.DraftId, ct).ConfigureAwait(false);
-            if (snapshot is null || snapshot.Draft.Revision != result.DraftRevision
-                || !snapshot.Scenarios.Any(s => s.ScenarioId == result.ScenarioId && s.ScenarioVersion == result.ScenarioVersion)
-                || TenantDefinitionChildRules.Fingerprint(snapshot) != result.ConfigurationFingerprint) return null;
-            var committed = result with { CommitRevision = next.Tenant.Revision };
-            db.Add(DefinitionDraftEvaluationPersistence.MapResult(committed, audit.AuditId)); return committed;
-        }, ct, initiator);
     private static async Task<TenantDefinitionDraftSnapshot?> DefinitionSnapshot(AgentCoreDbContext db, Guid tenant, Guid draftId, CancellationToken ct)
     {
         var draft = await Draft(db, tenant, draftId).AsNoTracking().SingleOrDefaultAsync(ct).ConfigureAwait(false); if (draft is null) return null;
         var key = draftId.ToString("D");
         var resources = await db.AgentDefinitionDraftResources.IgnoreQueryFilters().AsNoTracking().Where(r => r.DraftId == key).OrderBy(r => r.LogicalPath).ToArrayAsync(ct).ConfigureAwait(false);
-        var scenarios = await db.AgentDefinitionDraftEvaluationScenarios.IgnoreQueryFilters().AsNoTracking().Where(s => s.DraftId == key).OrderBy(s => s.ScenarioId).ToArrayAsync(ct).ConfigureAwait(false);
-        var results = await LatestDefinitionResults(db, key, ct).ConfigureAwait(false);
-        return new(AgentDefinitionAdminMapping.MapDraft(draft), resources.Select(DefinitionResourcePersistence.MapDraftResource).ToArray(),
-            scenarios.Select(DefinitionDraftEvaluationPersistence.MapScenario).ToArray(), results.Select(DefinitionDraftEvaluationPersistence.MapResult).ToArray());
+        var candidate = AgentDefinitionAdminMapping.MapDraft(draft);
+        var suites = new List<EvaluationSuiteVersion>(); if (await Suite(db, tenant, draftId, null, ct) is { } associated) suites.Add(associated);
+        foreach (var binding in candidate.Candidate.EvaluationBindings ?? [])
+        {
+            var suite = await Suite(db, tenant, binding.SuiteId, binding.Version, ct) ?? throw new AccessDeniedException("evaluation_suite_unavailable");
+            if (!suites.Any(s => s.SuiteId == suite.SuiteId && s.Version == suite.Version)) suites.Add(suite);
+        }
+        var evidence = db.Set<EvaluationAttemptRow>().AsNoTracking().Where(a => a.TenantId == tenant && a.SubjectKind == EvaluationSubjectKind.DefinitionDraft && a.SubjectId == draftId && a.CommitSequence > 0);
+        var remaining = suites.SelectMany(s => s.Checks.Select(c => (s.SuiteId, c.CheckId))).ToHashSet();
+        var attempts = new List<EvaluationAttempt>();
+        // Inspect bounded batches, retaining at most one newest witness per current check.
+        // Imported per-check receipts remain usable without materializing all historical result bodies.
+        for (var offset = 0; remaining.Count > 0; offset += 16)
+        {
+            var rows = await evidence.OrderByDescending(a => a.CommitSequence).ThenBy(a => a.AttemptId).Skip(offset).Take(16).ToArrayAsync(ct);
+            foreach (var row in rows)
+            {
+                var attempt = EvaluationPersistence.Value(row);
+                if (!attempt.Findings.Any(f => remaining.Contains((attempt.SuiteId, f.CheckId)))) continue;
+                attempts.Add(attempt);
+                foreach (var finding in attempt.Findings) remaining.Remove((attempt.SuiteId, finding.CheckId));
+            }
+            if (rows.Length < 16) break;
+        }
+        return new(candidate, resources.Select(DefinitionResourcePersistence.MapDraftResource).ToArray(), suites, attempts);
     }
-    private static Task<AgentDefinitionDraftEvaluationResultRecord[]> LatestDefinitionResults(AgentCoreDbContext db, string draftId, CancellationToken ct) =>
-        db.AgentDefinitionDraftEvaluationResults.IgnoreQueryFilters().AsNoTracking().Where(r => r.DraftId == draftId && db.AgentDefinitionDraftEvaluationScenarios.IgnoreQueryFilters().Any(s => s.DraftId == r.DraftId && s.ScenarioId == r.ScenarioId)).GroupBy(r => r.ScenarioId)
-            .Select(group => group.OrderByDescending(r => r.CommitRevision ?? 0).ThenByDescending(r => r.RecordedAtUtc).ThenByDescending(r => r.ResultId).First()).ToArrayAsync(ct);
 }

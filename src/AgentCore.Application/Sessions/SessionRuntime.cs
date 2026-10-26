@@ -41,6 +41,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly SemaphoreSlim _wake = new(0);
 
     private readonly ILanguageModelResolver _models;
+    private readonly AgentCore.Application.Evaluations.TenantEvaluationService? _tenantEvaluations;
     private readonly ILanguageModel? _fixtureModel;
     private readonly IModelCatalog? _catalog;
     private readonly IAgentBrain _brain;
@@ -207,8 +208,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IBrowserLease? browserLease = null,
         IAgentRunAuthority? runAuthority = null, AgentRunOwner? runtimeOwner = null,
         AgentCore.Application.Security.TenantRunContinuationService? tenantContinuations = null,
-        AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null, TenantVoiceRuntimeBinding? tenantVoice = null, TenantRunProfileService? tenantProfiles = null, TenantMemoryService? tenantMemory = null, TenantExperienceService? tenantExperience = null)
+        AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null, TenantVoiceRuntimeBinding? tenantVoice = null, TenantRunProfileService? tenantProfiles = null, TenantMemoryService? tenantMemory = null, TenantExperienceService? tenantExperience = null, AgentCore.Application.Evaluations.TenantEvaluationService? tenantEvaluations = null)
     {
+        _tenantEvaluations = tenantEvaluations;
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
         _runtimeOwner = runtimeOwner;
@@ -2528,6 +2530,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IReadOnlyList<string> activeSkillKeys,
         CancellationToken cancellationToken)
     {
+        if (_boundAgentRun is { Checkpoint: null } admitted && (admitted.Admission.Configuration?.Definition.EvaluationBindings ?? []).Any(b => b.Hook == AgentCore.Domain.Evaluations.EvaluationHook.BeforeRun))
+        {
+            var passed = false;
+            try { passed = _tenantEvaluations is not null && await _tenantEvaluations.BeforeRunAsync(admitted, cancellationToken); }
+            catch (Exception error) when (error is AccessDeniedException or SecurityConflictException or AgentCoreException) { }
+            if (!passed)
+            {
+                await MailboxModelAsync(cause, request.ResponseId, new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidRequest,
+                    "Required Run preconditions did not pass. Inspect the saved evaluation evidence before starting fresh work.")), CancellationToken.None);
+                return;
+            }
+        }
         if (_boundAgentRun?.Admission.ComposerInput?.Error is { } inputError)
         {
             await PublishAsync(new SessionOutput(cause, null, new ErrorOutput("Validation", "ComposerInputUnavailable", inputError, false, null)), cancellationToken);

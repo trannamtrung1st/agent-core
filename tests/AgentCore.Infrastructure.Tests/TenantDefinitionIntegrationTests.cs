@@ -73,56 +73,6 @@ public sealed partial class TenantDefinitionIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Publication_requires_current_resource_and_evaluation_evidence_and_commits_only_one_racer(bool sqlite)
-    {
-        await using var f = await Fixture.Create(sqlite);
-        var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
-        var draft = await f.Service.CreateAsync(owner.OwnerPrincipalId, owner.TenantId, "Evidence", 1);
-        var id = Guid.Parse(draft.DefinitionId);
-        var bytes = System.Text.Encoding.UTF8.GetBytes("Owned reference bytes.");
-        var hash = DefinitionResourceContentHasher.ComputeSha256Hex(bytes);
-        var resource = new AgentDefinitionDraftResource(f.Ids.NewId(), draft.DraftId, "reference.txt", AgentDefinitionResourceKind.Reference, "text/plain", hash, bytes.Length, DateTimeOffset.UtcNow);
-        var scenario = new DefinitionEvaluationScenario(draft.DraftId, "required", 1, "Required", "Check", DefinitionEvaluationRequirementLevel.Required, DefinitionEvaluationCheckType.ExternalActionDenied, null, DateTimeOffset.UtcNow);
-        await f.SeedEvidence(draft, resource, scenario, null);
-        var auditBefore = (await f.Iam.ReadAuditAsync(owner.TenantId, 200)).Count;
-        await Assert.ThrowsAsync<DefinitionPublicationNotReadyException>(() => f.Service.PublishAsync(owner.OwnerPrincipalId, owner.TenantId, draft.DraftId, 2, 1).AsTask());
-        Assert.NotNull(await f.Definitions.FindDefinitionDraftAsync(owner.TenantId, draft.DraftId));
-        Assert.Equal(auditBefore, (await f.Iam.ReadAuditAsync(owner.TenantId, 200)).Count);
-        var fingerprint = DefinitionDraftConfigurationFingerprint.Compute(draft.Candidate, [resource]);
-        var result = new DefinitionEvaluationResult(draft.DraftId, 1, fingerprint, scenario.ScenarioId, 1, "Synthetic", true, [], DateTimeOffset.UtcNow);
-        await f.SeedEvidence(draft, resource, scenario, result);
-        // Passing evidence cannot substitute for the actual immutable bytes.
-        await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() => f.Service.PublishAsync(owner.OwnerPrincipalId, owner.TenantId, draft.DraftId, 2, 1).AsTask());
-        await f.Content.StoreVerifiedAsync(hash, bytes);
-        var state = (await f.Iam.ReadTenantAsync(owner.TenantId))!; var next = state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } };
-        var outcomes = await Task.WhenAll(f.Definitions.TryPublishDefinitionDraftAsync(next, 2, draft.DraftId, 1, DateTimeOffset.UtcNow, f.Audit(owner.TenantId, owner.OwnerPrincipalId, id)).AsTask(),
-            f.Definitions.TryPublishDefinitionDraftAsync(next, 2, draft.DraftId, 1, DateTimeOffset.UtcNow, f.Audit(owner.TenantId, owner.OwnerPrincipalId, id)).AsTask());
-        Assert.Single(outcomes, p => p is not null);
-        Assert.Single(await f.Definitions.ListDefinitionPublicationsAsync(owner.TenantId, id));
-        Assert.Null(await f.Definitions.FindDefinitionDraftAsync(owner.TenantId, draft.DraftId));
-        Assert.Equal(auditBefore + 1, (await f.Iam.ReadAuditAsync(owner.TenantId, 200)).Count);
-        Assert.Empty(await f.Resources.ListPublicationResourcesAsync(draft.DefinitionId, 1));
-        var fork = await f.Service.ForkAsync(owner.OwnerPrincipalId, owner.TenantId, id, 1, 3);
-        // Resource bytes/bindings survive publication and a tenant fork without global exposure.
-        if (f.Contexts is { } contexts)
-        {
-            await using var db = contexts.CreateDbContext(); var key = fork.DraftId.ToString("D");
-            Assert.Equal(hash, Assert.Single(await db.AgentDefinitionDraftResources.IgnoreQueryFilters().Where(r => r.DraftId == key).ToArrayAsync()).ContentSha256);
-            Assert.Equal(hash, Assert.Single(await db.AgentDefinitionPublicationResources.IgnoreQueryFilters().Where(r => r.DefinitionId == draft.DefinitionId && r.Version == 1).ToArrayAsync()).ContentSha256);
-        }
-        else
-        {
-            var resources = ((InMemoryAgentDefinitionAdminStore)f.Admin).ResourceStore!;
-            Assert.Equal(hash, Assert.Single(resources.CopyDraftResources(fork.DraftId)!).ContentSha256);
-            Assert.Equal(hash, Assert.Single(resources.CopyPublicationResources(draft.DefinitionId, 1)!).ContentSha256);
-        }
-        var republished = await f.Service.PublishAsync(owner.OwnerPrincipalId, owner.TenantId, fork.DraftId, 4, 1);
-        Assert.Equal(2, republished.Version);
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
     public async Task Account_suspension_fences_prepared_definition_changes_without_losing_the_draft(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite);
@@ -162,11 +112,14 @@ public sealed partial class TenantDefinitionIntegrationTests
         public IamAuthorizer Authorizer => new(Iam);
         public IdentityService Identity => new(Iam, new AccountPasswordHasher(), Tokens, Ids, TimeProvider.System);
         public TenantAccessService Access => new(Iam, Authorizer, Identity, Tokens, Ids, TimeProvider.System);
+        public AgentCore.Application.Evaluations.TenantEvaluationService Evaluations(IDefinitionDraftSyntheticBehaviorEvaluator? evaluator = null) => new(Iam, (ITenantEvaluationStore)Iam,
+            Definitions, (ITenantRunStore)Iam, (ITenantSessionStore)Iam, Authorizer, Identity, Ids, TimeProvider.System,
+            new(evaluator ?? Evaluator, ToolConfigurationGates.AllowAll), Content);
         public IDefinitionDraftSyntheticBehaviorEvaluator Evaluator => new AgentCore.Infrastructure.Admin.SyntheticDefinitionDraftBehaviorEvaluator(new AgentCore.Infrastructure.Admin.DefinitionDraftSyntheticOfflineLanguageModel(), ToolConfigurationGates.AllowAll);
         private IBuiltInDefinitionTemplateSource? _shippedTemplates;
         public TenantDefinitionService Service => WithEvaluator(Evaluator);
         public TenantDefinitionService WithEvaluator(IDefinitionDraftSyntheticBehaviorEvaluator evaluator) => WithTemplates(_shippedTemplates ??= ShippedTemplates(), evaluator);
-        public TenantDefinitionService WithTemplates(IBuiltInDefinitionTemplateSource templates, IDefinitionDraftSyntheticBehaviorEvaluator? evaluator = null, IDefinitionResourceContentStore? resourceContent = null) => new(Iam, Definitions, Authorizer, SyntheticProviderAliases.Default, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(Iam), ToolConfigurationGates.AllowAll, Ids, TimeProvider.System, resourceContent ?? Content, new(evaluator ?? Evaluator, ToolConfigurationGates.AllowAll), templates, Identity);
+        public TenantDefinitionService WithTemplates(IBuiltInDefinitionTemplateSource templates, IDefinitionDraftSyntheticBehaviorEvaluator? evaluator = null, IDefinitionResourceContentStore? resourceContent = null) => new(Iam, Definitions, Authorizer, SyntheticProviderAliases.Default, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(Iam), ToolConfigurationGates.AllowAll, Ids, TimeProvider.System, resourceContent ?? Content, templates, Identity);
         public static IBuiltInDefinitionTemplateSource ShippedTemplates()
         {
             var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -176,7 +129,8 @@ public sealed partial class TenantDefinitionIntegrationTests
         }
         public IDbContextFactory<AgentCoreDbContext>? Contexts { get; private set; }
         private string? _path;
-        public static async Task<Fixture> Create(bool sqlite)
+        public string? DatabasePath => _path;
+        public static async Task<Fixture> Create(bool sqlite, string? targetMigration = null)
         {
             var f = new Fixture();
             if (sqlite)
@@ -184,7 +138,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                 f._path = Path.Combine(Path.GetTempPath(), $"tenant-definition-{Guid.NewGuid():N}.db");
                 f.Content = new FileDefinitionResourceContentStore(f._path + ".resources");
                 f.Contexts = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f._path};Foreign Keys=True;Default Timeout=10").Options);
-                await using (var db = f.Contexts.CreateDbContext()) await db.Database.MigrateAsync();
+                await using (var db = f.Contexts.CreateDbContext()) await Microsoft.EntityFrameworkCore.Infrastructure.AccessorExtensions.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>(db).MigrateAsync(targetMigration);
                 f.Iam = new SqliteIamStore(f.Contexts, f.Content); f.Admin = new SqliteAgentDefinitionAdminStore(f.Contexts, f.Ids, f.Content);
                 f.Sandbox = new SqliteSandboxStore(f.Contexts);
                 f.Instances = new SqliteAgentInstanceStore(f.Contexts, f.Ids); f.SessionStore = new SqliteMemoryStore(f.Contexts, TimeProvider.System);
@@ -207,18 +161,12 @@ public sealed partial class TenantDefinitionIntegrationTests
             {
                 await using var db = contexts.CreateDbContext(); var key = draft.DraftId.ToString("D");
                 await db.AgentDefinitionDraftResources.IgnoreQueryFilters().Where(r => r.DraftId == key).ExecuteDeleteAsync();
-                await db.AgentDefinitionDraftEvaluationScenarios.IgnoreQueryFilters().Where(r => r.DraftId == key).ExecuteDeleteAsync();
-                await db.AgentDefinitionDraftEvaluationResults.IgnoreQueryFilters().Where(r => r.DraftId == key).ExecuteDeleteAsync();
-                db.Add(DefinitionResourcePersistence.MapDraftResource(resource)); db.Add(DefinitionDraftEvaluationPersistence.MapScenario(scenario));
-                if (result is not null) db.Add(DefinitionDraftEvaluationPersistence.MapResult(result, Ids.NewId()));
+                db.Add(DefinitionResourcePersistence.MapDraftResource(resource));
                 await db.SaveChangesAsync();
             }
             else
             {
                 var admin = (InMemoryAgentDefinitionAdminStore)Admin; admin.ResourceStore!.RestoreDraftResources(draft.DraftId, [resource]);
-                var state = new InMemoryDefinitionDraftEvaluationStore.DraftEvaluationState(); state.Scenarios[scenario.ScenarioId] = scenario;
-                if (result is not null) state.Results[result.ScenarioId] = [result];
-                admin.EvaluationStore!.Restore(new(draft.DraftId, state));
             }
         }
         public ValueTask DisposeAsync()

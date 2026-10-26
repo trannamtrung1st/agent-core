@@ -19,40 +19,6 @@ public sealed class InMemoryDefinitionDraftEvaluationStore : IDefinitionDraftEva
         }
     }
 
-    internal (IReadOnlyList<DefinitionEvaluationScenario> Scenarios, IReadOnlyList<DefinitionEvaluationResult> Results) TenantEvidence(Guid id)
-    {
-        if (!_drafts.TryGetValue(id, out var state)) return ([], []);
-        lock (state.Gate) return (state.Scenarios.Values.OrderBy(s => s.ScenarioId, StringComparer.Ordinal).ToArray(),
-            state.Results.Where(r => state.Scenarios.ContainsKey(r.Key)).Select(r => r.Value.OrderByDescending(v => v.CommitRevision ?? 0)
-                .ThenByDescending(v => v.RecordedAt).First()).ToArray());
-    }
-    internal DefinitionEvaluationScenario SaveTenantScenario(DefinitionEvaluationScenarioUpsert upsert, DateTimeOffset at)
-    {
-        var state = _drafts.GetOrAdd(upsert.DraftId, _ => new DraftEvaluationState());
-        lock (state.Gate)
-        {
-            var before = state.Scenarios.GetValueOrDefault(upsert.ScenarioId);
-            if (before is null && state.Scenarios.Count >= AgentCore.Application.Security.TenantDefinitionChildRules.MaxScenarios)
-                throw new ArgumentException("This draft has reached its evaluation scenario limit.");
-            var scenario = new DefinitionEvaluationScenario(upsert.DraftId, upsert.ScenarioId, (before?.ScenarioVersion ?? 0) + 1,
-                upsert.Title, upsert.Prompt, upsert.RequirementLevel, upsert.CheckType, upsert.ToolName, at);
-            state.Scenarios[scenario.ScenarioId] = scenario; return scenario;
-        }
-    }
-    internal void RemoveTenantScenario(Guid draftId, string scenarioId)
-    {
-        if (!_drafts.TryGetValue(draftId, out var state)) throw new AgentCore.Application.Security.AccessDeniedException("resource_unavailable");
-        lock (state.Gate) if (!state.Scenarios.Remove(scenarioId)) throw new AgentCore.Application.Security.AccessDeniedException("resource_unavailable");
-    }
-    internal DefinitionEvaluationResult SaveTenantResult(DefinitionEvaluationResult result)
-    {
-        var state = _drafts.GetOrAdd(result.DraftId, _ => new DraftEvaluationState());
-        lock (state.Gate)
-        {
-            if (!state.Results.TryGetValue(result.ScenarioId, out var results)) state.Results[result.ScenarioId] = results = [];
-            result = result with { Findings = Array.AsReadOnly(result.Findings.ToArray()) }; results.Add(result); return result;
-        }
-    }
     private bool IsTenantDraft(Guid id) => admin is InMemoryAgentDefinitionAdminStore store && store.IsTenantDraft(id);
 
     internal void DeleteDraftEvaluation(Guid draftId) =>

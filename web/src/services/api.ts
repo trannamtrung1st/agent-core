@@ -82,6 +82,8 @@ export type SessionResponse = {
 };
 
 export type AgentRun = {
+  verificationSummary?: { status: string; requiredChecks: number; passedChecks: number; attemptIds: string[] } | null;
+  evaluationUrl?: string;
   taskIntent?: string | null;
   contextProvenanceAvailable?: boolean;
   contextManifest?: { contextFormatVersion: number; coreContractVersion: number; fingerprint: string; fieldSources?: Record<string, { kind: string; revision: string }> | null; sections: { id: string; layer: "Core" | "Runtime" | "Evidence"; source: string; semantics: string; sourceRevision: string | null; characters: number; utf8Bytes: number; estimatedTokens: number; omitted?: boolean; originalCharacters?: number | null }[] } | null;

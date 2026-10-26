@@ -144,7 +144,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var binding = new ModelBinding(setup.Route, setup.Offering.Capabilities, setup.Offering.Label, setup.Connection.Label);
         var selection = SessionModelBinder.Bind(ModelDescriptor.FromBinding(binding), "high", ModelSelectionSource.User);
         var admitted = Invocation(setup.Route);
-        var invocation = new ModelInvocation(admitted.Context, admitted.Route, admitted.RequireCurrent, binding);
+        var invocation = new ModelInvocation(admitted.Context!, admitted.Route, admitted.RequireCurrent, binding);
         var resolver = new SyntheticLanguageModelResolver(new ScriptedLanguageModel(),
             new TenantModelRouteAuthority(f.Iam, (ITenantModelStore)f.Iam));
         Assert.Throws<AccessDeniedException>(() => resolver.Resolve(selection, ModelPurpose.Conversation, null));

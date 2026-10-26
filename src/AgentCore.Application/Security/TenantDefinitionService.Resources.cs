@@ -25,7 +25,19 @@ public sealed partial class TenantDefinitionService
             }
             var canEvaluate = visible.Items.Length == snapshot.Resources.Count && await ResourceAllowed(state, actor, "agent-definitions.update", Scope(tenant, definition), ct).ConfigureAwait(false);
             var canPublish = (snapshot.Resources.Count == 0 || canCreate) && await ResourceAllowed(state, actor, "agent-definitions.publish", Scope(tenant, definition), ct).ConfigureAwait(false);
-            return new(snapshot.Draft, visible.Items, snapshot.Scenarios, snapshot.Results, new(visible.All, canCreate, canEvaluate, canPublish, permissions));
+            var readableSuites = new List<AgentCore.Domain.Evaluations.EvaluationSuiteVersion>();
+            foreach (var suite in snapshot.Suites)
+                if (await ResourceAllowed(state, actor, "evaluations.read", suite.DraftId == draftId ? tenantScope
+                    : AgentCore.Application.Evaluations.EvaluationStoreRules.Scope(tenant, suite.SuiteId), ct)) readableSuites.Add(suite);
+            var readableEvidence = new HashSet<(Guid, int)>();
+            foreach (var suite in readableSuites)
+            {
+                var scriptsReadable = true;
+                foreach (var reference in suite.Checks.Select(c => c.Script).OfType<AgentCore.Domain.Evaluations.ScriptReference>())
+                    scriptsReadable &= await ResourceAllowed(state, actor, "scripts.read", AgentCore.Application.Evaluations.EvaluationStoreRules.Scope(tenant, reference.ScriptId, true), ct);
+                if (scriptsReadable) readableEvidence.Add((suite.SuiteId, suite.Version));
+            }
+            return new(snapshot.Draft, visible.Items, readableSuites, visible.All ? snapshot.Attempts.Where(a => readableEvidence.Contains((a.SuiteId, a.SuiteVersion))).ToArray() : [], new(visible.All, canCreate, canEvaluate, canPublish, permissions));
         }, ct);
 
     public async ValueTask<AgentDefinitionDraftResourceBatchBound> BindResourcesAsync(Guid actor, Guid tenant, Guid draftId,

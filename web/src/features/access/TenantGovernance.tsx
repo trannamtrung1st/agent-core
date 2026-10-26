@@ -1,3 +1,4 @@
+import { EvaluationGovernanceSettings } from './EvaluationGovernanceSettings';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, App, Button, Checkbox, Descriptions, Drawer, Empty, Flex, Form, Grid, InputNumber, Select, Table, Tag, Typography } from 'antd';
 import { confirmAction } from '../../app/confirmAction';
@@ -27,6 +28,7 @@ export function TenantGovernance({ context }: { context: TenantContext }) {
   const state = useIdentityQuery<PolicyPage>(tenantApi(context.tenant.tenantId, `/operation-policies?page=${page}&pageSize=${pageSize}&q=${encodeURIComponent(search.trim())}`));
   const close = () => { setSelected(null); requestAnimationFrame(() => (opener.current?.isConnected ? opener.current : document.querySelector<HTMLElement>('[data-admin-page-heading]'))?.focus({ preventScroll: true })); };
   return <Flex vertical gap="var(--ac-space-section)">
+    <EvaluationGovernanceSettings context={context} />
     <ChatRetentionSettings key={context.tenant.tenantId} context={context} />
     <Alert type="info" showIcon title="Review policy does not grant permission" description="Agents use their own authority. Organization policy can require more human review; Core minimums and people-only restrictions always apply." />
     <AdminCollectionToolbar label="operation permissions" showScrollHint={false} value={search} onChange={value => { setSearch(value.slice(0, 160)); setPage(0); }} filters={<Button disabled={state.loading} onClick={state.reload}>Refresh policies</Button>} />

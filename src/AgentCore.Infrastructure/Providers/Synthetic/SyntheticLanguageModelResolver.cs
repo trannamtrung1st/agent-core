@@ -20,7 +20,7 @@ public sealed class SyntheticLanguageModelResolver(ILanguageModel fixture, ITena
                 { Tools = binding.Capabilities.Tools, Vision = binding.Capabilities.Vision, StructuredOutput = binding.Capabilities.StructuredOutput }),
                 binding.Capabilities.SemanticMode == ModelSemanticMode.ResponseFunction);
         if (invocation?.Binding is null || !binding.Equals(invocation.Binding) || invocation.Route != binding.Route
-            || invocation.Context.TenantId != binding.Route.TenantId)
+            || invocation.TenantId != binding.Route.TenantId)
             throw new AccessDeniedException("model_context_required");
         return new SemanticResponseLanguageModel(new BoundOfflineModel(fixture, binding, invocation, routes, purpose),
             binding.Capabilities.SemanticMode == ModelSemanticMode.ResponseFunction);
@@ -57,6 +57,7 @@ public sealed class SyntheticLanguageModelResolver(ILanguageModel fixture, ITena
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
+            invocation.RequireEvaluationRequest(request, purpose);
             if (await Check(cancellationToken).ConfigureAwait(false) is { } initial)
             { yield return new ModelFailed(initial); yield break; }
             if (!Enum.IsDefined(request.ToolChoice)

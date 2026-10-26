@@ -38,6 +38,12 @@ public static class PermissionCatalog
         Add("system.governance", "system", "manage", PermissionApprovalClass.Mutation, true, true);
         Add("system.model-presets", "model-preset", "read", PermissionApprovalClass.ReadOnly, true, true);
         Add("system.model-presets", "model-preset", "manage", PermissionApprovalClass.Mutation, true, true);
+        Add("scripts", "script", "read", PermissionApprovalClass.ReadOnly);
+        Add("scripts", "script", "manage", PermissionApprovalClass.Mutation, true);
+        Add("scripts", "script", "execute", PermissionApprovalClass.Mutation);
+        Add("evaluations", "evaluation-suite", "read", PermissionApprovalClass.ReadOnly);
+        Add("evaluations", "evaluation-suite", "manage review", PermissionApprovalClass.Mutation, true);
+        Add("evaluations", "evaluation-suite", "run", PermissionApprovalClass.Mutation);
         Add("models", "model-offering", "read", PermissionApprovalClass.ReadOnly);
         Add("models", "model-offering", "manage", PermissionApprovalClass.Mutation, true);
         Add("model-connections", "model-connection", "read", PermissionApprovalClass.ReadOnly, true);
@@ -129,7 +135,7 @@ public static class BuiltinAccessRoles
         return [
             Role(Owner, "Owner", true, tenant),
             Role("access-administrator", "Access Administrator", true, tenant.Where(p => p.Key.StartsWith("members.", StringComparison.Ordinal) || p.Key.StartsWith("iam.roles.", StringComparison.Ordinal) || p.Key == "security.audit.read")),
-            Role("contributor", "Contributor", false, tenant.Where(p => !p.HumanOnly && !p.Key.StartsWith("secrets.", StringComparison.Ordinal) && p.Key != "http.request" && !p.Key.StartsWith("approvals.", StringComparison.Ordinal) && !p.Key.StartsWith("tenant.governance.", StringComparison.Ordinal))),
+            Role("contributor", "Contributor", false, tenant.Where(p => !p.HumanOnly && !p.Key.StartsWith("secrets.", StringComparison.Ordinal) && p.Key != "http.request" && p.Key != "evaluations.run" && p.Key != "scripts.execute" && !p.Key.StartsWith("approvals.", StringComparison.Ordinal) && !p.Key.StartsWith("tenant.governance.", StringComparison.Ordinal))),
             Role("reader", "Reader", false, tenant.Where(p => !p.HumanOnly && p.Key.EndsWith(".read", StringComparison.Ordinal))),
             Role("agent-operator", "Agent Operator", false, tenant.Where(p => p.Key is "agents.read" or "agents.chat" or "agent-runs.read" or "agent-runs.cancel" or "sessions.read" or "sessions.create" or "sessions.manage")),
             Role("agent-administrator", "Agent Administrator", false, tenant.Where(p => !p.HumanOnly && (p.Key.StartsWith("agents.", StringComparison.Ordinal) || p.Key.StartsWith("agent-definitions.", StringComparison.Ordinal) || p.Key.StartsWith("skills.", StringComparison.Ordinal)))),

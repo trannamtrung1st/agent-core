@@ -7,7 +7,7 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed partial class TenantDefinitionService(IIamStore security, ITenantDefinitionStore definitions, IamAuthorizer authorizer,
-    ProviderAliasSet aliases, ITenantModelCatalogReader modelCatalogs, IToolConfigurationGate configuration, IIdGenerator ids, TimeProvider time, IDefinitionResourceContentStore content, AgentDefinitionDraftSyntheticEvaluationRunner evaluation,
+    ProviderAliasSet aliases, ITenantModelCatalogReader modelCatalogs, IToolConfigurationGate configuration, IIdGenerator ids, TimeProvider time, IDefinitionResourceContentStore content,
     IBuiltInDefinitionTemplateSource templates, IdentityService identity)
 {
     public ValueTask<TenantDefinitionPage> ListAsync(Guid actor, Guid tenant, int page = 0, int pageSize = 30, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
@@ -80,7 +80,8 @@ public sealed partial class TenantDefinitionService(IIamStore security, ITenantD
             DefinitionDraftSourceKind.ForkDurable, version, now, now);
         if (!await definitions.TrySaveDefinitionDraftAsync(Advance(state), expectedRevision, draft, null,
             Audit(tenant, actor, "fork", id, now), ct, initiator).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
-        return draft;
+        _ = await HumanState(actor, tenant, initiator, ct).ConfigureAwait(false);
+        return (await definitions.FindDefinitionDraftAsync(tenant, draft.DraftId, ct).ConfigureAwait(false))!;
     }
     public async ValueTask<AgentDefinitionPublication> PublishAsync(Guid actor, Guid tenant, Guid draftId,
         long expectedRevision, long expectedDraftRevision, CancellationToken ct = default, HumanSessionReference? initiator = null)

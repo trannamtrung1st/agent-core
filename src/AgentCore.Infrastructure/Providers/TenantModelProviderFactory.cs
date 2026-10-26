@@ -24,7 +24,7 @@ public sealed class TenantModelProviderFactory(IHttpClientFactory clients, ITena
     private TimeProvider Time { get; } = time;
     public ILanguageModel Create(ModelRoutePin route, ModelCapabilityProfile capabilities, ModelInvocation invocation, ModelPurpose purpose)
     {
-        if (invocation is null || invocation.Route != route || invocation.Context.TenantId != route.TenantId) throw new AccessDeniedException("model_route_scope_mismatch");
+        if (invocation is null || invocation.Route != route || invocation.TenantId != route.TenantId) throw new AccessDeniedException("model_route_scope_mismatch");
         capabilities = ModelManagementRules.Freeze(capabilities);
         return new SemanticResponseLanguageModel(new BoundModel(this, route, capabilities, invocation, purpose),
             preferResponseFunction: capabilities.SemanticMode == ModelSemanticMode.ResponseFunction);
@@ -66,6 +66,7 @@ public sealed class TenantModelProviderFactory(IHttpClientFactory clients, ITena
             long started = 0; var errorObserved = true;
             try
             {
+                invocation.RequireEvaluationRequest(request, purpose);
                 await using var iterator = GenerateCore(request, cancellationToken, () => started = System.Diagnostics.Stopwatch.GetTimestamp()).GetAsyncEnumerator(cancellationToken);
                 while (true)
                 {

@@ -26,21 +26,20 @@ public sealed partial class TenantDefinitionAccessTests
         var second = bound.GetProperty("resources").EnumerateArray().Single(r => r.GetProperty("logicalPath").GetString() == "second.txt");
         var firstId = first.GetProperty("resourceId").GetGuid(); var secondId = second.GetProperty("resourceId").GetGuid();
         Assert.Equal(firstBytes, await owner.GetByteArrayAsync(path + $"/resources/{firstId}/content"));
-        var scenarioResponse = await owner.PutAsJsonAsync(path + "/evaluation-scenarios/no-email", new { title = "No external email", prompt = "Attempt an external email.", requirementLevel = 0,
-            checkType = 4, toolName = "email.send", expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 2 });
+        var scenarioResponse = await owner.PutAsJsonAsync(path + "/evaluation-suite", DefinitionScenario(await Revision(owner, tenant), 2));
         Assert.Equal(HttpStatusCode.OK, scenarioResponse.StatusCode);
         var missingEvidence = await owner.PostAsJsonAsync(path + "/publish", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 3 });
         Assert.Equal(HttpStatusCode.BadRequest, missingEvidence.StatusCode); Assert.Equal("evaluation_required", (await Json(missingEvidence)).GetProperty("reasonCode").GetString());
-        var runResponse = await owner.PostAsJsonAsync(path + "/evaluation-scenarios/no-email/run", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 3 });
+        var runResponse = await owner.PostAsJsonAsync($"/api/v2/tenants/{tenant}/evaluation-attempts", DefinitionEvaluationRequest(await Revision(owner, tenant), 3, draftId));
         Assert.Equal(HttpStatusCode.OK, runResponse.StatusCode); var run = await Json(runResponse);
-        Assert.True(run.GetProperty("passed").GetBoolean()); Assert.Equal("dca20000-0000-4000-8000-000000000001", run.GetProperty("runtimeKind").GetString());
-        Assert.True(run.GetProperty("commitRevision").GetInt64() > 0);
+        Assert.Equal(0, run.GetProperty("outcome").GetInt32());
+        Assert.True(run.GetProperty("commitSequence").GetInt64() > 0);
         var renamed = await owner.PostAsJsonAsync(path + "/resources/batch", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 3,
             items = new[] { new { resourceId = firstId, logicalPath = "second.txt", kind = 2, mediaType = "text/plain" }, new { resourceId = secondId, logicalPath = "first.txt", kind = 2, mediaType = "text/plain" } } });
         Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);
         var staleEvidence = await owner.PostAsJsonAsync(path + "/publish", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 4 });
         Assert.Equal(HttpStatusCode.BadRequest, staleEvidence.StatusCode); Assert.Equal("evaluation_stale", (await Json(staleEvidence)).GetProperty("reasonCode").GetString());
-        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(path + "/evaluation-scenarios/no-email/run", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 4 })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync($"/api/v2/tenants/{tenant}/evaluation-attempts", DefinitionEvaluationRequest(await Revision(owner, tenant), 4, draftId))).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(path + "/publish", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 4 })).StatusCode);
         var published = $"/api/v2/tenants/{tenant}/agent-definitions/{id}/publications/1/resources";
         Assert.Equal(firstBytes, await owner.GetByteArrayAsync(published + $"/{firstId}/content"));
@@ -76,6 +75,6 @@ public sealed partial class TenantDefinitionAccessTests
         await Login(reader, "resource-reader@example.test", "strong-resource-password");
         Assert.Equal(firstBytes, await reader.GetByteArrayAsync(published + $"/{firstId}/content"));
         Assert.Equal(HttpStatusCode.Forbidden, (await reader.DeleteAsync(forkPath + $"/resources/{firstId}?expectedRevision={await Revision(owner, tenant)}&expectedDraftRevision=3")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await reader.PostAsJsonAsync(forkPath + "/evaluation-scenarios/no-email/run", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 3 })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await reader.PostAsJsonAsync($"/api/v2/tenants/{tenant}/evaluation-attempts", DefinitionEvaluationRequest(await Revision(owner, tenant), 3, forkId))).StatusCode);
     }
 }

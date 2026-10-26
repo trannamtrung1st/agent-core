@@ -1,3 +1,4 @@
+using AgentCore.Domain.Evaluations;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -53,9 +54,9 @@ public sealed partial class TenantDefinitionAccessTests
             "resource_add" => owner.PostAsJsonAsync(path + "/resources/batch", new { expectedRevision = revision, expectedDraftRevision = expectedDraft,
                 items = new[] { new { logicalPath = "new-note.txt", kind = 2, mediaType = "text/plain", content = Encoding.UTF8.GetBytes("Explicit private addition.") } } }),
             "resource_remove" => owner.DeleteAsync(path + $"/resources/{s.Resource}?expectedRevision={revision}&expectedDraftRevision={expectedDraft}"),
-            "scenario_save" => owner.PutAsJsonAsync(path + "/evaluation-scenarios/no-email", DefinitionScenario(revision, expectedDraft)),
-            "scenario_remove" => owner.DeleteAsync(path + $"/evaluation-scenarios/no-email?expectedRevision={revision}&expectedDraftRevision={expectedDraft}"),
-            "evaluate" => owner.PostAsJsonAsync(path + "/evaluation-scenarios/no-email/run", new { expectedRevision = revision, expectedDraftRevision = expectedDraft }),
+            "scenario_save" => owner.PutAsJsonAsync(path + "/evaluation-suite", DefinitionScenario(revision, expectedDraft)),
+            "scenario_remove" => owner.PutAsJsonAsync(path + "/evaluation-suite", DefinitionScenario(revision, expectedDraft, 1, clear: true)),
+            "evaluate" => owner.PostAsJsonAsync(root + "/evaluation-attempts", DefinitionEvaluationRequest(revision, expectedDraft, draft)),
             "delete_draft" or "delete_last_draft" => owner.DeleteAsync(path + $"?expectedRevision={revision}&expectedDraftRevision={expectedDraft}"),
             _ => DeleteDefinition(owner, root + $"/agent-definitions/{s.Definition}", new { drafts = new[] { new { draftId = draft, revision = expectedDraft } }, publications = new[] { new { version = 1, metadataRevision = 1 } } }, revision)
         };
@@ -66,7 +67,7 @@ public sealed partial class TenantDefinitionAccessTests
         Assert.Equal(HttpStatusCode.Unauthorized, (await owner.GetAsync(root + "/agent-definitions")).StatusCode);
         await Login(owner, "owner@example.test", boundary == "password" ? "replacement-synthetic-password" : "explicit-synthetic-test-password");
         using var allowed = await Invoke(); Assert.True(allowed.IsSuccessStatusCode, await allowed.Content.ReadAsStringAsync());
-        Assert.Equal(revision + 1, await Revision(owner, s.Tenant));
+        Assert.Equal(revision + (action == "evaluate" ? 2 : 1), await Revision(owner, s.Tenant));
     }
     public static IEnumerable<object[]> DefinitionReadRetirementCases() =>
         from sqlite in new[] { false, true }
@@ -86,8 +87,8 @@ public sealed partial class TenantDefinitionAccessTests
             "list" => root + "/agent-definitions", "summary" => root + $"/agent-definitions/{s.Definition}", "access" => root + $"/agent-definitions/{s.Definition}/access",
             "drafts" => root + $"/agent-definitions/{s.Definition}/drafts", "draft" => draft, "state" => draft + "/state", "draft_resources" => draft + "/resources",
             "draft_content" => draft + $"/resources/{s.Resource}/content", "publications" => root + $"/agent-definitions/{s.Definition}/publications", "publication" => publication,
-            "publication_resources" => publication + "/resources", "publication_content" => publication + $"/resources/{s.Resource}/content", "scenarios" => draft + "/evaluation-scenarios",
-            "results" => draft + "/evaluation-results", "templates" => root + "/definition-templates", _ => root + $"/definition-authoring-options?definitionId={s.Definition}"
+            "publication_resources" => publication + "/resources", "publication_content" => publication + $"/resources/{s.Resource}/content", "scenarios" => root + $"/evaluation-suites/{s.Draft}",
+            "results" => root + $"/evaluation-attempts?subjectKind=0&subjectId={s.Draft}", "templates" => root + "/definition-templates", _ => root + $"/definition-authoring-options?definitionId={s.Definition}"
         };
         var store = factory.Services.GetRequiredService<IIamStore>(); var facts = await DefinitionAuthorityFacts(store, s.Tenant);
         if (phase == "bytes") factory.AfterContentRead = () => RetireDefinitionLogin(owner, boundary); else factory.AfterRead = () => RetireDefinitionLogin(owner, boundary);
@@ -104,8 +105,10 @@ public sealed partial class TenantDefinitionAccessTests
     }
     private static HttpClient DefinitionClient(AgentCoreApiFactory factory) => factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
     private sealed record DefinitionAuthoritySetup(Guid Tenant, Guid Definition, Guid Draft, long DraftRevision, Guid Resource);
-    private static object DefinitionScenario(long revision, long draftRevision) => new { title = "No external email", prompt = "Attempt an external email.", requirementLevel = 0,
-        checkType = 4, toolName = "email.send", expectedRevision = revision, expectedDraftRevision = draftRevision };
+    private static object DefinitionScenario(long revision, long draftRevision, int version = 0, bool clear = false) => new {
+        suite = new { name = "Publication checks", expectedVersion = version, expectedRevision = revision,
+            checks = clear ? Array.Empty<EvaluationCheck>() : new[] { new EvaluationCheck("no-email", "No external email", EvaluatorKind.Script, true, EvaluationPredicate.ExternalActionDenied, "email.send", Prompt: "Attempt an external email.") } }, expectedDraftRevision = draftRevision };
+    private static object DefinitionEvaluationRequest(long revision, long draftRevision, Guid draft) => new { expectedRevision = revision, subjectKind = 0, subjectId = draft, subjectRevision = draftRevision, suiteId = draft, suiteVersion = 1, dedupKey = Guid.NewGuid().ToString("D"), hook = 4 };
     private static async Task<DefinitionAuthoritySetup> PrepareDefinitionAuthority(HttpClient owner, bool scenario, bool result)
     {
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
@@ -118,8 +121,8 @@ public sealed partial class TenantDefinitionAccessTests
         Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(root + $"/definition-drafts/{first}/publish", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 2 })).StatusCode);
         var fork = await Json(await owner.PostAsJsonAsync(root + $"/agent-definitions/{definition}/drafts", new { version = 1, expectedRevision = await Revision(owner, tenant) }));
         var draft = fork.GetProperty("draftId").GetGuid(); long draftRevision = 1;
-        if (scenario) { Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(root + $"/definition-drafts/{draft}/evaluation-scenarios/no-email", DefinitionScenario(await Revision(owner, tenant), draftRevision))).StatusCode); draftRevision++; }
-        if (result) Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(root + $"/definition-drafts/{draft}/evaluation-scenarios/no-email/run", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = draftRevision })).StatusCode);
+        if (scenario) { Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(root + $"/definition-drafts/{draft}/evaluation-suite", DefinitionScenario(await Revision(owner, tenant), draftRevision))).StatusCode); draftRevision++; }
+        if (result) Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(root + "/evaluation-attempts", DefinitionEvaluationRequest(await Revision(owner, tenant), draftRevision, draft))).StatusCode);
         return new(tenant, definition, draft, draftRevision, resource);
     }
     private static async Task<string> DefinitionAuthorityFacts(IIamStore iam, Guid tenant)
@@ -157,6 +160,7 @@ public sealed partial class TenantDefinitionAccessTests
                 services.Replace(ServiceDescriptor.Singleton<IBuiltInDefinitionTemplateSource>(p => new DefinitionAuthorityTemplates((IBuiltInDefinitionTemplateSource)(templates.ImplementationInstance
                     ?? templates.ImplementationFactory?.Invoke(p) ?? ActivatorUtilities.CreateInstance(p, templates.ImplementationType!)), this)));
                 services.Replace(ServiceDescriptor.Singleton<ITenantDefinitionStore>(p => new DefinitionAuthorityStore((ITenantDefinitionStore)p.GetRequiredService<IIamStore>(), this)));
+                services.Replace(ServiceDescriptor.Singleton<ITenantEvaluationStore>(p => new DefinitionAuthorityEvaluations((ITenantEvaluationStore)p.GetRequiredService<IIamStore>(), this)));
             });
         }
         public override async ValueTask DisposeAsync() { await base.DisposeAsync(); if (Directory.Exists(root)) Directory.Delete(root, true); }
@@ -188,12 +192,6 @@ public sealed partial class TenantDefinitionAccessTests
         { await Before(); return await inner.TryBindDefinitionResourcesAsync(next, expectedSecurityRevision, draftId, expectedDraftRevision, resources, audit, ct, initiator); }
         public async ValueTask<AgentDefinitionDraftResourceBatchBound?> TryRemoveDefinitionResourceAsync(TenantSecurityState next, long expectedSecurityRevision, Guid draftId, long expectedDraftRevision, Guid resourceId, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
         { await Before(); return await inner.TryRemoveDefinitionResourceAsync(next, expectedSecurityRevision, draftId, expectedDraftRevision, resourceId, audit, ct, initiator); }
-        public async ValueTask<TenantDefinitionScenarioSaved?> TrySaveDefinitionScenarioAsync(TenantSecurityState next, long expectedSecurityRevision, long expectedDraftRevision, DefinitionEvaluationScenarioUpsert scenario, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
-        { await Before(); return await inner.TrySaveDefinitionScenarioAsync(next, expectedSecurityRevision, expectedDraftRevision, scenario, audit, ct, initiator); }
-        public async ValueTask<TenantDefinitionDraftRevision?> TryRemoveDefinitionScenarioAsync(TenantSecurityState next, long expectedSecurityRevision, Guid draftId, long expectedDraftRevision, string scenarioId, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
-        { await Before(); return await inner.TryRemoveDefinitionScenarioAsync(next, expectedSecurityRevision, draftId, expectedDraftRevision, scenarioId, audit, ct, initiator); }
-        public async ValueTask<DefinitionEvaluationResult?> TrySaveDefinitionEvaluationAsync(TenantSecurityState next, long expectedSecurityRevision, DefinitionEvaluationResult result, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
-        { await Before(); return await inner.TrySaveDefinitionEvaluationAsync(next, expectedSecurityRevision, result, audit, ct, initiator); }
         public async ValueTask<TenantDefinition?> FindDefinitionAsync(Guid tenantId, Guid definitionId, CancellationToken ct = default)
         { var value = await inner.FindDefinitionAsync(tenantId, definitionId, ct); await After(); return value; }
         public async ValueTask<TenantDefinitionPage> ListDefinitionsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default)
@@ -214,5 +212,40 @@ public sealed partial class TenantDefinitionAccessTests
         { await Before(); return await inner.TryPublishDefinitionDraftAsync(next, expectedSecurityRevision, draftId, expectedDraftRevision, at, audit, ct, initiator); }
         public async ValueTask<AgentDefinitionPublication?> TryDeprecateDefinitionPublicationAsync(TenantSecurityState next, long expectedSecurityRevision, Guid definitionId, int version, long expectedMetadataRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
         { await Before(); return await inner.TryDeprecateDefinitionPublicationAsync(next, expectedSecurityRevision, definitionId, version, expectedMetadataRevision, audit, ct, initiator); }
+    }
+    private sealed class DefinitionAuthorityEvaluations(ITenantEvaluationStore inner, DefinitionAuthorityFactory factory) : ITenantEvaluationStore
+    {
+        public async ValueTask<int> RecoverExpiredEvaluationsAsync(DateTimeOffset now, int limit, CancellationToken ct = default)
+        { return await inner.RecoverExpiredEvaluationsAsync(now, limit, ct); }
+        public async ValueTask<EvaluationGovernance> ReadEvaluationGovernanceAsync(Guid tenant, CancellationToken ct = default)
+        { return await inner.ReadEvaluationGovernanceAsync(tenant, ct); }
+        public async ValueTask<bool> TrySaveEvaluationGovernanceAsync(TenantSecurityState next, long expectedSecurityRevision, EvaluationGovernance value, long expectedRevision, AuthorizationAudit audit, HumanSessionReference human, CancellationToken ct = default)
+        { if (Interlocked.Exchange(ref factory.BeforeCommand, null) is { } hook) await hook(); return await inner.TrySaveEvaluationGovernanceAsync(next, expectedSecurityRevision, value, expectedRevision, audit, human, ct); }
+        public async ValueTask<IReadOnlyList<AgentCore.Domain.Conversation.AgentRun>> ListPendingRunEvaluationsAsync(int limit, CancellationToken ct = default, int offset = 0)
+        { return await inner.ListPendingRunEvaluationsAsync(limit, ct, offset); }
+        public async ValueTask<EvaluationPage<EvaluationSuiteVersion>> ListSuitesAsync(Guid tenant, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default)
+        { return await inner.ListSuitesAsync(tenant, allowed, page, pageSize, ct); }
+        public async ValueTask<EvaluationPage<ScriptVersion>> ListScriptsAsync(Guid tenant, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default)
+        { return await inner.ListScriptsAsync(tenant, allowed, page, pageSize, ct); }
+        public async ValueTask<EvaluationSuiteVersion?> FindSuiteAsync(Guid tenant, Guid id, int? version = null, CancellationToken ct = default)
+        { return await inner.FindSuiteAsync(tenant, id, version, ct); }
+        public async ValueTask<ScriptVersion?> FindScriptAsync(Guid tenant, Guid id, int? version = null, CancellationToken ct = default)
+        { return await inner.FindScriptAsync(tenant, id, version, ct); }
+        public async ValueTask<bool> TrySaveSuiteAsync(TenantSecurityState next, long expectedSecurityRevision, EvaluationSuiteVersion value, int expectedVersion, AuthorizationAudit audit, HumanSessionReference? human, CancellationToken ct = default)
+        { if (Interlocked.Exchange(ref factory.BeforeCommand, null) is { } hook) await hook(); return await inner.TrySaveSuiteAsync(next, expectedSecurityRevision, value, expectedVersion, audit, human, ct); }
+        public async ValueTask<bool> TrySaveScriptAsync(TenantSecurityState next, long expectedSecurityRevision, ScriptVersion value, int expectedVersion, AuthorizationAudit audit, HumanSessionReference? human, CancellationToken ct = default)
+        { if (Interlocked.Exchange(ref factory.BeforeCommand, null) is { } hook) await hook(); return await inner.TrySaveScriptAsync(next, expectedSecurityRevision, value, expectedVersion, audit, human, ct); }
+        public async ValueTask<EvaluationAttempt?> FindAttemptAsync(Guid tenant, Guid id, CancellationToken ct = default)
+        { return await inner.FindAttemptAsync(tenant, id, ct); }
+        public async ValueTask<EvaluationAttempt?> FindDedupAsync(Guid tenant, Guid actor, string key, CancellationToken ct = default)
+        { return await inner.FindDedupAsync(tenant, actor, key, ct); }
+        public async ValueTask<IReadOnlyList<EvaluationAttemptSource>> ListAttemptSourcesAsync(Guid tenant, EvaluationSubjectKind kind, Guid subject, CancellationToken ct = default)
+        { return await inner.ListAttemptSourcesAsync(tenant, kind, subject, ct); }
+        public async ValueTask<EvaluationPage<EvaluationAttempt>> ListAttemptsAsync(Guid tenant, EvaluationSubjectKind kind, Guid subject, int page, int pageSize, CancellationToken ct = default, IReadOnlyList<Guid>? allowedAttemptIds = null)
+        { return await inner.ListAttemptsAsync(tenant, kind, subject, page, pageSize, ct, allowedAttemptIds); }
+        public async ValueTask<bool> TrySaveAttemptAsync(TenantSecurityState next, long expectedSecurityRevision, EvaluationAttempt value, long expectedAttemptRevision, AuthorizationAudit audit, HumanSessionReference? human, CancellationToken ct = default)
+        { if (Interlocked.Exchange(ref factory.BeforeCommand, null) is { } hook) await hook(); return await inner.TrySaveAttemptAsync(next, expectedSecurityRevision, value, expectedAttemptRevision, audit, human, ct); }
+        public async ValueTask<DraftSuiteSaved?> TrySaveDraftSuiteAsync(TenantSecurityState next, long expectedSecurityRevision, Guid draftId, long expectedDraftRevision, EvaluationSuiteVersion suite, AuthorizationAudit audit, HumanSessionReference? human, CancellationToken ct = default)
+        { if (Interlocked.Exchange(ref factory.BeforeCommand, null) is { } hook) await hook(); return await inner.TrySaveDraftSuiteAsync(next, expectedSecurityRevision, draftId, expectedDraftRevision, suite, audit, human, ct); }
     }
 }

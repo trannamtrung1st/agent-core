@@ -13,7 +13,7 @@ public sealed record TenantRunResourceConfiguration(TenantAgentConfigurationSnap
 
 public sealed partial class TenantRunConfigurationResolver(ITenantAgentStore agents, ITenantDefinitionStore definitions,
     IBuiltInAgentDefinitionStore builtIns, InheritedDefinitionResourceCatalog inheritedResources, ITenantCredentialBindingStore bindings,
-    ITenantSandboxProfileStore? sandboxProfiles = null, ISandboxImageAuthority? sandboxImages = null, ISandboxReadiness? sandboxReadiness = null, IamAuthorizer? authorizer = null, TenantSpaceContextResolver? spaceContexts = null)
+    ITenantSandboxProfileStore? sandboxProfiles = null, ISandboxImageAuthority? sandboxImages = null, ISandboxReadiness? sandboxReadiness = null, IamAuthorizer? authorizer = null, TenantSpaceContextResolver? spaceContexts = null, ITenantEvaluationStore? evaluations = null)
 {
     public async ValueTask<AgentRunContinuitySettings?> CurrentContinuitySettingsAsync(AgentRun run, CancellationToken ct)
     {
@@ -77,8 +77,30 @@ public sealed partial class TenantRunConfigurationResolver(ITenantAgentStore age
             ?? throw new AccessDeniedException("resource_unavailable");
         if (bound.Agent.Instance.Revision != owner.Revision) throw new SecurityConflictException("stale_revision");
         var effective = await BindSandboxProfilesAsync(tenant, state.Agent, resources.Definition, ct).ConfigureAwait(false);
+        long evaluationPolicyRevision = 0;
+        if (evaluations is not null)
+        {
+            var defaults = await evaluations.ReadEvaluationGovernanceAsync(tenant, ct);
+            evaluationPolicyRevision = defaults.Revision;
+            effective = effective with { EvaluationBindings = defaults.Defaults.Concat(effective.EvaluationBindings ?? []).Distinct().ToArray() };
+            AgentCore.Domain.Evaluations.EvaluationRules.ValidateBindings(effective.EvaluationBindings);
+        }
+        foreach (var binding in (effective.EvaluationBindings ?? []).Where(b => b.Hook != AgentCore.Domain.Evaluations.EvaluationHook.Publication))
+        {
+            var suite = evaluations is null ? null : await evaluations.FindSuiteAsync(tenant, binding.SuiteId, binding.Version, ct);
+            if (suite is null) throw new AccessDeniedException("evaluation_suite_unavailable");
+            // Only a required precondition constrains factual execution admission.
+            // Other observations repeat execution authority at their own hook and remain unverified on denial.
+            if (binding.Policy != AgentCore.Domain.Evaluations.EvaluationPolicy.RequirePassBeforeRun) continue;
+            if (suite.Archived || (await evaluations!.FindSuiteAsync(tenant, binding.SuiteId, ct: ct))?.Archived != false) throw new AccessDeniedException("evaluation_suite_unavailable");
+            if (authorizer is null) throw new AccessDeniedException("evaluation_authority_unavailable");
+            await authorizer.RequireAsync(state.Agent.PrincipalId, "evaluations.read", AgentCore.Application.Evaluations.EvaluationStoreRules.Scope(tenant, suite.SuiteId), ct);
+            await authorizer.RequireAsync(state.Agent.PrincipalId, "evaluations.run", AgentCore.Application.Evaluations.EvaluationStoreRules.Scope(tenant, suite.SuiteId), ct);
+        }
+        var sources = InstanceSettingsResolver.Sources(resources.Baseline, owner.SettingsOverrides, owner.Revision, owner.PersonaRevision).ToDictionary(p => p.Key, p => p.Value);
+        if (evaluationPolicyRevision > 0) sources["evaluationBindings"] = new("evaluation-governance", evaluationPolicyRevision.ToString(System.Globalization.CultureInfo.InvariantCulture));
         var configuration = new AgentRunConfiguration(effective, owner.Revision, owner.PersonaRevision, resources.Resources,
-            bound.Bindings.Select(b => b.Binding).ToArray(), InstanceSettingsResolver.Sources(resources.Baseline, owner.SettingsOverrides, owner.Revision, owner.PersonaRevision),
+            bound.Bindings.Select(b => b.Binding).ToArray(), sources,
             continuitySettings: new(state.Isolation.ExperienceEnabled, state.Isolation.ExperienceRevision, state.Isolation.AllowMaintenance, state.Isolation.MaintenanceRevision));
         return (state.Agent, new(configuration, owner.Persona, EffectiveSkillCatalogResolver.Resolve(effective, state.Skills), owner.ExecutionBudgets));
     }

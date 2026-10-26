@@ -102,6 +102,9 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantAgentReadService>();
         services.TryAddSingleton<ITenantDefinitionStore>(provider => (ITenantDefinitionStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantDefinitionService>();
+        services.TryAddSingleton<ITenantEvaluationStore>(p => (ITenantEvaluationStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<AgentCore.Application.Evaluations.TenantEvaluationService>();
+        services.TryAddSingleton<AgentCore.Application.Evaluations.EvaluationModelEvaluator>();
         services.TryAddSingleton<ITenantCredentialStore>(provider => (ITenantCredentialStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantCredentialService>();
         services.TryAddSingleton<ITenantModelStore>(provider => (ITenantModelStore)provider.GetRequiredService<IIamStore>());

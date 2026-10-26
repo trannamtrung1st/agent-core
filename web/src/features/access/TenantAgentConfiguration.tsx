@@ -1,3 +1,4 @@
+import { InstanceEvaluationBindings } from './InstanceEvaluationBindings';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, App, Button, Flex, Typography } from 'antd';
 import { identityRequest, tenantApi, type TenantContext } from '../../services/identity';
@@ -67,6 +68,7 @@ function TenantAgentSettings({ context, id }: { context: TenantContext; id: stri
     <Typography.Paragraph type="secondary">Settings define behavior and capability eligibility. The agent’s own roles and approval policy still control execution.</Typography.Paragraph>
     <Typography.Link href={tenantAgentPath(tenant, id, 'state-isolation')} onClick={followAppLink}>State, Memory and Voice enablement share the coordinated State & Isolation editor</Typography.Link>
     <InstanceSettingsSection confirmationContext={view ? `Agent: ${view.agent.instance.persona.name}. Organization: ${context.tenant.name}.` : undefined} instanceId={id} archived={!view?.canUpdate || view.agent.instance.lifecycle !== 'Active'} transport={transport} onUpdated={() => {}} onDirtyChange={setDirty} onBusyChange={setBusy} />
+    <InstanceEvaluationBindings tenant={tenant} instance={id} />
     {view?.unavailableSettings.includes('sandboxPolicy') && <Alert type="info" showIcon title="Sandbox has a separate settings page" description={<Typography.Link href={tenantAgentPath(tenant, id, 'sandbox')} onClick={followAppLink}>Open Sandbox configuration and saved setup verification. Independent Sandbox and profile access is required.</Typography.Link>} />}
   </Flex>;
 }

@@ -27,7 +27,7 @@ public sealed class SessionRuntimeFactory(
     TenantExperienceService tenantExperience,
     ILanguageModel? fixtureModel = null,
     IModelCatalog? fixtureCatalog = null,
-    IDiagnosticIdSource? diagnostics = null)
+    IDiagnosticIdSource? diagnostics = null, AgentCore.Application.Evaluations.TenantEvaluationService? evaluations = null)
 {
     public SessionRuntime CreateTenant(SessionSnapshot snapshot, ISessionOutput output, TenantRuntimeFrame frame,
         ITenantRuntimeStore runtimeStorage, ITenantRunStore tenantRuns, AgentCore.Application.Security.TenantRunExecutionAuthority authority,
@@ -45,7 +45,7 @@ public sealed class SessionRuntimeFactory(
             tenantContinuations: tenantContinuations,
             tenantAttachments: tenantAttachments, tenantVoice: tenantVoice,
             tenantProfiles: tenantProfiles,
-            tenantMemory: tenantMemory, tenantExperience: tenantExperience);
+            tenantMemory: tenantMemory, tenantExperience: tenantExperience, tenantEvaluations: evaluations);
     }
     public ValueTask<ISpeechRecognitionSession> OpenTenantRecognitionAsync(RecognitionOptions options, CancellationToken ct)
         => (recognizer ?? throw AgentCoreErrors.VoiceUnavailable()).OpenAsync(options, ct);
