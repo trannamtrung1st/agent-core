@@ -12,6 +12,10 @@ public sealed class TenantWorkingCleanupService(ITenantWorkingCleanupStore store
 
     public async ValueTask<bool> CleanupAsync(TenantSessionRoot owner, CancellationToken ct = default)
     {
+        // The store independently requires an exact deleted owner and settled Run.
+        // Native cleanup can be blocked by child work, a lease or filesystem failure;
+        // none of those may retain an unrelated settled Run's old transcript.
+        if (!await store.RetireTenantRunContentAsync(owner, ct).ConfigureAwait(false)) return false;
         var target = await store.ReadTenantWorkingCleanupAsync(owner, ct).ConfigureAwait(false);
         return target is not null && await bytes.PurgeTenantWorkingAsync(target,
             async token => await store.ReadTenantWorkingCleanupAsync(owner, token).ConfigureAwait(false) == target, ct).ConfigureAwait(false);

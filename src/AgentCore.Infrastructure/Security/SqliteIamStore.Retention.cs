@@ -51,7 +51,7 @@ public sealed partial class SqliteIamStore
             db.Entry(approval).CurrentValues.SetValues(TenantApprovalRecord.From(approval.Domain().Decide(now >= approval.Domain().ExpiresAt ? TenantApprovalStatus.Expired : TenantApprovalStatus.Cancelled, approval.Revision, now)));
         // Unknown effects remain recoverable. Persist expiry and factual cancellation,
         // but never redact their evidence or report successful execution.
-        if (allRuns.Any(r => r.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate))
+        if (allRuns.Any(r => r.RequiresEffectReconciliation))
         {
             foreach (var runRow in runRows)
             {
@@ -70,6 +70,7 @@ public sealed partial class SqliteIamStore
                 await TenantCoreEventProduction.StageSessionAsync(db, current, expired, owner.Domain(), null, ct).ConfigureAwait(false);
                 db.Add(new AuthorizationAudit(auditId, owner.TenantId, Guid.Empty, "sessions.retention.expire", owner.SessionId, "allowed", "system_due_effect_reconciliation_pending", now));
             }
+            await RetireRunContent(db, owner.TenantId, owner.SessionId, now, ct).ConfigureAwait(false);
             await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return false;
         }
         foreach (var runRow in runRows)
@@ -81,6 +82,7 @@ public sealed partial class SqliteIamStore
             await SettleTenantCompletion(db, cancelled, run.Claim?.Generation, ct).ConfigureAwait(false);
         }
         var next = TenantSessionMutations.RetireDue(current, now);
+        await RetireRunContent(db, owner.TenantId, owner.SessionId, now, ct).ConfigureAwait(false);
         SqliteMemoryStore.ApplySession(row, next);
         await TenantCoreEventProduction.StageSessionAsync(db, current, next, owner.Domain(), null, ct).ConfigureAwait(false);
         foreach (var entry in await db.Entries.Where(e => e.SessionId == owner.SessionId).ToArrayAsync(ct).ConfigureAwait(false)) RedactSessionEntry(entry);

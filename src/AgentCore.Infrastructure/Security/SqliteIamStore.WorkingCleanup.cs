@@ -23,4 +23,18 @@ public sealed partial class SqliteIamStore : ITenantWorkingCleanupStore
         var state = await SessionSettlement(db, owner, ct).ConfigureAwait(false);
         return state is null ? null : TenantWorkingCleanupRules.Target(state.Value.Graph, state.Value.Lease);
     }
+
+    public async ValueTask<bool> RetireTenantRunContentAsync(TenantSessionRoot owner, CancellationToken ct = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        var id = owner.SessionId.ToString("D");
+        var root = await db.Set<TenantSessionRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == owner.TenantId && r.SessionId == id, ct).ConfigureAwait(false);
+        if (root?.Domain() != owner) return false;
+        var session = await db.Sessions.AsNoTracking().SingleAsync(s => s.SessionId == id, ct).ConfigureAwait(false);
+        if (session.DurablyDeletedAtUtc is not null)
+            await RetireRunContent(db, owner.TenantId, id, (clock ?? TimeProvider.System).GetUtcNow(), ct).ConfigureAwait(false);
+        try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return true; }
+        catch (DbUpdateConcurrencyException) { return false; }
+    }
 }

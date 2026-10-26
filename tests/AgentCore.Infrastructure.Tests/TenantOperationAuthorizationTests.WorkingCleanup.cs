@@ -8,6 +8,8 @@ using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Workspaces;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using AgentCore.Application.Execution;
 using Fixture = AgentCore.Infrastructure.Tests.TenantCredentialIntegrationTests.Fixture;
 
 namespace AgentCore.Infrastructure.Tests;
@@ -107,6 +109,20 @@ public sealed partial class TenantOperationAuthorizationTests
             }
         }
         await SaveLease(lease, true);
+        async Task<AgentRunRecord> ReadRetainedRun()
+        {
+            if (!sqlite) return AgentRunStoreMapping.ToRecord(((InMemoryMemoryStore)f.Memory).ReadRetainedTenantOperationRun(setup.Tenant, frame.RunId)!);
+            await using var db = f.Contexts!.CreateDbContext();
+            return await db.AgentRuns.AsNoTracking().SingleAsync(r => r.AgentRunId == frame.RunId.ToString("D"));
+        }
+        var oldRun = await ReadRetainedRun();
+        const string privateTranscript = "PRIVATE-OLD-RUN-WITH-UNCONFIRMED-LEASE";
+        var document = JsonNode.Parse(oldRun.PayloadJson)!;
+        document["checkpoint"] = JsonSerializer.SerializeToNode(new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([
+            new(ModelRole.User, privateTranscript)]), 1, 12, 1000), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        oldRun.PayloadJson = document.ToJsonString();
+        await SaveEffectTestRun(f, AgentRunStoreMapping.ToDomain(oldRun));
+        Assert.Contains(privateTranscript, (await ReadRetainedRun()).PayloadJson);
         var store = sqlite ? (ITenantWorkingCleanupStore)new SqliteIamStore(f.Contexts!) : (ITenantWorkingCleanupStore)f.Iam;
         var native = CleanupFilesystem(f);
         var path = AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), owner.AgentInstanceId, owner.SessionId); Directory.CreateDirectory(path); await File.WriteAllTextAsync(Path.Combine(path, "keep.txt"), "keep until confirmed");
@@ -115,6 +131,7 @@ public sealed partial class TenantOperationAuthorizationTests
         {
             lease = lease with { State = state, Revision = lease.Revision + 1 }; await SaveLease(lease);
             Assert.Null(await store.ReadTenantWorkingCleanupAsync(owner)); Assert.False(await service.CleanupAsync(owner)); Assert.True(Directory.Exists(path));
+            Assert.DoesNotContain(privateTranscript, (await ReadRetainedRun()).PayloadJson);
         }
         lease = lease with { State = SandboxLeaseState.Terminated, Revision = lease.Revision + 1 }; await SaveLease(lease);
         var target = Assert.IsType<TenantWorkingCleanupTarget>(await store.ReadTenantWorkingCleanupAsync(owner));

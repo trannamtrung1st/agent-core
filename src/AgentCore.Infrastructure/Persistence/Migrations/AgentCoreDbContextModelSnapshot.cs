@@ -2729,10 +2729,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                             Archived = false,
                             CapabilitiesJson = "{\"tools\":true,\"vision\":false,\"hierarchy\":1,\"semanticMode\":0,\"structuredOutput\":true,\"forcedToolChoice\":true,\"reasoningEfforts\":[\"low\",\"medium\",\"high\"],\"defaultReasoningEffort\":\"medium\",\"source\":2,\"verifiedAt\":null}",
                             Enabled = true,
-                            ExternalModelId = "deepseek/deepseek-v4.1-flash",
+                            ExternalModelId = "deepseek/deepseek-v4.1-flash-1017",
                             Kind = 3,
-                            Label = "DeepSeek V4.1 Flash",
-                            Revision = 1L,
+                            Label = "DeepSeek V4.1 Flash 1017",
+                            Revision = 2L,
                             Transport = 3
                         });
                 });

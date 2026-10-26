@@ -85,7 +85,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var role = await f.Access.SaveRoleAsync(actor, tenant, null, "Model fixture Space context", ["spaces.read"], await Revision());
         await f.Access.AssignRoleAsync(actor, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision());
     }
-    private static async Task<ProviderSetupState> ProviderSetup(Fixture f, ModelProviderKind kind)
+    private static async Task<ProviderSetupState> ProviderSetup(Fixture f, ModelProviderKind kind, ModelPreset? presetOverride = null)
     {
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var human = await SandboxHuman(f, owner.OwnerPrincipalId);
@@ -94,7 +94,7 @@ public sealed partial class TenantCredentialIntegrationTests
             new("Inference", CredentialKind.ApiKey, CredentialPurpose.ModelInference, null, [], "factory-private-key"), await Revision(), initiator: human);
         var service = Models(f); var connection = await service.SaveConnectionAsync(human, owner.TenantId, null,
             new(kind, "Exact connection", kind == ModelProviderKind.OpenAICompatible ? "https://local.example.test/v1/" : null, credential.Credential.CredentialId, false, true), await Revision(), 0);
-        var preset = BuiltinModelPresets.All.FirstOrDefault(p => p.Kind == kind);
+        var preset = presetOverride ?? BuiltinModelPresets.All.FirstOrDefault(p => p.Kind == kind);
         var profile = preset?.Capabilities ?? new(true, false, ModelInstructionHierarchy.NativeDeveloper, ModelSemanticMode.NativeStructuredOutput, true, true, [], null, ModelMetadataSource.Manual);
         var offering = await service.SaveOfferingAsync(human, owner.TenantId, null, new(connection.ConnectionId, preset?.PresetId, preset?.ExternalModelId ?? "local-model", "Exact offering",
             preset?.Transport ?? ModelTransport.ChatCompletions, profile, true, false), await Revision(), 0);

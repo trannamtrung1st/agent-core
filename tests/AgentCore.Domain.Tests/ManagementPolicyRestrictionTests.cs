@@ -3,6 +3,24 @@ namespace AgentCore.Domain.Tests;
 
 public sealed class ManagementPolicyRestrictionTests
 {
+    [Fact]
+    public void Definition_adoption_inherits_sparse_defaults_but_preserves_saved_source_and_tool_eligibility()
+    {
+        var first = new AgentDefinition(2, "test", 1, new("Test", "Test", "", ""), [], "", null!, null!, null!, null!, null!,
+            new Dictionary<string, string>(), SelfManagement: Full());
+        var now = DateTimeOffset.UtcNow;
+        var instance = new AgentInstance(Guid.NewGuid(), first.Id, 1, first.Identity, AgentInstanceLifecycle.Active, now, now,
+            HarnessManagement: new(Full() with { Frozen = true }, Overrides: new()));
+        var adopted = first with { Version = 2, SelfManagement = Full(HarnessManagementMode.Assisted) with {
+            Sources = ["new-definition-source"], EligibleTools = ["workspace.write"], Scopes = [HarnessManagementScope.Skills] } };
+        var effective = ManagementPolicyResolver.Resolve(adopted, instance with { ActiveVersion = 2 });
+        Assert.Equal(HarnessManagementMode.Assisted, effective.Mode);
+        Assert.Equal(new[] { HarnessManagementScope.Skills }, effective.Scopes);
+        Assert.Equal(instance.HarnessManagement!.Policy.Sources, effective.Sources);
+        Assert.Equal(instance.HarnessManagement!.Policy.EligibleTools, effective.EligibleTools);
+        Assert.True(effective.Frozen);
+    }
+
     [Theory]
     [InlineData("{\"unknown\":true}")]
     [InlineData("{\"mode\":{\"value\":\"Managed\",\"unknown\":true}}")]

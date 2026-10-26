@@ -10,11 +10,13 @@ public sealed record TenantWorkingCleanupTarget(TenantSessionRoot Owner, long Se
     Guid? PolicyRunId, long? PolicyRunRevision, Guid? LeaseGeneration, long? LeaseRevision);
 public sealed record TenantWorkingCleanupPage(IReadOnlyList<TenantSessionRoot> Items, Guid? NextCursor);
 
-// No human-selected path or new execution authority. Retained lifecycle/policy and settlement authorize bytes only.
+// No human-selected path or new execution authority. Retained lifecycle/policy and settlement authorize bytes and deleted-Session Run minimization only.
 public interface ITenantWorkingCleanupStore
 {
     ValueTask<TenantWorkingCleanupPage> ListTenantWorkingCleanupAsync(Guid? after, int limit, CancellationToken ct = default);
     ValueTask<TenantWorkingCleanupTarget?> ReadTenantWorkingCleanupAsync(TenantSessionRoot owner, CancellationToken ct = default);
+    // Reuses the retained deletion witness to recover pre-fix content and deferred report bodies.
+    ValueTask<bool> RetireTenantRunContentAsync(TenantSessionRoot owner, CancellationToken ct = default);
 }
 public interface ITenantWorkingCleanupBytes
 {

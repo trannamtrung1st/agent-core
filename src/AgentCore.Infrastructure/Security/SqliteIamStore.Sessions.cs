@@ -26,6 +26,9 @@ public sealed partial class SqliteIamStore
             if (await db.AgentRuns.AnyAsync(r => r.SessionId == root.SessionId && r.Status != (int)AgentRunStatus.Completed && r.Status != (int)AgentRunStatus.Cancelled && r.Status != (int)AgentRunStatus.Failed, ct).ConfigureAwait(false)) throw new SecurityConflictException("session_in_use");
             if (change.Action == TenantSessionAction.Delete)
             {
+                var retainedRuns = await db.AgentRuns.Where(r => r.TenantId == root.TenantId && r.SessionId == root.SessionId).ToArrayAsync(ct).ConfigureAwait(false);
+                if (retainedRuns.Select(AgentRunStoreMapping.ToDomain).Any(r => r.RequiresEffectReconciliation))
+                    throw new SecurityConflictException("session_effect_reconciliation_pending");
                 var runIds = await db.AgentRuns.Where(r => r.TenantId == root.TenantId && r.SessionId == root.SessionId).Select(r => r.AgentRunId).ToArrayAsync(ct).ConfigureAwait(false);
                 var attachmentIds = await db.Attachments.Where(a => a.TenantId == root.TenantId && a.SessionId == root.SessionId).Select(a => a.AttachmentId).ToArrayAsync(ct).ConfigureAwait(false);
                 var artifactIds = await db.Artifacts.Where(a => a.TenantId == root.TenantId && a.SessionId == root.SessionId).Select(a => a.ArtifactId).ToArrayAsync(ct).ConfigureAwait(false);
@@ -49,6 +52,7 @@ public sealed partial class SqliteIamStore
             await TenantCoreEventProduction.StageSessionAsync(db, previous, value, root.Domain(), null, ct).ConfigureAwait(false);
             if (change.Action == TenantSessionAction.Delete)
             {
+                await RetireRunContent(db, root.TenantId, root.SessionId, at, ct).ConfigureAwait(false);
                 foreach (var entry in await db.Entries.Where(e => e.SessionId == root.SessionId).ToArrayAsync(ct).ConfigureAwait(false)) RedactSessionEntry(entry);
                 var memories = await db.Set<TenantLearnedMemoryRecord>().Where(i => i.TenantId == root.TenantId && i.SessionId == root.SessionId && i.Scope == 0 && i.Status != 2).ToArrayAsync(ct).ConfigureAwait(false);
                 foreach (var memory in memories) db.Entry(memory).CurrentValues.SetValues(memory with { Status = 2, Subject = "", Content = "", SubjectKey = "",

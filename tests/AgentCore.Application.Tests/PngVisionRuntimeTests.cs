@@ -31,7 +31,7 @@ public sealed class PngVisionRuntimeTests
                 DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/",
-                DefaultModel = "deepseek/deepseek-v4.1-flash",
+                DefaultModel = "deepseek/deepseek-v4.1-flash-1017",
                 ApiKey = "test-key",
                 Vision = true,
                 Tools = true

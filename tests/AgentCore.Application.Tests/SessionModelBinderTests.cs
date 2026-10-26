@@ -153,13 +153,13 @@ internal static class TestModelCatalogs
 
     public static IModelCatalog Real() =>
         new ConfigurationModelCatalog(
-            "deepseek-v41-flash",
+            "deepseek-v41-flash-1017",
             [
                 new ModelDescriptor(
-                    "deepseek-v41-flash",
-                    "DeepSeek V4.1 Flash",
+                    "deepseek-v41-flash-1017",
+                    "DeepSeek V4.1 Flash 1017",
                     "dca20000-0000-4000-8000-000000000001",
-                    "deepseek/deepseek-v4.1-flash",
+                    "deepseek/deepseek-v4.1-flash-1017",
                     Tools: true,
                     Vision: false,
                     StructuredOutput: false,

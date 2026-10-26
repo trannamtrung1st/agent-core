@@ -86,9 +86,9 @@ public sealed class UserTurnCapabilityValidatorTests
         Assert.Throws<AgentCoreException>(() =>
             validator.ValidateProcessedImages(
                 new SessionModelSelection(
-                    "deepseek-v41-flash",
+                    "deepseek-v41-flash-1017",
                     "dca20000-0000-4000-8000-000000000001",
-                    "deepseek/deepseek-v4.1-flash",
+                    "deepseek/deepseek-v4.1-flash-1017",
                     ModelSelectionSource.TenantDefault,
                     "medium"),
                 results));

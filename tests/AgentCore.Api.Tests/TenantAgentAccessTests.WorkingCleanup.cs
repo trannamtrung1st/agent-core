@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json;
+using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Workspaces;
 using AgentCore.Domain.Conversation;
@@ -9,6 +11,7 @@ using AgentCore.Infrastructure.Security;
 using AgentCore.Infrastructure.Workspaces;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Api.Tests;
 
@@ -93,13 +96,54 @@ public sealed partial class TenantAgentAccessTests
         var root = Path.Combine(Path.GetTempPath(), "tenant-working-restart-" + Guid.NewGuid().ToString("N"));
         await using var first = new RequestIsolationFactory(true, root); using var client = first.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, _) = await IsolationAgent(client); var api = $"/api/v2/tenants/{tenant}";
+        var agent = await Json(await client.GetAsync(api + $"/agents/{instance}"));
+        var role = await Json(await client.PostAsJsonAsync(api + "/roles", new { name = "Restart retention request", permissions = new[] { "agents.chat", "spaces.read" }, expectedRevision = await Revision(client, tenant) }));
+        await Json(await client.PostAsJsonAsync(api + "/role-assignments", new { principalId = agent.GetProperty("principalId").GetGuid(), roleId = role.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(client, tenant) }));
         var session = (await Json(await client.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedInstanceRevision = 1, expectedRevision = await Revision(client, tenant) }))).GetProperty("sessionId").GetGuid();
+        const string privateText = "PRIVATE-RESTART-RETIRED-CHECKPOINT";
+        var receipt = await Json(await client.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = privateText, expectedRevision = await Revision(client, tenant), expectedSessionRevision = 1 }));
+        Assert.True(receipt.TryGetProperty("runId", out var admittedRun), receipt.GetRawText());
+        var runId = admittedRun.GetGuid();
+        await first.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
+        var runs = first.Services.GetRequiredService<ITenantRunStore>();
+        for (var i = 0; i < 400 && (await runs.FindTenantRunAsync(tenant, runId))?.IsTerminal != true; i++) await Task.Delay(25);
+        var completed = (await runs.FindTenantRunAsync(tenant, runId))!;
+        Assert.True(completed.Status == AgentRunStatus.Completed, $"status={completed.Status}; failure={completed.Failure?.Code}:{completed.Failure?.Summary}");
+        var contexts = first.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>();
+        string oldPayload;
+        await using (var db = await contexts.CreateDbContextAsync())
+        {
+            var document = JsonNode.Parse((await db.AgentRuns.AsNoTracking().SingleAsync(r => r.AgentRunId == runId.ToString("D"))).PayloadJson)!;
+            // A one-call Synthetic response needs no tool checkpoint. Seed the
+            // previous binary's valid transcript shape for the recovery scenario.
+            document["checkpoint"] = JsonSerializer.SerializeToNode(new AgentRunCheckpoint(
+                AgentRunToolCallCheckpoint.Write([new(ModelRole.User, privateText)]), 1, privateText.Length, 1000), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            oldPayload = document.ToJsonString();
+            Assert.Contains(privateText, oldPayload);
+        }
         var path = AgentWorkspacePhysicalPaths.WorkingDirectory(first.Services.GetRequiredService<PersistenceOptions>().WorkspaceRoot, instance, session); Directory.CreateDirectory(path); await File.WriteAllTextAsync(Path.Combine(path, "retained.txt"), "commit-to-bytes gap");
-        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync(api + $"/sessions/{session}?expectedRevision={await Revision(client, tenant)}&expectedSessionRevision=1")).StatusCode);
+        var revision = (await first.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(tenant, session))!.Snapshot.Revision;
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync(api + $"/sessions/{session}?expectedRevision={await Revision(client, tenant)}&expectedSessionRevision={revision}")).StatusCode);
+        // Reproduce a pre-fix installed tombstone left by the previous binary.
+        await using (var db = await contexts.CreateDbContextAsync())
+        {
+            var row = await db.AgentRuns.SingleAsync(r => r.AgentRunId == runId.ToString("D"));
+            row.PayloadJson = oldPayload; await db.SaveChangesAsync();
+        }
         Assert.True(Directory.Exists(path)); await first.DisposeAsync();
         await using var reopened = new RequestIsolationFactory(true, root); using var again = reopened.CreateClient();
         for (var i = 0; i < 400 && Directory.Exists(path); i++) await Task.Delay(25);
         Assert.False(Directory.Exists(path)); Assert.Empty(await reopened.Services.GetRequiredService<ITenantRunStore>().ListTenantRunIdsAsync(tenant, session));
         Assert.Contains((await reopened.Services.GetRequiredService<ITenantWorkingCleanupStore>().ListTenantWorkingCleanupAsync(null, 100)).Items, o => o.SessionId == session);
+        var reopenedContexts = reopened.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>();
+        await using var retained = await reopenedContexts.CreateDbContextAsync();
+        string payload = oldPayload;
+        for (var i = 0; i < 400 && payload.Contains(privateText, StringComparison.Ordinal); i++)
+        {
+            payload = (await retained.AgentRuns.AsNoTracking().SingleAsync(r => r.AgentRunId == runId.ToString("D"))).PayloadJson;
+            if (payload.Contains(privateText, StringComparison.Ordinal)) await Task.Delay(25);
+        }
+        Assert.DoesNotContain(privateText, payload);
+        Assert.Single(await retained.AgentRuns.AsNoTracking().Where(r => r.SessionId == session.ToString("D")).ToArrayAsync());
     }
 }

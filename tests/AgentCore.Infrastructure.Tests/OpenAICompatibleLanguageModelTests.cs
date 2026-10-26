@@ -145,7 +145,7 @@ public sealed class OpenAICompatibleLanguageModelTests
                 DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
-                DefaultModel = "deepseek/deepseek-v4.1-flash",
+                DefaultModel = "deepseek/deepseek-v4.1-flash-1017",
                 ReasoningObjectWire = true,
                 ExcludeVisibleReasoning = true,
                 ApiKey = "test-key"

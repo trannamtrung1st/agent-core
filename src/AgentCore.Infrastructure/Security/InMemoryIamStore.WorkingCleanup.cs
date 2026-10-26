@@ -21,4 +21,15 @@ public sealed partial class InMemoryIamStore : ITenantWorkingCleanupStore
             return ValueTask.FromResult(TenantWorkingCleanupRules.Target(graph, lease));
         }
     }
+
+    public ValueTask<bool> RetireTenantRunContentAsync(TenantSessionRoot owner, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate)
+        {
+            var current = sessionBacking.ReadRetainedTenantBackgroundSession(owner.TenantId, owner.SessionId);
+            if (current?.Owner != owner) return ValueTask.FromResult(false);
+            if (current.Snapshot.DurablyDeletedAt is not null) RetireRunContent(owner.TenantId, owner.SessionId, (clock ?? TimeProvider.System).GetUtcNow());
+            return ValueTask.FromResult(true);
+        }
+    }
 }

@@ -9,7 +9,7 @@ using Fixture = AgentCore.Infrastructure.Tests.TenantCredentialIntegrationTests.
 
 namespace AgentCore.Infrastructure.Tests;
 
-public sealed class TenantChatRetentionTests
+public sealed partial class TenantChatRetentionTests
 {
     [Theory]
     [InlineData(false, false)] [InlineData(true, false)]
@@ -39,6 +39,10 @@ public sealed class TenantChatRetentionTests
             new AgentCore.Application.Execution.AgentRunCommand.Claim(run.Revision, clock.GetUtcNow(), Guid.NewGuid(), clock.GetUtcNow().AddMinutes(5)), Guid.NewGuid());
         var artifacts = (ITenantArtifactStore)f.Artifacts;
         var artifact = await artifacts.CreateTenantAsync(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), Guid.NewGuid(), "output.txt", "text/plain", "private output"u8.ToArray());
+        var checkpoint = new AgentRunCheckpoint(AgentCore.Application.Execution.AgentRunToolCallCheckpoint.Write([
+            new(ModelRole.User, PrivateRunContent), new(ModelRole.Assistant, "", ToolCalls: [new("retention-fixture-effect", "fixture.private", "{\"private\":\"" + PrivateRunContent + "\"}")])]), 1, 32, 1000);
+        run = await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
+            new AgentCore.Application.Execution.AgentRunCommand.Checkpoint(run.Revision, clock.GetUtcNow(), run.Claim!.Generation, checkpoint, PrivateRunContent), Guid.NewGuid());
         if (uncertain)
         {
             run = await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
@@ -47,6 +51,15 @@ public sealed class TenantChatRetentionTests
             run = await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
                 new AgentCore.Application.Execution.AgentRunCommand.MarkSideEffect(run.Revision, clock.GetUtcNow(), run.Claim!.Generation,
                     AgentRunSideEffectDisposition.InFlight, "retention-fixture-effect", new string('a', 64)), Guid.NewGuid());
+            run = await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
+                new AgentCore.Application.Execution.AgentRunCommand.RequestCancellation(run.Revision, clock.GetUtcNow(), null), Guid.NewGuid());
+            run = await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
+                new AgentCore.Application.Execution.AgentRunCommand.CommitCancellation(run.Revision, clock.GetUtcNow(), run.Claim!.Generation, null), Guid.NewGuid());
+            var pending = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(account.TenantId, chat.Owner.SessionId))!;
+            var securityRevision = await Revision();
+            var refused = await Assert.ThrowsAsync<SecurityConflictException>(() => f.Sessions.ChangeAsync(account.TenantId, actor,
+                new(chat.Owner.SessionId, pending.Snapshot.Revision, TenantSessionAction.Delete), securityRevision).AsTask());
+            Assert.Equal("session_effect_reconciliation_pending", refused.ReasonCode);
         }
         clock.Advance(TimeSpan.FromHours(24));
         Assert.Empty(await runtime.ListRunnableTenantRunsAsync(clock.GetUtcNow(), 10));
@@ -75,6 +88,7 @@ public sealed class TenantChatRetentionTests
             Assert.Null(snapshot.DurablyDeletedAt); Assert.True(retained.CancellationRequested);
             Assert.Equal(AgentRunStatus.Cancelled, retained.Status); Assert.Null(retained.Claim);
             Assert.Equal(AgentRunSideEffectDisposition.InFlight, retained.SideEffect.Disposition);
+            Assert.Equal(checkpoint.PayloadJson, retained.Checkpoint!.PayloadJson);
             var retry = Assert.Single(await sessions.ListDueSessionsAsync(null, 10));
             Assert.False(await sessions.RetireDueSessionAsync(retry, Guid.NewGuid()));
             Assert.Equal(retry.Revision, Assert.Single(await sessions.ListDueSessionsAsync(null, 10)).Revision);
@@ -82,6 +96,7 @@ public sealed class TenantChatRetentionTests
         else
         {
             Assert.NotNull(snapshot.DurablyDeletedAt); Assert.Equal(AgentRunStatus.Cancelled, retained.Status);
+            Assert.DoesNotContain(PrivateRunContent, AgentRunStoreMapping.ToRecord(retained).PayloadJson);
             var cleanup = (ITenantAttachmentCleanupStore)f.Attachments;
             var fileTarget = Assert.Single((await cleanup.ListAttachmentCleanupAsync(null, 100)).Items, t => t.SessionId == chat.Owner.SessionId);
             Assert.True(await cleanup.CleanupAttachmentContentAsync(fileTarget)); Assert.True(await cleanup.CleanupAttachmentContentAsync(fileTarget));

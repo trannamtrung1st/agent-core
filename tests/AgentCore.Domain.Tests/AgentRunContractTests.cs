@@ -6,6 +6,24 @@ namespace AgentCore.Domain.Tests;
 
 public sealed class AgentRunContractTests
 {
+    [Fact]
+    public void Deletion_minimizes_a_settled_transcript_but_defers_a_report_body_until_accounted()
+    {
+        var run = NewItem().TakeClaim(GenerationA, Now, Now.AddMinutes(1));
+        run = run.SaveCheckpoint(run.Revision, GenerationA, new("{\"private\":\"private transcript\"}", 3, 40, 900), "private progress", Now);
+        run = run.Complete(run.Revision, GenerationA, "private report", Now, outcomeKind: AgentRunOutcomeKind.NoAction);
+        var pendingReport = run.RetireConversationContent(Now, preserveResult: true);
+        Assert.Equal("private report", pendingReport.Result!.Text);
+        Assert.Equal(AgentRun.RetiredConversationCheckpoint, pendingReport.Checkpoint!.PayloadJson);
+        Assert.Equal(3, pendingReport.Checkpoint.StepCount); Assert.Equal(900, pendingReport.Checkpoint.RemainingOverallBudgetMs);
+        Assert.Same(run.Admission, pendingReport.Admission); Assert.Same(run.PinnedModel, pendingReport.PinnedModel);
+        var accounted = pendingReport.RetireConversationContent(Now);
+        Assert.Equal(AgentRun.RetiredConversationText, accounted.Result!.Text);
+        Assert.Equal(run.Result!.OutcomeKind, accounted.Result.OutcomeKind);
+        Assert.Equal(run.Result.CompletedAtUtc, accounted.Result.CompletedAtUtc);
+        Assert.Same(accounted, accounted.RetireConversationContent(Now.AddDays(1)));
+    }
+
     private static readonly Guid InstanceId = Guid.Parse("019944af-0008-7000-8000-0000000000a1");
     private static readonly Guid ProfileId = Guid.Parse("019944af-0008-7000-8000-0000000000b1");
     private static readonly Guid AgentRunId = Guid.Parse("019944af-0008-7000-8000-0000000000c1");

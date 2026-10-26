@@ -35,7 +35,7 @@ public sealed partial class InMemoryIamStore
                 _operationGrants[grant.RequestId] = grant with { Status = OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) };
             foreach (var approval in _approvals.Values.Where(a => a.TenantId == target.Owner.TenantId && a.SessionId == target.Owner.SessionId && a.Status == TenantApprovalStatus.Pending).ToArray())
                 _approvals[approval.RequestId] = approval.Decide(now >= approval.ExpiresAt ? TenantApprovalStatus.Expired : TenantApprovalStatus.Cancelled, approval.Revision, now);
-            if (all.Any(r => r.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate))
+            if (all.Any(r => r.RequiresEffectReconciliation))
             {
                 foreach (var run in all.Where(r => !r.IsTerminal))
                 {
@@ -48,6 +48,7 @@ public sealed partial class InMemoryIamStore
                     AppendTenantCoreSession(new(target.Owner, current), sessionBacking.ReadRetainedTenantBackgroundSession(target.Owner.TenantId, target.Owner.SessionId)!);
                     _audit.Add(new(auditId, target.Owner.TenantId, Guid.Empty, "sessions.retention.expire", target.Owner.SessionId.ToString("D"), "allowed", "system_due_effect_reconciliation_pending", now));
                 }
+                RetireRunContent(target.Owner.TenantId, target.Owner.SessionId, now);
                 return ValueTask.FromResult(false);
             }
             foreach (var run in all.Where(r => !r.IsTerminal))
@@ -60,6 +61,7 @@ public sealed partial class InMemoryIamStore
             var nextState = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) }, Assignments = TenantSessionMutations.RetireAssignments(state.Assignments,
                 target.Owner, all.Select(r => r.AgentRunId).ToHashSet(), attachmentIds, artifactBacking?.RetainedTenantArtifactIds(target.Owner.TenantId, target.Owner.SessionId) ?? new HashSet<Guid>()) };
             sessionBacking.DeleteDueTenantSession(target, now); TombstoneSessionMemory(target.Owner.TenantId, target.Owner.SessionId, now);
+            RetireRunContent(target.Owner.TenantId, target.Owner.SessionId, now);
             var retired = sessionBacking.ReadRetainedTenantBackgroundSession(target.Owner.TenantId, target.Owner.SessionId)!;
             AppendTenantCoreSession(new(target.Owner, current), retired);
             _tenants[target.Owner.TenantId] = nextState;

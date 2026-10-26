@@ -93,7 +93,7 @@ public sealed class AutomationAuthorizationProviderTests
     {
         using var handler = new ClassifierHandler(outcome);
         using var http = new HttpClient(handler);
-        var descriptor = FixtureDescriptor(ModelInferenceTransport.ChatCompletions) with { ExternalModelId = "deepseek/deepseek-v4.1-flash" };
+        var descriptor = FixtureDescriptor(ModelInferenceTransport.ChatCompletions) with { ExternalModelId = "deepseek/deepseek-v4.1-flash-1017" };
         var verdict = await IsolatedClassifier(http, descriptor, "low", "offline-fixture")
             .AuthorizeAsync(Proposed("I would like daily reflection on how you can consolidate your memory, experience at 9am"));
 

@@ -13,7 +13,7 @@ public static class BuiltinModelPresets
         Preset(4, ModelProviderKind.Anthropic, "claude-sonnet-5-5", "Claude Sonnet 5.5", ModelTransport.AnthropicMessages, true, false, ["low", "medium", "high", "xhigh", "max"], "high"),
         Preset(5, ModelProviderKind.Google, "gemini-3.5-flash-lite", "Gemini 3.5 Flash Lite", ModelTransport.GeminiContent, true, false, ["minimal", "low", "medium", "high"], "minimal"),
         Preset(6, ModelProviderKind.Google, "gemini-3.8-flash", "Gemini 3.8 Flash", ModelTransport.GeminiContent, true, false, ["low", "medium", "high"], "medium"),
-        Preset(7, ModelProviderKind.OpenRouter, "deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash", ModelTransport.ChatCompletions, false, true, ["low", "medium", "high"], "medium")
+        Preset(7, ModelProviderKind.OpenRouter, "deepseek/deepseek-v4.1-flash-1017", "DeepSeek V4.1 Flash 1017", ModelTransport.ChatCompletions, false, true, ["low", "medium", "high"], "medium") with { Revision = 2 }
     });
     private static ModelPreset Preset(int number, ModelProviderKind kind, string external, string label,
         ModelTransport transport, bool vision, bool forced, string[] efforts, string? effort) => ModelManagementRules.Freeze(new ModelPreset(

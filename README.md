@@ -6,11 +6,13 @@ The [IAM stabilization follow-up](docs/reports/iam-stabilization-2026-10-24.md) 
 
 Tenant-owned dynamic model management is implemented locally: five adapter kinds, protected provider connections, explicit offerings/defaults and canonical Chat/authoring/runtime selection. The [delivery audit](docs/reports/dynamic-model-management-delivery-2026-10-25.md#final-requirement-audit) records focused offline/Synthetic evidence, migration/reset policy and unrun live-provider/CI limits.
 
+The OpenRouter preset is DeepSeek V4.1 Flash 1017 (`deepseek/deepseek-v4.1-flash-1017`). The [tracked snapshot upgrade](docs/15-persistence-and-configuration.md#real-model-catalog) preserves tenant offering IDs/defaults and historical pins; stop the host, back up SQLite and apply the offline EF migration before restarting.
+
 The [model and Space integration](docs/reports/model-space-main-integration-2026-10-25.md) records combined migration, authority and conversation verification after synchronizing main. Inference offerings remain tenant scoped; Space/Environment selection retains independent membership and IAM checks.
 
 Agent Self-Management completion uses ordinary tenant Instances and the existing IAM/configuration/approval owners. The [completion delivery](docs/reports/agent-self-management-delivery-2026-10-26.md) records the one-time sparse-policy migration, retained immutable history, UI refinement and current local verification limits. No special Admin Assistant feature is installed.
 
-Chat supports Saved or fixed 24-hour Temporary conversations, default-Off scoped agent completion, and deliberate long-text attachments. [The cutover report](docs/reports/chat-simplification-2026-10-26.md) records local Synthetic verification and operational limits.
+Chat supports Saved or fixed 24-hour Temporary conversations, default-Off scoped agent completion, and deliberate long-text attachments. [The cutover report](docs/reports/chat-simplification-2026-10-26.md) records local Synthetic verification and operational limits. [The retention follow-up](docs/reports/retired-run-content-verification-2026-10-26.md) removes settled Run conversation copies and qualifies deletion, expiry and restart recovery while preserving required effect evidence.
 
 Agent Core is a lightweight runtime for creating persistent AI identities capable of natural, real-time conversation.
 
