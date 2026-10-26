@@ -18,6 +18,7 @@ public sealed partial class InMemoryIamStore
         lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate)
         {
             RequireRuntimeOwner(frame.Owner); var tenant = frame.Owner.TenantId!.Value; var state = _tenants[tenant];
+
             var parent = sessionBacking.ReadTenantRun(tenant, frame.RunId) ?? throw new AccessDeniedException("run_unavailable");
             var session = sessionBacking.ReadTenantSession(tenant, frame.SessionId) ?? throw new AccessDeniedException("session_unavailable");
             var agent = FindTenantAgentAsync(tenant, frame.Owner.AgentInstanceId, ct).Result!;
@@ -39,6 +40,7 @@ public sealed partial class InMemoryIamStore
                     throw new SecurityConflictException("background_id_conflict");
                 return ValueTask.FromResult(new AgentRunAdmissionResult(false, saved));
             }
+            AgentCore.Application.Models.ExecutionModelPolicy.RequireCurrentDecision(child.PinnedModel, modelSettings.GetValueOrDefault(tenant)?.Revision ?? 0);
             if (_audit.Any(a => a.AuditId == auditId)) throw new SecurityConflictException("identity_conflict");
             var audit = new AuthorizationAudit(auditId, tenant, frame.Owner.ExecutorPrincipalId!.Value,
                 "agent-runs.background.admit", child.AgentRunId.ToString("D"), "allowed", "owned_parent_child_admitted", now);

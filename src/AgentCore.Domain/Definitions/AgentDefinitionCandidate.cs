@@ -20,7 +20,7 @@ public sealed record AgentDefinitionCandidate(
     ProviderPreferences ProviderPreferences,
     IReadOnlyDictionary<string, string> Metadata,
     DefinitionExecutionPolicy? ExecutionPolicy = null,
-    AgentModelDefaults? ModelDefaults = null,
+    AgentCore.Domain.Models.ModelPreference? ModelDefaults = null,
     MemoryPolicy? MemoryPolicy = null,
     TriggerPolicy? TriggerPolicy = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

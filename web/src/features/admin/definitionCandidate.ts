@@ -326,26 +326,6 @@ export function writeNullableString(
   return writePath(candidate, path, value.trim().length === 0 ? null : value);
 }
 
-export function writeModelDefault(
-  candidate: DefinitionCandidate,
-  field: "offeringId" | "reasoningEffort",
-  value: string
-): DefinitionCandidate {
-  const current = readRecord(candidate, ["modelDefaults"]);
-  const next = {
-    offeringId:
-      field === "offeringId" ? blankToNull(value) : blankToNull(readString(current ?? {}, ["offeringId"])),
-    reasoningEffort:
-      field === "reasoningEffort"
-        ? blankToNull(value)
-        : blankToNull(readString(current ?? {}, ["reasoningEffort"]))
-  };
-  if (next.offeringId === null && next.reasoningEffort === null) {
-    return writePath(candidate, ["modelDefaults"], null);
-  }
-  return writePath(candidate, ["modelDefaults"], next);
-}
-
 export function readMetadataRows(candidate: DefinitionCandidate): MetadataRow[] {
   const current = readRecord(candidate, ["metadata"]);
   if (!current) {
@@ -398,9 +378,7 @@ export const triggerPolicyDefaults: Record<string, unknown> = {
   minFixedIntervalSeconds: 60
 };
 
-function blankToNull(value: string): string | null {
-  return value.trim().length === 0 ? null : value;
-}
+
 
 function stableStringify(value: unknown): string {
   if (value === undefined) {

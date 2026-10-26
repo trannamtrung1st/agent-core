@@ -551,12 +551,7 @@ public sealed partial class SqliteAgentInstanceStore(
             row.ExecutionBudgetsJson = update.ExecutionBudgets is null ? null : JsonSerializer.Serialize(update.ExecutionBudgets, Json);
         if (update.SetUnattendedModel)
         {
-            row.UnattendedOfferingId = string.IsNullOrWhiteSpace(update.UnattendedOfferingId)
-                ? null
-                : update.UnattendedOfferingId.Trim();
-            row.UnattendedReasoningEffort = string.IsNullOrWhiteSpace(update.UnattendedReasoningEffort)
-                ? null
-                : update.UnattendedReasoningEffort.Trim();
+            row.UnattendedModelJson = update.UnattendedModel is null ? null : JsonSerializer.Serialize(update.UnattendedModel, Json);
         }
 
         if (update.Lifecycle is AgentInstanceLifecycle lifecycle)
@@ -620,8 +615,7 @@ public sealed partial class SqliteAgentInstanceStore(
             DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc),
             row.Revision,
             row.PersonaRevision,
-            row.UnattendedOfferingId,
-            row.UnattendedReasoningEffort,
+            row.UnattendedModelJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Models.ModelPreference>(row.UnattendedModelJson, Json),
             row.HarnessManagementJson is null ? null : JsonSerializer.Deserialize<HarnessManagementState>(row.HarnessManagementJson, Json),
             row.ExecutionBudgetsJson is null ? null : JsonSerializer.Deserialize<ExecutionBudgetPolicy>(row.ExecutionBudgetsJson, Json),
             row.SettingsOverridesJson is null ? null : JsonSerializer.Deserialize<InstanceSettingsOverrides>(row.SettingsOverridesJson, Json),
@@ -639,8 +633,7 @@ public sealed partial class SqliteAgentInstanceStore(
             UpdatedAtUtc = instance.UpdatedAt.ToUnixTimeMilliseconds(),
             Revision = instance.Revision,
             PersonaRevision = instance.PersonaRevision,
-            UnattendedOfferingId = instance.UnattendedOfferingId,
-            UnattendedReasoningEffort = instance.UnattendedReasoningEffort,
+            UnattendedModelJson = instance.UnattendedModel is null ? null : JsonSerializer.Serialize(instance.UnattendedModel, Json),
             SettingsOverridesJson = instance.SettingsOverrides is null ? null : JsonSerializer.Serialize(instance.SettingsOverrides, Json),
             ExecutionBudgetsJson = instance.ExecutionBudgets is null ? null : JsonSerializer.Serialize(instance.ExecutionBudgets, Json),
             BrowserProfileResetJson = instance.BrowserProfileReset is null ? null : JsonSerializer.Serialize(instance.BrowserProfileReset, Json),

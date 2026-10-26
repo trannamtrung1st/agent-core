@@ -23,7 +23,7 @@ public sealed class AutomationSpacePinsTests
         Assert.Equal(space, restored.PinnedSpaceId); Assert.Equal(environment, restored.PinnedEnvironmentId);
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Automation>(frozen.Replace("\"SchemaVersion\":5", "\"SchemaVersion\":4", StringComparison.Ordinal), consent));
         foreach (var copy in new[] { saved.WithScheduleAdvance(AutomationStatus.Completed, null, 1, 2, at, null),
-            saved.WithCancellation(2, at), saved.WithModelOverride("scripted", null, 2, at),
+            saved.WithCancellation(2, at), saved.WithModelOverride(AgentCore.Domain.Models.ModelPreference.Fixed("dca30000-0000-4000-8000-000000000001"), 2, at),
             saved.WithUpdate("Updated task", saved.Trigger!, at.AddMinutes(10), null, 2, 2, at) })
         { Assert.Equal(space, copy.PinnedSpaceId); Assert.Equal(environment, copy.PinnedEnvironmentId); }
         var occurrence = new TriggerOccurrence(Guid.NewGuid(), "space-pin-fixture", saved.AutomationId, owner, TriggerSourceKind.Schedule,

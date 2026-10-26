@@ -930,3 +930,10 @@ The [terminal cleanup/Skill consolidation](reports/tenant-terminal-cleanup-conso
 ## Message, execution and Chat simplification — 2026-10-26
 
 Initiative 5 implementation uses the current Session → Activation → AgentRun architecture, explicit scoped Agent completion, immutable Saved/Temporary retention, bounded existing maintenance/deletion and explicit long-text attachments. Local verification covers canonical stores, migration/reopen/refusal, Synthetic HTTP and JavaScript MessagePack, runtime/voice/context regressions, frontend behavior/build and responsive browser journeys. [The exact verification ledger](reports/chat-simplification-2026-10-26.md) owns source commits, commands, results and limits. This ordinary initiative delivery does not reopen historical milestone acceptance, certify live providers/devices or request hosted CI. Decision Intelligence remains a separate roadmap initiative.
+
+
+## Initiative 6 implementation ledger
+
+The separately requested [Decision Intelligence proposal](proposals/self-hosted-decision-intelligence.md) is implemented as the S1 foundation and S2 canonical routing/preference cutover, with focused local/Synthetic verification recorded in the [delivery ledger](reports/decision-intelligence-delivery-2026-10-26.md). Host inference remains disabled/shadow by default. Production Auto qualification remains open until real checkpoint, held-out quality/calibration and operator-approved latency/footprint evidence exists; local implementation does not claim that gate or application milestone acceptance.
+
+S3 tool/Skill and context/memory relevance, S4 initiative/event relevance, and S5 contextual configuration advice are explicitly deferred subsequent vertical slices. Their current owners still supply deterministic eligibility/budgets and existing generative behavior. Each needs purpose-specific bounded candidate/signal contracts and a baseline/held-out decision-quality fixture before replacement is justified. Work priority remains deferred to initiatives 7–9; no Work table, parallel scheduler or speculative hook is added.

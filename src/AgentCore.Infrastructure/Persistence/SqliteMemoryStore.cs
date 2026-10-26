@@ -742,6 +742,8 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
         row.Snapshot.LifecycleChangedAtUtc = snapshot.LifecycleChangedAt?.ToUnixTimeMilliseconds();
         row.Snapshot.SpeechLocaleOverride = snapshot.SpeechLocaleOverride;
         ApplyModelSelection(row.Snapshot, snapshot.ModelSelection);
+        row.Snapshot.ModelPreferenceJson = snapshot.ModelPreference is null ? null : JsonSerializer.Serialize(snapshot.ModelPreference);
+        row.Snapshot.ModelDecisionJson = snapshot.ModelSelection?.Decision is null ? null : JsonSerializer.Serialize(snapshot.ModelSelection.Decision);
     }
 
     internal static SessionRecord ToRecord(SessionSnapshot snapshot)
@@ -837,7 +839,8 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
             (SessionSurface)row.Surfaces,
             JsonSerializer.Deserialize<Guid[]>(row.PendingAgentInputIdsJson, Json) ?? throw AgentCoreErrors.Persistence("Pending agent input intent is missing."),
             row.ContextSelectionJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Spaces.SessionContextSelection>(row.ContextSelectionJson, Json),
-            (SessionRetentionKind)row.RetentionKind, row.RetainAfterTerminalDays, row.RetentionDueAtUtc is { } due ? FromUnix(due) : null);
+            (SessionRetentionKind)row.RetentionKind, row.RetainAfterTerminalDays, row.RetentionDueAtUtc is { } due ? FromUnix(due) : null,
+            snapshot.ModelPreferenceJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Models.ModelPreference>(snapshot.ModelPreferenceJson));
     }
 
     internal static ConversationEntry ToEntry(EntryRecord row) =>
@@ -917,7 +920,6 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
         row.ExternalModelId = selection?.ExternalModelId;
         row.ModelSelectionSource = selection?.SelectionSource.ToString();
         row.ModelReasoningEffort = selection?.ReasoningEffort;
-        row.ModelHasExplicitReasoningEffort = selection?.HasExplicitReasoningEffort ?? false;
         row.ModelBindingJson = ModelBindingJson.Write(selection?.Binding, selection?.OfferingId, selection?.ConnectionId, selection?.ExternalModelId);
     }
 
@@ -936,8 +938,9 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
             row.ModelConnectionId,
             row.ExternalModelId,
             Enum.Parse<ModelSelectionSource>(row.ModelSelectionSource),
-            row.ModelReasoningEffort, row.ModelHasExplicitReasoningEffort,
-            ModelBindingJson.Read(row.ModelBindingJson, row.ModelOfferingId, row.ModelConnectionId, row.ExternalModelId));
+            row.ModelReasoningEffort,
+            ModelBindingJson.Read(row.ModelBindingJson, row.ModelOfferingId, row.ModelConnectionId, row.ExternalModelId),
+            row.ModelDecisionJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Models.ModelDecisionEvidence>(row.ModelDecisionJson));
     }
 
     private static ModelGenerationProvenance? ReadSummaryModel(SnapshotRecord row)

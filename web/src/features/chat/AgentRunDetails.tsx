@@ -92,6 +92,7 @@ export function AgentRunDetails({ run, onChange, showContextProvenance = false, 
       </Flex>
     </section> : null}
     <Descriptions size="small" column={1} items={[
+      { key: "decision", label: "Model selection", children: run.modelDecision ? <Flex vertical><Typography.Text>{({ fixed: "Fixed", inherited: "Inherited", ranked: "Auto ranked", singleEligible: "Auto · only eligible model", configuredDefault: "Auto · configured default used", fixedAutoReasoning: "Fixed model · Auto reasoning" } as Record<string, string>)[run.modelDecision.basis] ?? "Recorded selection"} · {run.reasoningEffort ?? "Model default"}</Typography.Text><Typography.Text type="secondary" style={{ overflowWrap: "anywhere" }}>{run.modelDecision.engineId} · {run.modelDecision.engineVersion} · policy {run.modelDecision.policyRevision} · settings {run.modelDecision.settingsRevision}{run.modelDecision.diagnosticCode ? ` · ${run.modelDecision.diagnosticCode}` : ''}</Typography.Text></Flex> : 'Captured fixed or inherited selection' },
       { key: "model", label: "Model", children: <Typography.Text className="background-work-progress">{run.modelOfferingId}</Typography.Text> },
       ...(run.configuration ? [
         { key: "configuration", label: "Run configuration", children: `Published Definition v${run.configuration.definitionVersion} · Instance revision ${run.configuration.instanceRevision} · Persona revision ${run.configuration.personaRevision}` },

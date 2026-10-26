@@ -32,8 +32,8 @@ public static class TenantSessionMutations
         if (current.SessionId != change.SessionId || current.DurablyDeletedAt is not null || !Enum.IsDefined(change.Action)) throw new ArgumentException("Invalid Session mutation.");
         if (current.Status is SessionStatus.Attached or SessionStatus.Ending || current.PendingAgentInputIds.Count > 0) throw new SecurityConflictException("session_in_use");
         if (change.Action != TenantSessionAction.Rename && change.Title is not null) throw AgentCoreErrors.Validation("Title applies only to renaming a Session.");
-        if ((change.Action == TenantSessionAction.SelectModel) != (change.Model is not null))
-            throw AgentCoreErrors.Validation("A model selection applies only to a model change.");
+        if ((change.Action == TenantSessionAction.SelectModel) != (change.ModelPreference is not null))
+            throw AgentCoreErrors.Validation("A model preference applies only to a model change.");
         if ((change.Action == TenantSessionAction.SetAgentCompletion) != (change.AgentCompletionAllowed is not null))
             throw AgentCoreErrors.Validation("Agent completion delegation applies only to its policy command.");
         if (change.Action == TenantSessionAction.SetAgentCompletion && (current.LifecycleStatus != SessionLifecycleStatus.Active || current.ArchivedAt is not null))
@@ -46,7 +46,7 @@ public static class TenantSessionMutations
         {
             TenantSessionAction.SetAgentCompletion => current with { CompletionPolicy = (current.CompletionPolicy ?? SessionCompletionPolicy.Default) with {
                 AgentCompletion = change.AgentCompletionAllowed == true ? AgentCompletionAuthority.Allowed : AgentCompletionAuthority.Disabled } },
-            TenantSessionAction.SelectModel => current with { ModelSelection = change.Model },
+            TenantSessionAction.SelectModel => current with { ModelSelection = change.Model, ModelPreference = change.ModelPreference },
             TenantSessionAction.Rename => current with { Title = Title(change.Title) },
             TenantSessionAction.Archive => current with { ArchivedAt = current.ArchivedAt ?? at },
             TenantSessionAction.Restore => current with { ArchivedAt = null },

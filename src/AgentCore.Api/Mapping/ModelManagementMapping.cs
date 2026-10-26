@@ -8,6 +8,14 @@ namespace AgentCore.Api.Mapping;
 
 internal static class ModelManagementMapping
 {
+    internal static ModelPreferenceDto? Map(ModelPreference? p) => p is null ? null : new(p.Mode, p.OfferingId, p.Reasoning is null ? null : new(p.Reasoning.Mode, p.Reasoning.Effort));
+    internal static ModelPreference Input(ModelPreferenceDto? p)
+    {
+        var value = p is null ? ModelPreference.Inherit : new ModelPreference(p.Mode, p.OfferingId,
+            p.Reasoning is null ? null : new(p.Reasoning.Mode, p.Reasoning.Effort));
+        try { value.Validate(); } catch (ArgumentException error) { throw AgentCoreErrors.Validation(error.Message); }
+        return value;
+    }
     internal static T Parse<T>(string value) where T : struct, Enum => Enum.TryParse<T>(value, false, out var result)
         && Enum.IsDefined(result) && Enum.GetNames<T>().Contains(value, StringComparer.Ordinal)
         ? result : throw AgentCoreErrors.Validation("Unknown model provider, transport or capability value.");
@@ -23,8 +31,8 @@ internal static class ModelManagementMapping
         c.CredentialId, c.NoCredential, c.Enabled, c.Revision, c.CreatedAt, c.UpdatedAt, c.LastTestAt, c.LastTestResult);
     internal static ModelOfferingDto Map(ModelOffering o) => new(o.OfferingId, o.TenantId, o.ConnectionId, o.Kind.ToString(), o.PresetId,
         o.ExternalModelId, o.Label, o.Transport.ToString(), Map(o.Capabilities), o.Enabled, o.Retired, o.Revision, o.Observation.ToString(), o.LastSeenAt);
-    internal static TenantModelSettingsDto Map(TenantModelSettings s) => new(s.TenantId, s.DefaultOfferingId, s.DefaultReasoningEffort, s.Revision);
-    internal static TenantModelAdminDto Map(TenantModelAdminView v) => new(v.Connections.Select(Map).ToArray(), v.Offerings.Select(Map).ToArray(), Map(v.Settings), v.Presets.Select(Map).ToArray(), v.SecurityRevision, v.Availability.Select(a => new ModelOfferingAvailabilityDto(a.OfferingId, a.Available, a.Reason)).ToArray(), new(v.Access.CanCreateConnection, v.Access.CanCreateOffering, v.Access.CanManageDefault,
+    internal static TenantModelSettingsDto Map(TenantModelSettings s) => new(s.TenantId, s.DefaultOfferingId, s.DefaultReasoningEffort, s.Revision, new((s.Routing ?? new()).Enabled, (s.Routing ?? new()).AllowConfiguredDefault, (s.Routing ?? new()).MinimumProbability));
+    internal static TenantModelAdminDto Map(TenantModelAdminView v) => new(v.Connections.Select(Map).ToArray(), v.Offerings.Select(Map).ToArray(), Map(v.Settings), v.Presets.Select(Map).ToArray(), v.SecurityRevision, v.Availability.Select(a => new ModelOfferingAvailabilityDto(a.OfferingId, a.Available, a.Reason, a.Observations is { } o ? new(o.SampleCount, o.ErrorCount, o.From, o.To, o.P50Milliseconds, o.P95Milliseconds, o.OfferingRevision, o.ConnectionRevision, o.Scope) : null)).ToArray(), new(v.Access.CanCreateConnection, v.Access.CanCreateOffering, v.Access.CanManageDefault,
         v.Access.ManageConnectionIds, v.Access.TestConnectionIds, v.Access.ManageOfferingIds));
     internal static ModelMetadataTestDto Map(ModelMetadataTestView v) => new(v.MetadataAvailable, v.Result, v.ModelsObserved, v.TestedAt);
     internal static ProviderConnectionChange Input(ModelConnectionRequest c) => new(Parse<ModelProviderKind>(c.Kind), c.Label, c.Endpoint, c.CredentialId, c.NoCredential, c.Enabled);

@@ -106,7 +106,7 @@ public static class TenantBackgroundReportRules
         var p = request.Operation.BackgroundReport!;
         if (TenantBackgroundCreationRules.Hash(resolved) != p.ConfigurationHash || resolved.Configuration.SpaceContext?.MatchesSelection(p.DestinationContext) != true)
             throw new AccessDeniedException("operation_witness_changed");
-        return TenantBackgroundCompletionFactory.Create(source, resolved, new(p.Model.OfferingId, p.Model.ConnectionId, p.Model.ExternalModelId, ModelSelectionSource.Host, p.Model.ReasoningEffort, Binding: p.Model.Binding),
+        return TenantBackgroundCompletionFactory.Create(source, resolved, new(p.Model.OfferingId, p.Model.ConnectionId, p.Model.ExternalModelId, ModelSelectionSource.Host, p.Model.ReasoningEffort, Binding: p.Model.Binding, Decision: p.Model.Decision),
             p.ActivationId, p.RunId, p.ResponseId, request.CreatedAt);
     }
     public static void Report(TenantApprovalRequest request, TenantBackgroundCompletion source, AgentRun report, TenantAgent agent, DateTimeOffset now)
@@ -117,7 +117,7 @@ public static class TenantBackgroundReportRules
         if (report.AgentRunId != p.RunId || report.ActivationId != p.ActivationId || report.ResponseId != p.ResponseId
             || report.CreatedAtUtc != request.CreatedAt || report.Admission.Activation.EvidenceJson != p.EvidenceJson
             || report.Admission.Configuration!.SpaceContext?.MatchesSelection(p.DestinationContext) != true
-            || JsonSerializer.Serialize(report.PinnedModel) != JsonSerializer.Serialize(p.Model) || TenantBackgroundCreationRules.Hash(resolved) != p.ConfigurationHash)
+            || JsonSerializer.Serialize(report.PinnedModel) != JsonSerializer.Serialize(p.Model.ToPin()) || TenantBackgroundCreationRules.Hash(resolved) != p.ConfigurationHash)
             throw new SecurityConflictException("operation_mismatch");
     }
     public static void Decision(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant, DateTimeOffset now)

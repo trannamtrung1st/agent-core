@@ -73,7 +73,7 @@ const storedCandidate = {
     maxSilentEvaluations: 8,
     maxInactivityMs: 900000
   },
-  modelDefaults: { offeringId: "dca30000-0000-4000-8000-000000000001", reasoningEffort: "low" },
+  modelDefaults: { mode: "fixed", offeringId: "dca30000-0000-4000-8000-000000000001", reasoning: { mode: "fixed", effort: "low" } },
   providerPreferences: {
     speechRecognizer: null,
     speechSynthesizer: null,
@@ -245,14 +245,14 @@ describe("definition candidate editor", () => {
 
   it("retains an unavailable model and effort without substituting an available model", () => {
     suppliedAuthoring = authoringOptions; suppliedFailure = undefined;
-    const candidate = { ...storedCandidate, modelDefaults: { offeringId: 'dca30000-0000-4000-8000-000000000099', reasoningEffort: 'high' } };
+    const candidate = { ...storedCandidate, modelDefaults: { mode: 'fixed', offeringId: 'dca30000-0000-4000-8000-000000000099', reasoning: { mode: 'fixed', effort: 'high' } } };
     const changed = vi.fn();
     render(<DefinitionCandidateEditor candidate={candidate} view="form" jsonText={candidateToJson(candidate)}
       busy={false} onCandidateChange={changed} onJsonTextChange={vi.fn()} onViewChange={vi.fn()} />);
     openSettings();
     expect(screen.getByText('Unavailable · dca30000-0000-4000-8000-000000000099', { exact: true })).toBeVisible();
-    expect(screen.getByLabelText('Reasoning')).toBeDisabled();
-    expect(screen.getByText(/Its effort is retained/)).toBeVisible();
+    expect(screen.getByLabelText('Definition reasoning')).toBeDisabled();
+    expect(screen.getByText("high · Unavailable", { exact: true })).toBeVisible();
     expect(changed).not.toHaveBeenCalled();
   });
 
@@ -265,13 +265,13 @@ describe("definition candidate editor", () => {
       busy={false} onCandidateChange={changed} onJsonTextChange={vi.fn()} onViewChange={vi.fn()} />);
     openSettings();
     await screen.findByTitle("Scripted Alpha");
-    fireEvent.mouseDown(screen.getByLabelText("Reasoning"));
+    fireEvent.mouseDown(screen.getByLabelText("Definition reasoning"));
     await exposedRoles().findByRole("listbox");
     expect([...document.querySelectorAll(".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content")]
-      .map(option => option.textContent)).toEqual(["Low", "Medium", "High"]);
+      .map(option => option.textContent)).toEqual(["Model default", "Auto reasoning", "low", "medium", "high"]);
     expect(changed).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByTitle("High"));
-    expect(changed.mock.lastCall![0].modelDefaults.reasoningEffort).toBe("high");
+    fireEvent.click(screen.getByTitle("high"));
+    expect(changed.mock.lastCall![0].modelDefaults.reasoning.effort).toBe("high");
   });
 
   it("emits a voice-enabled candidate with default speech aliases", async () => {

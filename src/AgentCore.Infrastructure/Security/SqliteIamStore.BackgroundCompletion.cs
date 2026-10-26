@@ -89,6 +89,8 @@ public sealed partial class SqliteIamStore
             SELECT * FROM TenantApprovalRequests WHERE json_extract(PayloadJson, '$.Operation.BackgroundReport.ChildRunId') = {source.Child.AgentRunId.ToString("D")}
             """).AnyAsync(r => r.TenantId == tenant, ct).ConfigureAwait(false)) throw new AccessDeniedException("report_approval_required");
         var state = await ReadTenantAsync(db, tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
+        AgentCore.Application.Models.ExecutionModelPolicy.RequireCurrentDecision(report.PinnedModel,
+            await db.Set<TenantModelSettingsRecord>().Where(settings => settings.TenantId == tenant).Select(settings => (long?)settings.Revision).SingleOrDefaultAsync(ct).ConfigureAwait(false) ?? 0);
         var agentRow = await OwnedAgents(db, tenant).SingleOrDefaultAsync(a => a.Instance.InstanceId == report.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false) ?? throw new AccessDeniedException("executor_unavailable");
         var agent = Owned(agentRow); TenantSessionRules.RequireExecutor(state, agent); var now = (clock ?? TimeProvider.System).GetUtcNow();
         TenantBackgroundCompletionRules.Shape(source, report, agent, expectedParentRevision, now);

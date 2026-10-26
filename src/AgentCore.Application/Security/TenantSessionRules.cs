@@ -36,8 +36,11 @@ public static class TenantSessionRules
     public static void ValidateModelChange(Guid tenant, TenantSessionChange change)
     {
         if (change.Action != TenantSessionAction.SelectModel) return;
+        if (change.ModelPreference is not { } preference) throw new AccessDeniedException("model_preference_required");
+        preference.Validate();
+        if (change.Model is null && (preference.Mode is "auto" or "inherit" || preference.Reasoning?.Mode == "auto")) return;
         if (change.Model is not { Binding: { } binding } model || binding.Route.TenantId != tenant
-            || model.SelectionSource is not (ModelSelectionSource.User or ModelSelectionSource.AgentDefault or ModelSelectionSource.TenantDefault))
+            || model.SelectionSource is not (ModelSelectionSource.User or ModelSelectionSource.AgentDefault or ModelSelectionSource.TenantDefault or ModelSelectionSource.Auto or ModelSelectionSource.Host))
             throw new AccessDeniedException("model_context_required");
         binding.RequireIdentity(model.OfferingId, model.ConnectionId, model.ExternalModelId);
     }

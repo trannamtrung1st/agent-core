@@ -87,6 +87,6 @@ public sealed partial class SessionRuntime
             _outputActivity.ToString(),
             hasOlderHistory,
             historyBeforeSequence, _snapshot.RetentionKind, _snapshot.RetentionDueAtUtc,
-            (_snapshot.CompletionPolicy ?? SessionCompletionPolicy.Default).AgentCompletion, _snapshot.LifecycleReason, _snapshot.LifecycleSource);
+            (_snapshot.CompletionPolicy ?? SessionCompletionPolicy.Default).AgentCompletion, _snapshot.LifecycleReason, _snapshot.LifecycleSource, _snapshot.ModelPreference);
     }
 }

@@ -53,7 +53,9 @@ public static class TenantExperienceReviewRules
             model, AgentRunLimits.DefaultMaxAttempts, at, resolved.Skills, resolved.Skills.Where(i => i.Projection == SkillProjection.Always).Select(i => i.Key).ToArray());
         var snapshot = new SessionSnapshot(1, session, 1, definition, SessionMode.Text, null, SessionStatus.Created, [input], "", 0, null, null, at, at,
             source.AgentId, Title: "Review completed work", LastEntrySequence: 1, PinnedPersona: resolved.Persona, PinnedPersonaRevision: agent.Instance.PersonaRevision,
-            ModelSelection: new(model.OfferingId, model.ConnectionId, model.ExternalModelId, ModelSelectionSource.Host, model.ReasoningEffort, Binding: model.Binding),
+            ModelSelection: new(model.OfferingId, model.ConnectionId, model.ExternalModelId, ModelSelectionSource.Host, model.ReasoningEffort, Binding: model.Binding, Decision: model.Decision),
+            ModelPreference: AgentCore.Application.Models.ExecutionModelPolicy.Preference(definition, agent.Instance, null),
+            ContextSelection: resolved.Configuration.SpaceContext is { } space ? AgentCore.Domain.Spaces.SessionContextSelection.FromCapture(space, at) : null,
             Origin: new(SessionOriginKind.ManualBackground, initialBackgroundAgentRunId: runId, initialTitle: "Review completed work"), Surfaces: SessionSurface.BackgroundWork);
         return new(source, snapshot, run);
     }

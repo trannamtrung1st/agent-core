@@ -9,7 +9,7 @@ public static partial class TenantAgentEndpoints
     public sealed record SettingsRequest(long ExpectedRevision, long ExpectedInstanceRevision,
         IReadOnlyDictionary<string, JsonElement> Set, IReadOnlyList<string> Clear);
     public sealed record BudgetsRequest(long ExpectedRevision, long ExpectedInstanceRevision, ExecutionBudgetPolicy? Budgets);
-    public sealed record UnattendedRequest(long ExpectedRevision, long ExpectedInstanceRevision, string? OfferingId, string? ReasoningEffort);
+    public sealed record UnattendedRequest(long ExpectedRevision, long ExpectedInstanceRevision, AgentCore.Contracts.Http.ModelPreferenceDto? ModelPreference);
     [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
     public sealed record ManagementRequest(long ExpectedRevision, long ExpectedInstanceRevision, ManagementPolicyOverrides Overrides, bool? Frozen = null);
     public sealed record FreezeRequest(long ExpectedRevision, long ExpectedInstanceRevision);
@@ -51,7 +51,7 @@ public static partial class TenantAgentEndpoints
         {
             var a = IdentityHttp.TenantContext(http);
             return Results.Json(Safe(await service.UpdateUnattendedModelAsync(a.PrincipalId, a.TenantId, instanceId, body.ExpectedRevision,
-                body.ExpectedInstanceRevision, body.OfferingId, body.ReasoningEffort, ct, Human(http)).ConfigureAwait(false)));
+                body.ExpectedInstanceRevision, AgentCore.Api.Mapping.ModelManagementMapping.Input(body.ModelPreference), ct, Human(http)).ConfigureAwait(false)));
         }));
         group.MapGet("/agents/{instanceId:guid}/self-management", (Guid instanceId, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

@@ -142,9 +142,11 @@ export type SessionView = {
   pendingReasoningEffort: string | null;
   modelMutationPending: boolean;
   modelMutationOwner: { sessionId: string; operationId: number } | null;
+  sessionModelPreference: import("../services/modelPreference").ModelPreference | null;
   sessionOfferingId: string | null;
   sessionModelDisplayName: string | null;
   sessionModelSource: string | null;
+  sessionModelObserved: boolean;
   sessionModelEffort: string | null;
   sessionExternalModelId: string | null;
   sttTransport: "serverAudio" | "clientTranscript" | null;
@@ -199,9 +201,11 @@ export const emptySession = (): SessionView => ({
   pendingReasoningEffort: null,
   modelMutationPending: false,
   modelMutationOwner: null,
+  sessionModelPreference: null,
   sessionOfferingId: null,
   sessionModelDisplayName: null,
   sessionModelSource: null,
+  sessionModelObserved: false,
   sessionModelEffort: null,
   sessionExternalModelId: null,
   sttTransport: null,
@@ -315,32 +319,37 @@ function modelFieldsFromPayload(
   payload: Record<string, unknown>
 ): Pick<
   SessionView,
-  "sessionOfferingId" | "sessionModelDisplayName" | "sessionModelSource" | "sessionModelEffort" | "sessionExternalModelId"
+  "sessionModelPreference" | "sessionOfferingId" | "sessionModelDisplayName" | "sessionModelSource" | "sessionModelEffort" | "sessionExternalModelId" | "sessionModelObserved"
 > {
   const capabilities = (payload.capabilities ?? {}) as Record<string, unknown>;
-  return modelFieldsFromRecord((capabilities.model ?? payload.model ?? {}) as Record<string, unknown>);
+  return { ...modelFieldsFromRecord((capabilities.model ?? payload.model ?? {}) as Record<string, unknown>),
+    sessionModelPreference: (capabilities.modelPreference ?? payload.modelPreference ?? null) as SessionView["sessionModelPreference"] };
 }
 
 export function modelFieldsFromSelection(
-  model: SessionModelSelection | null | undefined
+  model: SessionModelSelection | null | undefined, preference?: SessionView["sessionModelPreference"]
 ): Pick<
   SessionView,
-  "sessionOfferingId" | "sessionModelDisplayName" | "sessionModelSource" | "sessionModelEffort" | "sessionExternalModelId"
+  "sessionModelPreference" | "sessionOfferingId" | "sessionModelDisplayName" | "sessionModelSource" | "sessionModelEffort" | "sessionExternalModelId" | "sessionModelObserved"
 > {
   if (!model) {
     return {
+      sessionModelPreference: preference ?? null,
       sessionOfferingId: null,
       sessionModelDisplayName: null,
       sessionModelSource: null,
+  sessionModelObserved: false,
       sessionModelEffort: null,
       sessionExternalModelId: null
     };
   }
 
   return {
+    sessionModelPreference: preference ?? null,
     sessionOfferingId: model.offeringId,
     sessionModelDisplayName: modelChoiceLabel(model),
     sessionModelSource: model.selectionSource,
+    sessionModelObserved: model.observedFromRun === true,
     sessionModelEffort: model.reasoningEffort ?? null,
     sessionExternalModelId: model.externalModelId ?? null
   };
@@ -350,12 +359,14 @@ function modelFieldsFromRecord(
   model: Record<string, unknown>
 ): Pick<
   SessionView,
-  "sessionOfferingId" | "sessionModelDisplayName" | "sessionModelSource" | "sessionModelEffort" | "sessionExternalModelId"
+  "sessionModelPreference" | "sessionOfferingId" | "sessionModelDisplayName" | "sessionModelSource" | "sessionModelEffort" | "sessionExternalModelId" | "sessionModelObserved"
 > {
   return {
+    sessionModelPreference: null,
     sessionOfferingId: asString(model.offeringId) || null,
     sessionModelDisplayName: asString(model.displayName) ? modelChoiceLabel({ displayName: asString(model.displayName), connectionLabel: asString(model.connectionLabel) }) : null,
     sessionModelSource: asString(model.selectionSource) || null,
+    sessionModelObserved: model.observedFromRun === true,
     sessionModelEffort: asString(model.reasoningEffort) || null,
     sessionExternalModelId: asString(model.externalModelId) || null
   };
@@ -750,6 +761,10 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       };
     }
     case "agent.response.started": {
+      if (event.responseId && (state.tombstones[event.responseId] || state.entries.some(entry => isAssistantForResponse(entry, event.responseId!) && entry.status !== "streaming")))
+        return { ...state, lastServerSequence: event.sequence };
+      const observation = (event.payload.model ?? {}) as Record<string, unknown>;
+      const modelFields = typeof observation.offeringId === "string" ? modelFieldsFromRecord(observation) : {};
       const entry: HistoryEntry = {
         entryId: asString(event.payload.entryId),
         sequence: asNumber(event.payload.entrySequence),
@@ -765,6 +780,8 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       };
       return {
         ...state,
+        ...modelFields,
+        sessionModelPreference: state.sessionModelPreference,
         agentRunId:
           event.payload.agentRunId == null
             ? state.agentRunId
@@ -1100,7 +1117,7 @@ export type SessionStore = SessionView & {
   modelCatalog: ModelDescriptor[];
   modelCatalogDefaultOfferingId: string | null;
   modelCatalogDefaultEffort: string | null;
-  modelCatalogDefaultSource: "tenantDefault" | "agentDefault";
+  modelCatalogDefaultSource: "tenantDefault" | "agentDefault" | "auto";
   modelCatalogLoading: boolean;
   modelCatalogError: string | null;
   catalogItems: CatalogItem[];

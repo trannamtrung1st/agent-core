@@ -240,3 +240,23 @@ describe("ascending reasoning slider", () => {
     expect(screen.queryByRole("slider")).not.toBeInTheDocument();
   });
 });
+
+it("keeps fixed model reasoning intent distinct from its resolved effort", async () => {
+  const changed = vi.fn();
+  render(<ModelPicker models={models} defaultOfferingId={models[0].offeringId} modelValue={models[0].offeringId}
+    effortValue="auto" onModelChange={vi.fn()} onEffortChange={changed} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Model' }));
+  expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Reasoning preference' }));
+  fireEvent.click(await screen.findByText('Model default', { selector: '.ant-select-item-option-content' }));
+  expect(changed).toHaveBeenCalledWith(null);
+});
+it("allows an explicit fixed effort to constrain Auto model choice", async () => {
+  const changed = vi.fn();
+  render(<ModelPicker models={models} defaultOfferingId={models[0].offeringId} modelValue="auto"
+    effortValue="auto" onModelChange={vi.fn()} onEffortChange={changed} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Model' }));
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Auto reasoning intent' }));
+  fireEvent.click(await screen.findByText('High', { selector: '.ant-select-item-option-content' }));
+  expect(changed).toHaveBeenCalledWith('high');
+});

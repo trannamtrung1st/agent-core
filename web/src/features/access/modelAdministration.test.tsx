@@ -6,6 +6,7 @@ import { connectionId, keyId, modelCatalog, modelConnection, modelContext, model
 import type { ModelAdmin } from '../../services/models';
 import { ModelConnectionEditor } from './ModelConnectionEditor';
 import { ModelOfferingEditor } from './ModelOfferingEditor';
+import { ModelRoutingEditor } from './ModelRoutingEditor';
 import { ModelDefaultEditor } from './ModelDefaultEditor';
 import { ModelReferences } from './ModelReferences';
 import { TenantModels } from './TenantModels';
@@ -31,6 +32,7 @@ beforeEach(() => {
     }
     if (url.includes('/references?')) return stale ? response({ reasonCode: 'stale_revision' }, 409) : response({ items: [], total: 0, page: 0, pageSize: 20, securityRevision: current.securityRevision });
     if (url.includes('/credentials?')) return response({ items: [{ tenantId: modelContext.tenant.tenantId, credential: { credentialId: keyId, displayName: 'Inference key', kind: 'ApiKey', purpose: 'ModelInference', status: 'Active' } }], total: 1, page: 0, pageSize: 20 });
+    if (url.endsWith('/models/routing/status')) return response({ status: 'disabled', engineId: 'localKev', engineVersion: 'pinned-fixture', shadowMode: true, preAdmissionSupported: true });
     if (url.endsWith('/models')) return response(current);
     throw new Error(`Unexpected fixture request: ${url}`);
   });
@@ -238,4 +240,22 @@ describe('canonical model administration commands', () => {
     expect(writes()).toHaveLength(1);
   });
 
+});
+
+it('routing saves canonical intent under CAS and retains its draft through a stale readback', async () => {
+  const saved = vi.fn(); render(<App><ModelRoutingEditor context={modelContext} catalog={current} saved={saved} dirtyChanged={() => {}} /></App>);
+  await screen.findByText('Decision service: disabled');
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Allow Auto for new Runs' }));
+  stale = true; fireEvent.click(screen.getByRole('button', { name: 'Save routing' }));
+  await screen.findByText('Reload before saving again');
+  expect(body()).toMatchObject({ expectedRevision: current.securityRevision, expectedSettingsRevision: current.settings.revision,
+    routing: { enabled: true, allowConfiguredDefault: false, minimumProbability: .7 } });
+  expect(saved).not.toHaveBeenCalled();
+  stale = false; current.securityRevision++;
+  fireEvent.click(screen.getByRole('button', { name: 'Reload routing' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save routing' })).toBeEnabled());
+  expect(screen.getByRole('checkbox', { name: 'Allow Auto for new Runs' })).toBeChecked();
+  fireEvent.click(screen.getByRole('button', { name: 'Save routing' }));
+  await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+  expect(body().expectedRevision).toBe(current.securityRevision);
 });

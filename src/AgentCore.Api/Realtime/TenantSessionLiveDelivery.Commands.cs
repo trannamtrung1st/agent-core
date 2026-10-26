@@ -141,9 +141,10 @@ public sealed partial class TenantSessionLiveDelivery
             { ack = Reject(command.EventId, ex.Code, "Voice is unavailable for this conversation. Continue in text.", "Speech"); }
             catch (AgentCoreException ex) when (ex.Code == "fresh_session_required")
             { ack = Reject(command.EventId, ex.Code, "Create a new Session for the next request.", "Session"); }
-            catch (AgentCoreException ex) when (ex.Code is "ModelUnavailable" or "ModelRouteStale" or "ModelCapabilityUnsupported")
+            catch (AgentCoreException ex) when (ex.Code is "ModelUnavailable" or "ModelRouteStale" or "ModelCapabilityUnsupported" or "ModelRoutingUnavailable")
             { ack = Reject(command.EventId, ex.Code, ex.Code switch
                 {
+                    "ModelRoutingUnavailable" => ex.Message,
                     "ModelRouteStale" => "The selected model configuration changed. Reload before choosing a model for new work.",
                     "ModelCapabilityUnsupported" => "The selected model does not support this request. Choose a compatible model for new work.",
                     _ => "The selected model is unavailable. Restore its connection or choose an available model for new work."

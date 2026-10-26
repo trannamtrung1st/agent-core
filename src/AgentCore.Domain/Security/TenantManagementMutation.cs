@@ -11,7 +11,7 @@ public sealed record PreparedManagementMutation(Guid SessionId, Guid RootSession
     string ConfigurationHash, string BeforeStableHash, string AfterStableHash, string ChangesJson,
     InstanceSettingsOverrides? Settings = null, HarnessManagementState? Management = null,
     IReadOnlyList<InstanceAutomationPolicyChange>? AutomationChanges = null,
-    string? UnattendedOfferingId = null, string? UnattendedReasoningEffort = null,
+    AgentCore.Domain.Models.ModelPreference? UnattendedModel = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedManagementSkill? Skill = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedManagementResource? Resource = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedHarnessCommand? Harness = null,

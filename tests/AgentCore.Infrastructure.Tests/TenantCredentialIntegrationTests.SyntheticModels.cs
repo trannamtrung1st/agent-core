@@ -31,7 +31,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var agent = await f.Agents.CreateAsync(human.PrincipalId, tenant, "examiner", 1, await Revision());
         using var http = new ProviderHttpFixture(); await using var services = RuntimeServices(f, http, new(), "Synthetic");
         var session = await services.GetRequiredService<TenantSessionService>().CreateAsync(tenant, agent.Instance.InstanceId, human,
-            SessionMode.Text, await Revision(), agent.Instance.Revision, offeringId: offeringId == SyntheticModelCatalog.ScriptedAlphaOfferingId ? null : offeringId);
+            SessionMode.Text, await Revision(), agent.Instance.Revision, preference: offeringId == SyntheticModelCatalog.ScriptedAlphaOfferingId ? null : AgentCore.Domain.Models.ModelPreference.Fixed(offeringId));
         var receipt = await services.GetRequiredService<TenantRunService>().SubmitTextAsync(tenant, session.Owner.SessionId, human, f.Ids.NewId(), "Hello", await Revision(), 1);
         var runs = (ITenantRunStore)f.Iam; var storage = (ITenantRuntimeStore)f.Iam;
         var run = (await runs.FindTenantRunAsync(tenant, receipt.RunId))!;

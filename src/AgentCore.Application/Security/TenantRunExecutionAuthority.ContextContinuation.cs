@@ -34,7 +34,9 @@ public sealed partial class TenantRunExecutionAuthority
             var resolved = await configurations.ResolveInSpaceAsync(current.State.Tenant.TenantId, source.AgentInstanceId, snapshot.ContextSelection!, ct).ConfigureAwait(false);
             var definition = resolved.Configuration.Configuration.Definition;
             var models = await configurationModels.ReadAsync(current.State, ct).ConfigureAwait(false);
-            var selected = SessionModelBinder.RefreshDefault(models, definition, snapshot.ModelSelection); if (selected is null) return Decline("model_unavailable");
+            var selected = routing is null ? SessionModelBinder.RefreshDefault(models, definition, snapshot.ModelSelection)
+                : await routing.ResolveAsync(models, snapshot.ModelPreference ?? AgentCore.Domain.Models.ModelPreference.Inherit, definition.ModelDefaults, false, true,
+                    "contextContinuation", new Dictionary<string, string> { ["inputMode"] = "contextContinuation" }, ct); if (selected is null) return Decline("model_unavailable");
             var task = string.Join("\n", history.History.Items.Where(e => root.Admission.Activation.SourceEntryIds.Contains(e.EntryId)).OrderBy(e => e.Sequence).Select(e => e.Text));
             if (task.Length > 4000) task = task[..4000];
             var next = AgentRunContextContinuationFactory.Create(ids.NewId(), ids.NewId(), ids.NewId(), snapshot with { ModelSelection = selected, PinnedPersona = resolved.Configuration.Persona },
@@ -45,5 +47,6 @@ public sealed partial class TenantRunExecutionAuthority
         }
         catch (AccessDeniedException ex) { return Decline(ex.ReasonCode); }
         catch (SecurityConflictException ex) { return Decline(ex.ReasonCode); }
+        catch (AgentCore.Application.Sessions.AgentCoreException ex) { return Decline(ex.Code); }
     }
 }

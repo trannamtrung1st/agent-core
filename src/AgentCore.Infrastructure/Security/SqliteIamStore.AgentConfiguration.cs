@@ -89,7 +89,7 @@ public sealed partial class SqliteIamStore
         row.SettingsOverridesJson = updated.SettingsOverrides is null ? null : JsonSerializer.Serialize(updated.SettingsOverrides, json);
         row.ExecutionBudgetsJson = updated.ExecutionBudgets is null ? null : JsonSerializer.Serialize(updated.ExecutionBudgets, json);
         row.HarnessManagementJson = updated.HarnessManagement is null ? null : JsonSerializer.Serialize(updated.HarnessManagement, json);
-        row.UnattendedOfferingId = updated.UnattendedOfferingId; row.UnattendedReasoningEffort = updated.UnattendedReasoningEffort;
+        row.UnattendedModelJson = System.Text.Json.JsonSerializer.Serialize(updated.UnattendedModel, json);
         row.Revision = updated.Revision; row.UpdatedAtUtc = at.ToUnixTimeMilliseconds();
         await SqliteAgentInstanceStore.InitializeSkillsAsync(db, change.InstanceId, change.DefinitionSkills, at, ct).ConfigureAwait(false);
         await SqliteAgentInstanceStore.StageAutomationPolicyAsync(db, new(change.InstanceId, change.ExpectedInstanceRevision,

@@ -37,12 +37,13 @@ api_health="$api_origin/health"
 web_health="$web_origin/health"
 sandbox_project="${AGENTCORE_SANDBOX_PROJECT:-agent-core-sandbox}"
 sandbox_port="${AGENTCORE_SANDBOX_PORT:-18080}"
+decision_selected=0
 sandbox_selected=0
 store_selected=0
 store_origin="http://127.0.0.1:5088"
 
 usage() {
-  echo "usage: scripts/dev-real.sh start|restart [--api-only] [--with-sandbox] [--with-store] | start|restart --full"
+  echo "usage: scripts/dev-real.sh start|restart [--api-only] [--with-sandbox] [--with-store] [--with-decision] | start|restart --full"
   echo "       scripts/dev-real.sh restart [--full | --with-store | --api-only --with-sandbox] --recreate-sandbox"
   echo "       scripts/dev-real.sh stop [--with-store] [--with-sandbox] | stop --full | status"
   echo "       scripts/dev-real.sh bootstrap-identity  # explicit one-use setup with operator-supplied AGENTCORE_BOOTSTRAP_* values"
@@ -323,13 +324,15 @@ start_sandbox() {
 
 cmd_start() {
   local with_store=0 full=0 api_only=0 explicit_sandbox=0
+  decision_selected=0
   sandbox_selected=1
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --api-only) api_only=1 ;;
       --with-sandbox) explicit_sandbox=1 ;;
       --with-store) with_store=1 ;;
-      --full) with_store=1; sandbox_selected=1; full=1 ;;
+      --with-decision) decision_selected=1 ;;
+      --full) with_store=1; sandbox_selected=1; full=1; [[ "${DecisionIntelligence__Enabled:-false}" != "true" ]] || decision_selected=1 ;;
       -h | --help) usage; return 0 ;;
       *) echo "unknown option: $1" >&2; usage >&2; return 2 ;;
     esac
@@ -346,6 +349,9 @@ cmd_start() {
   sandbox_project="${AGENTCORE_SANDBOX_PROJECT:-$sandbox_project}"
   sandbox_port="${AGENTCORE_SANDBOX_PORT:-$sandbox_port}"
   if [[ "$with_store" == 1 || "$sandbox_selected" == 1 ]]; then command -v docker >/dev/null || { echo "Docker is required for selected components." >&2; return 1; }; fi
+  if [[ "$decision_selected" == 1 ]] && ! python3 "$root/scripts/decision-compose.py" preflight; then
+    if [[ "$full" == 1 ]]; then decision_selected=0; echo "Optional decision service skipped: resources are unavailable; fixed/default app execution remains available."; else return 1; fi
+  fi
   stop_api_web
   # Refuse occupied ports after stopping only verified tracked processes.
   python3 - "$api_port" "$web_port" <<'PYTHON'
@@ -356,6 +362,7 @@ for port in map(int,sys.argv[1:]):
         if probe.connect_ex(('127.0.0.1',port)) == 0:
             raise SystemExit(f'Development port {port} is occupied by an untracked process; it was left running.')
 PYTHON
+  if [[ "$decision_selected" == 1 ]]; then python3 "$root/scripts/decision-compose.py" start; fi
   if [[ "$with_store" == 1 ]]; then start_nopcommerce; fi
   if [[ "$sandbox_selected" == 1 ]]; then start_sandbox; fi
   record_stack
@@ -380,12 +387,13 @@ PYTHON
 }
 
 cmd_stop() {
-  local with_store=0 with_sandbox=0
+  local with_store=0 with_sandbox=0 with_decision=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --with-store) with_store=1 ;;
       --with-sandbox) with_sandbox=1 ;;
-      --full) with_store=1; with_sandbox=1 ;;
+      --with-decision) with_decision=1 ;;
+      --full) with_store=1; with_sandbox=1; [[ "${DecisionIntelligence__Enabled:-false}" != "true" ]] || with_decision=1 ;;
       -h | --help) usage; exit 0 ;;
       *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
     esac
@@ -409,6 +417,7 @@ cmd_stop() {
   if [[ "$with_store" == 1 ]]; then
     (cd "$root" && ./scripts/nopcommerce-demo.sh stop)
   fi
+  if [[ "$with_decision" == 1 ]]; then python3 "$root/scripts/decision-compose.py" stop; fi
   echo "Stopped API and web."
   if [[ "$with_store" == 1 ]]; then echo "Stopped nopCommerce demo."; fi
   [[ "$pending" == 0 ]] || { echo "Selected sandbox cleanup remains pending; server/state retained." >&2; return 1; }
@@ -448,6 +457,7 @@ cmd_status() {
   else
     echo "OpenSandbox: not selected for this native stack"
   fi
+  if [[ "${DecisionIntelligence__Enabled:-false}" == "true" ]]; then python3 "$root/scripts/decision-compose.py" status || down=1; fi
   return "$down"
 }
 

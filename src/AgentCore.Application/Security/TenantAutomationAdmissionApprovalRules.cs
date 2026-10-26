@@ -85,7 +85,7 @@ public static class TenantAutomationAdmissionApprovalRules
         }
         var graph = BackgroundSessionAdmissionFactory.ForOccurrence(p.SessionId, p.EntryId, p.ActivationId, p.RunId, p.ResponseId, source,
             resolved.Configuration.Definition, agent.Instance.Persona, agent.Instance.PersonaRevision, model, resolved.Skills, at, p.Current.Name,
-            ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved.Configuration, p.ManualInitiatorPrincipalId);
+            ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved.Configuration, p.ManualInitiatorPrincipalId, AgentCore.Application.Models.ExecutionModelPolicy.Preference(resolved.Configuration.Definition, agent.Instance, p.Current));
         return new(p.Current, p.Next, Pending(p).WithExecutionAcceptance(p.SessionId, p.RunId, 1, at),
             new(p.TenantId, p.SessionId, agent.Instance.InstanceId, agent.PrincipalId, agent.PrincipalId, at), graph.Session, graph.Run,
             request.Operation.ExpectedInstanceRevision, p.ConfigurationHash, p.EventSource);

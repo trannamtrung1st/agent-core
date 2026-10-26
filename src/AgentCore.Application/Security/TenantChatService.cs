@@ -20,7 +20,7 @@ public sealed class TenantChatService(IIamStore security, ITenantAgentStore agen
     public async ValueTask<IModelCatalog> ModelsAsync(Guid tenant, TenantSessionInitiator human, Guid? instance = null, CancellationToken ct = default)
     {
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
-        AgentModelDefaults? defaults = null;
+        AgentCore.Domain.Models.ModelPreference? defaults = null;
         if (instance is { } id)
         {
             var agent = await agents.FindTenantAgentAsync(tenant, id, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
@@ -46,7 +46,7 @@ public sealed class TenantChatService(IIamStore security, ITenantAgentStore agen
     private sealed class ChatDefaultCatalog : IModelCatalog
     {
         private readonly IModelCatalog _catalog;
-        public ChatDefaultCatalog(IModelCatalog catalog, AgentModelDefaults defaults)
+        public ChatDefaultCatalog(IModelCatalog catalog, AgentCore.Domain.Models.ModelPreference defaults)
         {
             _catalog = catalog;
             var choice = SessionModelBinder.InheritedChoice(catalog, defaults);

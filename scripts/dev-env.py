@@ -92,6 +92,22 @@ def validate(values, compose=False):
             raise ValueError(f'Ambiguous configuration keys {external} and {other}; set one input. Values are redacted.')
         if compose and other and values[other]:
             raise ValueError(f'{other} is a native input; Compose uses {external}. Values are redacted.')
+    decision_keys = {'enabled', 'backend', 'endpoint', 'apikey', 'modelid', 'requesttimeoutms', 'maxconcurrentrequests', 'maxstatecharacters', 'shadowmode'}
+    for key, value in values.items():
+        normalized = normalize(key)
+        if normalized.startswith('decisionintelligence:') and normalized.split(':', 1)[1] not in decision_keys:
+            raise ValueError(f'Unknown DecisionIntelligence key {key}. Values are redacted.')
+        if normalized in ('decisionintelligence:enabled', 'decisionintelligence:shadowmode') and value.lower() not in ('true', 'false'):
+            raise ValueError('DecisionIntelligence boolean option is invalid. Values are redacted.')
+        if normalized == 'decisionintelligence:modelid' and value != 'jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52':
+            raise ValueError('DecisionIntelligence requires the pinned checkpoint. Values are redacted.')
+        if normalized == 'decisionintelligence:backend' and value not in ('Disabled', 'LocalKev', 'AuthorizedLlm', 'Synthetic'):
+            raise ValueError('DecisionIntelligence backend is invalid. Values are redacted.')
+        if normalized in ('decisionintelligence:requesttimeoutms', 'decisionintelligence:maxconcurrentrequests', 'decisionintelligence:maxstatecharacters'):
+            bounds = {'decisionintelligence:requesttimeoutms': (50, 10000), 'decisionintelligence:maxconcurrentrequests': (1, 16), 'decisionintelligence:maxstatecharacters': (512, 16000)}
+            low, high = bounds[normalized]
+            if not value.isascii() or not value.isdecimal() or not low <= int(value) <= high:
+                raise ValueError(f'{key} is outside its bounded range. Values are redacted.')
     origin = values.get('GOOGLE_OAUTH_PUBLIC_APP_URL') or values.get(seen.get('googleoauth:publicappurl', ''))
     if origin:
         try:

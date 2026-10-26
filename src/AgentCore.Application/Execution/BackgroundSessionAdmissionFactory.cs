@@ -36,9 +36,9 @@ public static class BackgroundSessionAdmissionFactory
             LastEntrySequence: 1, Purpose: SessionPurpose.OngoingDefault, CompletionPolicy: SessionCompletionPolicy.Default,
             LifecycleSource: LifecycleTransitionSource.System, LifecycleChangedAt: now,
             ModelSelection: new(model.OfferingId, model.ConnectionId, model.ExternalModelId,
-                parent.ModelSelection?.SelectionSource ?? ModelSelectionSource.Host, model.ReasoningEffort, parent.ModelSelection?.HasExplicitReasoningEffort == true, model.Binding), PinnedPersona: persona,
+                parent.ModelSelection?.SelectionSource ?? ModelSelectionSource.Host, model.ReasoningEffort, model.Binding, model.Decision), PinnedPersona: persona,
             PinnedPersonaRevision: configuration.PersonaRevision, Origin: origin, Surfaces: SessionSurface.BackgroundWork,
-            ContextSelection: configuration.SpaceContext is { } context ? SessionContextSelection.FromCapture(context, now) : null);
+            ContextSelection: configuration.SpaceContext is { } context ? SessionContextSelection.FromCapture(context, now) : null, ModelPreference: parent.ModelPreference);
         return (session, run);
     }
 
@@ -53,7 +53,7 @@ public static class BackgroundSessionAdmissionFactory
             model, AgentRunLimits.DefaultMaxAttempts, now, skills, skills.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
         var session = new SessionSnapshot(1, sessionId, 1, definition, SessionMode.Text, null, SessionStatus.Created, [entry], "", 0, null,
             profileId, now, now, instance.InstanceId, Title: title, LastEntrySequence: 1, PinnedPersona: persona,
-            PinnedPersonaRevision: instance.PersonaRevision, ModelSelection: new(model.OfferingId, model.ConnectionId, model.ExternalModelId, ModelSelectionSource.Host, model.ReasoningEffort, Binding: model.Binding),
+            PinnedPersonaRevision: instance.PersonaRevision, ModelSelection: new(model.OfferingId, model.ConnectionId, model.ExternalModelId, ModelSelectionSource.Host, model.ReasoningEffort, Binding: model.Binding, Decision: model.Decision),
             Origin: new(SessionOriginKind.ManualBackground, initialBackgroundAgentRunId: runId, initialTitle: title), Surfaces: SessionSurface.BackgroundWork);
         return (session, run);
     }
@@ -61,7 +61,7 @@ public static class BackgroundSessionAdmissionFactory
     public static (SessionSnapshot Session, AgentRun Run) ForOccurrence(Guid sessionId, Guid entryId,
         Guid activationId, Guid agentRunId, Guid responseId, TriggerOccurrence occurrence,
         AgentDefinition definition, AgentIdentity persona, long personaRevision, ExecutionModelPin model,
-        IReadOnlyList<EffectiveSkill> skills, DateTimeOffset admittedAtUtc, string? title = null, EffectiveExecutionBudget? budget = null, AgentRunConfiguration? configuration = null, Guid? manualInitiator = null)
+        IReadOnlyList<EffectiveSkill> skills, DateTimeOffset admittedAtUtc, string? title = null, EffectiveExecutionBudget? budget = null, AgentRunConfiguration? configuration = null, Guid? manualInitiator = null, AgentCore.Domain.Models.ModelPreference? preference = null)
     {
         ArgumentNullException.ThrowIfNull(occurrence);
         var kind = occurrence.SourceKind switch
@@ -88,7 +88,7 @@ public static class BackgroundSessionAdmissionFactory
         var run = AgentRun.Create(agentRunId,
             trusted is null ? new AgentRunOwner(occurrence.Owner.AgentInstanceId, occurrence.Owner.ProfileId) : AgentRunOwner.ForTenant(trusted.TenantId, occurrence.Owner.AgentInstanceId, trusted.AgentPrincipalId),
             new AgentRunAdmission(activation, definition.Id, definition.Version, persona, responseId, AgentRunOutputContract.BackgroundOutcome, budget, configuration ?? new(definition, 0, personaRevision, []), taskIntent: RunTaskIntents.FromOccurrence(occurrence), executionContext: trusted),
-            new AgentRunModelPin(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort, model.Binding),
+            new AgentRunModelPin(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort, model.Binding, model.Decision),
             AgentRunLimits.DefaultMaxAttempts, admittedAtUtc, pinnedSkillCatalog: skills,
             activeSkillKeys: skills.Where(skill => skill.Projection == SkillProjection.Always)
                 .Select(skill => skill.Key).ToArray());
@@ -106,9 +106,9 @@ public static class BackgroundSessionAdmissionFactory
             CompletionPolicy: SessionCompletionPolicy.Default, LifecycleSource: LifecycleTransitionSource.System,
             LifecycleChangedAt: admittedAtUtc,
             ModelSelection: new SessionModelSelection(model.OfferingId, model.ConnectionId, model.ExternalModelId,
-                ModelSelectionSource.Host, model.ReasoningEffort, Binding: model.Binding), PinnedPersona: persona,
+                ModelSelectionSource.Host, model.ReasoningEffort, Binding: model.Binding, Decision: model.Decision), PinnedPersona: persona,
             PinnedPersonaRevision: personaRevision, Origin: origin, Surfaces: origin.InitialSurface,
-            ContextSelection: configuration?.SpaceContext is { } context ? SessionContextSelection.FromCapture(context, admittedAtUtc) : null);
+            ContextSelection: configuration?.SpaceContext is { } context ? SessionContextSelection.FromCapture(context, admittedAtUtc) : null, ModelPreference: preference);
         return (session, run);
     }
 }

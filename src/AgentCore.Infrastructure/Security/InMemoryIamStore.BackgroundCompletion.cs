@@ -63,6 +63,7 @@ public sealed partial class InMemoryIamStore
         lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate)
         {
             RequireRuntimeOwner(report.Owner); var tenant = report.Owner.TenantId!.Value; var state = _tenants[tenant];
+
             var source = CompletionSource(report.Owner, report.Admission.ExecutionContext?.ParentRunId ?? Guid.Empty) ?? throw new AccessDeniedException("completion_unavailable");
             RequireTenantReportRead(state, source, ct);
             var all = sessionBacking.AgentRuns;
@@ -74,6 +75,7 @@ public sealed partial class InMemoryIamStore
                     return ValueTask.FromResult(new AgentRunAdmissionResult(false, existing));
                 throw new AccessDeniedException("completion_unavailable");
             }
+            AgentCore.Application.Models.ExecutionModelPolicy.RequireCurrentDecision(report.PinnedModel, modelSettings.GetValueOrDefault(tenant)?.Revision ?? 0);
             if (_approvals.Values.Any(r => r.TenantId == tenant && r.Operation.BackgroundReport?.ChildRunId == source.Child.AgentRunId))
                 throw new AccessDeniedException("report_approval_required");
             var agent = FindTenantAgentAsync(tenant, report.AgentInstanceId, ct).Result!;

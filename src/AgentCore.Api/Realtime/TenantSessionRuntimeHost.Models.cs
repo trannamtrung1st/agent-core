@@ -6,7 +6,7 @@ namespace AgentCore.Api.Realtime;
 public sealed partial class TenantSessionRuntimeHost
 {
     public async ValueTask<TenantSession> SelectModelAsync(TenantSessionService service, Guid tenant, Guid session,
-        TenantSessionInitiator human, long securityRevision, long sessionRevision, string? offeringId, string? reasoningEffort, CancellationToken ct)
+        TenantSessionInitiator human, long securityRevision, long sessionRevision, AgentCore.Domain.Models.ModelPreference preference, CancellationToken ct)
     {
         // Authorize the resource before reserving it. The mutation repeats all human, Agent,
         // configuration and revision checks. Active work is never rewritten or interrupted.
@@ -18,7 +18,7 @@ public sealed partial class TenantSessionRuntimeHost
                 throw new SecurityConflictException("session_in_use");
             _sessionWriteEpoch = checked(_sessionWriteEpoch + 1);
         }
-        try { return await service.SelectModelAsync(tenant, session, human, securityRevision, sessionRevision, offeringId, reasoningEffort, ct).ConfigureAwait(false); }
+        try { return await service.SelectModelAsync(tenant, session, human, securityRevision, sessionRevision, preference, ct).ConfigureAwait(false); }
         finally { lock (_gate) { _quiescentWrites.Remove(session); _sessionWriteEpoch = checked(_sessionWriteEpoch + 1); } }
     }
 }

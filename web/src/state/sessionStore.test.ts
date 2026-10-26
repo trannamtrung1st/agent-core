@@ -17,6 +17,20 @@ function event(partial: Partial<ServerEvent> & Pick<ServerEvent, "type" | "seque
 }
 
 describe("applyServerEvent", () => {
+  it('updates the observed Run model without overwriting saved Auto intent', () => {
+    const preference = { mode: 'auto' as const, reasoning: { mode: 'modelDefault' as const } };
+    const state = { ...emptySession(), sessionId: 's1', attachmentId: 'a1', sessionModelPreference: preference, sessionModelEffort: 'high' };
+    const updated = applyServerEvent(state, event({ type: 'agent.response.started', sequence: 1, responseId: 'r1', payload: {
+      entryId: 'reply', entrySequence: 1, model: { offeringId: 'observed', displayName: 'Chosen model', externalModelId: 'provider-model',
+        connectionId: 'connection', connectionLabel: 'Team connection', observedFromRun: true, selectionSource: 'auto', reasoningEffort: 'low' } } }));
+    expect(updated.sessionModelPreference).toEqual(preference);
+    expect(updated.sessionModelObserved).toBe(true); expect(updated.sessionOfferingId).toBe('observed'); expect(updated.sessionModelEffort).toBe('low');
+    const stale = applyServerEvent(updated, event({ type: 'agent.response.started', attachmentId: 'old-attachment', sequence: 2, responseId: 'r2',
+      payload: { model: { offeringId: 'stale-model' } } }));
+    expect(stale.sessionOfferingId).toBe('observed');
+    const late = applyServerEvent({ ...updated, tombstones: { r2: 'interrupted' as const } }, event({ type: 'agent.response.started', sequence: 2, responseId: 'r2', payload: { model: { offeringId: 'superseded' } } }));
+    expect(late.sessionOfferingId).toBe('observed');
+  });
   it('releases only the exact Run waiting for a durable approval without completing or tombstoning its response', () => {
     const state = { ...emptySession(), sessionId: 's1', attachmentId: 'a1', liveResponseId: 'r1', agentRunId: 'run-two', outputState: 'agentGenerating' };
     const old = applyServerEvent(state, event({ type: 'agent.approval.pending', sequence: 1, responseId: 'r1', payload: { runId: 'run-one', requestId: 'approval' } }));

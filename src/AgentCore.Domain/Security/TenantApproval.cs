@@ -82,9 +82,10 @@ public sealed record PreparedWorkspaceMutation(Guid SessionId, bool Working, str
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PreparedBackgroundModel(string OfferingId, string ConnectionId, string ExternalModelId, string? ReasoningEffort,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AgentCore.Domain.Models.ModelBinding? Binding = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AgentCore.Domain.Models.ModelBinding? Binding = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AgentCore.Domain.Models.ModelDecisionEvidence? Decision = null)
 {
-    public AgentRunModelPin ToPin() => new(OfferingId, ConnectionId, ExternalModelId, ReasoningEffort, Binding);
+    public AgentRunModelPin ToPin() => new(OfferingId, ConnectionId, ExternalModelId, ReasoningEffort, Binding, Decision);
 }
 public sealed record PreparedBackgroundStart(Guid TenantId, Guid SessionId, Guid ChildSessionId, Guid EntryId, Guid ActivationId,
     Guid RunId, Guid ResponseId, string Objective, string Title, bool ReportCompletion, string Permission, string ConfigurationHash, PreparedBackgroundModel Model);

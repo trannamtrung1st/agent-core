@@ -171,8 +171,7 @@ public interface ITriggerStore
         TriggerOwner owner,
         Guid automationId,
         long expectedRevision,
-        string? offeringId,
-        string? reasoningEffort,
+        AgentCore.Domain.Models.ModelPreference? preference,
         DateTimeOffset updatedAt,
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();

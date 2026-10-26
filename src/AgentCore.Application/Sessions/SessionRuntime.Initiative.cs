@@ -177,7 +177,8 @@ public sealed partial class SessionRuntime
 
     private void PinModelSelectionIfMissing()
     {
-        if (_snapshot.ModelSelection is not null || _catalog is null)
+        if (_snapshot.ModelSelection is not null || _catalog is null
+            || (_snapshot.ModelPreference?.Mode == "auto" || _snapshot.ModelPreference?.Mode is null or "inherit" && ExecutionDefinition.ModelDefaults?.Mode == "auto"))
         {
             return;
         }

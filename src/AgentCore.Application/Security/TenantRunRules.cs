@@ -43,7 +43,10 @@ public static class TenantRunRules
         if (!live && (current.Status is SessionStatus.Attached or SessionStatus.Ending || current.PendingAgentInputIds.Count != 0))
             throw new SecurityConflictException("session_in_use");
         if (current.LifecycleStatus != SessionLifecycleStatus.Active) throw AgentCoreErrors.Validation("Resume the Session before sending input.");
-        return current with { Revision = checked(current.Revision + 1), Entries = live ? [..current.Entries, input] : [input], LastEntrySequence = input.Sequence,
+        return current with { ModelSelection = new(run.PinnedModel.OfferingId, run.PinnedModel.ConnectionId, run.PinnedModel.ExternalModelId,
+                run.PinnedModel.Decision?.Basis is "ranked" or "singleEligible" or "configuredDefault" ? ModelSelectionSource.Auto : ModelSelectionSource.Host,
+                run.PinnedModel.ReasoningEffort, Binding: run.PinnedModel.Binding, Decision: run.PinnedModel.Decision),
+            Revision = checked(current.Revision + 1), Entries = live ? [..current.Entries, input] : [input], LastEntrySequence = input.Sequence,
             LastUserActivityAt = live && current.LastUserActivityAt > input.CreatedAt ? current.LastUserActivityAt : input.CreatedAt,
             UpdatedAt = live && current.UpdatedAt > input.CreatedAt ? current.UpdatedAt : input.CreatedAt };
     }

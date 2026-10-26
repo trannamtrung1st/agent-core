@@ -45,8 +45,7 @@ public sealed record AdminEffectiveConfiguration(
     MemoryPolicy MemoryPolicy,
     TriggerPolicy? TriggerPolicy,
     AdminDurableExecutionEligibility DurableExecutionEligibility,
-    string? UnattendedOfferingId = null,
-    string? UnattendedReasoningEffort = null,
+    AgentCore.Domain.Models.ModelPreference? UnattendedModel = null,
     BrowserEffectiveConfiguration? Browser = null);
 
 public sealed record BrowserEffectiveConfiguration(string ProviderId, string DisplayName, bool Enabled, bool Ready, string ProfileMode, string PolicyMode, IReadOnlyList<string> SupportedFeatures, int MaxSnapshotBytes, int MaxCaptureBytes, int MaxDownloadBytes, string Engine = "unknown", BrowserOperationalLimits? Limits = null);

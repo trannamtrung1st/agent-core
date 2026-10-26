@@ -11,6 +11,7 @@ import { ModelConnectionEditor } from './ModelConnectionEditor';
 import { ModelOfferingEditor } from './ModelOfferingEditor';
 import { ModelCatalogFilters, type ModelCatalogFilterValue } from './ModelCatalogFilters';
 import { ModelReferences } from './ModelReferences';
+import { ModelRoutingEditor } from './ModelRoutingEditor';
 import { ModelDefaultEditor } from './ModelDefaultEditor';
 import { useIdentityQuery } from './useIdentityQuery';
 import { useTenantCommand } from './useTenantCommand';
@@ -103,6 +104,7 @@ export function TenantModels({ context, page }: { context: TenantContext; page: 
           { key: 'observed', label: 'Last metadata observation', children: row.lastSeenAt ? new Date(row.lastSeenAt).toLocaleString() : 'Not observed' }
         ]} /> }} />
     </>}
+    {page === 'routing' && <ModelRoutingEditor key={tenant} context={context} catalog={catalog} saved={reload} dirtyChanged={setDefaultDirty} />}
     {page === 'defaults' && <ModelDefaultEditor key={tenant} context={context} catalog={catalog} saved={() => { message.success('Organization default saved.'); reload(); }} dirtyChanged={setDefaultDirty} reloadRef={reloadAction} />}
     {editor?.kind === 'connection' && <ModelConnectionEditor context={context} catalog={catalog} connection={editor.value} close={close} readLost={() => { close(); reload(); }} saved={connection => { close(); reload(); setMetadata(undefined); if (!editor.value) message.info(`Add models on ${connection.label}, then choose a default.`); }} />}
     {editor?.kind === 'offering' && <ModelOfferingEditor context={context} catalog={catalog} offering={editor.value} connectionId={editor.connectionId} presetId={editor.presetId} close={close} readLost={() => { close(); reload(); }} saved={() => { close(); reload(); }} />}
@@ -110,6 +112,7 @@ export function TenantModels({ context, page }: { context: TenantContext; page: 
   return <>{reference && <ModelReferences tenant={tenant} catalog={catalog} target={reference} close={closeReferences} />}<Tabs activeKey={page} onChange={value => navigateToAppPath(tenantModelsPath(tenant, value as ModelAdminPage))} items={[
     { key: 'connections', label: 'Connections', children: page === 'connections' ? content : null },
     { key: 'models', label: 'Models', children: page === 'models' ? content : null },
-    { key: 'defaults', label: 'Defaults', children: page === 'defaults' ? content : null }
+    { key: 'defaults', label: 'Defaults', children: page === 'defaults' ? content : null },
+    { key: 'routing', label: 'Routing', children: page === 'routing' ? content : null }
   ]} /></>;
 }

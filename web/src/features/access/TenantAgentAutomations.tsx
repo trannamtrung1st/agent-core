@@ -1,3 +1,4 @@
+import { preferenceFields } from '../../services/modelPreference';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, App, Button, Checkbox, Collapse, Descriptions, Drawer, Empty, Flex, Form, Grid, Input, Pagination, Select, Table, Tabs, Tag, Typography, theme } from 'antd';
 import { followAppLink } from '../../app/appLink';
@@ -126,9 +127,9 @@ function TenantAutomationDrawer({ context, instance, selection, onClose, onReadL
   const disabled = !allowed || command.busy || replacing || attempted || unknown || command.requiresReload || state.loading || !!state.error;
   const existingMode = draft?.targetSessionId != null;
   const model = models.data?.models.find(m => m.offeringId === (draft?.offeringId || models.data?.defaultOfferingId));
-  const retainedModel = !!value && draft?.offeringId === value.modelOverrideOfferingId && draft?.reasoningEffort === value.modelOverrideReasoningEffort;
+  const retainedModel = !!value && draft?.offeringId === preferenceFields(value.modelPreference).key && draft?.reasoningEffort === preferenceFields(value.modelPreference).effort;
   const modelValid = !draft?.enabled && (!draft?.offeringId && !draft?.reasoningEffort || retainedModel)
-    || existingMode || !!models.data && (!draft?.offeringId || !!model) && (!draft?.reasoningEffort || !!model?.supportedReasoningEfforts.includes(draft.reasoningEffort));
+    || existingMode || draft?.offeringId === "auto" || !!models.data && (!draft?.offeringId || !!model) && (!draft?.reasoningEffort || draft.reasoningEffort === "auto" || !!model?.supportedReasoningEfforts.includes(draft.reasoningEffort));
   const policy = view?.policy; const timing = draft?.schedule;
   const scheduleAllowed = !!view?.canSchedule && !!policy && !!timing && ({ oneShot: policy.allowOneShot, daily: policy.allowDaily, weekly: policy.allowWeekly, fixedInterval: policy.allowFixedInterval })[timing.kind]
     && (timing.kind === 'oneShot' || policy.allowIndefiniteRecurrence || !!timing.maxOccurrences || !!timing.endDate || !!timing.endAtUtc);

@@ -276,6 +276,9 @@ public static class SessionEventMapper
                             ["override"] = locale.Override
                         }
                         : null,
+                    ["modelPreference"] = ready.ModelPreference is { } preference ? new Dictionary<string, object?> {
+                        ["mode"] = preference.Mode, ["offeringId"] = preference.OfferingId,
+                        ["reasoning"] = preference.Reasoning is { } reasoning ? new Dictionary<string, object?> { ["mode"] = reasoning.Mode, ["effort"] = reasoning.Effort } : null } : null,
                     ["model"] = ready.ModelSelection is { } model
                         ? new Dictionary<string, object?>
                         {
@@ -285,6 +288,7 @@ public static class SessionEventMapper
                             ["reasoningEffort"] = model.ReasoningEffort,
                             ["externalModelId"] = model.ExternalModelId,
                             ["connectionId"] = model.ConnectionId,
+                            ["observedFromRun"] = model.Decision is not null,
                             ["connectionLabel"] = model.Binding?.ConnectionLabel
                         }
                         : null

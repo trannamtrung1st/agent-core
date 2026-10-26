@@ -591,3 +591,9 @@ The Space workspace cutover extends trusted sandbox mount verification to contra
 ## Decision: Message execution and Chat simplification
 
 Retain Session → Activation → AgentRun, separate message and response identity, voice supersession fences and transport/business lifecycle projections. No Turn table or new execution engine. Replace internal Legacy lifecycle provenance with Host; no privileged Legacy parser remains. Agent closure is explicit `session.complete`, separate from background `work.complete`, and follows durable final delivery. Retention belongs to Session, tenant defaults pin at creation, and expiry is authoritative before eventual physical cleanup. Large text uses deliberate canonical attachment intake, never a larger wire-message limit.
+
+## Decision: optional self-hosted Decision Intelligence
+
+The owner-approved [Initiative 6 proposal](proposals/self-hosted-decision-intelligence.md) permits one optional Kev inference sidecar as a narrow exception to the microservice non-goal. The .NET modular monolith retains all policy, IAM, admission, persistence and execution ownership. No broker, second database, agent or scheduler is introduced. Kev is not an inference offering and never receives provider credentials.
+
+Pin upstream Kev source `6b719c3c3f367295f6ef336f4f751cf5ff970abc` (kev-1.0), with its frozen uv lock, and Kev-4B artifact revision `6cfce5c2fa4b4bd64026336ab649c5ca78857d52` (resolved v1.0). Serving must witness that exact immutable run; a mutable model alias alone is insufficient. Default disabled, explicit internal bearer authentication, loopback/internal-only transport, no HTTP redirects/proxies, bounded input/output/concurrency/deadline, and no automatic backend/model failover. Upstream probability is not measured Agent Core correctness. Actual inference, quality and warm-latency qualification remain separate opt-in evidence.

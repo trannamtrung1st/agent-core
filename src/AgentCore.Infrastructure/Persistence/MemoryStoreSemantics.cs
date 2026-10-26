@@ -33,6 +33,7 @@ internal static class MemoryStoreSemantics
         && left.LifecycleSource == right.LifecycleSource
         && left.LifecycleChangedAt == right.LifecycleChangedAt
         && left.SpeechLocaleOverride == right.SpeechLocaleOverride
+        && left.ModelPreference == right.ModelPreference
         && left.ModelSelection == right.ModelSelection
         && left.AgentInstanceId == right.AgentInstanceId
         && left.PinnedPersona == right.PinnedPersona

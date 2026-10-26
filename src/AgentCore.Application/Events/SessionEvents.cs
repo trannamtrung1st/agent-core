@@ -372,7 +372,7 @@ public sealed record SessionReadyProjection(
     DateTimeOffset? RetentionDueAtUtc = null,
     AgentCompletionAuthority AgentCompletion = AgentCompletionAuthority.Disabled,
     string? LifecycleReason = null,
-    LifecycleTransitionSource? LifecycleSource = null);
+    LifecycleTransitionSource? LifecycleSource = null, AgentCore.Domain.Models.ModelPreference? ModelPreference = null);
 
 public sealed record ReadyOutput(SessionReadyProjection Ready) : OutputPayload;
 

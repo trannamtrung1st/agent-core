@@ -11,7 +11,7 @@ public sealed record TenantSessionRetentionTarget(TenantSessionRoot Owner, long 
 public sealed record TenantSessionInitiator(Guid AccountId, Guid AuthenticationSessionId, Guid PrincipalId)
     : HumanSessionReference(AccountId, AuthenticationSessionId, PrincipalId);
 public enum TenantSessionAction { Rename, Archive, Restore, Pause, Resume, Complete, Cancel, Delete, SelectModel, SetAgentCompletion }
-public sealed record TenantSessionChange(Guid SessionId, long ExpectedSessionRevision, TenantSessionAction Action, string? Title = null, SessionModelSelection? Model = null, bool? AgentCompletionAllowed = null);
+public sealed record TenantSessionChange(Guid SessionId, long ExpectedSessionRevision, TenantSessionAction Action, string? Title = null, SessionModelSelection? Model = null, bool? AgentCompletionAllowed = null, AgentCore.Domain.Models.ModelPreference? ModelPreference = null);
 
 // Existing Session rows and immutable ownership commit with security/audit. No legacy adoption.
 public interface ITenantSessionStore

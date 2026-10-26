@@ -20,6 +20,7 @@ public sealed partial class SqliteIamStore
         var (root, parent) = await RequireRuntimeFrame(db, frame, ct).ConfigureAwait(false);
         var tenant = root.TenantId; var row = await db.Sessions.Include(s => s.Snapshot).SingleAsync(s => s.SessionId == root.SessionId, ct).ConfigureAwait(false);
         var state = (await ReadTenantAsync(db, tenant, ct).ConfigureAwait(false))!;
+
         var agentRow = await OwnedAgents(db, tenant).SingleAsync(a => a.Instance.InstanceId == root.AgentInstanceId, ct).ConfigureAwait(false);
         var agent = Owned(agentRow); var now = (clock ?? TimeProvider.System).GetUtcNow();
         var childRoot = TenantBackgroundAdmissionRules.Shape(frame, new(root.Domain(), SqliteMemoryStore.ToSnapshot(row, [])), parent, snapshot, child, agent, now);
@@ -43,6 +44,8 @@ public sealed partial class SqliteIamStore
                 throw new SecurityConflictException("background_id_conflict");
             return new(false, saved);
         }
+        AgentCore.Application.Models.ExecutionModelPolicy.RequireCurrentDecision(child.PinnedModel,
+            await db.Set<TenantModelSettingsRecord>().Where(settings => settings.TenantId == tenant).Select(settings => (long?)settings.Revision).SingleOrDefaultAsync(ct).ConfigureAwait(false) ?? 0);
         await StageTenantBackgroundGraph(db, childRoot, snapshot, child, ct).ConfigureAwait(false);
         var tenantRow = await db.Set<Tenant>().SingleAsync(t => t.TenantId == tenant, ct).ConfigureAwait(false);
         db.Entry(tenantRow).CurrentValues.SetValues(state.Tenant with { Revision = checked(state.Tenant.Revision + 1) });

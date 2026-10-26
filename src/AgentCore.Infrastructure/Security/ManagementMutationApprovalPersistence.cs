@@ -23,12 +23,11 @@ internal static class ManagementMutationApprovalPersistence
         AND {T("ChangesJson")} IS 'text' AND length(CAST({J("ChangesJson")} AS BLOB)) BETWEEN 2 AND 48000
         AND json_valid({J("ChangesJson")}) AND json_type({J("ChangesJson")})='array'
         AND ({J("ToolName")}='settings.patch' AND {T("Settings")}='object' AND {T("AutomationChanges")}='array' AND json_array_length(PayloadJson,'$.Operation.ManagementMutation.AutomationChanges')<256
-            AND {J("Management")} IS NULL AND {J("UnattendedOfferingId")} IS NULL AND {J("UnattendedReasoningEffort")} IS NULL
+            AND {J("Management")} IS NULL AND {J("UnattendedModel")} IS NULL
             OR {J("ToolName")} IN ('management.policy.update','management.freeze') AND {T("Management")}='object' AND {J("Settings")} IS NULL AND {J("AutomationChanges")} IS NULL
-                AND {J("UnattendedOfferingId")} IS NULL AND {J("UnattendedReasoningEffort")} IS NULL
+                AND {J("UnattendedModel")} IS NULL
             OR {J("ToolName")}='automation.preferences.patch' AND {J("Settings")} IS NULL AND {J("Management")} IS NULL AND {J("AutomationChanges")} IS NULL
-                AND ({J("UnattendedOfferingId")} IS NULL OR {T("UnattendedOfferingId")}='text' AND length({J("UnattendedOfferingId")})<=128)
-                AND ({J("UnattendedReasoningEffort")} IS NULL OR {T("UnattendedReasoningEffort")}='text' AND length({J("UnattendedReasoningEffort")})<=64))
+                AND ({J("UnattendedModel")} IS NULL OR {T("UnattendedModel")}='object' AND json_extract(PayloadJson,'$.Operation.ManagementMutation.UnattendedModel.Mode') IN ('inherit','fixed','auto')))
         AND {Others}
         """;
 }

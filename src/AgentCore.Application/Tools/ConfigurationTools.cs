@@ -56,8 +56,7 @@ public static class ConfigurationTools
             if (name == "credentials.binding.remove") { Field("bindingId", Text(36)); Field("expectedBindingRevision", Integer()); }
             if (name == "automation.preferences.patch")
             {
-                Field("offeringId", new() { ["type"] = new JsonArray("string", "null"), ["maxLength"] = 128 });
-                Field("reasoningEffort", new() { ["type"] = new JsonArray("string", "null"), ["maxLength"] = 64 });
+                Field("modelPreference", ModelPreferenceSchema());
             }
             var schema = new JsonObject { ["type"] = "object", ["additionalProperties"] = false, ["properties"] = properties, ["required"] = required };
             yield return new(new(name, Help(name), schema.ToJsonString()), read ? ToolEffect.ReadOnly : ToolEffect.SensitiveWrite,
@@ -89,10 +88,13 @@ public static class ConfigurationTools
             return new() { ["type"] = field is "maxConsecutiveProactiveTurns" or "maxSilentEvaluations" or "maxInactivityMs" ? new JsonArray("integer", "null") : JsonValue.Create("integer") };
         if (field is "agentInstructions" or "responseLength" or "language" or "interruptionStyle" or "voiceId" or "interruptionClassifier")
             return new() { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = field == "agentInstructions" ? 8000 : 80 };
-        if (field is "offeringId" or "reasoningEffort" or "speechRecognizer" or "speechSynthesizer")
+        if (field == "preference") return ModelPreferenceSchema();
+        if (field is "speechRecognizer" or "speechSynthesizer")
             return new() { ["type"] = new JsonArray("string", "null"), ["maxLength"] = 80 };
         return new() { ["type"] = "boolean" };
     }
+
+    internal static JsonObject ModelPreferenceSchema() => JsonNode.Parse("""{"type":"object","additionalProperties":false,"properties":{"mode":{"type":"string","enum":["inherit","fixed","auto"]},"offeringId":{"type":["string","null"],"format":"uuid"},"reasoning":{"type":["object","null"],"additionalProperties":false,"properties":{"mode":{"type":"string","enum":["modelDefault","fixed","auto"]},"effort":{"type":["string","null"],"maxLength":32}},"required":["mode"]}},"required":["mode"]}""")!.AsObject();
 
     public static void Validate(string name, JsonElement args)
     {

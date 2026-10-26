@@ -16,8 +16,7 @@ public sealed record AgentInstance(
     DateTimeOffset UpdatedAt,
     long Revision = 1,
     long PersonaRevision = 1,
-    string? UnattendedOfferingId = null,
-    string? UnattendedReasoningEffort = null,
+    AgentCore.Domain.Models.ModelPreference? UnattendedModel = null,
     HarnessManagementState? HarnessManagement = null,
     ExecutionBudgetPolicy? ExecutionBudgets = null, InstanceSettingsOverrides? SettingsOverrides = null,
     [property: System.Text.Json.Serialization.JsonIgnore] AgentBrowserProfileReset? BrowserProfileReset = null);

@@ -39,6 +39,8 @@ public sealed class TenantModelCatalog : IModelCatalog
             }).OrderBy(d => d.DisplayName, StringComparer.Ordinal).ThenBy(d => d.OfferingId, StringComparer.Ordinal).ToArray());
         DefaultOfferingId = source.Settings.DefaultOfferingId?.ToString("D") ?? "";
     }
+    public AutoRoutingPolicy RoutingPolicy => Settings.Routing ?? new();
+    public long RoutingRevision => Settings.Revision;
     public Guid TenantId { get; }
     public long SecurityRevision { get; }
     public TenantModelSettings Settings { get; }

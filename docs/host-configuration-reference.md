@@ -232,3 +232,20 @@ The active startup preset is [`.env.example`](../.env.example). Optional shapes 
 # Voice
 # Voice__MaxUtteranceSeconds=120
 ```
+
+
+## DecisionIntelligence
+
+| Binder option / environment suffix under `DecisionIntelligence__` | Default / constraint |
+| --- | --- |
+| `Enabled` | `false`; optional service is never an application startup dependency |
+| `Backend` | `LocalKev`; closed `Disabled`, `LocalKev`, `AuthorizedLlm`, `Synthetic` (Synthetic profile only) |
+| `Endpoint` | `http://127.0.0.1:8009`; HTTP literal loopback or internal `decision:8009`, no path/credentials/query/fragment/redirect/proxy |
+| `ApiKey` | Private optional bearer; configured values must be 16–256 printable non-space ASCII. Missing reports notConfigured |
+| `ModelId` | `jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52`; exact pinned artifact only |
+| `RequestTimeoutMs` | `500`, allowed 50–10000; cancellation bound, no latency SLA |
+| `MaxConcurrentRequests` | `4`, allowed 1–16; no application waiting queue or retry |
+| `MaxStateCharacters` | `8000`, allowed 512–16000; max 32 candidates / 16 named signals |
+| `ShadowMode` | `true`; recommendations cannot replace the deterministic allowed default |
+
+Unknown keys and invalid bounds fail startup. Native and Compose examples keep private host configuration separate from tenant protected provider Credentials. `KEV_API_KEY` is the sidecar's private input; match the host key for native serving. The optional Compose overlay explicitly maps this key and an internal endpoint; ordinary Compose does not start inference. See the [lifecycle/migration/qualification runbook](decision-intelligence-runbook.md). AuthorizedLlm uses only the admitted Run route and cannot bootstrap pre-admission Auto. There is no automatic fallback to hosted inference.

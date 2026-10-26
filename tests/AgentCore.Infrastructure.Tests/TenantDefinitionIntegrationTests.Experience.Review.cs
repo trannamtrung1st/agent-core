@@ -17,12 +17,15 @@ public sealed partial class TenantDefinitionIntegrationTests
         store ??= f.Iam; var builtIns = new SessionNoBuiltinFallback();
         var resolver = new TenantRunConfigurationResolver((ITenantAgentStore)store, f.Definitions, builtIns,
             new(f.Resources, builtIns, new NoBuiltinKnowledge(), f.Content), (ITenantCredentialBindingStore)store);
-        return new(store, f.Identity, (ITenantExperienceReviewStore)store, resolver, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(store), f.Ids, TimeProvider.System);
+        return new(store, f.Identity, (ITenantExperienceReviewStore)store, resolver, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(store), f.Ids, TimeProvider.System, new AgentCore.Application.Models.AutoModelRouter(new AgentCore.Infrastructure.Decisions.DecisionEngine(new AgentCore.Infrastructure.Decisions.SyntheticDecisionAdapter(), new AgentCore.Infrastructure.Decisions.DecisionIntelligenceOptions { Enabled = true, Backend = AgentCore.Infrastructure.Decisions.DecisionBackendKind.Synthetic, ShadowMode = false })));
     }
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_experience_manual_review_admits_one_human_root_graph_and_records_private_facts_through_normal_tools(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite); var owner = await ExperienceOwner(f); var seed = await MemoryClaim(f, owner); await MemoryCommit(f, seed, await MemoryPlan(f, seed));
+        await using var f = await Fixture.Create(sqlite); var owner = await ExperienceOwner(f);
+        var spaceRole = await f.Access.SaveRoleAsync(owner.Human.PrincipalId, owner.Tenant, null, "Review fixture context", ["spaces.read"], (await f.Iam.ReadTenantAsync(owner.Tenant))!.Tenant.Revision);
+        await f.Access.AssignRoleAsync(owner.Human.PrincipalId, owner.Tenant, owner.Agent.PrincipalId, spaceRole.RoleId, AccessScope.ForTenant(owner.Tenant), (await f.Iam.ReadTenantAsync(owner.Tenant))!.Tenant.Revision);
+        var seed = await MemoryClaim(f, owner); await MemoryCommit(f, seed, await MemoryPlan(f, seed));
         var service = ExperienceReviewService(f); async Task<long> Revision() => (await f.Iam.ReadTenantAsync(owner.Tenant))!.Tenant.Revision;
         var first = await service.RequestAsync(owner.Tenant, owner.Agent.Instance.InstanceId, owner.Human, ExperienceSourceKind.Session, seed.Frame.SessionId, await Revision(), owner.Agent.Instance.Revision, TenantExperienceReviewRules.Fingerprint(await ((ITenantExperienceReviewStore)f.Iam).ObserveOwnTenantExperienceReviewAsync(owner.Tenant, owner.Agent.Instance.InstanceId, owner.Human, ExperienceSourceKind.Session, seed.Frame.SessionId)));
         Assert.True(first.Created); if (sqlite) service = ExperienceReviewService(f, new SqliteIamStore(f.Contexts!, f.Content));
@@ -30,6 +33,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         Assert.False(again.Created); Assert.Equal(first.RunId, again.RunId); Assert.Equal(first.SessionId, again.SessionId);
         var runs = (ITenantRunStore)f.Iam; var run = (await runs.FindTenantRunAsync(owner.Tenant, first.RunId))!;
         Assert.Equal(ExecutionOrigin.UserMessage, run.Admission.ExecutionContext!.Origin); Assert.Equal(owner.Human.PrincipalId, run.Admission.ExecutionContext.OriginalInitiatorPrincipalId);
+        Assert.NotNull(run.PinnedModel.Decision); Assert.NotNull(run.Admission.Configuration!.SpaceContext);
         Assert.Equal(run.ActivationId, run.Admission.Activation.RootActivationId); Assert.Null(run.Admission.ExecutionContext.ParentRunId); Assert.Equal(AgentRunOutputContract.BackgroundOutcome, run.Admission.OutputContract);
         var session = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(owner.Tenant, first.SessionId))!;
         Assert.Equal(SessionOriginKind.ManualBackground, session.Snapshot.Origin.Kind); Assert.Equal(SessionSurface.BackgroundWork, session.Snapshot.Surfaces); Assert.Null(session.Snapshot.ProfileId);

@@ -3659,7 +3659,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                                 HarnessSources: harnessSources.ToArray(),
                                                 OwnerTurnText: trigger.Kind == TriggerKind.UserTurn ? trigger.Text : null,
                                                 SupportsTools: model.Capabilities.Tools,
-                                                Model: _snapshot.ModelSelection is { } choice ? new AgentCore.Domain.Conversation.AgentRunModelPin(choice.OfferingId, choice.ConnectionId, choice.ExternalModelId, choice.ReasoningEffort, choice.Binding) : null,
+                                                Model: _snapshot.ModelSelection is { } choice ? new AgentCore.Domain.Conversation.AgentRunModelPin(choice.OfferingId, choice.ConnectionId, choice.ExternalModelId, choice.ReasoningEffort, choice.Binding, choice.Decision) : null,
                                                 WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, AgentRunId: _boundAgentRun?.AgentRunId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings,
                                                 ConfigurationContinuationTarget: ContinuationTarget(_boundAgentRun), TenantId: _boundAgentRun?.Owner.TenantId, AgentRunGeneration: _boundAgentRun?.Claim?.Generation))
                                         .ConfigureAwait(false);

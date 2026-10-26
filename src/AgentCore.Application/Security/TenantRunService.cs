@@ -15,7 +15,7 @@ public sealed record TenantRunMetadata(TrustedExecutionContext Context, Guid Age
 
 public sealed class TenantRunService(IIamStore security, ITenantSessionStore sessions, ITenantRunStore runs,
     TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer authorizer, ITenantModelCatalogReader modelCatalogs, IIdGenerator ids, TimeProvider time, TenantRunCancellationService? cancellations = null, ITenantRunControl? control = null, ITenantAttachmentStore? attachments = null, ITenantSessionInputControl? inputs = null,
-    ITenantRequestIsolationStore? requestIsolation = null, TenantComposerReferenceService? composer = null)
+    ITenantRequestIsolationStore? requestIsolation = null, TenantComposerReferenceService? composer = null, AutoModelRouter? routing = null)
 {
     public async ValueTask<TenantRunReceipt> SubmitTextAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
         Guid messageId, string text, long expectedSecurityRevision, long expectedSessionRevision, CancellationToken ct = default)
@@ -98,15 +98,25 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         var context = new TrustedExecutionContext(tenant, agent.PrincipalId, initiator.PrincipalId, sessionId, runId, activationId, activationId, null, null, ExecutionOrigin.UserMessage);
         var definition = resolved.Configuration.Definition;
         var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
-        var selected = SessionModelBinder.RefreshDefault(models, definition, session.Snapshot.ModelSelection)
-            ?? throw AgentCoreErrors.Validation("A resolved model is required.");
+        var preference = session.Snapshot.ModelPreference ?? AgentCore.Domain.Models.ModelPreference.Inherit;
+        if (routing is null && (preference.Mode == "auto" || preference.Reasoning?.Mode == "auto" || preference.Mode == "inherit"
+            && (definition.ModelDefaults?.Mode == "auto" || definition.ModelDefaults?.Reasoning?.Mode == "auto")))
+            throw new AgentCoreException("ModelRoutingUnavailable", "Auto requires the configured admission router. Choose a fixed model or repair Routing.", 409);
+        var selected = routing is null
+            ? SessionModelBinder.BindPreference(models, preference, definition.ModelDefaults)
+            : await routing.ResolveAsync(models, preference, definition.ModelDefaults,
+                sources.Any(a => a.Readable && AttachmentMedia.IsImage(a.ContentType)), true, "session",
+                new Dictionary<string, string> { ["inputCharacters"] = text.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["attachmentCount"] = sources.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["requiresVision"] = sources.Any(a => a.Readable && AttachmentMedia.IsImage(a.ContentType)).ToString(), ["inputMode"] = speech is null ? "text" : "voice" }, ct).ConfigureAwait(false);
+        _ = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         var composerInput = parts is null ? null : await composer!.PinAsync(agent.Instance.InstanceId, context, definition, resolved.Skills, parts, resolved.Configuration.SpaceContext!.Witness(), ct).ConfigureAwait(false);
         var active = composerInput is null ? resolved.Skills.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray()
             : AgentCore.Application.Composer.ComposerInputRules.ActiveSkills(definition, resolved.Skills, composerInput.ExplicitSkillKeys);
         var run = AgentRun.Create(runId, AgentRunOwner.ForTenant(tenant, agent.Instance.InstanceId, agent.PrincipalId),
             new(activation, definition.Id, definition.Version, resolved.Persona, responseId, AgentRunOutputContract.ConversationResponse,
                 AgentRunAdmissionFactory.WithCleanupIntent(ExecutionBudgetResolver.Resolve(definition, resolved.InstanceBudgets, true), text), resolved.Configuration, composerInput, executionContext: context),
-            new(selected.OfferingId, selected.ConnectionId, selected.ExternalModelId, selected.ReasoningEffort, selected.Binding), AgentRunLimits.DefaultMaxAttempts, now,
+            new(selected.OfferingId, selected.ConnectionId, selected.ExternalModelId, selected.ReasoningEffort, selected.Binding, selected.Decision), AgentRunLimits.DefaultMaxAttempts, now,
             resolved.Skills, active);
         var admission = new TenantHumanRunAdmission(run, input, expectedSessionRevision, agent.Instance.Revision, sources.Count == 0 ? null : sources.ToArray(), interruption, speech);
         var prepared = new TenantHumanInput(session.Owner, initiator, state.Tenant.Revision, TenantAttachmentBindingRules.Freeze(admission));

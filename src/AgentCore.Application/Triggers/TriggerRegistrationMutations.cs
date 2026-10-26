@@ -66,8 +66,7 @@ public static class AutomationMutations
     public static Automation SetModelOverride(
         Automation current,
         long expectedRevision,
-        string? offeringId,
-        string? reasoningEffort,
+        AgentCore.Domain.Models.ModelPreference? preference,
         DateTimeOffset updatedAt)
     {
         ArgumentNullException.ThrowIfNull(current);
@@ -84,20 +83,19 @@ public static class AutomationMutations
         Automation updated;
         try
         {
-            updated = current.WithModelOverride(offeringId, reasoningEffort, current.Revision, updatedAt);
+            updated = current.WithModelOverride(preference, current.Revision, updatedAt);
         }
         catch (ArgumentException exception)
         {
             throw AgentCoreErrors.Validation(exception.Message);
         }
 
-        if (string.Equals(updated.ModelOverrideOfferingId, current.ModelOverrideOfferingId, StringComparison.Ordinal)
-            && string.Equals(updated.ModelOverrideReasoningEffort, current.ModelOverrideReasoningEffort, StringComparison.Ordinal))
+        if (updated.ModelPreference == current.ModelPreference)
         {
             return current;
         }
 
-        return current.WithModelOverride(offeringId, reasoningEffort, current.Revision + 1, updatedAt);
+        return current.WithModelOverride(preference, current.Revision + 1, updatedAt);
     }
 
     public static Automation Cancel(

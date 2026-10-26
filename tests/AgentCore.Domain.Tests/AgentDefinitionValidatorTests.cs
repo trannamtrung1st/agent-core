@@ -101,9 +101,9 @@ public sealed class AgentDefinitionValidatorTests
             new VoiceConfiguration(true, "default", 1.0),
             new ProviderPreferences("primary-stt", "primary-tts"),
             new Dictionary<string, string>(),
-            ModelDefaults: new AgentModelDefaults("Not Valid", "medium"));
+            ModelDefaults: AgentCore.Domain.Models.ModelPreference.Fixed("Not Valid", "medium"));
         var error = Assert.Throws<ArgumentException>(() => AgentDefinitionValidator.Validate(definition));
-        Assert.Contains("modelDefaults.offeringId", error.Message, StringComparison.Ordinal);
+        Assert.Contains("canonical offering UUID", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

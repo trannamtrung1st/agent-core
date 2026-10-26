@@ -13,8 +13,8 @@ public sealed class ManagementMutationContractTests
             new('a',64), new('b',64), new('c',64), "[]", Management: new(new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []), Overrides: new(Mode: new(HarnessManagementMode.Assisted)))),
         "management.freeze" => new(Guid.NewGuid(), Guid.NewGuid(), tool, TenantManagementMutationContract.Parse(tool, JsonSerializer.Serialize(new { expectedInstanceRevision = revision })).Json,
             new('a',64), new('b',64), new('c',64), "[]", Management: new(new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], [], Frozen: true))),
-        "automation.preferences.patch" => new(Guid.NewGuid(), Guid.NewGuid(), tool, TenantManagementMutationContract.Parse(tool, JsonSerializer.Serialize(new { expectedInstanceRevision = revision, offeringId = "alpha", reasoningEffort = (string?)null })).Json,
-            new('a',64), new('b',64), new('c',64), "[]", UnattendedOfferingId: "alpha"), _ => throw new ArgumentException()
+        "automation.preferences.patch" => new(Guid.NewGuid(), Guid.NewGuid(), tool, TenantManagementMutationContract.Parse(tool, JsonSerializer.Serialize(new { expectedInstanceRevision = revision, modelPreference = new { mode = "fixed", offeringId = "dca30000-0000-4000-8000-000000000001", reasoning = new { mode = "modelDefault" } } })).Json,
+            new('a',64), new('b',64), new('c',64), "[]", UnattendedModel: AgentCore.Domain.Models.ModelPreference.Fixed("dca30000-0000-4000-8000-000000000001")), _ => throw new ArgumentException()
     };
     [Theory] [InlineData("settings.patch")] [InlineData("management.policy.update")] [InlineData("management.freeze")] [InlineData("automation.preferences.patch")]
     public void Saved_management_plan_roundtrip_preserves_value_equality_closed_payload_hash_and_exact_intent(string tool)

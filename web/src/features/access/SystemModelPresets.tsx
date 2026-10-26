@@ -11,6 +11,7 @@ import { ModelCapabilityFields, validateCapabilities } from './ModelCapabilityFi
 import { useAccessDraftGuard } from './useAccessDraftGuard';
 import { useIdentityQuery } from './useIdentityQuery';
 import { useTenantCommand } from './useTenantCommand';
+import { DecisionServiceReadiness } from './DecisionServiceReadiness';
 
 const api = '/api/v2/system/model-presets';
 export function SystemModelPresets({ permissions }: { permissions: string[] }) {
@@ -26,6 +27,7 @@ export function SystemModelPresets({ permissions }: { permissions: string[] }) {
   if (state.loading) return <AccessLoading />;
   if (state.error) return <AccessError error={state.error} retry={state.reload} />;
   return <Flex vertical gap="var(--ac-space-section)">
+    {permissions.includes('system.model-presets.read') && <><DecisionServiceReadiness path="/api/v2/system/decision-intelligence" /><Typography.Paragraph type="secondary">Decision inference is configured by the host operator. Keep shadow mode until the pinned checkpoint, quality and hardware budget are qualified. For notConfigured or loading, check the private service key, pinned cache and GPU in the operator runbook.</Typography.Paragraph></>}
     <Alert type="info" showIcon title="Shared metadata only" description="Enabled starter presets help organizations configure known models. They contain no credentials and grant no tenant access or execution default. Existing tenant offerings retain their own declarations." />
     <AdminCollectionToolbar label="model presets" value={collection.search} onChange={collection.setSearch} filters={<><Button ref={reloadAction} disabled={!!editing} onClick={() => { pendingFocus.current = true; focusSource.current = state.data; state.reload(); }}>Reload</Button>{manage && <Button type="primary" disabled={!!editing} onClick={event => { opener.current = event.currentTarget; setEditing({}); }}>Add model preset</Button>}</>} />
     <ModelCatalogFilters value={filters} stateLabel="Filter preset state" states={[{ value: 'enabled', label: 'Enabled preset' }, { value: 'disabled', label: 'Disabled preset' }, { value: 'archived', label: 'Archived' }]}

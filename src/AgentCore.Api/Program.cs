@@ -137,6 +137,7 @@ builder.Services.AddExceptionHandler<DiagnosticExceptionHandler>();
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
+_ = app.Services.GetRequiredService<AgentCore.Infrastructure.Decisions.DecisionIntelligenceOptions>();
 app.UseExceptionHandler();
 await InitializePersistenceAsync(app.Services).ConfigureAwait(false);
 if (identityBootstrapCommand)

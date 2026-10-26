@@ -28,7 +28,7 @@ public sealed record ModelOffering(Guid OfferingId, Guid TenantId, Guid Connecti
     ModelCapabilityProfile Capabilities, bool Enabled, bool Retired, long Revision,
     ModelObservation Observation = ModelObservation.Unknown, DateTimeOffset? LastSeenAt = null);
 
-public sealed record TenantModelSettings(Guid TenantId, Guid? DefaultOfferingId, string? DefaultReasoningEffort, long Revision);
+public sealed record TenantModelSettings(Guid TenantId, Guid? DefaultOfferingId, string? DefaultReasoningEffort, long Revision, AutoRoutingPolicy? Routing = null);
 
 // Nonsecret, immutable dispatch witness. A credential/configuration edit cannot retarget it.
 public sealed record ModelRoutePin(Guid TenantId, Guid OfferingId, long OfferingRevision,
@@ -101,6 +101,7 @@ public static class ModelManagementRules
     }
     public static TenantModelSettings Freeze(TenantModelSettings value)
     {
+        value.Routing?.Validate();
         if (value.TenantId == Guid.Empty || value.DefaultOfferingId == Guid.Empty || value.Revision < 1
             || value.DefaultOfferingId is null && value.DefaultReasoningEffort is not null)
             throw new ArgumentException("Invalid tenant model default.");

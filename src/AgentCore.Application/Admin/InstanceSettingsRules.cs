@@ -29,7 +29,8 @@ internal static class InstanceSettingsRules
     {
         var next = InstanceSettingsResolver.Patch(current, section, set, clear);
         var effective = InstanceSettingsResolver.Resolve(definition, next);
-        if (models is not null) _ = SessionModelBinder.PinDefault(models, effective);
+        if (models is not null && effective.ModelDefaults is not { Mode: "auto" }
+            && effective.ModelDefaults?.Reasoning?.Mode != "auto") _ = SessionModelBinder.BindPreference(models, effective.ModelDefaults ?? AgentCore.Domain.Models.ModelPreference.Inherit);
         if (aliases is not null && (effective.ProviderPreferences.SpeechRecognizer is { } stt && !aliases.SpeechRecognizers.Contains(stt)
             || effective.ProviderPreferences.SpeechSynthesizer is { } tts && !aliases.SpeechSynthesizers.Contains(tts)))
             throw AgentCoreErrors.Validation("Provider alias is not configured on this host.");

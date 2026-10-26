@@ -8,7 +8,7 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 public sealed class TenantExperienceReviewService(IIamStore security, IdentityService identity, ITenantExperienceReviewStore store,
-    TenantRunConfigurationResolver configurations, ITenantModelCatalogReader modelCatalogs, IIdGenerator ids, TimeProvider time)
+    TenantRunConfigurationResolver configurations, ITenantModelCatalogReader modelCatalogs, IIdGenerator ids, TimeProvider time, AutoModelRouter? routing = null)
 {
     public async ValueTask<TenantExperienceReviewSource> ObserveAsync(Guid tenant, Guid agent, HumanSessionReference human,
         ExperienceSourceKind kind, Guid sourceId, CancellationToken ct = default)
@@ -25,15 +25,29 @@ public sealed class TenantExperienceReviewService(IIamStore security, IdentitySe
         var source = await ObserveAsync(tenant, agentId, human, kind, sourceId, ct).ConfigureAwait(false);
         if (sourceFingerprint != TenantExperienceReviewRules.Fingerprint(source)) throw new SecurityConflictException("experience_source_changed");
         if (source.SecurityRevision != expectedSecurityRevision || source.InstanceRevision != expectedInstanceRevision) throw new SecurityConflictException("stale_revision");
-        var (agent, resolved) = await configurations.ResolveAsync(tenant, agentId, ct).ConfigureAwait(false);
+        if (await ((ITenantRunStore)security).FindTenantRunAsync(tenant, TenantExperienceReviewRules.Id(source, "run"), ct).ConfigureAwait(false) is { } existing)
+        {
+            if (existing.Owner != AgentRunOwner.ForTenant(tenant, agentId, source.ExecutorPrincipalId)
+                || existing.Admission.Activation.DedupeKey != TenantExperienceReviewRules.Key(source)
+                || existing.Admission.TaskIntent?.Text != TenantExperienceReviewRules.Objective(source)) throw new SecurityConflictException("identity_conflict");
+            return new(false, existing.SessionId, existing.AgentRunId, source.SecurityRevision);
+        }
+        // This manual background entry point has no destination picker: use the Instance private Space.
+        var destination = await ((ITenantSpaceStore)security).FindPrivateSpaceAsync(tenant, agentId, ct).ConfigureAwait(false)
+            ?? throw new AccessDeniedException("private_space_unavailable");
+        await new IamAuthorizer(security).RequireAsync(human.PrincipalId, "spaces.read", TenantSpaceService.Scope(tenant, destination.SpaceId), ct).ConfigureAwait(false);
+        var (agent, resolved) = await configurations.ResolveInSpaceAsync(tenant, agentId,
+            new(tenant, destination.SpaceId, null, 0, 1, time.GetUtcNow()), ct).ConfigureAwait(false);
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         if (state.Tenant.Revision != source.SecurityRevision) throw new SecurityConflictException("stale_revision");
         var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
-        var selection = ExecutionModelPolicy.Resolve(models, resolved.Configuration.Definition, agent.Instance, null);
+        var selection = routing is null ? ExecutionModelPolicy.Resolve(models, resolved.Configuration.Definition, agent.Instance, null)
+            : await ExecutionModelPolicy.ResolveAsync(routing, models, resolved.Configuration.Definition, agent.Instance, null, ct).ConfigureAwait(false);
+        _ = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         if (!selection.Accepted || selection.Pin is not { } model || models.Get(model.OfferingId)?.Tools != true)
             throw AgentCoreErrors.Validation("An available tool-capable unattended model is required.");
         var at = DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds());
-        var admission = TenantExperienceReviewRules.Build(source, agent, resolved, new(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort, model.Binding), at);
+        var admission = TenantExperienceReviewRules.Build(source, agent, resolved, new(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort, model.Binding, model.Decision), at);
         return await store.TryAdmitOwnTenantExperienceReviewAsync(admission, human, new(ids.NewId(), tenant, human.PrincipalId,
             TenantExperienceReviewRules.AuditAction, admission.Run.AgentRunId.ToString("D"), "allowed", "experience_review_admitted", at), ct).ConfigureAwait(false)
             ?? throw new SecurityConflictException("stale_revision");

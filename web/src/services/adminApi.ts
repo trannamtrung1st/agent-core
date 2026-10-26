@@ -113,8 +113,7 @@ export type AdminEffectiveConfiguration = {
     allowsApplicationEventSource: boolean;
     canAcceptNewTriggeredWork: boolean;
   };
-  unattendedOfferingId?: string | null;
-  unattendedReasoningEffort?: string | null;
+  unattendedModel?: import("./modelPreference").ModelPreference | null;
 };
 
 export type AdminCapabilityDescriptor = { name: string; category: string; summary: string; tags: string[]; discoverable: boolean; defaultProjectionClass: string; configured: boolean };
@@ -232,8 +231,7 @@ export type AdminAgentInstance = {
   revision: number;
   personaRevision: number;
   persona?: { name: string; role: string; description: string; tone: string };
-  unattendedOfferingId?: string | null;
-  unattendedReasoningEffort?: string | null;
+  unattendedModel?: import("./modelPreference").ModelPreference | null;
 };
 
 export type AdminCreateInstancePersona = {

@@ -44,7 +44,7 @@ public static class AgentRunAdmissionFactory
             previous.OriginalInitiatorPrincipalId, source.SessionId, runId, activationId, previous.RootActivationId, source.AgentRunId, source.ActivationId, ExecutionOrigin.ConfigurationContinuation) : null;
         return AgentRun.Create(runId, source.Owner, new(activation, configuration.Definition.Id, configuration.Definition.Version,
             snapshot.PinnedPersona!, responseId, AgentRunOutputContract.ConversationResponse, budget, configuration, executionContext: context),
-            new(selection.OfferingId, selection.ConnectionId, selection.ExternalModelId, selection.ReasoningEffort, selection.Binding),
+            new(selection.OfferingId, selection.ConnectionId, selection.ExternalModelId, selection.ReasoningEffort, selection.Binding, selection.Decision),
             1, now, catalog, catalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray());
     }
 
@@ -64,9 +64,9 @@ public static class AgentRunAdmissionFactory
             ToolResources.IsOccurrence(trigger.Kind) ? trigger.EventId : null, null, null,
             $"signal:{trigger.EventId:D}", atUtc, JsonSerializer.Serialize(new SignalInput(trigger.Kind, trigger.Text, trigger.EnvironmentKind)));
         var model = occurrenceModel is { } pin
-            ? new AgentRunModelPin(pin.OfferingId, pin.ConnectionId, pin.ExternalModelId, pin.ReasoningEffort, pin.Binding)
+            ? new AgentRunModelPin(pin.OfferingId, pin.ConnectionId, pin.ExternalModelId, pin.ReasoningEffort, pin.Binding, pin.Decision)
             : snapshot.ModelSelection is { } selection
-                ? new AgentRunModelPin(selection.OfferingId, selection.ConnectionId, selection.ExternalModelId, selection.ReasoningEffort, selection.Binding)
+                ? new AgentRunModelPin(selection.OfferingId, selection.ConnectionId, selection.ExternalModelId, selection.ReasoningEffort, selection.Binding, selection.Decision)
                 : throw AgentCoreErrors.Validation("AgentRun requires a resolved model.");
         return AgentRun.Create(runId, new(snapshot.AgentInstanceId, snapshot.ProfileId
             ?? throw AgentCoreErrors.Validation("AgentRun requires a trusted profile.")),
@@ -109,7 +109,7 @@ public static class AgentRunAdmissionFactory
         if (budget is not null) budget = WithCleanupIntent(budget, string.Join("\n", users.Select(user => user.Text)));
         return AgentRun.Create(agentRunId, new AgentRunOwner(instanceId, profileId),
             new AgentRunAdmission(activation, snapshot.Definition.Id, snapshot.Definition.Version, persona, responseId, AgentRunOutputContract.ConversationResponse, budget, configuration ?? new(snapshot.Definition, 0, snapshot.PinnedPersonaRevision ?? 0, []), composerInput),
-            new AgentRunModelPin(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort, model.Binding),
+            new AgentRunModelPin(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort, model.Binding, model.Decision),
             AgentRunLimits.DefaultMaxAttempts, admittedAtUtc,
             pinnedSkillCatalog: catalog,
             activeSkillKeys: composerInput?.Error is not null ? catalog.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray()

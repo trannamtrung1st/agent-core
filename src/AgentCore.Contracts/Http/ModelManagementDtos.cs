@@ -34,9 +34,20 @@ public sealed record ModelConnectionDto(Guid ConnectionId, Guid TenantId, string
 public sealed record ModelOfferingDto(Guid OfferingId, Guid TenantId, Guid ConnectionId, string Kind, Guid? PresetId,
     string ExternalModelId, string Label, string Transport, ModelCapabilityDto Capabilities, bool Enabled, bool Retired,
     long Revision, string Observation, DateTimeOffset? LastSeenAt);
-public sealed record TenantModelSettingsDto(Guid TenantId, Guid? DefaultOfferingId, string? DefaultReasoningEffort, long Revision);
+public sealed record TenantModelSettingsDto(Guid TenantId, Guid? DefaultOfferingId, string? DefaultReasoningEffort, long Revision, AutoRoutingPolicyDto? Routing = null);
 public sealed record ModelAdministrationAccessDto(bool CanCreateConnection, bool CanCreateOffering, bool CanManageDefault,
     IReadOnlyList<Guid> ManageConnectionIds, IReadOnlyList<Guid> TestConnectionIds, IReadOnlyList<Guid> ManageOfferingIds);
-public sealed record ModelOfferingAvailabilityDto(Guid OfferingId, bool Available, string Reason);
+public sealed record ModelRoundSummaryDto(int SampleCount, int ErrorCount, DateTimeOffset From, DateTimeOffset To,
+    double? P50Milliseconds, double? P95Milliseconds, long OfferingRevision, long ConnectionRevision, string Scope);
+public sealed record ModelOfferingAvailabilityDto(Guid OfferingId, bool Available, string Reason, ModelRoundSummaryDto? Observations = null);
 public sealed record TenantModelAdminDto(IReadOnlyList<ModelConnectionDto> Connections, IReadOnlyList<ModelOfferingDto> Offerings,
     TenantModelSettingsDto Settings, IReadOnlyList<ModelPresetDto> Presets, long SecurityRevision, IReadOnlyList<ModelOfferingAvailabilityDto> Availability, ModelAdministrationAccessDto Access);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ReasoningPreferenceDto([property: JsonRequired] string Mode, string? Effort = null);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ModelPreferenceDto([property: JsonRequired] string Mode, string? OfferingId = null, ReasoningPreferenceDto? Reasoning = null);
+public sealed record AutoRoutingPolicyDto(bool Enabled, bool AllowConfiguredDefault, double MinimumProbability);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record AutoRoutingPolicyRequest([property: JsonRequired] AutoRoutingPolicyDto Routing,
+    [property: JsonRequired] long ExpectedRevision, [property: JsonRequired] long ExpectedSettingsRevision);

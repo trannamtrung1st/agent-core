@@ -1,4 +1,4 @@
-import { reasoningEffortChoices } from "../models/reasoningEfforts";
+import { orderedReasoningEfforts, reasoningEffortChoices } from "../models/reasoningEfforts";
 import { modelChoiceLabel } from "../models/modelLabels";
 import type { ComponentType } from "react";
 import { useEffect, useState } from "react";
@@ -134,7 +134,7 @@ export function formatEffortLabel(effort: string | null | undefined): string {
     return "";
   }
 
-  return effort.charAt(0).toUpperCase() + effort.slice(1);
+  return effort === "modelDefault" ? "Model default" : effort.charAt(0).toUpperCase() + effort.slice(1);
 }
 
 export function ModelPicker({
@@ -144,6 +144,7 @@ export function ModelPicker({
   modelValue,
   inheritSelected = modelValue === INHERIT_MODEL,
   unavailableLabel,
+  lastResolved,
   effortValue,
   disabled,
   layout = "stack",
@@ -152,10 +153,11 @@ export function ModelPicker({
 }: {
   models: readonly ModelCatalogItem[];
   defaultOfferingId: string | null;
-  defaultSource?: "tenantDefault" | "agentDefault";
+  defaultSource?: "tenantDefault" | "agentDefault" | "auto";
   modelValue: string;
   inheritSelected?: boolean;
   unavailableLabel?: string | null;
+  lastResolved?: string | null;
   effortValue: string | null;
   disabled?: boolean;
   layout?: "stack" | "row";
@@ -209,6 +211,7 @@ export function ModelPicker({
         ? defaultOfferingId ?? INHERIT_MODEL
         : modelValue;
   const selected = models.length === 0 ? null : selectedCatalogModel(models, selectValue, defaultOfferingId);
+  const availableEfforts = orderedReasoningEfforts([...new Set(models.flatMap(model => model.supportedReasoningEfforts))]);
   const { levels: efforts, modes } = reasoningEffortChoices(selected?.supportedReasoningEfforts ?? []);
   const effortIndex = efforts.indexOf(effortValue ?? selected?.defaultReasoningEffort ?? "");
   const [effortPreviewIndex, setEffortPreviewIndex] = useState(effortIndex);
@@ -245,15 +248,18 @@ export function ModelPicker({
         Select model
       </Typography.Text>
       <Flex vertical role="listbox" aria-label="Model catalog">
-        <Button type="text" role="option" title={defaultSource === "agentDefault" ? "Use Agent default" : "Use organization default"}
-          aria-selected={inheritSelected} className="model-picker-option" disabled={disabled || !defaultOfferingId || !models.some(model => model.offeringId === defaultOfferingId)}
+        <Button type="text" role="option" title={defaultSource === "auto" ? "Use Agent default (Auto)" : defaultSource === "agentDefault" ? "Use Agent default" : "Use organization default"}
+          aria-selected={inheritSelected} className="model-picker-option" disabled={disabled || defaultSource !== "auto" && (!defaultOfferingId || !models.some(model => model.offeringId === defaultOfferingId))}
           style={{ width: "100%", height: "auto", paddingInline: controlPadding, paddingBlock: controlPadding }}
           onClick={() => { onModelChange(INHERIT_MODEL); closePicker(); }}>
           <Flex align="center" justify="space-between" gap={token.paddingXS} style={{ width: "100%", minWidth: 0 }}>
-            <span className="model-picker-option-name">{defaultSource === "agentDefault" ? "Use Agent default" : "Use organization default"}</span>
+            <span className="model-picker-option-name">{defaultSource === "auto" ? "Use Agent default (Auto)" : defaultSource === "agentDefault" ? "Use Agent default" : "Use organization default"}</span>
             <span className="model-picker-option-mark" aria-hidden>{inheritSelected ? <CheckOutlined /> : null}</span>
           </Flex>
         </Button>
+        <Button type="text" role="option" aria-selected={modelValue === "auto"} className="model-picker-option" disabled={disabled}
+          style={{ width: "100%", height: "auto", paddingInline: controlPadding, paddingBlock: controlPadding }}
+          onClick={() => { onModelChange("auto"); closePicker(); }}>Auto · choose per new Run{modelValue === "auto" ? <CheckOutlined /> : null}</Button>
         {models.map((model) => {
           const isSelected = !inheritSelected && model.offeringId === selectValue;
           return (
@@ -294,8 +300,19 @@ export function ModelPicker({
           );
         })}
       </Flex>
+      {(modelValue === "auto" || inheritSelected && defaultSource === "auto") && <Flex vertical gap={token.paddingXS} style={{ paddingInline: controlPadding }}>
+        <Typography.Text type="secondary">{lastResolved ? `Last Run used ${lastResolved}` : 'Resolves eligible models when the next Run is admitted.'}</Typography.Text>
+        <Select classNames={{ popup: { root: "model-picker-effort-popup" } }} aria-label="Auto reasoning intent" value={effortValue ?? ""} disabled={disabled} options={[{ value: "", label: inheritSelected ? "Use inherited reasoning" : "Model default" }, ...(inheritSelected ? [{ value: "modelDefault", label: "Model default" }] : []), { value: "auto", label: "Auto reasoning" }, ...availableEfforts.map(value => ({ value, label: formatEffortLabel(value) }))]} onChange={value => onEffortChange(value || null)} />
+      </Flex>}
+      {lastResolved && modelValue !== "auto" && !(inheritSelected && defaultSource === "auto") ? <Typography.Text type="secondary" style={{ paddingInline: controlPadding }}>Last Run used {lastResolved}</Typography.Text> : null}
       {showEffort ? (
         <Flex vertical gap={token.paddingXS} className="model-picker-reasoning" style={{ paddingInline: controlPadding }}>
+          <Select aria-label="Reasoning preference" classNames={{ popup: { root: "model-picker-effort-popup" } }}
+            value={effortValue === "auto" || effortValue === "modelDefault" || !effortValue ? effortValue ?? "" : "fixed"} disabled={disabled}
+            options={[{ value: "", label: inheritSelected ? "Use inherited reasoning" : "Model default" },
+              ...(inheritSelected ? [{ value: "modelDefault", label: "Model default" }] : []), { value: "auto", label: "Auto reasoning" }, { value: "fixed", label: "Fixed effort" }]}
+            onChange={value => onEffortChange(value === "fixed" ? selected?.defaultReasoningEffort ?? efforts[0] ?? modes[0] ?? null : value || null)} />
+          {effortValue && effortValue !== "auto" && effortValue !== "modelDefault" ? <>
           <Flex align="center" justify="space-between" gap={token.paddingXS}>
             <Typography.Text type="secondary">Reasoning</Typography.Text>
             <Typography.Text>{formatEffortLabel(efforts[effortPreviewIndex] ?? effortValue)}</Typography.Text>
@@ -321,6 +338,7 @@ export function ModelPicker({
             options={[...efforts, ...modes].map(value => ({ value, label: formatEffortLabel(value) }))}
             onChange={onEffortChange}
           /> : null}
+          </> : null}
         </Flex>
       ) : null}
     </Flex>
@@ -352,13 +370,13 @@ export function ModelPicker({
         }}
       >
         <Flex align="center" gap={token.paddingXS} style={{ minWidth: 0, flex: "1 1 auto" }}>
-          <span className="model-picker-name">{selected ? modelChoiceLabel(selected) : `${unavailableLabel ?? (selectValue === INHERIT_MODEL ? defaultSource === "agentDefault" ? "Agent default" : "Organization default" : selectValue)} · Unavailable`}</span>
+          <span className="model-picker-name">{modelValue === INHERIT_MODEL && defaultSource === "auto" ? lastResolved ? `Agent default · Auto · last Run used ${lastResolved}` : "Agent default · Auto" : modelValue === "auto" ? lastResolved ? `Auto · last Run used ${lastResolved}` : "Auto" : selected ? modelChoiceLabel(selected) : `${unavailableLabel ?? (selectValue === INHERIT_MODEL ? defaultSource === "agentDefault" ? "Agent default" : "Organization default" : selectValue)} · Unavailable`}</span>
           {inheritSelected ? (
             <Tag variant="filled" style={{ marginInlineEnd: 0 }}>
               Default
             </Tag>
           ) : null}
-          {showEffort ? (
+      {showEffort ? (
             <Typography.Text type="secondary" className="model-picker-effort" aria-label="Reasoning effort">
               {formatEffortLabel(effortValue)}
             </Typography.Text>

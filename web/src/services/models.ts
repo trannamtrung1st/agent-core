@@ -17,7 +17,8 @@ export type ModelConnection = { connectionId: string; tenantId: string; kind: Mo
 export type ModelOffering = { offeringId: string; tenantId: string; connectionId: string; kind: ModelKind; presetId: string | null;
   externalModelId: string; label: string; transport: ModelTransport; capabilities: ModelCapabilityMetadata;
   enabled: boolean; retired: boolean; revision: number; observation: 'Unknown' | 'Observed' | 'NotReturned'; lastSeenAt: string | null };
-export type ModelSettings = { tenantId: string; defaultOfferingId: string | null; defaultReasoningEffort: string | null; revision: number };
+export type AutoRoutingPolicy = { enabled: boolean; allowConfiguredDefault: boolean; minimumProbability: number };
+export type ModelSettings = { routing?: AutoRoutingPolicy | null; tenantId: string; defaultOfferingId: string | null; defaultReasoningEffort: string | null; revision: number };
 export type ModelAdmin = { connections: ModelConnection[]; offerings: ModelOffering[]; presets: ModelPreset[]; settings: ModelSettings;
   securityRevision: number; access: { canCreateConnection: boolean; canCreateOffering: boolean; canManageDefault: boolean; manageConnectionIds: string[]; testConnectionIds: string[]; manageOfferingIds: string[] }; availability: { offeringId: string; available: boolean; reason: string }[] };
 export type MetadataTest = { metadataAvailable: boolean; result: string; modelsObserved: number; testedAt: string };

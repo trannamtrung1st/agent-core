@@ -1,3 +1,4 @@
+import { preferenceFields, preferenceFromFields } from '../../services/modelPreference';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, App, Button, Flex, Form, Tag, Typography } from 'antd';
 import { IdentityCompletionError, IdentityError, identityRequest, tenantApi, type TenantContext } from '../../services/identity';
@@ -20,7 +21,7 @@ import { useTenantCommand } from './useTenantCommand';
 export type TenantControlPage = 'execution-budgets' | 'self-management' | 'unattended-model';
 type Draft = { budgets: ExecutionBudgetPolicy; management: SelfManagementDraft; model: { key: string; effort: string } };
 const budgetDraft = (value: ExecutionBudgetPolicy | null): ExecutionBudgetPolicy => ({ standard: value?.standard ?? null, interactiveBrowser: value?.interactiveBrowser ?? null, unattendedBoundBrowser: value?.unattendedBoundBrowser ?? null });
-const draftOf = (view: TenantAgentControlsView): Draft => ({ budgets: budgetDraft(view.budgets.overrides), management: managementDraftOf(view.management.policy), model: { key: view.agent.instance.unattendedOfferingId ?? '', effort: view.agent.instance.unattendedReasoningEffort ?? '' } });
+const draftOf = (view: TenantAgentControlsView): Draft => ({ budgets: budgetDraft(view.budgets.overrides), management: managementDraftOf(view.management.policy), model: preferenceFields(view.agent.instance.unattendedModel) });
 const titles: Record<TenantControlPage, string> = { 'execution-budgets': 'Execution budgets', 'self-management': 'Self-management', 'unattended-model': 'Unattended model' };
 const draftPart = (draft: Draft, page: TenantControlPage) => page === 'execution-budgets' ? draft.budgets : page === 'self-management' ? draft.management : draft.model;
 
@@ -41,14 +42,14 @@ export function TenantAgentControls({ context, id, page }: { context: TenantCont
   const view = state.data; const writable = !!view?.canUpdate && view.agent.instance.lifecycle === 'Active'; const disabled = !writable || command.busy || committed || command.requiresReload;
   const reload = () => { command.clearError(); state.reload(); };
   const selected = catalog.data?.models.find(model => model.offeringId === (draft?.model.key || catalog.data?.defaultOfferingId));
-  const invalidModel = !!catalog.data && !!draft && (!!draft.model.key && !selected || !!draft.model.effort && !selected?.supportedReasoningEfforts.includes(draft.model.effort));
+  const invalidModel = !!catalog.data && !!draft && draft.model.key !== "auto" && (!!draft.model.key && !selected || !!draft.model.effort && draft.model.effort !== "auto" && !selected?.supportedReasoningEfforts.includes(draft.model.effort));
   const valid = !!draft && !!view && (page === 'execution-budgets' ? validExecutionBudgets(draft.budgets, view.budgets.hostLimits) : page !== 'unattended-model' || !!catalog.data && !invalidModel);
   function save(lock?: boolean) {
     if (!view || !draft || disabled || lock === undefined && (!dirty || !valid)) return;
     const suffix = lock === true ? '/self-management/freeze' : page === 'execution-budgets' ? '/execution-budgets' : page === 'self-management' ? '/self-management' : '/unattended-model';
     const policy = lock === undefined ? draft.management : managementDraftOf(view.management.policy);
     const body = { expectedRevision: view.securityRevision, expectedInstanceRevision: view.agent.instance.revision,
-      ...(lock === true ? {} : page === 'execution-budgets' ? { budgets: draft.budgets } : page === 'self-management' ? { overrides: managementOverridesOf(policy), ...(lock === false ? { frozen: false } : {}) } : { offeringId: draft.model.key || null, reasoningEffort: draft.model.effort || null }) };
+      ...(lock === true ? {} : page === 'execution-budgets' ? { budgets: draft.budgets } : page === 'self-management' ? { overrides: managementOverridesOf(policy), ...(lock === false ? { frozen: false } : {}) } : { modelPreference: preferenceFromFields(draft.model.key, draft.model.effort) }) };
     void command.run(async signal => {
       try { await identityRequest<unknown>(tenantAgentApi(tenant, id, suffix), { method: lock === true ? 'POST' : 'PUT', body, signal }); }
       catch (error) { if (!(error instanceof IdentityCompletionError)) throw error; }

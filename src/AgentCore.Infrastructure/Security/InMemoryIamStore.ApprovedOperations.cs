@@ -243,7 +243,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 updated = configure ? instances.ChangeTenantConfigurationAsync(new(target.Instance.InstanceId, target.Instance.Revision,
                 Persona: change!.Persona, ExpectedPersonaRevision: change.ExpectedPersonaRevision,
                 SetSettingsOverrides: change.SetSettingsOverrides, SettingsOverrides: change.SettingsOverrides, AutomationPolicyChanges: change.AutomationPolicyChanges,
-                HarnessManagement: preparedConfiguration.HarnessManagement, SetUnattendedModel: change.SetUnattendedModel, UnattendedOfferingId: change.UnattendedOfferingId, UnattendedReasoningEffort: change.UnattendedReasoningEffort), at, ct).Result : target.Instance;
+                HarnessManagement: preparedConfiguration.HarnessManagement, SetUnattendedModel: change.SetUnattendedModel, UnattendedModel: change.UnattendedModel), at, ct).Result : target.Instance;
             }
             applyBinding?.Invoke(); reconcileBinding?.Invoke(); reconcileSpaces?.Invoke();
             if (complete && automationMutation is not null)

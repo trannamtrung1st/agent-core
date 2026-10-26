@@ -56,8 +56,8 @@ public sealed partial class TenantApprovalService
         var old = value.Current; var next = value.Proposed;
         IReadOnlyList<TenantApprovalFieldChange> changes = [new("Automation", old?.Name ?? "No existing Automation", next.Name), new("Instructions", old?.Instructions, next.Instructions),
             new("State", old?.Status.ToString(), next.Status.ToString()), new("Timing and sources", Timing(old), Timing(next)),
-            new("Model", old is null ? "No existing Automation" : old.ModelOverrideOfferingId ?? "Agent default", next.ModelOverrideOfferingId ?? "Agent default"),
-            new("Reasoning", old is null ? "No existing Automation" : old.ModelOverrideReasoningEffort ?? "Agent default", next.ModelOverrideReasoningEffort ?? "Agent default"),
+            new("Model", old is null ? "No existing Automation" : old.ModelPreference?.OfferingId ?? "Agent default", next.ModelPreference?.OfferingId ?? "Agent default"),
+            new("Reasoning", old is null ? "No existing Automation" : old.ModelPreference?.Reasoning?.Effort ?? "Agent default", next.ModelPreference?.Reasoning?.Effort ?? "Agent default"),
             new("Requirements", old is null ? null : $"Tools: {old.RequiresTools} · Vision: {old.RequiresVision}", $"Tools: {next.RequiresTools} · Vision: {next.RequiresVision}"),
             new("Execution destination", old is null ? "No existing Automation" : old.ExecutionTarget.SessionId?.ToString("D") ?? "Independent Background work", next.ExecutionTarget.SessionId?.ToString("D") ?? "Independent Background work"),
             new("Completion report", old is null ? "No existing Automation" : old.CompletionDelivery.SessionId?.ToString("D") ?? "None", next.CompletionDelivery.SessionId?.ToString("D") ?? "None"),

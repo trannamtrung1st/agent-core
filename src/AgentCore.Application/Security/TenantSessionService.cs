@@ -19,7 +19,7 @@ public sealed partial class TenantSessionService(IIamStore security, ITenantAgen
     ITenantModelCatalogReader modelCatalogs, VoiceAvailability voice, IIdGenerator ids, TimeProvider time, ITenantArtifactStore? artifacts = null, ITenantAttachmentStore? attachments = null, TenantBrowserRetirementService? browserRetirement = null)
 {
     public async ValueTask<TenantSessionMetadata> CreateAsync(Guid tenant, Guid instance, TenantSessionInitiator initiator, SessionMode mode,
-        long expectedSecurityRevision, long expectedInstanceRevision, string? offeringId = null, string? reasoningEffort = null, CancellationToken ct = default, SessionRetentionKind retentionKind = SessionRetentionKind.Saved)
+        long expectedSecurityRevision, long expectedInstanceRevision, AgentCore.Domain.Models.ModelPreference? preference = null, CancellationToken ct = default, SessionRetentionKind retentionKind = SessionRetentionKind.Saved)
     {
         var state = await Human(tenant, initiator, ct).ConfigureAwait(false);
         foreach (var key in new[] { "sessions.create", "sessions.read" }) await Require(state, initiator.PrincipalId, key, AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
@@ -37,6 +37,11 @@ public sealed partial class TenantSessionService(IIamStore security, ITenantAgen
         var definition = InstanceSettingsResolver.Resolve(baseline, parent.Instance.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, parent.Instance) };
         if (mode == SessionMode.Voice && !voice.IsAvailable(definition, definition.ConversationPolicy.Language)) throw AgentCoreErrors.VoiceUnavailable();
         var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
+        preference ??= AgentCore.Domain.Models.ModelPreference.Inherit;
+        preference.Validate();
+        ExecutionModelPolicy.RequireSelectable(models, preference);
+        var effectivePreference = preference.Mode == "inherit" ? definition.ModelDefaults ?? preference : preference;
+        var initialModel = effectivePreference.Mode == "auto" || preference.Reasoning?.Mode == "auto" || effectivePreference.Reasoning?.Mode == "auto" ? null : SessionModelBinder.BindPreference(models, preference, definition.ModelDefaults);
         var now = DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds()); var id = ids.NewSessionId();
         var privateSpace = await ((ITenantSpaceStore)security).FindPrivateSpaceAsync(tenant, instance, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("private_space_unavailable");
@@ -45,7 +50,7 @@ public sealed partial class TenantSessionService(IIamStore security, ITenantAgen
         var snapshot = new SessionSnapshot(1, id, 1, definition, mode, null, SessionStatus.Created, [], "", 0, null, null, now, now, instance,
             LastUserActivityAt: now, Purpose: SessionPurpose.OngoingDefault, CompletionPolicy: SessionCompletionPolicy.Default,
             LifecycleSource: LifecycleTransitionSource.System, LifecycleChangedAt: now,
-            ModelSelection: SessionModelBinder.Bind(models, offeringId, reasoningEffort, ModelSelectionSource.User, definition.ModelDefaults),
+            ModelSelection: initialModel, ModelPreference: preference,
             PinnedPersona: parent.Instance.Persona, PinnedPersonaRevision: parent.Instance.PersonaRevision, ContextSelection: selection, RetentionKind: retentionKind,
             RetainAfterTerminalDays: retentionKind == SessionRetentionKind.Saved ? state.Tenant.SavedChatRetentionDays : null,
             RetentionDueAtUtc: retentionKind == SessionRetentionKind.Temporary ? now.AddHours(24) : null);

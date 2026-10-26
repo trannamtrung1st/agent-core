@@ -19,7 +19,7 @@ public static class InstanceSettingsResolver
         "behaviorPolicy" => ["interruptionStyle", "acknowledgeInterruption", "avoidUnsupportedClaims"],
         "initiativePolicy" => ["enabled", "silenceThresholdMs", "cooldownMs", "maxPerSilencePeriod", "triggers", "maxConsecutiveProactiveTurns", "maxSilentEvaluations", "maxInactivityMs"],
         "voice" => ["enabled", "voiceId", "speakingRate"],
-        "modelDefaults" => ["offeringId", "reasoningEffort"],
+        "modelDefaults" => ["preference"],
         "memoryPolicy" => ["sessionMemory", "identityUserPromotion", "identityUserRetrieval", "userPromotion", "userRetrieval"],
         "capabilities" => ["selected", "always", "allowUnreadUnsupportedTypes"],
         "triggerPolicy" => ["enabled", "allowUserScheduling", "allowOneShot", "allowDaily", "allowWeekly", "allowIndefiniteRecurrence", "maxActiveRegistrations", "oneShotHorizonDays", "minRecurrenceDays", "allowedSourceKinds", "allowFixedInterval", "minFixedIntervalSeconds"],
@@ -80,8 +80,7 @@ public static class InstanceSettingsResolver
                     ("voice", "enabled") => next with { VoiceEnabled = remove ? null : new(Read<bool>(set[field])) },
                     ("voice", "voiceId") => next with { VoiceId = remove ? null : new(Read<string>(set[field])) },
                     ("voice", "speakingRate") => next with { SpeakingRate = remove ? null : new(Read<double>(set[field])) },
-                    ("modelDefaults", "offeringId") => next with { ModelOfferingId = remove ? null : new(set[field].ValueKind == JsonValueKind.Null ? null : Read<string>(set[field])) },
-                    ("modelDefaults", "reasoningEffort") => next with { ReasoningEffort = remove ? null : new(set[field].ValueKind == JsonValueKind.Null ? null : Read<string>(set[field])) },
+                    ("modelDefaults", "preference") => next with { ModelPreference = remove ? null : new(set[field].ValueKind == JsonValueKind.Null ? null : Read<AgentCore.Domain.Models.ModelPreference>(set[field])) },
                     ("memoryPolicy", "sessionMemory") => next with { MemorySessionMemory = remove ? null : new(Read<bool>(set[field])) },
                     ("memoryPolicy", "identityUserPromotion") => next with { MemoryIdentityUserPromotion = remove ? null : new(Read<bool>(set[field])) },
                     ("memoryPolicy", "identityUserRetrieval") => next with { MemoryIdentityUserRetrieval = remove ? null : new(Read<bool>(set[field])) },
@@ -274,11 +273,8 @@ public static class InstanceSettingsResolver
                 SpeechSynthesizer = o.ProviderSpeechSynthesizer is { } fieldProviderSpeechSynthesizer ? fieldProviderSpeechSynthesizer.Value : baseline.ProviderPreferences.SpeechSynthesizer,
                 InterruptionClassifier = o.ProviderInterruptionClassifier is { } fieldProviderInterruptionClassifier ? fieldProviderInterruptionClassifier.Value : baseline.ProviderPreferences.InterruptionClassifier,
             },
-            ModelDefaults = (baseline.ModelDefaults ?? new AgentModelDefaults(null, null)) with
-            {
-                OfferingId = o.ModelOfferingId is { } modelOfferingId ? modelOfferingId.Value : (baseline.ModelDefaults ?? new AgentModelDefaults(null, null)).OfferingId,
-                ReasoningEffort = o.ReasoningEffort is { } reasoningEffort ? reasoningEffort.Value : (baseline.ModelDefaults ?? new AgentModelDefaults(null, null)).ReasoningEffort,
-            },
+            ModelDefaults = o.ModelPreference is { } preference ? preference.Value is null ? null
+                : AgentCore.Application.Models.ExecutionModelPolicy.MergePreference(baseline.ModelDefaults, preference.Value) : baseline.ModelDefaults,
             MemoryPolicy = (baseline.MemoryPolicy ?? MemoryPolicy.Disabled) with
             {
                 SessionMemory = o.MemorySessionMemory is { } memorySessionMemory ? memorySessionMemory.Value : (baseline.MemoryPolicy ?? MemoryPolicy.Disabled).SessionMemory,
@@ -373,8 +369,7 @@ public static class InstanceSettingsResolver
             ["speakingRate"] = d.Voice.SpeakingRate,
         },
         "modelDefaults" => new Dictionary<string, object?> {
-            ["offeringId"] = d.ModelDefaults?.OfferingId,
-            ["reasoningEffort"] = d.ModelDefaults?.ReasoningEffort,
+            ["preference"] = d.ModelDefaults,
         },
         "memoryPolicy" => new Dictionary<string, object?> {
             ["sessionMemory"] = (d.MemoryPolicy ?? MemoryPolicy.Disabled).SessionMemory,
@@ -466,8 +461,7 @@ public static class InstanceSettingsResolver
                 if (o.SpeakingRate is { } speakingRate) result["speakingRate"] = speakingRate.Value;
                 break;
             case "modelDefaults":
-                if (o.ModelOfferingId is { } modelOfferingId) result["offeringId"] = modelOfferingId.Value;
-                if (o.ReasoningEffort is { } reasoningEffort) result["reasoningEffort"] = reasoningEffort.Value;
+                if (o.ModelPreference is { } preference) result["preference"] = preference.Value;
                 break;
             case "memoryPolicy":
                 if (o.MemorySessionMemory is { } memorySessionMemory) result["sessionMemory"] = memorySessionMemory.Value;

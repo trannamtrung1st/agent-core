@@ -36,7 +36,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var budget = new ExecutionBudgetPolicy(Standard: new(8, 60, 1, SandboxCommandSeconds: 5));
         changed = await configuration.UpdateBudgetsAsync(owner.OwnerPrincipalId, owner.TenantId, id, await Revision(), changed.Instance.Revision, budget);
         Assert.Equal("instance", (await configuration.ReadBudgetsAsync(owner.OwnerPrincipalId, owner.TenantId, id)).Effective[ExecutionBudgetClass.Standard].Source);
-        changed = await configuration.UpdateUnattendedModelAsync(owner.OwnerPrincipalId, owner.TenantId, id, await Revision(), changed.Instance.Revision, AgentCore.Infrastructure.Providers.Synthetic.SyntheticModelCatalog.Create().DefaultOfferingId, "low");
+        changed = await configuration.UpdateUnattendedModelAsync(owner.OwnerPrincipalId, owner.TenantId, id, await Revision(), changed.Instance.Revision, AgentCore.Domain.Models.ModelPreference.Fixed(AgentCore.Infrastructure.Providers.Synthetic.SyntheticModelCatalog.Create().DefaultOfferingId, "low"));
         var scopes = new[] { HarnessManagementScope.Settings, HarnessManagementScope.Skills };
         var overrides = new ManagementPolicyOverrides(new(HarnessManagementMode.Assisted), new(scopes), ConfigurationAssistance: new(false));
         changed = await configuration.UpdateManagementAsync(owner.OwnerPrincipalId, owner.TenantId, id, await Revision(), changed.Instance.Revision, overrides);
@@ -57,14 +57,14 @@ public sealed partial class TenantDefinitionIntegrationTests
             Assert.Equal("Local owned instructions.", (await reopened.ReadAsync(owner.OwnerPrincipalId, owner.TenantId, id)).Definition.AgentInstructions);
             Assert.True((await reopened.ReadManagementAsync(owner.OwnerPrincipalId, owner.TenantId, id)).Policy.Effective.Frozen);
             Assert.Equal(budget, (await reopened.ReadBudgetsAsync(owner.OwnerPrincipalId, owner.TenantId, id)).Overrides);
-            Assert.Equal(AgentCore.Infrastructure.Providers.Synthetic.SyntheticModelCatalog.Create().DefaultOfferingId, (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(owner.TenantId, id))!.Instance.UnattendedOfferingId);
+            Assert.Equal(AgentCore.Infrastructure.Providers.Synthetic.SyntheticModelCatalog.Create().DefaultOfferingId, (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(owner.TenantId, id))!.Instance.UnattendedModel?.OfferingId);
         }
         changed = await configuration.PatchSettingsAsync(owner.OwnerPrincipalId, owner.TenantId, id, "instructions", await Revision(), changed.Instance.Revision, Fields(new { }), ["agentInstructions"]);
         Assert.Equal(p1.Payload.AgentInstructions, (await configuration.ReadAsync(owner.OwnerPrincipalId, owner.TenantId, id)).Definition.AgentInstructions);
         changed = await configuration.UpdateBudgetsAsync(owner.OwnerPrincipalId, owner.TenantId, id, await Revision(), changed.Instance.Revision, null);
         Assert.NotEqual("instance", (await configuration.ReadBudgetsAsync(owner.OwnerPrincipalId, owner.TenantId, id)).Effective[ExecutionBudgetClass.Standard].Source);
-        changed = await configuration.UpdateUnattendedModelAsync(owner.OwnerPrincipalId, owner.TenantId, id, await Revision(), changed.Instance.Revision, null, null);
-        Assert.Null(changed.Instance.UnattendedOfferingId);
+        changed = await configuration.UpdateUnattendedModelAsync(owner.OwnerPrincipalId, owner.TenantId, id, await Revision(), changed.Instance.Revision, null);
+        Assert.Null(changed.Instance.UnattendedModel?.OfferingId);
         changed = await configuration.UpdateManagementAsync(owner.OwnerPrincipalId, owner.TenantId, id, await Revision(), changed.Instance.Revision, new(), false);
         Assert.Equal("definition", (await configuration.ReadManagementAsync(owner.OwnerPrincipalId, owner.TenantId, id)).Policy.Source);
         Assert.False((await configuration.ReadManagementAsync(owner.OwnerPrincipalId, owner.TenantId, id)).Policy.Effective.Frozen);

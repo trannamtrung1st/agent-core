@@ -2953,6 +2953,11 @@ body,
 .access-auth-form { width: min(100%, 26rem); display: flex; flex-direction: column; gap: var(--ac-space-section); padding-block: var(--ac-space-section); min-width: 0; overflow-wrap: anywhere; }
 .access-auth-form > .ant-typography, .access-bounded-form > .ant-typography { margin: 0; }
 .access-bounded-form { max-inline-size: 48rem; min-width: 0; }
+@media (max-width: 480px) {
+  .decision-readiness.ant-alert { flex-wrap: wrap; gap: var(--ac-space-compact); }
+  .decision-readiness .ant-alert-section { flex-basis: 100%; }
+  .decision-readiness .ant-alert-actions { margin-inline-start: 0; }
+}
 .access-loading-page { padding: var(--ac-space-section); display: flex; flex-direction: column; gap: var(--ac-space-section); }
 .access-form-error { margin-block-end: var(--ac-space-section); }
 .access-organization-list { display: flex; flex-direction: column; }

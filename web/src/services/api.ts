@@ -28,6 +28,7 @@ export type SessionModelSelection = {
   offeringId: string;
   displayName: string;
   selectionSource: string;
+  observedFromRun?: boolean;
   reasoningEffort?: string | null;
   externalModelId?: string | null;
   connectionId?: string | null;
@@ -53,11 +54,12 @@ export type ModelDescriptor = {
 export type ModelCatalog = {
   defaultOfferingId: string | null;
   defaultReasoningEffort?: string | null;
-  defaultSource?: "tenantDefault" | "agentDefault";
+  defaultSource?: "tenantDefault" | "agentDefault" | "auto";
   models: ModelDescriptor[];
 };
 
 export type SessionResponse = {
+  modelPreference?: import("./modelPreference").ModelPreference | null;
   retentionKind?: "saved" | "temporary";
   retentionDueAtUtc?: string | null;
   agentCompletion?: string;
@@ -97,7 +99,7 @@ export type AgentRun = {
   approval: { approvalId: string; revision: number; actionHash: string; toolName: string; preview: string; expiresAt: string } | null;
   outcome: { kind: string; summary: string; outcomeEntryId: string | null; attentionRequired: boolean } | null;
   failureCode: string | null; failureSummary: string | null; diagnosticId: string | null;
-  knownEffectSummary: string | null; modelOfferingId: string; responseId: string | null;
+  knownEffectSummary: string | null; modelDecision?: import("./modelPreference").ModelDecisionEvidence | null; reasoningEffort?: string | null; modelOfferingId: string; responseId: string | null;
   automationId: string | null; experienceId: string | null; sourceOccurrenceId: string | null; sourceBackgroundSessionId?: string | null;
 };
 export type CursorPage<T> = { items: T[]; nextCursor: string | null; hasMore: boolean };

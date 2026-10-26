@@ -178,9 +178,10 @@ internal static class AgentDefinitionCandidateValidator
         IModelCatalog catalog)
     {
         var defaults = definition.ModelDefaults;
+        if (defaults?.Mode == "auto") return [];
         var hasAgentKey = !SessionModelBinder.IsInheritedOffering(defaults?.OfferingId);
         // Inheriting an as-yet-unconfigured tenant default is valid authoring, not an executable pin.
-        if (!hasAgentKey && string.IsNullOrWhiteSpace(defaults?.ReasoningEffort)) return [];
+        if (!hasAgentKey && string.IsNullOrWhiteSpace(defaults?.Reasoning?.Effort)) return [];
         var key = hasAgentKey ? defaults!.OfferingId!.Trim() : catalog.DefaultOfferingId;
         if (catalog.Get(key) is null)
         {
@@ -199,7 +200,7 @@ internal static class AgentDefinitionCandidateValidator
         }
         catch (AgentCoreException ex)
         {
-            return [Blocking("modelDefaults.reasoningEffort", "unsupported_reasoning_effort", ex.Message)];
+            return [Blocking("modelDefaults.reasoning.effort", "unsupported_reasoning_effort", ex.Message)];
         }
     }
 

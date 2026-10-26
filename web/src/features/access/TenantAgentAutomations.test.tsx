@@ -13,7 +13,7 @@ const presets: TenantAutomationPreset[] = [
 ];
 const fixture = (): TenantAutomationEditor => ({ agent: { principalId: 'executor', instance: { instanceId: 'agent', revision: 3, activeVersion: 32, lifecycle: 'Active', persona: { name: 'Alex' } } }, securityRevision: 8, canCreate: true, canSchedule: true, total: 1, page: 0, pageSize: 10,
   policy: { allowDaily: true, allowOneShot: true, allowWeekly: true, allowFixedInterval: true, allowIndefiniteRecurrence: true }, items: [{ canUpdate: true, canCancel: true, canRun: true,
-    automation: { automationId: 'schedule', name: 'Saved schedule', instructions: 'Exact saved instructions', status: 'active', revision: 6, triggerRevision: 2, occurrenceCount: 2, nextOccurrenceAtUtc: null, modelOverrideOfferingId: null, modelOverrideReasoningEffort: null, requiresTools: true, requiresVision: false,
+    automation: { automationId: 'schedule', name: 'Saved schedule', instructions: 'Exact saved instructions', status: 'active', revision: 6, triggerRevision: 2, occurrenceCount: 2, nextOccurrenceAtUtc: null, modelPreference: { mode: "inherit" }, requiresTools: true, requiresVision: false,
       executionTarget: 'backgroundSession', completionDelivery: 'none', triggers: [{ kind: 'schedule', schedule: { kind: 'daily', interval: 1, localTime: '09:00', timeZone: 'UTC', startDate: '2026-10-01', endDate: '2027-01-01', maxOccurrences: 10 } }] } }] } as TenantAutomationEditor);
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const fetchMock = vi.fn<typeof fetch>(); let current: TenantAutomationEditor; let stale = false, denied = false, unknown = false, invalidAck = false, catalogFailed = false, mismatchedPreset = false;
@@ -148,7 +148,7 @@ it('opens a configured report for editing and can explicitly remove that destina
 });
 
 it('uses the shared picker for execution and clears separate reports and Automation model overrides', async () => {
-  current.items[0].automation.modelOverrideOfferingId = 'alpha';
+  current.items[0].automation.modelPreference = { mode: 'fixed', offeringId: 'alpha' };
   current.items[0].automation.completionDelivery = 'toSession'; current.items[0].automation.reportToSessionId = 'prior-report';
   await open(); await edit();
   fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Automation execution destination' }));
@@ -160,7 +160,7 @@ it('uses the shared picker for execution and clears separate reports and Automat
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled(), { timeout: 5000 });
   fireEvent.click(screen.getByRole('button', { name: 'Save Automation' }));
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ targetSessionId: '11111111-1111-4111-8111-111111111111', reportToSessionId: null, offeringId: null, reasoningEffort: null });
+  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ targetSessionId: '11111111-1111-4111-8111-111111111111', reportToSessionId: null, modelPreference: { mode: 'inherit' } });
 });
 it('opens an existing execution destination, retains a stale target draft and saves only after explicit reload', async () => {
   current.items[0].automation.executionTarget = 'existingSession'; current.items[0].automation.targetSessionId = '22222222-2222-4222-8222-222222222222';

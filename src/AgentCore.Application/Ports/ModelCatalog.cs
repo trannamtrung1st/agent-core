@@ -10,7 +10,8 @@ public enum ModelPurpose
     Conversation,
     Initiative,
     CompletionEvaluation,
-    TriggerAuthorization
+    TriggerAuthorization,
+    Decision
 }
 
 public enum ModelInferenceTransport { ChatCompletions, Responses, AnthropicMessages, GeminiContent }
@@ -63,6 +64,8 @@ public interface ITenantModelCatalogReader
 
 public interface IModelCatalog
 {
+    AutoRoutingPolicy RoutingPolicy => new();
+    long RoutingRevision => 0;
     string DefaultOfferingId { get; }
 
     ModelSelectionSource DefaultSelectionSource => ModelSelectionSource.TenantDefault;

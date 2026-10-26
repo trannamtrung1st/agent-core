@@ -7,11 +7,12 @@ namespace AgentCore.Application.Ports;
 // Constructed by the existing Run owner, never from a model/tool or HTTP argument.
 public sealed class ModelInvocation
 {
-    internal ModelInvocation(TrustedExecutionContext context, ModelRoutePin route, Func<CancellationToken, ValueTask> requireCurrent, ModelBinding? binding = null)
-    { Context = context; Route = route; RequireCurrent = requireCurrent; Binding = binding; }
+    internal ModelInvocation(TrustedExecutionContext context, ModelRoutePin route, Func<CancellationToken, ValueTask> requireCurrent, ModelBinding? binding = null, string? reasoningEffort = null)
+    { Context = context; Route = route; RequireCurrent = requireCurrent; Binding = binding; ReasoningEffort = reasoningEffort; }
     public TrustedExecutionContext Context { get; }
     public ModelRoutePin Route { get; }
     public ModelBinding? Binding { get; }
+    public string? ReasoningEffort { get; }
     internal Func<CancellationToken, ValueTask> RequireCurrent { get; }
     public ValueTask RequireCurrentAsync(CancellationToken ct = default) => RequireCurrent(ct);
     public static ModelInvocation ForRun(AgentRun run, ModelRoutePin route, IAgentRunAuthority authority)
@@ -26,7 +27,7 @@ public sealed class ModelInvocation
         {
             if (await authority.CurrentDefinitionAsync(run, ct).ConfigureAwait(false) is null)
                 throw new AccessDeniedException("tenant_runtime_unavailable");
-        }, run.PinnedModel.Binding);
+        }, run.PinnedModel.Binding, run.PinnedModel.ReasoningEffort);
     }
 }
 

@@ -33,8 +33,9 @@ public sealed class TenantAutomationOperationTarget(IIamStore security, ITenantA
         catch (ArgumentException) { throw new AccessDeniedException("operation_configuration_changed"); }
         if (TenantAutomationRules.Hash(current.Configuration) != p.ConfigurationHash) throw new SecurityConflictException("operation_witness_changed");
         var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
-        var model = conversation is null ? ExecutionModelPolicy.Resolve(models, current.Configuration.Configuration.Definition, current.Agent.Instance, p.Current)
-            : new ExecutionModelDecision(TenantAutomationConversationRules.Model(p.Current, conversation, current.Configuration.Configuration.Definition, models), null);
+        var model = p.Occurrence.ModelPin is { } captured
+            ? ExecutionModelPolicy.Validate(models, captured, current.Configuration.Configuration.Definition, p.Current)
+            : new ExecutionModelDecision(null, ExecutionModelPolicy.UnavailableCode);
         if (!model.Accepted || model.Pin is null || model.Pin.OfferingId != p.Model.OfferingId || model.Pin.ConnectionId != p.Model.ConnectionId
             || model.Pin.ExternalModelId != p.Model.ExternalModelId || model.Pin.ReasoningEffort != p.Model.ReasoningEffort || !Equals(model.Pin.Binding, p.Model.Binding)) throw new AccessDeniedException("automation_model_unavailable");
         await TenantAutomationAdmissionApprovalRules.ExecutorAsync(state, request, iam, ct).ConfigureAwait(false);

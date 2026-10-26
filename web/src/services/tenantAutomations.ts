@@ -1,3 +1,4 @@
+import { preferenceFields, preferenceFromFields, type ModelPreference } from './modelPreference';
 import type { AutomationPolicy, ScheduleTiming, EventSourceReference, EventDispatch } from './adminApi';
 import type { TenantAgentEditor } from './tenantAgentConfiguration';
 import { tenantAgentApi } from './tenantAgentConfiguration';
@@ -9,7 +10,7 @@ export type TenantAutomation = {
   presetId?: string | null; presetVersion?: number | null;
   automationId: string; name: string; instructions: string; status: string; revision: number; triggerRevision: number;
   nextOccurrenceAtUtc: string | null; occurrenceCount: number; suspensionReason: string | null;
-  modelOverrideOfferingId: string | null; modelOverrideReasoningEffort: string | null; requiresTools: boolean; requiresVision: boolean;
+  modelPreference?: ModelPreference | null; requiresTools: boolean; requiresVision: boolean;
   executionTarget: string; completionDelivery: string; reportToSessionId?: string | null; targetSessionId?: string | null; createdAt: string; updatedAt: string;
   triggers: { kind: string; schedule?: ScheduleTiming; source?: EventSourceReference; triggerId?: string; enabled?: boolean; revision?: number; filterExpression?: string | null; dispatch?: EventDispatch | null }[];
 };
@@ -30,8 +31,8 @@ export const automationDraft = (value?: TenantAutomation): TenantAutomationDraft
     || value.completionDelivery === 'toSession' && !value.reportToSessionId
     || value.executionTarget === 'existingSession' && (!value.targetSessionId || value.completionDelivery !== 'none' || value.reportToSessionId != null)
     || value.executionTarget === 'backgroundSession' && value.targetSessionId != null) return undefined;
-  const base = { pinnedSpaceId: value.pinnedSpaceId ?? null, pinnedEnvironmentId: value.pinnedEnvironmentId ?? null, presetId: value.presetId ?? null, presetVersion: value.presetVersion ?? null, targetSessionId: value.executionTarget === 'existingSession' ? value.targetSessionId : null, reportToSessionId: value.completionDelivery === 'toSession' ? value.reportToSessionId : null, enabled: value.status === 'active', name: value.name, instructions: value.instructions, offeringId: value.modelOverrideOfferingId,
-    reasoningEffort: value.modelOverrideReasoningEffort, requiresTools: value.requiresTools, requiresVision: value.requiresVision };
+  const base = { pinnedSpaceId: value.pinnedSpaceId ?? null, pinnedEnvironmentId: value.pinnedEnvironmentId ?? null, presetId: value.presetId ?? null, presetVersion: value.presetVersion ?? null, targetSessionId: value.executionTarget === 'existingSession' ? value.targetSessionId : null, reportToSessionId: value.completionDelivery === 'toSession' ? value.reportToSessionId : null, enabled: value.status === 'active', name: value.name, instructions: value.instructions, offeringId: preferenceFields(value.modelPreference).key || null,
+    reasoningEffort: preferenceFields(value.modelPreference).effort || null, requiresTools: value.requiresTools, requiresVision: value.requiresVision };
   if (value.triggers.length === 1 && value.triggers[0].kind === 'schedule' && value.triggers[0].schedule)
     return { ...base, schedule: { ...value.triggers[0].schedule } };
   if (!value.triggers.length || value.triggers.length > 32 || value.triggers.some(t => t.kind !== 'event' || !t.triggerId || !t.source || !Number.isSafeInteger(t.revision))) return undefined;
@@ -54,7 +55,7 @@ export const automationWitness = (view: TenantAutomationEditor, value?: TenantAu
   expectedInstanceRevision: view.agent.instance.revision, expectedAutomationRevision: value?.revision ?? 0 });
 export async function saveTenantAutomation(tenant: string, instance: string, view: TenantAutomationEditor, draft: TenantAutomationDraft, value: TenantAutomation | undefined, signal: AbortSignal) {
   const result = await identityRequest<TenantAutomation>(tenantAutomationsApi(tenant, instance, value ? `/${encodeURIComponent(value.automationId)}` : ''), {
-    method: value ? 'PUT' : 'POST', signal, body: { pinnedSpaceId: draft.pinnedSpaceId ?? null, pinnedEnvironmentId: draft.pinnedEnvironmentId ?? null, enabled: draft.enabled, name: draft.name.trim(), instructions: draft.instructions.trim(), offeringId: draft.offeringId, reasoningEffort: draft.reasoningEffort,
+    method: value ? 'PUT' : 'POST', signal, body: { pinnedSpaceId: draft.pinnedSpaceId ?? null, pinnedEnvironmentId: draft.pinnedEnvironmentId ?? null, enabled: draft.enabled, name: draft.name.trim(), instructions: draft.instructions.trim(), modelPreference: preferenceFromFields(draft.offeringId, draft.reasoningEffort),
       presetId: draft.presetId ?? null, presetVersion: draft.presetVersion ?? null,
       requiresTools: draft.requiresTools, requiresVision: draft.requiresVision, targetSessionId: draft.targetSessionId || null, reportToSessionId: draft.reportToSessionId || null,
       ...(draft.mode === 'events' ? { triggers: draft.events?.map(e => ({ kind: 'event', triggerId: e.triggerId, revision: e.revision, enabled: e.enabled,

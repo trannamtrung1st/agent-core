@@ -69,7 +69,7 @@ public static class TenantSessionEndpoints
                 mode = view.Mode.ToString().ToLowerInvariant(), pendingMode = (string?)null, status = view.Status.ToString().ToLowerInvariant(),
                 lifecycleStatus = LifecycleTransition.ToWire(view.LifecycleStatus), view.CreatedAt, view.UpdatedAt,
                 agentId = view.Agent.Id, agentVersion = view.Agent.Version, agentName = view.Agent.Name, agentRole = view.Agent.Role,
-                model = HttpMapping.ToModel(view.Model, null), retentionKind = view.RetentionKind.ToString().ToLowerInvariant(),
+                modelPreference = ModelManagementMapping.Map(view.ModelPreference), model = HttpMapping.ToModel(view.Model, null), retentionKind = view.RetentionKind.ToString().ToLowerInvariant(),
                 view.RetentionDueAtUtc, agentCompletion = view.AgentCompletion.ToString().ToLowerInvariant(), view.LifecycleReason,
                 lifecycleSource = view.LifecycleSource?.ToString().ToLowerInvariant() });
         }));
@@ -130,14 +130,14 @@ public static class TenantSessionEndpoints
         {
             var actor = IdentityHttp.TenantContext(http);
             var saved = await host.SelectModelAsync(service, actor.TenantId, sessionId, Initiator(http, actor), body.ExpectedRevision,
-                body.ExpectedSessionRevision, body.OfferingId?.ToString("D"), body.ReasoningEffort, ct).ConfigureAwait(false);
-            return Results.Json(new { sessionId, revision = saved.Snapshot.Revision, model = HttpMapping.ToModel(saved.Snapshot.ModelSelection, null) });
+                body.ExpectedSessionRevision, ModelManagementMapping.Input(body.ModelPreference), ct).ConfigureAwait(false);
+            return Results.Json(new { sessionId, revision = saved.Snapshot.Revision, modelPreference = saved.Snapshot.ModelPreference, model = HttpMapping.ToModel(saved.Snapshot.ModelSelection, null) });
         }));
         group.MapPost("", (TenantSessionCreateRequest body, HttpContext http, TenantSessionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
             var initiator = new TenantSessionInitiator(actor.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
-            var item = await service.CreateAsync(actor.TenantId, body.AgentInstanceId, initiator, HttpMapping.ParseMode(body.Mode), body.ExpectedRevision, body.ExpectedInstanceRevision, body.OfferingId?.ToString("D"), body.ReasoningEffort, ct, body.RetentionKind switch { "saved" => AgentCore.Domain.Conversation.SessionRetentionKind.Saved,
+            var item = await service.CreateAsync(actor.TenantId, body.AgentInstanceId, initiator, HttpMapping.ParseMode(body.Mode), body.ExpectedRevision, body.ExpectedInstanceRevision, ModelManagementMapping.Input(body.ModelPreference), ct, body.RetentionKind switch { "saved" => AgentCore.Domain.Conversation.SessionRetentionKind.Saved,
                 "temporary" => AgentCore.Domain.Conversation.SessionRetentionKind.Temporary, _ => throw AgentCoreErrors.Validation("retentionKind must be saved or temporary.") }).ConfigureAwait(false);
             return Results.Json(Safe(item), statusCode: 201);
         }));

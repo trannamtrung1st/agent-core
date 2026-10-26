@@ -10,7 +10,7 @@ public sealed partial class TenantRunExecutionAuthority(TenantOperationAuthorize
     TenantRunConfigurationResolver configurations, TenantBrowserEffectService? browserEffects = null, TenantBrowserReadService? browserReads = null,
     TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantAttachmentRuntimeContextService? attachmentContext = null,
     TenantWaitSourceAuthority? waitSources = null, TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantEventReadAuthority? eventReads = null, TenantRunSourceAuthority? sourceAuthority = null, ITenantModelCatalogReader? configurationModels = null, AgentCore.Application.Tools.IToolConfigurationGate? configurationTools = null, TenantPublicWebReadService? publicWebReads = null, TenantHttpEffectService? httpEffects = null,
-    ILogger<TenantRunExecutionAuthority>? logger = null, TenantContextToolService? contextTools = null) : IAgentRunAuthority, ITenantRunContext
+    ILogger<TenantRunExecutionAuthority>? logger = null, TenantContextToolService? contextTools = null, AgentCore.Application.Models.AutoModelRouter? routing = null) : IAgentRunAuthority, ITenantRunContext
 {
     public ValueTask RecordContextOutputFailureAsync(TenantRunReference reference, string reason, CancellationToken ct) =>
         operations.RecordFailureAsync(reference, "variables.resolve", reason, ExecutionAuthorizationPurpose.EffectEligibility, ct);

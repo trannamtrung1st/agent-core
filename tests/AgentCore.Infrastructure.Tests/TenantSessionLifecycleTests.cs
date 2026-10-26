@@ -145,7 +145,7 @@ public sealed class TenantSessionLifecycleTests
         var failure = await Assert.ThrowsAsync<SecurityConflictException>(() => f.Sessions.ChangeAsync(setup.Tenant, setup.Actor, new(id, 1, TenantSessionAction.Rename, "Blocked"), witness).AsTask());
         Assert.Equal("session_in_use", failure.ReasonCode);
         var modelFailure = await Assert.ThrowsAsync<SecurityConflictException>(() => f.Sessions.SelectModelAsync(setup.Tenant, id, setup.Actor,
-            witness, 1, "dca30000-0000-4000-8000-000000000002", null).AsTask());
+            witness, 1, AgentCore.Domain.Models.ModelPreference.Fixed("dca30000-0000-4000-8000-000000000002")).AsTask());
         Assert.Equal("session_in_use", modelFailure.ReasonCode);
         Assert.Equal(witness, await Revision(f, setup.Tenant));
         var cancelled = new AgentRunCommand.RequestCancellation(run.Revision, source.CreatedAt.AddSeconds(1), null).Apply(run, Guid.NewGuid);
@@ -157,7 +157,7 @@ public sealed class TenantSessionLifecycleTests
         else ((InMemoryMemoryStore)f.Memory).AgentRuns.Runs[run.AgentRunId] = cancelled;
         var saved = await f.Sessions.ChangeAsync(setup.Tenant, setup.Actor, new(id, 1, TenantSessionAction.Rename, "Allowed"), await Revision(f, setup.Tenant)); Assert.Equal("Allowed", saved!.Title);
         var selected = await f.Sessions.SelectModelAsync(setup.Tenant, id, setup.Actor, await Revision(f, setup.Tenant), saved.Revision,
-            "dca30000-0000-4000-8000-000000000002", null);
+            AgentCore.Domain.Models.ModelPreference.Fixed("dca30000-0000-4000-8000-000000000002"));
         Assert.Equal(setup.Item.Owner, selected.Owner);
         Assert.Equal(ModelSelectionSource.User, selected.Snapshot.ModelSelection!.SelectionSource);
         Assert.Equal("dca30000-0000-4000-8000-000000000002", selected.Snapshot.ModelSelection.OfferingId);

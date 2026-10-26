@@ -49,10 +49,10 @@ public sealed partial class InMemoryIamStore
             foreach (var root in definitions.TenantDefinitions.Values.Where(d => d.TenantId == tenant && d.DeletedAt is null))
             {
                 foreach (var draft in definitions.TenantDrafts(tenant, root.DefinitionId))
-                    if (Guid.TryParse(draft.Candidate.ModelDefaults?.OfferingId ?? modelSettings.GetValueOrDefault(tenant)?.DefaultOfferingId?.ToString("D"), out var id))
+                    if (Guid.TryParse((draft.Candidate.ModelDefaults?.Mode == "auto" ? null : draft.Candidate.ModelDefaults?.OfferingId ?? modelSettings.GetValueOrDefault(tenant)?.DefaultOfferingId?.ToString("D")), out var id))
                         rows.Add(new(new(root.DefinitionId, draft.DraftId.ToString("D"), id, draft.Candidate.Identity.Name, draft.Candidate.ModelDefaults?.OfferingId is null ? "Draft inherits organization default" : "Definition draft", draft.Revision, "Draft")));
                 foreach (var publication in definitions.TenantPublications(tenant, root.DefinitionId))
-                    if (Guid.TryParse(publication.Payload.ModelDefaults?.OfferingId ?? modelSettings.GetValueOrDefault(tenant)?.DefaultOfferingId?.ToString("D"), out var id))
+                    if (Guid.TryParse((publication.Payload.ModelDefaults?.Mode == "auto" ? null : publication.Payload.ModelDefaults?.OfferingId ?? modelSettings.GetValueOrDefault(tenant)?.DefaultOfferingId?.ToString("D")), out var id))
                         rows.Add(new(new(root.DefinitionId, "v" + publication.Version, id, publication.Payload.Identity.Name, "Published Definition v" + publication.Version + (publication.Payload.ModelDefaults?.OfferingId is null ? " inherits organization default" : ""),
                             publication.MetadataRevision, publication.Status == AgentCore.Domain.Definitions.DefinitionPublicationStatus.Active ? "Published" : "Deprecated")));
             }
@@ -71,13 +71,15 @@ public sealed partial class InMemoryIamStore
                 var baseline = Guid.TryParse(instance.DefinitionId, out var definition)
                     ? definitions.TenantPublication(owner.Tenant.TenantId, definition, instance.ActiveVersion)?.Payload
                     : builtIns?.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct).GetAwaiter().GetResult();
-                var explicitModel = instance.SettingsOverrides?.ModelOfferingId;
-                var chosen = (explicitModel is null ? baseline?.ModelDefaults?.OfferingId : explicitModel.Value)
+                var explicitModel = instance.SettingsOverrides?.ModelPreference;
+                var preference = explicitModel is null ? baseline?.ModelDefaults : explicitModel.Value is null ? null
+                    : AgentCore.Application.Models.ExecutionModelPolicy.MergePreference(baseline?.ModelDefaults, explicitModel.Value);
+                var chosen = preference?.Mode == "auto" ? null : preference?.OfferingId
                     ?? modelSettings.GetValueOrDefault(owner.Tenant.TenantId)?.DefaultOfferingId?.ToString("D");
                 if (Guid.TryParse(chosen, out var id)) rows.Add(new(new(instance.InstanceId, "conversation", id, instance.Persona.Name,
-                    explicitModel?.Value is not null ? "Instance conversation override" : explicitModel is null && baseline?.ModelDefaults?.OfferingId is not null
+                    explicitModel?.Value?.OfferingId is not null ? "Instance conversation override" : explicitModel is null && baseline?.ModelDefaults?.OfferingId is not null
                         ? "Inherited Definition default" : "Inherited organization default", instance.Revision, instance.Lifecycle.ToString())));
-                if (Guid.TryParse(instance.UnattendedOfferingId, out var unattended)) rows.Add(new(new(instance.InstanceId, "unattended", unattended,
+                if (Guid.TryParse(instance.UnattendedModel?.OfferingId, out var unattended)) rows.Add(new(new(instance.InstanceId, "unattended", unattended,
                     instance.Persona.Name, "Unattended preference", instance.Revision, instance.Lifecycle.ToString())));
             }
             return rows.ToArray();

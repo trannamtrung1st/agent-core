@@ -1,3 +1,4 @@
+import { preferenceFromFields, type ModelPreference } from './modelPreference';
 import { identityRequest as identityCall, tenantApi, type TenantContext } from './identity';
 import type { CatalogItem, CatalogPage, ChatAgentInstance, HistoryPage, ModelCatalog, SessionHistoryQuery, SessionModelChoice, SessionResponse } from './api';
 
@@ -56,7 +57,7 @@ export async function createTenantChat(instanceId: string, model?: SessionModelC
   if (!selected || !createAllowed) throw new Error('Select an available agent before starting a conversation.');
   const access = await tenantChatAccess();
   const created = await request<Metadata>(path('/sessions'), { method: 'POST', body: { agentInstanceId: instanceId,
-    expectedRevision: access.revision, expectedInstanceRevision: selected.revision, retentionKind, mode: 'text', offeringId: model?.offeringId === "default" ? null : model?.offeringId, reasoningEffort: model?.reasoningEffort } });
+    expectedRevision: access.revision, expectedInstanceRevision: selected.revision, retentionKind, mode: 'text', modelPreference: preferenceFromFields(model?.offeringId, model?.reasoningEffort) } });
   return tenantSessionView(created.sessionId);
 }
 function catalogItem(row: Metadata): CatalogItem {
@@ -101,8 +102,8 @@ export async function tenantInterruptWitness(id: string, run: string) {
 
 export async function tenantSelectChatModel(id: string, offeringId: string | null, reasoningEffort: string | null) {
   const witness = await tenantTextWitness(id);
-  return request<{ sessionId: string; revision: number; model: SessionResponse['model'] }>(path(`/sessions/${encodeURIComponent(id)}/model`), {
-    method: 'PUT', body: { ...witness, offeringId, reasoningEffort }
+  return request<{ sessionId: string; revision: number; model: SessionResponse['model']; modelPreference?: ModelPreference }>(path(`/sessions/${encodeURIComponent(id)}/model`), {
+    method: 'PUT', body: { ...witness, modelPreference: preferenceFromFields(offeringId, reasoningEffort) }
   });
 }
 

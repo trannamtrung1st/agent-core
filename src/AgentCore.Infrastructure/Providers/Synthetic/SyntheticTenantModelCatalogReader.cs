@@ -32,10 +32,13 @@ public sealed class SyntheticTenantModelCatalogReader(IIamStore security, ITenan
         private readonly string? defaultEffort;
         public OfflineCatalog(TenantModelCatalog tenant, IModelCatalog fixture)
         {
+            RoutingPolicy = tenant.RoutingPolicy; RoutingRevision = tenant.RoutingRevision;
             Models = Array.AsReadOnly(tenant.Models.Concat(fixture.Models).ToArray());
             DefaultOfferingId = tenant.Settings.Revision == 0 ? fixture.DefaultOfferingId : tenant.DefaultOfferingId;
             defaultEffort = tenant.Settings.Revision == 0 ? fixture.DefaultReasoningEffort : tenant.DefaultReasoningEffort;
         }
+        public AgentCore.Domain.Models.AutoRoutingPolicy RoutingPolicy { get; }
+        public long RoutingRevision { get; }
         public string DefaultOfferingId { get; }
         public string? DefaultReasoningEffort => defaultEffort;
         public IReadOnlyList<ModelDescriptor> Models { get; }

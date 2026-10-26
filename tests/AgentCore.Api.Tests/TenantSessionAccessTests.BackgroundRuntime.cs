@@ -17,11 +17,24 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
+using AgentCore.Application.Decisions;
+using AgentCore.Infrastructure.Decisions;
 
 namespace AgentCore.Api.Tests;
 
 public sealed partial class TenantSessionAccessTests
 {
+    private sealed class BackgroundRoutingBackend : IDecisionBackend
+    {
+        public int Calls; public string Id => "synthetic-background-routing"; public string Version => "v1"; public bool PreAdmissionSupported => true;
+        public ValueTask<DecisionStatus> ReadinessAsync(CancellationToken ct) => ValueTask.FromResult(DecisionStatus.Ready);
+        public ValueTask<DecisionResult> EvaluateAsync(DecisionRequest request, CancellationToken ct)
+        {
+            Interlocked.Increment(ref Calls); var chosen = request.Candidates[0].Id;
+            return ValueTask.FromResult(new DecisionResult(DecisionStatus.Ready, chosen, request.Candidates.ToDictionary(c => c.Id, c => c.Id == chosen ? 1d : 0d), null, Id, Version));
+        }
+    }
     private class TenantBackgroundModel : ILanguageModel
     {
         public ModelCapabilities Capabilities { get; } = new(true, true, true);
@@ -103,7 +116,7 @@ public sealed partial class TenantSessionAccessTests
             });
         }
     }
-    private static async Task<(Guid Tenant,Guid Session,Guid Source)> StartTenantBackground(WebApplicationFactory<Program> factory,HttpClient owner,bool createAuthority=true,bool submit=true,bool attachmentCapability=false,IReadOnlyList<string>? fileCapabilities=null,bool reportReads=false,bool independentTask=false,bool requestIsolated=false)
+    private static async Task<(Guid Tenant,Guid Session,Guid Source)> StartTenantBackground(WebApplicationFactory<Program> factory,HttpClient owner,bool createAuthority=true,bool submit=true,bool attachmentCapability=false,IReadOnlyList<string>? fileCapabilities=null,bool reportReads=false,bool independentTask=false,bool requestIsolated=false,bool auto=false)
     {
         await Login(owner,"owner@example.test","explicit-synthetic-test-password");
         var tenant=(await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();var api=$"/api/v2/tenants/{tenant}";
@@ -142,7 +155,12 @@ public sealed partial class TenantSessionAccessTests
         if(createAuthority){var access=factory.Services.GetRequiredService<TenantAccessService>();var role=await access.SaveRoleAsync(human,tenant,null,"Background executor",["sessions.create","agent-runs.create"],await Revision(owner,tenant));
         await access.AssignRoleAsync(human,tenant,executor,role.RoleId,AgentCore.Domain.Security.AccessScope.ForTenant(tenant),await Revision(owner,tenant));}
         if(reportReads) { var access=factory.Services.GetRequiredService<TenantAccessService>(); var readRole=await access.SaveRoleAsync(human,tenant,null,"Independent completion source reader",["sessions.read","agent-runs.read"],await Revision(owner,tenant)); await access.AssignRoleAsync(human,tenant,executor,readRole.RoleId,AgentCore.Domain.Security.AccessScope.ForTenant(tenant),await Revision(owner,tenant)); }
-        var session=(await Json(await owner.PostAsJsonAsync(api+"/sessions",new{agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=instanceRevision}))).GetProperty("sessionId").GetGuid();
+        var privateSpace = await Json(await owner.GetAsync(api + $"/agents/{instance}/private-space"));
+        var spaceAccess = factory.Services.GetRequiredService<TenantAccessService>();
+        var spaceRole = await spaceAccess.SaveRoleAsync(human, tenant, null, "Read exact background fixture context", ["spaces.read"], await Revision(owner, tenant));
+        await spaceAccess.AssignRoleAsync(human, tenant, executor, spaceRole.RoleId, AgentCore.Domain.Security.AccessScope.ForResource(tenant, "space", privateSpace.GetProperty("spaceId").GetGuid().ToString("D")), await Revision(owner, tenant));
+        if (auto) Assert.Equal(System.Net.HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/models/routing", new { routing = new { enabled = true, allowConfiguredDefault = false, minimumProbability = .7 }, expectedRevision = await Revision(owner, tenant), expectedSettingsRevision = 0 })).StatusCode);
+        var session=(await Json(await owner.PostAsJsonAsync(api+"/sessions",new{agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=instanceRevision,retentionKind="saved",modelPreference=new { mode=auto?"auto":"inherit",reasoning=new { mode="modelDefault" } }}))).GetProperty("sessionId").GetGuid();
         if(!submit)return(tenant,session,Guid.Empty);
         var result=await Json(await owner.PostAsJsonAsync(api+$"/sessions/{session}/messages",new{messageId=Guid.NewGuid(),text="Start the exact owned background check",expectedRevision=await Revision(owner,tenant),expectedSessionRevision=1}));
         return(tenant,session,result.GetProperty("runId").GetGuid());
@@ -168,14 +186,20 @@ public sealed partial class TenantSessionAccessTests
         if(report){Assert.NotNull(notification);Assert.True(notification.Status==AgentRunStatus.Completed,$"Report {notification.Status}: {notification.Failure?.Code} {notification.Failure?.Summary}\n{string.Join('\n',((TenantBackgroundModel)factory.Services.GetRequiredService<ILanguageModel>()).Failures)}");}
         return(child,notification);
     }
-    [Theory(Timeout=90000)] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_background_model_starts_detached_owned_work_and_reports_once_to_original_conversation(bool sqlite)
+    [Theory(Timeout=90000)] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Tenant_background_model_starts_detached_owned_work_and_reports_once_to_original_conversation(bool sqlite, bool auto)
     {
         var root=Path.Combine(Path.GetTempPath(),"tenant-background-host-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
         try{
-            var model=new TenantBackgroundModel();await using WebApplicationFactory<Program> factory=sqlite?new TenantBackgroundSqliteFactory(root,model):new TenantBackgroundMemoryFactory(root,model);
+            var model=new TenantBackgroundModel(); var routingBackend = new BackgroundRoutingBackend();
+            await using WebApplicationFactory<Program> original=sqlite?new TenantBackgroundSqliteFactory(root,model):new TenantBackgroundMemoryFactory(root,model);
+            await using var factory = original.WithWebHostBuilder(builder => {
+                if (auto) { builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string,string?> { ["DecisionIntelligence:Enabled"]="true", ["DecisionIntelligence:Backend"]="Synthetic", ["DecisionIntelligence:ShadowMode"]="false" }));
+                    builder.ConfigureTestServices(services => services.Replace(ServiceDescriptor.Singleton<IDecisionBackend>(routingBackend))); }
+            });
             using var owner=factory.CreateClient(new WebApplicationFactoryClientOptions{BaseAddress=new("https://localhost")});
-            var started=await StartTenantBackground(factory,owner,reportReads:true);var(child,report)=await WaitTenantBackground(factory,started.Tenant,started.Session,started.Source,true);
+            var started=await StartTenantBackground(factory,owner,reportReads:true,auto:auto);var(child,report)=await WaitTenantBackground(factory,started.Tenant,started.Session,started.Source,true);
+            if (auto) { Assert.Equal(3, routingBackend.Calls); Assert.Equal("ranked", child.PinnedModel.Decision!.Basis); Assert.Equal("ranked", report!.PinnedModel.Decision!.Basis); }
             Assert.Equal("Owned background result.",child.Result!.Text);Assert.Equal(started.Session,report!.SessionId);
             Assert.Equal(child.AgentRunId,report.Admission.ExecutionContext!.ParentRunId);Assert.Equal(child.Admission.ExecutionContext!.RootActivationId,report.Admission.ExecutionContext.RootActivationId);
             Assert.Null(child.Owner.ProfileIdOrNull);Assert.Null(report.Owner.ProfileIdOrNull);

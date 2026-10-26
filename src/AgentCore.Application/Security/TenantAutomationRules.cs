@@ -44,7 +44,7 @@ public static class TenantAutomationRules
     public static bool Same(Automation a, Automation b) => a.AutomationId == b.AutomationId && a.Owner == b.Owner && a.Status == b.Status
         && a.Revision == b.Revision && a.TriggerRevision == b.TriggerRevision && a.Name == b.Name && a.Instructions == b.Instructions
         && a.NextOccurrenceAtUtc == b.NextOccurrenceAtUtc && a.ExpiresAtUtc == b.ExpiresAtUtc && a.OccurrenceCount == b.OccurrenceCount
-        && a.ModelOverrideOfferingId == b.ModelOverrideOfferingId && a.ModelOverrideReasoningEffort == b.ModelOverrideReasoningEffort
+        && a.ModelPreference == b.ModelPreference
         && a.PinnedSpaceId == b.PinnedSpaceId && a.PinnedEnvironmentId == b.PinnedEnvironmentId
         && a.RequiresTools == b.RequiresTools && a.RequiresVision == b.RequiresVision && a.ExecutionTarget == b.ExecutionTarget && a.CompletionDelivery == b.CompletionDelivery
         && a.SuspensionReason == b.SuspensionReason && JsonSerializer.Serialize(a.Provenance) == JsonSerializer.Serialize(b.Provenance)
@@ -234,7 +234,7 @@ public static class TenantAutomationRules
             throw new ArgumentException("Autonomous configuration witness changed.");
         var rebuilt = BackgroundSessionAdmissionFactory.ForOccurrence(run.SessionId, value.Session.Entries[0].EntryId, run.ActivationId, run.AgentRunId, run.ResponseId ?? throw new ArgumentException("Occurrence response identity is required."),
             occurrence, run.Admission.Configuration.Definition, agent.Instance.Persona, agent.Instance.PersonaRevision, pin, run.PinnedSkillCatalog, at, current.Name,
-            ExecutionBudgetResolver.Resolve(run.Admission.Configuration.Definition, agent.Instance.ExecutionBudgets, false), run.Admission.Configuration, manualInitiator);
+            ExecutionBudgetResolver.Resolve(run.Admission.Configuration.Definition, agent.Instance.ExecutionBudgets, false), run.Admission.Configuration, manualInitiator, AgentCore.Application.Models.ExecutionModelPolicy.Preference(run.Admission.Configuration.Definition, agent.Instance, current));
         if (JsonSerializer.Serialize(rebuilt.Session) != JsonSerializer.Serialize(value.Session) || JsonSerializer.Serialize(rebuilt.Run.Admission) != JsonSerializer.Serialize(run.Admission)
             || JsonSerializer.Serialize(rebuilt.Run.PinnedModel) != JsonSerializer.Serialize(run.PinnedModel) || rebuilt.Run.MaxAttempts != run.MaxAttempts
             || JsonSerializer.Serialize(rebuilt.Run.PinnedSkillCatalog) != JsonSerializer.Serialize(run.PinnedSkillCatalog)

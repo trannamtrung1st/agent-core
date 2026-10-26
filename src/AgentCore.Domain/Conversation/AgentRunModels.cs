@@ -119,7 +119,7 @@ public readonly record struct AgentRunOwner
 public sealed class AgentRunModelPin
 {
     public AgentRunModelPin(string offeringId, string connectionId, string externalModelId, string? reasoningEffort,
-        AgentCore.Domain.Models.ModelBinding? binding = null)
+        AgentCore.Domain.Models.ModelBinding? binding = null, AgentCore.Domain.Models.ModelDecisionEvidence? decision = null)
     {
         OfferingId = AgentRunText.RequireToken(offeringId, AgentRunLimits.MaxModelFieldCharacters, "Model catalog key");
         ConnectionId = AgentRunText.RequireToken(connectionId, AgentRunLimits.MaxModelFieldCharacters, "Model provider");
@@ -129,6 +129,7 @@ public sealed class AgentRunModelPin
             : AgentRunText.RequireToken(reasoningEffort, AgentRunLimits.MaxReasoningEffortCharacters, "Reasoning effort");
         binding?.RequireIdentity(OfferingId, ConnectionId, ExternalModelId);
         Binding = binding;
+        Decision = decision;
     }
 
     public string OfferingId { get; }
@@ -139,6 +140,7 @@ public sealed class AgentRunModelPin
 
     public string? ReasoningEffort { get; }
 
+    public AgentCore.Domain.Models.ModelDecisionEvidence? Decision { get; }
     public AgentCore.Domain.Models.ModelBinding? Binding { get; }
 }
 

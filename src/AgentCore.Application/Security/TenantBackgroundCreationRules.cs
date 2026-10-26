@@ -81,7 +81,7 @@ public static class TenantBackgroundCreationRules
         if (child.SessionId != value.ChildSessionId || child.AgentRunId != value.RunId || child.ActivationId != value.ActivationId
             || child.ResponseId != value.ResponseId || snapshot.Entries.Count != 1 || snapshot.Entries[0].EntryId != value.EntryId
             || snapshot.Entries[0].Text != value.Objective || snapshot.Title != value.Title || snapshot.Origin.ReportCompletionToOrigin != value.ReportCompletion
-            || JsonSerializer.Serialize(child.PinnedModel) != JsonSerializer.Serialize(value.Model) || Hash(resolved) != value.ConfigurationHash
+            || JsonSerializer.Serialize(child.PinnedModel) != JsonSerializer.Serialize(value.Model.ToPin()) || Hash(resolved) != value.ConfigurationHash
             || child.Admission.Activation.DedupeKey != "background:operation:" + request.Operation.OperationId.ToString("D"))
             throw new SecurityConflictException("operation_mismatch");
         return TenantBackgroundAdmissionRules.Shape(new(parent.Owner, parent.SessionId, parent.AgentRunId, parent.Claim!.Generation), session, parent, snapshot, child, agent, at);

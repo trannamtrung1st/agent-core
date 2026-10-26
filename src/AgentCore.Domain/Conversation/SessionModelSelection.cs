@@ -8,7 +8,8 @@ public enum ModelSelectionSource
     TenantDefault,
     AgentDefault,
     User,
-    Host
+    Host,
+    Auto
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -18,8 +19,7 @@ public sealed record SessionModelSelection(
     string ExternalModelId,
     ModelSelectionSource SelectionSource,
     string? ReasoningEffort,
-    bool HasExplicitReasoningEffort = false,
-    ModelBinding? Binding = null);
+    ModelBinding? Binding = null, ModelDecisionEvidence? Decision = null);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ModelGenerationProvenance(

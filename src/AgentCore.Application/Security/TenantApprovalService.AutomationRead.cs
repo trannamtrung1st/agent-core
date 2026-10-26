@@ -46,7 +46,11 @@ public sealed partial class TenantApprovalService
             void Add(string label, string value) => changes.Add(new(Label(label), null, value, false));
             Add("Automation", $"{Text(item, "name")}\nID: {Text(item, "automationId")}\nRevision: {Text(item, "revision")} · {Text(item, "status")}");
             Add(item.GetProperty("instructionsExcerpt").GetBoolean() ? "Instructions excerpt" : "Instructions", Text(item, "instructions"));
-            Add("Model and requirements", $"Model: {Text(item, "modelOverrideOfferingId", "Agent default")}\nReasoning: {Text(item, "modelOverrideReasoningEffort", "Agent default")}\nTools required: {(item.GetProperty("requiresTools").GetBoolean() ? "Yes" : "No")} · Vision required: {(item.GetProperty("requiresVision").GetBoolean() ? "Yes" : "No")}");
+            var preference = item.TryGetProperty("modelPreference", out var preferenceJson) && preferenceJson.ValueKind == JsonValueKind.Object
+                ? JsonSerializer.Deserialize<AgentCore.Domain.Models.ModelPreference>(preferenceJson, new JsonSerializerOptions(JsonSerializerDefaults.Web)) : null;
+            var modelLabel = preference?.Mode == "auto" ? "Auto" : preference?.Mode == "fixed" ? preference.OfferingId : "Inherited default";
+            var effortLabel = preference?.Reasoning?.Mode == "auto" ? "Auto reasoning" : preference?.Reasoning?.Effort ?? "Model default";
+            Add("Model and requirements", $"Model: {modelLabel}\nReasoning: {effortLabel}\nTools required: {(item.GetProperty("requiresTools").GetBoolean() ? "Yes" : "No")} · Vision required: {(item.GetProperty("requiresVision").GetBoolean() ? "Yes" : "No")}");
             var target = item.GetProperty("executionTarget"); var report = item.GetProperty("completionDelivery");
             Add("Destination", (target.GetProperty("kind").GetInt32() == 0 ? "Independent Background work" : "Saved conversation: " + Text(target, "sessionId"))
                 + "\nCompletion report: " + Text(report, "sessionId"));

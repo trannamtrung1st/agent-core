@@ -22,7 +22,7 @@ public static class TenantAgentConfigurationRules
             || !change.SetSettingsOverrides && (change.SettingsOverrides is not null || change.Isolation is not null)
             || change.Isolation is { } isolation && (isolation.Expected.Instance != change.ExpectedInstanceRevision || isolation.Expected.Experience < 0 || isolation.Expected.Maintenance < 0)
             || !change.SetExecutionBudgets && change.ExecutionBudgets is not null
-            || !change.SetUnattendedModel && (change.UnattendedOfferingId is not null || change.UnattendedReasoningEffort is not null)
+            || !change.SetUnattendedModel && (change.UnattendedModel is not null)
             || change.ActiveVersion is null && !change.SetSettingsOverrides && change.AutomationPolicyChanges is not null)
             throw new ArgumentException("One exact Instance configuration change is required.");
         if (change.Skill is { } skill && (skill.InstanceId != current.InstanceId || skill.ExpectedInstanceRevision != current.Revision || skill.History is not null)
@@ -42,6 +42,7 @@ public static class TenantAgentConfigurationRules
             throw new SecurityConflictException("stale_revision");
         if (change.Persona is { } persona) AgentDefinitionValidator.ValidateIdentity(persona);
         if (change.SetExecutionBudgets) change.ExecutionBudgets?.Validate();
+        change.UnattendedModel?.Validate();
         if (change.HarnessAssessment is { } assessmentState)
         {
             var assessment = assessmentState.InstanceChanges?.LastOrDefault();
@@ -68,8 +69,7 @@ public static class TenantAgentConfigurationRules
             Revision = checked(current.Revision + 1), UpdatedAt = at,
             SettingsOverrides = change.SetSettingsOverrides ? change.SettingsOverrides?.Copy() : current.SettingsOverrides,
             ExecutionBudgets = change.SetExecutionBudgets ? change.ExecutionBudgets : current.ExecutionBudgets,
-            UnattendedOfferingId = change.SetUnattendedModel ? Normalize(change.UnattendedOfferingId) : current.UnattendedOfferingId,
-            UnattendedReasoningEffort = change.SetUnattendedModel ? Normalize(change.UnattendedReasoningEffort) : current.UnattendedReasoningEffort,
+            UnattendedModel = change.SetUnattendedModel ? change.UnattendedModel : current.UnattendedModel,
             HarnessManagement = change.HarnessAssessment ?? change.HarnessManagement ?? current.HarnessManagement };
     }
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

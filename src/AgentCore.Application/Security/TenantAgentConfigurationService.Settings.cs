@@ -52,13 +52,13 @@ public sealed partial class TenantAgentConfigurationService
     }, ct);
 
     public ValueTask<TenantAgent> UpdateUnattendedModelAsync(Guid actor, Guid tenant, Guid id, long securityRevision,
-        long instanceRevision, string? offeringId, string? reasoningEffort, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate(id, async token =>
+        long instanceRevision, AgentCore.Domain.Models.ModelPreference? preference, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate(id, async token =>
     {
         var state = await ChangeState(actor, tenant, id, securityRevision, token).ConfigureAwait(false);
         var models = await modelCatalogs.ReadAsync(state, token).ConfigureAwait(false);
-        ExecutionModelPolicy.RequireSelectable(models, offeringId, reasoningEffort);
+        ExecutionModelPolicy.RequireSelectable(models, preference);
         return await Commit(actor, tenant, state, new(id, instanceRevision, SetUnattendedModel: true,
-            UnattendedOfferingId: offeringId, UnattendedReasoningEffort: reasoningEffort), "agents.unattended-model.update", token, initiator).ConfigureAwait(false);
+            UnattendedModel: preference), "agents.unattended-model.update", token, initiator).ConfigureAwait(false);
     }, ct);
 
     public async ValueTask<TenantAgentManagement> ReadManagementAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default)

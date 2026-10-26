@@ -15,7 +15,7 @@ public sealed record ProviderConnectionRecord(Guid ConnectionId, Guid TenantId, 
 public sealed record ModelOfferingRecord(Guid OfferingId, Guid TenantId, Guid ConnectionId, ModelProviderKind Kind,
     Guid? PresetId, string ExternalModelId, string Label, ModelTransport Transport, string CapabilitiesJson,
     bool Enabled, bool Retired, long Revision, ModelObservation Observation, DateTimeOffset? LastSeenAt);
-public sealed record TenantModelSettingsRecord(Guid TenantId, Guid? DefaultOfferingId, string? DefaultReasoningEffort, long Revision);
+public sealed record TenantModelSettingsRecord(Guid TenantId, Guid? DefaultOfferingId, string? DefaultReasoningEffort, long Revision, string? RoutingJson = null);
 
 internal static class ModelManagementPersistence
 {
@@ -23,11 +23,11 @@ internal static class ModelManagementPersistence
     internal static ModelPresetRecord Row(ModelPreset p) => new(p.PresetId, p.Kind, p.ExternalModelId, p.Label, p.Transport, JsonSerializer.Serialize(p.Capabilities, Json), p.Enabled, p.Archived, p.Revision);
     internal static ProviderConnectionRecord Row(ProviderConnection p) => new(p.ConnectionId, p.TenantId, p.Kind, p.Label, p.Endpoint, p.CredentialId?.ToString("D"), p.NoCredential, p.Enabled, p.Revision, p.CreatedAt, p.UpdatedAt, p.LastTestAt, p.LastTestResult);
     internal static ModelOfferingRecord Row(ModelOffering p) => new(p.OfferingId, p.TenantId, p.ConnectionId, p.Kind, p.PresetId, p.ExternalModelId, p.Label, p.Transport, JsonSerializer.Serialize(p.Capabilities, Json), p.Enabled, p.Retired, p.Revision, p.Observation, p.LastSeenAt);
-    internal static TenantModelSettingsRecord Row(TenantModelSettings p) => new(p.TenantId, p.DefaultOfferingId, p.DefaultReasoningEffort, p.Revision);
+    internal static TenantModelSettingsRecord Row(TenantModelSettings p) => new(p.TenantId, p.DefaultOfferingId, p.DefaultReasoningEffort, p.Revision, p.Routing is null ? null : JsonSerializer.Serialize(p.Routing, Json));
     internal static ModelPreset Domain(ModelPresetRecord p) => ModelManagementRules.Freeze(new ModelPreset(p.PresetId, p.Kind, p.ExternalModelId, p.Label, p.Transport, Capabilities(p.CapabilitiesJson), p.Enabled, p.Archived, p.Revision));
     internal static ProviderConnection Domain(ProviderConnectionRecord p) => ModelManagementRules.Freeze(new ProviderConnection(p.ConnectionId, p.TenantId, p.Kind, p.Label, p.Endpoint, p.CredentialId is null ? null : Guid.Parse(p.CredentialId), p.NoCredential, p.Enabled, p.Revision, p.CreatedAt, p.UpdatedAt, p.LastTestAt, p.LastTestResult));
     internal static ModelOffering Domain(ModelOfferingRecord p) => ModelManagementRules.Freeze(new ModelOffering(p.OfferingId, p.TenantId, p.ConnectionId, p.Kind, p.PresetId, p.ExternalModelId, p.Label, p.Transport, Capabilities(p.CapabilitiesJson), p.Enabled, p.Retired, p.Revision, p.Observation, p.LastSeenAt));
-    internal static TenantModelSettings Domain(TenantModelSettingsRecord p) => ModelManagementRules.Freeze(new TenantModelSettings(p.TenantId, p.DefaultOfferingId, p.DefaultReasoningEffort, p.Revision));
+    internal static TenantModelSettings Domain(TenantModelSettingsRecord p) => ModelManagementRules.Freeze(new TenantModelSettings(p.TenantId, p.DefaultOfferingId, p.DefaultReasoningEffort, p.Revision, p.RoutingJson is null ? null : JsonSerializer.Deserialize<AutoRoutingPolicy>(p.RoutingJson, Json)));
     private static ModelCapabilityProfile Capabilities(string json) => ModelManagementRules.Freeze(JsonSerializer.Deserialize<ModelCapabilityProfile>(json, Json) ?? throw new InvalidOperationException("Invalid persisted model capabilities."));
 
     internal static void Configure(ModelBuilder model)

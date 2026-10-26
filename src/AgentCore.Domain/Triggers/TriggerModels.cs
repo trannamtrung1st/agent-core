@@ -546,14 +546,13 @@ public sealed class Automation
         long triggerRevision,
         TriggerProvenance provenance,
         string? suspensionReason,
-        string? modelOverrideOfferingId = null,
-        string? modelOverrideReasoningEffort = null,
+        AgentCore.Domain.Models.ModelPreference? modelPreference = null,
         bool requiresVision = false,
         string? name = null,
         AutomationExecutionTarget? executionTarget = null,
         AutomationCompletionDelivery? completionDelivery = null, bool requiresTools = false,
         Guid? pinnedSpaceId = null, Guid? pinnedEnvironmentId = null)
- : this(automationId, owner, status, instructions, new[] { new AutomationTriggerRecord(automationId, trigger, revision: triggerRevision) }, nextOccurrenceAtUtc, expiresAtUtc, occurrenceCount, revision, triggerRevision, provenance, suspensionReason, modelOverrideOfferingId, modelOverrideReasoningEffort, requiresVision, name, executionTarget, completionDelivery, requiresTools, pinnedSpaceId, pinnedEnvironmentId) { }
+ : this(automationId, owner, status, instructions, new[] { new AutomationTriggerRecord(automationId, trigger, revision: triggerRevision) }, nextOccurrenceAtUtc, expiresAtUtc, occurrenceCount, revision, triggerRevision, provenance, suspensionReason, modelPreference, requiresVision, name, executionTarget, completionDelivery, requiresTools, pinnedSpaceId, pinnedEnvironmentId) { }
 
     public Automation(
         Guid automationId,
@@ -568,8 +567,7 @@ public sealed class Automation
         long triggerRevision,
         TriggerProvenance provenance,
         string? suspensionReason,
-        string? modelOverrideOfferingId = null,
-        string? modelOverrideReasoningEffort = null,
+        AgentCore.Domain.Models.ModelPreference? modelPreference = null,
         bool requiresVision = false,
         string? name = null,
         AutomationExecutionTarget? executionTarget = null,
@@ -616,7 +614,7 @@ public sealed class Automation
             filterExpression = (t.Configuration as FilteredEventTrigger)?.FilterExpression,
             dispatch = (t.Configuration as FilteredEventTrigger)?.Dispatch,
             schedule = t.Configuration is ScheduleTrigger timing ? System.Text.Json.JsonSerializer.SerializeToElement(timing.Schedule, timing.Schedule.GetType()) : (System.Text.Json.JsonElement?)null }),
-            modelOverrideOfferingId, modelOverrideReasoningEffort, executionTarget, completionDelivery });
+            modelPreference, executionTarget, completionDelivery });
         if (System.Text.Encoding.UTF8.GetByteCount(configuration) > TriggerLimits.MaxAutomationConfigurationBytes)
             throw new ArgumentException("Automation configuration exceeds the 64 KiB serialized budget.");
         Triggers = Array.AsReadOnly(triggers.ToArray());
@@ -629,11 +627,8 @@ public sealed class Automation
         TriggerRevision = Triggers.Max(t => t.Revision);
         Provenance = provenance ?? throw new ArgumentException("Provenance is required.", nameof(provenance));
         SuspensionReason = TriggerText.OptionalReason(suspensionReason);
-        ModelOverrideOfferingId = OptionalModelToken(modelOverrideOfferingId, AgentRunLimits.MaxModelFieldCharacters, "Model override");
-        ModelOverrideReasoningEffort = OptionalModelToken(
-            modelOverrideReasoningEffort,
-            AgentRunLimits.MaxReasoningEffortCharacters,
-            "Model override reasoning effort");
+        modelPreference?.Validate();
+        ModelPreference = modelPreference;
         RequiresVision = requiresVision;
         ExecutionTarget = executionTarget ?? AutomationExecutionTarget.Background;
         CompletionDelivery = completionDelivery ?? AutomationCompletionDelivery.None;
@@ -674,9 +669,7 @@ public sealed class Automation
 
     public string? SuspensionReason { get; }
 
-    public string? ModelOverrideOfferingId { get; }
-
-    public string? ModelOverrideReasoningEffort { get; }
+    public AgentCore.Domain.Models.ModelPreference? ModelPreference { get; }
 
     public AutomationExecutionTarget ExecutionTarget { get; }
     public AutomationCompletionDelivery CompletionDelivery { get; }
@@ -713,8 +706,7 @@ public sealed class Automation
             triggerRevision,
             Provenance.WithUpdated(updatedAt),
             SuspensionReason,
-            ModelOverrideOfferingId,
-            ModelOverrideReasoningEffort,
+            ModelPreference,
             RequiresVision,
             Name, ExecutionTarget, CompletionDelivery, RequiresTools, PinnedSpaceId, PinnedEnvironmentId);
 
@@ -738,8 +730,7 @@ public sealed class Automation
             TriggerRevision,
             Provenance.WithUpdated(updatedAt),
             suspensionReason,
-            ModelOverrideOfferingId,
-            ModelOverrideReasoningEffort,
+            ModelPreference,
             RequiresVision,
             Name, ExecutionTarget, CompletionDelivery, RequiresTools, PinnedSpaceId, PinnedEnvironmentId);
 
@@ -757,14 +748,12 @@ public sealed class Automation
             TriggerRevision,
             Provenance.WithUpdated(cancelledAt),
             SuspensionReason,
-            ModelOverrideOfferingId,
-            ModelOverrideReasoningEffort,
+            ModelPreference,
             RequiresVision,
             Name, ExecutionTarget, CompletionDelivery, RequiresTools, PinnedSpaceId, PinnedEnvironmentId);
 
     public Automation WithModelOverride(
-        string? offeringId,
-        string? reasoningEffort,
+        AgentCore.Domain.Models.ModelPreference? preference,
         long revision,
         DateTimeOffset updatedAt) =>
         new(
@@ -780,8 +769,7 @@ public sealed class Automation
             TriggerRevision,
             Provenance.WithUpdated(updatedAt),
             SuspensionReason,
-            offeringId,
-            reasoningEffort,
+            preference,
             RequiresVision,
             Name, ExecutionTarget, CompletionDelivery, RequiresTools, PinnedSpaceId, PinnedEnvironmentId);
 

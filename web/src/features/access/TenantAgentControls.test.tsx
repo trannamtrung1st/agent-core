@@ -8,7 +8,7 @@ import { TenantAgentControls, type TenantControlPage } from './TenantAgentContro
 
 const context: TenantContext = { tenant: { tenantId: 'tenant', name: 'Controls organization', slug: 'controls' }, userId: 'user', principalId: 'viewer', permissions: [], roles: [], revision: 7 };
 const profile = { maxSteps: 48, durationSeconds: 360, perToolSeconds: 30, preset: 1, sandboxCommandSeconds: 120 };
-const controls = () => ({ agent: { principalId: 'principal', systemIdentityId: 'identity', instance: { instanceId: 'agent', persona: { name: 'Alex', role: 'Guide', description: 'Guide', tone: 'Calm' }, personaRevision: 1, revision: 4, activeVersion: 1, lifecycle: 'Active', unattendedOfferingId: 'alpha', unattendedReasoningEffort: 'high' } }, securityRevision: 7, canUpdate: true,
+const controls = () => ({ agent: { principalId: 'principal', systemIdentityId: 'identity', instance: { instanceId: 'agent', persona: { name: 'Alex', role: 'Guide', description: 'Guide', tone: 'Calm' }, personaRevision: 1, revision: 4, activeVersion: 1, lifecycle: 'Active', unattendedModel: { mode: "fixed", offeringId: 'alpha', reasoning: { mode: "fixed", effort: 'high'  } }} }, securityRevision: 7, canUpdate: true,
   budgets: { instanceRevision: 4, securityRevision: 7, overrides: { standard: profile }, definitionDefaults: null, hostLimits: { maxSteps: 144, durationSeconds: 900, perToolSeconds: 30, sandboxCommandSeconds: 180 } },
   management: { securityRevision: 7, policy: { instanceRevision: 4, policyRevision: 2, source: 'per-field', effective: { ...defaultManagement, mode: 'Assisted', scopes: ['Settings'] }, definitionDefaults: defaultManagement, overrides: { mode: { value: 'Assisted' }, scopes: { value: ['Settings'] } } } }
 } as TenantAgentControlsView);
@@ -82,7 +82,7 @@ it('fails closed on catalog errors, retries, and saves a current model without a
   catalogFailure = true; await open('unattended-model'); await screen.findByRole('alert'); expect(screen.getByRole('button', { name: 'Save Unattended model' })).toBeDisabled();
   catalogFailure = false; fireEvent.click(screen.getByRole('button', { name: 'Reload' })); await select('Unattended model', 'Beta');
   fireEvent.click(screen.getByRole('button', { name: 'Save Unattended model' })); await waitFor(() => expect(writes()).toHaveLength(1));
-  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ expectedRevision: 7, expectedInstanceRevision: 4, offeringId: 'beta', reasoningEffort: null });
+  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ expectedRevision: 7, expectedInstanceRevision: 4, modelPreference: { mode: 'fixed', offeringId: 'beta', reasoning: { mode: 'modelDefault', effort: null } } });
 });
 it('renders an exact reader without write access or an IAM inspection request', async () => {
   current.canUpdate = false; await open('self-management'); await screen.findByText('Read-only configuration');

@@ -1,0 +1,4 @@
+# Explicit native-host bridge only; never a public listener.
+services:
+  decision:
+    ports: ["127.0.0.1:8009:8009"]

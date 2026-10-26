@@ -11,11 +11,11 @@ public sealed record TenantConversationHistory(IReadOnlyList<PublicHistoryEntry>
 public sealed record TenantConversationRecipient(TenantSessionRoot Owner, long SessionRevision, long SecurityRevision,
     SessionMode Mode, SessionStatus Status, SessionLifecycleStatus LifecycleStatus, PublicAgentDescriptor Agent, SessionModelSelection? Model = null,
     SessionRetentionKind RetentionKind = SessionRetentionKind.Saved, DateTimeOffset? RetentionDueAtUtc = null,
-    AgentCompletionAuthority AgentCompletion = AgentCompletionAuthority.Disabled, string? LifecycleReason = null, LifecycleTransitionSource? LifecycleSource = null);
+    AgentCompletionAuthority AgentCompletion = AgentCompletionAuthority.Disabled, string? LifecycleReason = null, LifecycleTransitionSource? LifecycleSource = null, AgentCore.Domain.Models.ModelPreference? ModelPreference = null);
 public sealed record TenantConversationView(TenantSessionRoot Owner, string Title, long Revision, long SecurityRevision,
     SessionMode Mode, SessionStatus Status, SessionLifecycleStatus LifecycleStatus, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt,
     PublicAgentDescriptor Agent, SessionModelSelection? Model, SessionRetentionKind RetentionKind, DateTimeOffset? RetentionDueAtUtc,
-    AgentCompletionAuthority AgentCompletion, string? LifecycleReason, LifecycleTransitionSource? LifecycleSource);
+    AgentCompletionAuthority AgentCompletion, string? LifecycleReason, LifecycleTransitionSource? LifecycleSource, AgentCore.Domain.Models.ModelPreference? ModelPreference = null);
 
 public sealed class TenantConversationService(IIamStore security, ITenantSessionStore sessions, ITenantConversationStore content,
     IdentityService identity, IamAuthorizer authorizer, TenantArtifactService? artifactAccess = null, TenantAttachmentService? attachmentAccess = null, VoiceAvailability? voice = null, TenantComposerReferenceService? composer = null)
@@ -53,7 +53,7 @@ public sealed class TenantConversationService(IIamStore security, ITenantSession
         if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
         return new(saved.Owner, saved.Snapshot.Revision, state.Tenant.Revision, saved.Snapshot.Mode, saved.Snapshot.Status,
             saved.Snapshot.LifecycleStatus, PublicHistory.FromSnapshot(saved.Snapshot, voiceAvailable: voice?.IsAvailable(saved.Snapshot.Definition, AgentCore.Application.Speech.SpeechLocale.Resolve(saved.Snapshot).Effective) == true), saved.Snapshot.ModelSelection, saved.Snapshot.RetentionKind, saved.Snapshot.RetentionDueAtUtc,
-            (saved.Snapshot.CompletionPolicy ?? SessionCompletionPolicy.Default).AgentCompletion, saved.Snapshot.LifecycleReason, saved.Snapshot.LifecycleSource);
+            (saved.Snapshot.CompletionPolicy ?? SessionCompletionPolicy.Default).AgentCompletion, saved.Snapshot.LifecycleReason, saved.Snapshot.LifecycleSource, saved.Snapshot.ModelPreference);
     }
     public async ValueTask<TenantConversationView> ReadViewAsync(Guid tenant, Guid session, TenantSessionInitiator human, CancellationToken ct = default)
     {
@@ -63,7 +63,7 @@ public sealed class TenantConversationService(IIamStore security, ITenantSession
         if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
         var s = saved.Snapshot;
         return new(saved.Owner, s.Title, s.Revision, state.Tenant.Revision, s.Mode, s.Status, s.LifecycleStatus, s.CreatedAt, s.UpdatedAt,
-            PublicHistory.FromSnapshot(s, voiceAvailable: voice?.IsAvailable(s.Definition, AgentCore.Application.Speech.SpeechLocale.Resolve(s).Effective) == true), s.ModelSelection, s.RetentionKind, s.RetentionDueAtUtc, (s.CompletionPolicy ?? SessionCompletionPolicy.Default).AgentCompletion, s.LifecycleReason, s.LifecycleSource);
+            PublicHistory.FromSnapshot(s, voiceAvailable: voice?.IsAvailable(s.Definition, AgentCore.Application.Speech.SpeechLocale.Resolve(s).Effective) == true), s.ModelSelection, s.RetentionKind, s.RetentionDueAtUtc, (s.CompletionPolicy ?? SessionCompletionPolicy.Default).AgentCompletion, s.LifecycleReason, s.LifecycleSource, s.ModelPreference);
     }
     public async ValueTask<TenantConversationHistory> ReadAsync(Guid tenant, Guid session, TenantSessionInitiator human,
         long? after = null, long? before = null, int limit = 50, CancellationToken ct = default)

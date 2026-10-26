@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Triggers;
@@ -257,8 +258,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         TriggerOwner owner,
         Guid automationId,
         long expectedRevision,
-        string? offeringId,
-        string? reasoningEffort,
+        AgentCore.Domain.Models.ModelPreference? preference,
         DateTimeOffset updatedAt,
         CancellationToken cancellationToken = default)
     {
@@ -273,8 +273,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         var updated = AutomationMutations.SetModelOverride(
             current,
             expectedRevision,
-            offeringId,
-            reasoningEffort,
+            preference,
             updatedAt);
         if (updated.Revision == current.Revision)
         {
@@ -292,8 +291,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
                 && row.Status == (int)AutomationStatus.Active)
             .ExecuteUpdateAsync(
                 setters => setters
-                    .SetProperty(row => row.ModelOverrideOfferingId, updated.ModelOverrideOfferingId)
-                    .SetProperty(row => row.ModelOverrideReasoningEffort, updated.ModelOverrideReasoningEffort)
+                    .SetProperty(row => row.ModelPreferenceJson, JsonSerializer.Serialize(updated.ModelPreference))
                     .SetProperty(row => row.Revision, updated.Revision)
                     .SetProperty(row => row.UpdatedAtUtc, updated.Provenance.UpdatedAt.ToUnixTimeMilliseconds()),
                 cancellationToken)
@@ -1024,6 +1022,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         row.ModelConnectionId = pin.ConnectionId;
         row.ExternalModelId = pin.ExternalModelId;
         row.ModelReasoningEffort = pin.ReasoningEffort;
+        row.ModelDecisionJson = pin.Decision is null ? null : JsonSerializer.Serialize(pin.Decision);
         row.ModelSource = (int)pin.Source;
         row.ModelBindingJson = ModelBindingJson.Write(pin.Binding, pin.OfferingId, pin.ConnectionId, pin.ExternalModelId);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -1103,8 +1102,7 @@ internal static class TriggerStoreMapping
         CreatedAtUtc = registration.Provenance.CreatedAt.ToUnixTimeMilliseconds(),
         UpdatedAtUtc = registration.Provenance.UpdatedAt.ToUnixTimeMilliseconds(),
         SuspensionReason = registration.SuspensionReason,
-        ModelOverrideOfferingId = registration.ModelOverrideOfferingId,
-        ModelOverrideReasoningEffort = registration.ModelOverrideReasoningEffort,
+        ModelPreferenceJson = registration.ModelPreference is null ? null : JsonSerializer.Serialize(registration.ModelPreference),
         RequiresVision = registration.RequiresVision,
         RequiresTools = registration.RequiresTools,
         PinnedSpaceId = registration.PinnedSpaceId, PinnedEnvironmentId = registration.PinnedEnvironmentId,
@@ -1128,8 +1126,7 @@ internal static class TriggerStoreMapping
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
             DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc), row.PresetId, row.PresetVersion),
         row.SuspensionReason,
-        row.ModelOverrideOfferingId,
-        row.ModelOverrideReasoningEffort,
+        row.ModelPreferenceJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Models.ModelPreference>(row.ModelPreferenceJson),
         row.RequiresVision,
         row.Name, new((AutomationExecutionTargetKind)row.ExecutionTargetKind, ParseOptional(row.TargetSessionId)),
         new(ParseOptional(row.ReportToSessionId)), row.RequiresTools, row.PinnedSpaceId, row.PinnedEnvironmentId);
@@ -1186,6 +1183,7 @@ internal static class TriggerStoreMapping
         ModelConnectionId = occurrence.ModelPin?.ConnectionId,
         ExternalModelId = occurrence.ModelPin?.ExternalModelId,
         ModelReasoningEffort = occurrence.ModelPin?.ReasoningEffort,
+        ModelDecisionJson = occurrence.ModelPin?.Decision is null ? null : JsonSerializer.Serialize(occurrence.ModelPin.Decision),
         ModelBindingJson = ModelBindingJson.Write(occurrence.ModelPin?.Binding, occurrence.ModelPin?.OfferingId, occurrence.ModelPin?.ConnectionId, occurrence.ModelPin?.ExternalModelId),
         ModelSource = occurrence.ModelPin is null ? null : (int)occurrence.ModelPin.Source
     };
@@ -1242,7 +1240,8 @@ internal static class TriggerStoreMapping
             row.ExternalModelId,
             row.ModelReasoningEffort,
             (ExecutionModelSource)source,
-            ModelBindingJson.Read(row.ModelBindingJson, row.ModelOfferingId, row.ModelConnectionId, row.ExternalModelId));
+            ModelBindingJson.Read(row.ModelBindingJson, row.ModelOfferingId, row.ModelConnectionId, row.ExternalModelId),
+            row.ModelDecisionJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Models.ModelDecisionEvidence>(row.ModelDecisionJson));
     }
 
     private static DateTimeOffset? FromUnix(long? value) =>

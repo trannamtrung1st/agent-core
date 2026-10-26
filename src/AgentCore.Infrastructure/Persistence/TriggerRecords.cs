@@ -29,8 +29,7 @@ public sealed class AutomationRecord
     public long CreatedAtUtc { get; set; }
     public long UpdatedAtUtc { get; set; }
     public string? SuspensionReason { get; set; }
-    public string? ModelOverrideOfferingId { get; set; }
-    public string? ModelOverrideReasoningEffort { get; set; }
+    public string? ModelPreferenceJson { get; set; }
     public bool RequiresVision { get; set; }
     public bool RequiresTools { get; set; }
 }
@@ -73,6 +72,7 @@ public sealed class TriggerOccurrenceRecord
     public string? ModelReasoningEffort { get; set; }
     public int? ModelSource { get; set; }
     public string? ModelBindingJson { get; set; }
+    public string? ModelDecisionJson { get; set; }
 }
 
 public sealed class AutomationTriggerRecordEntity

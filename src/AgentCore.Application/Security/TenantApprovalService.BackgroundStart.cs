@@ -27,7 +27,7 @@ public sealed partial class TenantApprovalService
         if (!(await authorizer.CheckTenantAsync(state, run.Owner.ExecutorPrincipalId!.Value, PermissionCatalog.Get("sessions.create"), AccessScope.ForTenant(reference.TenantId), ct).ConfigureAwait(false)).Allowed)
             primary = "sessions.create";
         var value = new PreparedBackgroundStart(reference.TenantId, run.SessionId, ids.NewSessionId(), ids.NewId(), ids.NewId(), ids.NewId(), ids.NewId(),
-            task.Objective, task.Title, task.ReportCompletion, primary, TenantBackgroundCreationRules.Hash(resolved), new(run.PinnedModel.OfferingId, run.PinnedModel.ConnectionId, run.PinnedModel.ExternalModelId, run.PinnedModel.ReasoningEffort, run.PinnedModel.Binding));
+            task.Objective, task.Title, task.ReportCompletion, primary, TenantBackgroundCreationRules.Hash(resolved), new(run.PinnedModel.OfferingId, run.PinnedModel.ConnectionId, run.PinnedModel.ExternalModelId, run.PinnedModel.ReasoningEffort, run.PinnedModel.Binding, run.PinnedModel.Decision));
         var op = TenantApprovalRules.PrepareBackgroundStart(ids.NewId(), run.AgentInstanceId, value, agent.Instance.Revision, agent.Instance.PersonaRevision);
         op = TenantApprovalRules.ForRun(op, run);
         var previous = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.ExecutionContext!.RootActivationId, agent.PrincipalId, op, ct).ConfigureAwait(false);

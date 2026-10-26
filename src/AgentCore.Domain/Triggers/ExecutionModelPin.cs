@@ -19,7 +19,7 @@ public sealed class ExecutionModelPin
         string externalModelId,
         string? reasoningEffort,
         ExecutionModelSource source,
-        AgentCore.Domain.Models.ModelBinding? binding = null)
+        AgentCore.Domain.Models.ModelBinding? binding = null, AgentCore.Domain.Models.ModelDecisionEvidence? decision = null)
     {
         if (!Enum.IsDefined(source))
         {
@@ -35,6 +35,7 @@ public sealed class ExecutionModelPin
         Source = source;
         binding?.RequireIdentity(OfferingId, ConnectionId, ExternalModelId);
         Binding = binding;
+        Decision = decision;
     }
 
     public string OfferingId { get; }
@@ -47,6 +48,7 @@ public sealed class ExecutionModelPin
 
     public ExecutionModelSource Source { get; }
 
+    public AgentCore.Domain.Models.ModelDecisionEvidence? Decision { get; }
     public AgentCore.Domain.Models.ModelBinding? Binding { get; }
 
     public static string ToWire(ExecutionModelSource source) =>

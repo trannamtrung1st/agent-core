@@ -23,6 +23,13 @@ public sealed class SystemModelPresetService(IIamStore security, ITenantModelSto
         if (!await store.TrySaveModelPresetAsync(value, expectedRevision, human, audit, ct)) throw new SecurityConflictException("stale_revision");
         return value;
     }
+    public async ValueTask<AgentCore.Application.Decisions.DecisionEngineStatus> DecisionStatusAsync(HumanSessionReference human, AgentCore.Application.Decisions.IDecisionEngine engine, CancellationToken ct)
+    {
+        await Require(human, "system.model-presets.read", ct);
+        var result = await engine.StatusAsync(ct);
+        await Require(human, "system.model-presets.read", ct);
+        return result;
+    }
     private ValueTask Require(HumanSessionReference human, string permission, CancellationToken ct) =>
         SystemHumanSessionAuthority.RequireAsync(security, identity, authorizer, human, permission, ct);
 }

@@ -27,11 +27,11 @@ public sealed partial class TenantCredentialIntegrationTests
         async Task Configure(TenantAgent agent)
         {
             await f.AgentConfiguration().UpdateUnattendedModelAsync(human.PrincipalId, tenant, agent.Instance.InstanceId, await Revision(), agent.Instance.Revision,
-                setup.Offering.OfferingId.ToString("D"), "low", initiator: human);
+                AgentCore.Domain.Models.ModelPreference.Fixed(setup.Offering.OfferingId.ToString("D"), "low"), initiator: human);
         }
         await Configure(visible); await Configure(hidden);
         var session = await f.Sessions.CreateAsync(tenant, visible.Instance.InstanceId, human, SessionMode.Text,
-            await Revision(), 2, setup.Offering.OfferingId.ToString("D"), "high");
+            await Revision(), 2, AgentCore.Domain.Models.ModelPreference.Fixed(setup.Offering.OfferingId.ToString("D"), "high"));
         var runReceipt = await f.RunService().SubmitTextAsync(tenant, session.Owner.SessionId, human, f.Ids.NewId(), "Read no provider; retain this admitted pin.", await Revision(), 1);
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(tenant, runReceipt.RunId))!;
         var pin = JsonSerializer.Serialize(run.PinnedModel);

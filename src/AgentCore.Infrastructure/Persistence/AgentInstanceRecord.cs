@@ -11,8 +11,7 @@ public sealed class AgentInstanceRecord
     public long UpdatedAtUtc { get; set; }
     public long Revision { get; set; } = 1;
     public long PersonaRevision { get; set; } = 1;
-    public string? UnattendedOfferingId { get; set; }
-    public string? UnattendedReasoningEffort { get; set; }
+    public string? UnattendedModelJson { get; set; }
     public string? BrowserProfileResetJson { get; set; }
     public string? SettingsOverridesJson { get; set; }
     public string? ExecutionBudgetsJson { get; set; }

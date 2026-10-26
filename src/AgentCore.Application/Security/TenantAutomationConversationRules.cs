@@ -41,6 +41,29 @@ public static partial class TenantAutomationConversationRules
                 throw new AccessDeniedException("automation_conversation_unavailable");
     }
 
+    public static async ValueTask<ExecutionModelPin> ModelAsync(AutoModelRouter routing, Automation value, TenantSession target, AgentDefinition definition, IModelCatalog models, CancellationToken ct)
+    {
+        var preference = ExecutionModelPolicy.MergePreference(target.Snapshot.ModelPreference, value.ModelPreference);
+        var selection = await routing.ResolveAsync(models, preference, definition.ModelDefaults, value.RequiresVision, true, "automation",
+            new Dictionary<string, string> { ["inputMode"] = "automationExistingSession", ["inputCharacters"] = value.Instructions.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) }, ct);
+        return new(selection.OfferingId, selection.ConnectionId, selection.ExternalModelId, selection.ReasoningEffort,
+            ExecutionModelSource.ConversationDefault, selection.Binding, selection.Decision);
+    }
+
+    public static void RequireSelectable(Automation value, TenantSession target, AgentDefinition definition, IModelCatalog models)
+    {
+        Require(value, target);
+        var preference = ExecutionModelPolicy.MergePreference(
+            ExecutionModelPolicy.MergePreference(definition.ModelDefaults, target.Snapshot.ModelPreference), value.ModelPreference);
+        ExecutionModelPolicy.RequireSelectable(models, preference);
+        if (value.Status == AutomationStatus.Active &&
+            ((preference.Mode == "auto" || preference.Reasoning?.Mode == "auto") && !models.RoutingPolicy.Enabled
+            || !models.Models.Any(m => m.SupportsInstructionHierarchy && Enum.IsDefined(m.Transport)
+                && (preference.Mode != "fixed" || m.OfferingId == preference.OfferingId)
+                && (!value.RequiresTools || m.Tools) && (!value.RequiresVision || m.Vision))))
+            throw new AccessDeniedException("automation_model_unavailable");
+    }
+
     public static ExecutionModelPin Model(Automation value, TenantSession target, AgentDefinition definition, IModelCatalog models)
     {
         Require(value, target);
@@ -48,8 +71,8 @@ public static partial class TenantAutomationConversationRules
         if (selection?.SelectionSource is not (ModelSelectionSource.User or ModelSelectionSource.Host))
             selection = SessionModelBinder.RefreshDefault(models, definition, selection);
         selection ??= SessionModelBinder.PinDefault(models, definition);
-        if (value.ModelOverrideOfferingId is { } key && key != selection.OfferingId
-            || value.ModelOverrideReasoningEffort is { } effort && effort != selection.ReasoningEffort)
+        if (value.ModelPreference?.OfferingId is { } key && key != selection.OfferingId
+            || value.ModelPreference?.Reasoning?.Effort is { } effort && effort != selection.ReasoningEffort)
             throw new AccessDeniedException("automation_conversation_model_conflict");
         var pin = new ExecutionModelPin(selection.OfferingId, selection.ConnectionId, selection.ExternalModelId, selection.ReasoningEffort, ExecutionModelSource.ConversationDefault, selection.Binding);
         if (!ExecutionModelPolicy.Matches(models, pin, out var descriptor)
@@ -95,7 +118,7 @@ public static partial class TenantAutomationConversationRules
                 responseId, AgentRunOutputContract.ConversationResponse,
                 ExecutionBudgetResolver.Resolve(configuration.Configuration.Definition, configuration.InstanceBudgets, false), configuration.Configuration,
                 taskIntent: RunTaskIntents.FromOccurrence(occurrence), executionContext: context),
-            new(pin.OfferingId, pin.ConnectionId, pin.ExternalModelId, pin.ReasoningEffort, pin.Binding), AgentRunLimits.DefaultMaxAttempts, at,
+            new(pin.OfferingId, pin.ConnectionId, pin.ExternalModelId, pin.ReasoningEffort, pin.Binding, pin.Decision), AgentRunLimits.DefaultMaxAttempts, at,
             configuration.Skills, configuration.Skills.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray());
     }
 }

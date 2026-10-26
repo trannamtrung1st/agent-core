@@ -63,30 +63,41 @@ public sealed class TenantModelProviderFactory(IHttpClientFactory clients, ITena
         }
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            await using var iterator = GenerateCore(request, cancellationToken).GetAsyncEnumerator(cancellationToken);
-            while (true)
+            long started = 0; var errorObserved = true;
+            try
             {
-                var more = false; ModelFailed? failure = null;
-                try { more = await iterator.MoveNextAsync(); }
-                catch (Exception error) when (error is AccessDeniedException or SecurityConflictException or AgentCoreException
-                    or JsonException or HttpRequestException or IOException or OperationCanceledException or ArgumentException or InvalidOperationException)
+                await using var iterator = GenerateCore(request, cancellationToken, () => started = System.Diagnostics.Stopwatch.GetTimestamp()).GetAsyncEnumerator(cancellationToken);
+                while (true)
                 {
-                    failure = error switch
+                    var more = false; ModelFailed? failure = null;
+                    try { more = await iterator.MoveNextAsync(); }
+                    catch (Exception error) when (error is AccessDeniedException or SecurityConflictException or AgentCoreException
+                        or JsonException or HttpRequestException or IOException or OperationCanceledException or ArgumentException or InvalidOperationException)
                     {
-                        AccessDeniedException or SecurityConflictException => new(new(ProviderErrorCode.Authentication, "The admitted model route is no longer authorized.")),
-                        AgentCoreException { Code: "ModelCapabilityUnsupported" } => new(new(ProviderErrorCode.UnsupportedCapability, "The model does not support the required Core contract.")),
-                        AgentCoreException { Code: "ModelRouteStale" } => new(new(ProviderErrorCode.InvalidRequest, "The admitted model route changed. Start a new Run with a current model.")),
-                        OperationCanceledException => new(new(cancellationToken.IsCancellationRequested ? ProviderErrorCode.Cancelled : ProviderErrorCode.Timeout, "The model request was cancelled or timed out.")),
-                        JsonException or ArgumentException => new(new(ProviderErrorCode.InvalidRequest, "The model route or continuation is invalid.")),
-                        _ => new(new(ProviderErrorCode.Unavailable, "The admitted model connection is unavailable."))
-                    };
+                        failure = error switch
+                        {
+                            AccessDeniedException or SecurityConflictException => new(new(ProviderErrorCode.Authentication, "The admitted model route is no longer authorized.")),
+                            AgentCoreException { Code: "ModelCapabilityUnsupported" } => new(new(ProviderErrorCode.UnsupportedCapability, "The model does not support the required Core contract.")),
+                            AgentCoreException { Code: "ModelRouteStale" } => new(new(ProviderErrorCode.InvalidRequest, "The admitted model route changed. Start a new Run with a current model.")),
+                            OperationCanceledException => new(new(cancellationToken.IsCancellationRequested ? ProviderErrorCode.Cancelled : ProviderErrorCode.Timeout, "The model request was cancelled or timed out.")),
+                            JsonException or ArgumentException => new(new(ProviderErrorCode.InvalidRequest, "The model route or continuation is invalid.")),
+                            _ => new(new(ProviderErrorCode.Unavailable, "The admitted model connection is unavailable."))
+                        };
+                    }
+                    if (failure is not null) { yield return failure; yield break; }
+                    if (!more) yield break;
+                    if (iterator.Current is ModelCompleted { Reason: ModelStopReason.Completed or ModelStopReason.ToolCalls }) errorObserved = false;
+                    yield return iterator.Current;
                 }
-                if (failure is not null) { yield return failure; yield break; }
-                if (!more) yield break;
-                yield return iterator.Current;
+            }
+            finally
+            {
+                if (purpose == ModelPurpose.Conversation && started != 0)
+                    AgentCore.Application.Observability.ModelRoundObservations.Record(route,
+                        System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds, errorObserved, owner.Time.GetUtcNow());
             }
         }
-        private async IAsyncEnumerable<ModelGenerationEvent> GenerateCore(ModelRequest request, [EnumeratorCancellation] CancellationToken ct)
+        private async IAsyncEnumerable<ModelGenerationEvent> GenerateCore(ModelRequest request, [EnumeratorCancellation] CancellationToken ct, Action observeStart)
         {
             var current = await Current(ct).ConfigureAwait(false);
             if (!Enum.IsDefined(request.ToolChoice) || request.ToolChoice == ModelToolChoice.Named && request.Tools?.Any(t => t.Name == request.ToolChoiceName) != true)
@@ -119,6 +130,7 @@ public sealed class TenantModelProviderFactory(IHttpClientFactory clients, ITena
                 model = new OpenAICompatibleLanguageModel(http, options, owner.Time);
             }
             var calls = new List<ModelToolCall>();
+            observeStart();
             await foreach (var item in model.GenerateAsync(request, ct).ConfigureAwait(false))
             {
                 if (item is ModelToolCallEvent call)

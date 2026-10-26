@@ -53,8 +53,7 @@ public static class TenantManagementMutationRules
         }
         else if (args.Tool == "automation.preferences.patch")
         {
-            rows.Add(new("Unattended model", owner.UnattendedOfferingId ?? "Inherit Agent default", after.UnattendedOfferingId ?? "Inherit Agent default", RestoresDefault: after.UnattendedOfferingId is null));
-            rows.Add(new("Unattended reasoning", owner.UnattendedReasoningEffort ?? "Inherit Agent default", after.UnattendedReasoningEffort ?? "Inherit Agent default", RestoresDefault: after.UnattendedReasoningEffort is null));
+            rows.Add(new("Unattended model", JsonSerializer.Serialize(owner.UnattendedModel), JsonSerializer.Serialize(after.UnattendedModel), RestoresDefault: after.UnattendedModel is null));
         }
         else
         {
@@ -74,7 +73,7 @@ public static class TenantManagementMutationRules
         DefinitionResourcePolicies.RejectSecretsInTextualContent("text/plain", Encoding.UTF8.GetBytes(changes));
         var result = new PreparedManagementMutation(reader.Run.SessionId, reader.Root.SessionId, args.Tool, args.Json,
             TenantManagementReadRules.ConfigurationHash(owner), TenantManagementReadRules.StableConfigurationHash(owner), TenantManagementReadRules.StableConfigurationHash(after), changes,
-            change.SettingsOverrides, change.HarnessManagement, change.AutomationPolicyChanges, change.UnattendedOfferingId, change.UnattendedReasoningEffort, Harness: args.Harness, Remedy: args.Remedy);
+            change.SettingsOverrides, change.HarnessManagement, change.AutomationPolicyChanges, change.UnattendedModel, Harness: args.Harness, Remedy: args.Remedy);
         Validate(result); return result;
     }
     public static void Validate(PreparedManagementMutation value)
@@ -84,11 +83,11 @@ public static class TenantManagementMutationRules
             || !TenantMemoryOperationRules.ValidHash(value.ConfigurationHash) || !TenantMemoryOperationRules.ValidHash(value.BeforeStableHash) || !TenantMemoryOperationRules.ValidHash(value.AfterStableHash)
             || TenantManagementSkillRules.IsTool(value.ToolName) != (value.Skill is not null)
             || TenantManagementResourceRules.IsTool(value.ToolName) != (value.Resource is not null)
-            || value.Skill is { } skill && (skill.TenantId == Guid.Empty || skill.Result is null || !SkillKeys.IsValid(skill.Result.Key) || skill.Result.Revision < 1 || skill.Result.Deleted != (value.ToolName == "skills.delete") || !TenantMemoryOperationRules.ValidHash(skill.SnapshotHash) || value.Settings is not null || value.AutomationChanges is not null || value.UnattendedOfferingId is not null || value.UnattendedReasoningEffort is not null
+            || value.Skill is { } skill && (skill.TenantId == Guid.Empty || skill.Result is null || !SkillKeys.IsValid(skill.Result.Key) || skill.Result.Revision < 1 || skill.Result.Deleted != (value.ToolName == "skills.delete") || !TenantMemoryOperationRules.ValidHash(skill.SnapshotHash) || value.Settings is not null || value.AutomationChanges is not null || value.UnattendedModel is not null
                 || skill.CreateScope != (value.ToolName is "skills.create" or "skills.customize") || skill.TargetKey != (args.Value.TryGetProperty("key", out var target) ? target.GetString() : null))
             || Encoding.UTF8.GetByteCount(value.ChangesJson) > (value.Resource is null && value.Harness is null ? 48000 : 262144) || Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(value)) > (value.Resource is null && value.Harness is null ? 98000 : 524288)
-            || value.ToolName == "settings.patch" && (value.Settings is null || value.AutomationChanges is null || value.Management is not null || value.UnattendedOfferingId is not null || value.UnattendedReasoningEffort is not null)
-            || value.ToolName is "management.freeze" or "management.policy.update" && (value.Management is null || value.Settings is not null || value.AutomationChanges is not null || value.UnattendedOfferingId is not null || value.UnattendedReasoningEffort is not null)
+            || value.ToolName == "settings.patch" && (value.Settings is null || value.AutomationChanges is null || value.Management is not null || value.UnattendedModel is not null)
+            || value.ToolName is "management.freeze" or "management.policy.update" && (value.Management is null || value.Settings is not null || value.AutomationChanges is not null || value.UnattendedModel is not null)
             || value.ToolName == "automation.preferences.patch" && (value.Settings is not null || value.Management is not null || value.AutomationChanges is not null))
             throw new ArgumentException("Use one exact bounded management plan.");
         TenantHarnessCommandRules.Validate(value);
@@ -128,9 +127,9 @@ public static class TenantManagementMutationRules
         }
         else if (value.ToolName == "automation.preferences.patch")
         {
-            if (value.UnattendedOfferingId != args.Value.GetProperty("offeringId").GetString() || value.UnattendedReasoningEffort != args.Value.GetProperty("reasoningEffort").GetString())
+            if (JsonSerializer.Serialize(value.UnattendedModel) != JsonSerializer.Serialize(args.Value.GetProperty("modelPreference").Deserialize<AgentCore.Domain.Models.ModelPreference>(new JsonSerializerOptions(JsonSerializerDefaults.Web))))
                 throw new AccessDeniedException("management_source_changed");
-            change = new(owner.InstanceId, owner.Revision, SetUnattendedModel: true, UnattendedOfferingId: value.UnattendedOfferingId, UnattendedReasoningEffort: value.UnattendedReasoningEffort);
+            change = new(owner.InstanceId, owner.Revision, SetUnattendedModel: true, UnattendedModel: value.UnattendedModel);
         }
         else
         {

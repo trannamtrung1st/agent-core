@@ -7,6 +7,11 @@ using AgentCore.Domain.Security;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using AgentCore.Application.Decisions;
 
 namespace AgentCore.Api.Tests;
 
@@ -29,17 +34,24 @@ public sealed partial class TenantSessionAccessTests
     public Task Tenant_background_report_source_read_consent_survives_actual_SQLite_host_recreation() => BackgroundReportFlow(true, "source-review", readRestart: true);
     [Theory(Timeout = 120000)] [InlineData(false)] [InlineData(true)]
     public Task Tenant_Run_Profile_changed_child_source_cannot_be_approved_or_consumed_for_a_report(bool sqlite) => BackgroundReportFlow(sqlite, "source-review", profileBoundary: true);
-    private async Task BackgroundReportFlow(bool sqlite, string mode, bool restart = false, bool readRestart = false, bool profileBoundary = false)
+    [Theory(Timeout = 120000)] [InlineData(false)] [InlineData(true)]
+    public Task Tenant_Auto_background_report_approval_reuses_the_captured_decision_without_reranking(bool sqlite) => BackgroundReportFlow(sqlite, "review", auto: true);
+    private async Task BackgroundReportFlow(bool sqlite, string mode, bool restart = false, bool readRestart = false, bool profileBoundary = false, bool auto = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-report-approval-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         WebApplicationFactory<Program>? reopened = null; HttpClient? reopenedOwner = null;
         try
         {
             var model = new BackgroundCreationModel();
-            await using WebApplicationFactory<Program> initial = sqlite ? new TenantBackgroundSqliteFactory(root, model) : new TenantBackgroundMemoryFactory(root, model);
+            var routing = new BackgroundRoutingBackend();
+            await using WebApplicationFactory<Program> original = sqlite ? new TenantBackgroundSqliteFactory(root, model) : new TenantBackgroundMemoryFactory(root, model);
+            await using var initial = original.WithWebHostBuilder(builder => {
+                if (auto) { builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string,string?> { ["DecisionIntelligence:Enabled"]="true", ["DecisionIntelligence:Backend"]="Synthetic", ["DecisionIntelligence:ShadowMode"]="false" }));
+                    builder.ConfigureTestServices(services => services.Replace(ServiceDescriptor.Singleton<IDecisionBackend>(routing))); }
+            });
             var factory = initial;
             using var firstOwner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") }); var owner = firstOwner;
-            var setup = await StartTenantBackground(factory, owner, createAuthority: false, submit: false, reportReads: true); var tenant = setup.Tenant; var api = $"/api/v2/tenants/{tenant}";
+            var setup = await StartTenantBackground(factory, owner, createAuthority: false, submit: false, reportReads: true, auto: auto); var tenant = setup.Tenant; var api = $"/api/v2/tenants/{tenant}";
             var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var sessions = factory.Services.GetRequiredService<ITenantSessionStore>();
             var parent = (await sessions.FindTenantSessionAsync(tenant, setup.Session))!; var access = factory.Services.GetRequiredService<TenantAccessService>();
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
@@ -49,7 +61,9 @@ public sealed partial class TenantSessionAccessTests
             if (mode is not ("grant" or "source-grant")) Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/agent-runs.create", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
             if (mode.StartsWith("source-", StringComparison.Ordinal)) Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/agent-runs.read", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
             var sourceId = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{setup.Session}/messages", new { messageId = Guid.NewGuid(), text = "Start exact work with independently reviewed report delivery", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
-            var approvals = factory.Services.GetRequiredService<ITenantApprovalStore>(); var waiting = await AwaitBrowserRestartRun(runs, tenant, sourceId, true);
+            var approvals = factory.Services.GetRequiredService<ITenantApprovalStore>(); AgentCore.Domain.Conversation.AgentRun waiting;
+            try { waiting = await AwaitBrowserRestartRun(runs, tenant, sourceId, true); }
+            catch (OperationCanceledException) { throw new Xunit.Sdk.XunitException("Waiting for preparation: " + string.Join("\n", model.Failures) + "; current=" + (await CurrentApprovalExecution(runs, tenant, sourceId))!.Status); }
             var creation = (await approvals.FindApprovalAsync(tenant, waiting.ApprovalRequestId!.Value))!; Assert.NotNull(creation.Operation.BackgroundStart);
             async Task Decide(TenantApprovalRequest request, string decision)
             {
@@ -58,7 +72,10 @@ public sealed partial class TenantSessionAccessTests
                     expectedRevision = view.GetProperty("securityRevision").GetInt64(), expectedRequestRevision = request.Revision });
                 Assert.True(response.IsSuccessStatusCode, $"{response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
             }
-            await Decide(creation, "approve"); var source = await AwaitBrowserRestartRun(runs, tenant, sourceId, false); Assert.Equal(AgentRunStatus.Completed, source.Status);
+            await Decide(creation, "approve"); AgentRun source;
+            try { source = await AwaitBrowserRestartRun(runs, tenant, sourceId, false); }
+            catch (OperationCanceledException) { throw new Xunit.Sdk.XunitException("After approval: " + string.Join("\n", model.Failures) + "; current=" + (await CurrentApprovalExecution(runs, tenant, sourceId))!.Status); }
+            Assert.Equal(AgentRunStatus.Completed, source.Status);
             var child = (await WaitTenantBackground(factory, tenant, setup.Session, source.AgentRunId, false)).Child;
             if (mode.StartsWith("source-", StringComparison.Ordinal))
             {
@@ -120,6 +137,8 @@ public sealed partial class TenantSessionAccessTests
             Assert.Contains(visible.GetProperty("items").EnumerateArray(), item => item.GetProperty("requestId").GetGuid() == request.RequestId);
             var detail = await Json(await owner.GetAsync(api + $"/approvals/{request.RequestId}")); Assert.True(detail.GetProperty("review").GetProperty("canDecide").GetBoolean(), detail.GetRawText());
             Assert.Equal("deliver_background_completion", detail.GetProperty("preparedAction").GetProperty("operation").GetString());
+            var decisionsBeforeConsent = routing.Calls;
+            if (auto) { Assert.Equal("ranked", p.Model.Decision!.Basis); Assert.Equal(2, decisionsBeforeConsent); }
             if (restart)
             {
                 await initial.DisposeAsync(); reopened = new TenantBackgroundSqliteFactory(root, new BackgroundCreationModel()); factory = reopened;
@@ -136,6 +155,7 @@ public sealed partial class TenantSessionAccessTests
             if (mode is "review" or "grant")
             {
                 var report = (await WaitTenantBackground(factory, tenant, setup.Session, source.AgentRunId, true)).Report!;
+                if (auto) { Assert.Equal(decisionsBeforeConsent, routing.Calls); Assert.Equal(p.Model.Decision, report.PinnedModel.Decision); }
                 Assert.Equal(p.RunId, report.AgentRunId); Assert.Equal(p.ActivationId, report.ActivationId); Assert.Equal(p.EvidenceJson, report.Admission.Activation.EvidenceJson);
                 var receipt = (await factory.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant, request.Operation.OperationId))!;
                 Assert.Equal(TenantOperationOutcome.Completed, receipt.Outcome); Assert.Equal("completion_report_created", receipt.ReasonCode); Assert.Equal(child.AgentRunId, receipt.RunId);

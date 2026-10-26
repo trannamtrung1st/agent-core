@@ -11,7 +11,7 @@ namespace AgentCore.Application.Security;
 public sealed record TenantAutomationMutationPreparation(TenantAutomationMutationObservation Source, PreparedAutomationMutation Value);
 public sealed class TenantAutomationMutationService(ITenantAutomationMutationStore store, TenantOperationAuthorizer operations, IamAuthorizer iam,
     ITenantApprovalStore approvals, ITriggerCommandAuthorizer semantic, ITenantModelCatalogReader modelCatalogs, IIdGenerator ids, TimeProvider time, IEventFilterEvaluator? filters = null,
-    TenantRunConfigurationResolver? configurations = null, TenantRunExecutionAuthority? runAuthority = null)
+    TenantRunConfigurationResolver? configurations = null, TenantRunExecutionAuthority? runAuthority = null, AutoModelRouter? routing = null)
 {
     public async ValueTask<TenantAutomationMutationPreparation> PrepareAsync(TenantRunReference reference, Guid? generation, string tool, string arguments,
         CancellationToken ct, PreparedAutomationMutation? expected = null, Guid? human = null)
@@ -24,8 +24,13 @@ public sealed class TenantAutomationMutationService(ITenantAutomationMutationSto
         if (tool == ToolCatalog.AutomationRun)
         {
             var resolved = await ResolveInvocationAsync(source, ct).ConfigureAwait(false); var current = source.Current!;
-            var model = source.Conversation is null ? ExecutionModelPolicy.Resolve(models, resolved.Configuration.Configuration.Definition, source.Reader.Agent.Instance, current).Pin
-                : TenantAutomationConversationRules.Model(current, source.Conversation, resolved.Configuration.Configuration.Definition, models);
+            var model = expected?.Invocation?.Model;
+            if (model is null)
+                model = source.Conversation is null
+                    ? routing is null ? ExecutionModelPolicy.Resolve(models, resolved.Configuration.Configuration.Definition, source.Reader.Agent.Instance, current).Pin
+                        : (await ExecutionModelPolicy.ResolveAsync(routing, models, resolved.Configuration.Configuration.Definition, source.Reader.Agent.Instance, current, ct)).Pin
+                    : routing is null ? TenantAutomationConversationRules.Model(current, source.Conversation, resolved.Configuration.Configuration.Definition, models)
+                        : await TenantAutomationConversationRules.ModelAsync(routing, current, source.Conversation, resolved.Configuration.Configuration.Definition, models, ct);
             if (model is null) throw new AccessDeniedException("automation_model_unavailable");
             var invocation = new PreparedAutomationInvocation(current.ExecutionTarget.SessionId ?? ids.NewSessionId(), ids.NewId(), ids.NewId(), ids.NewId(), ids.NewId(),
                 TenantAutomationRules.Hash(resolved.Configuration), model, source.Conversation is null ? null : new(source.Conversation.Snapshot.Revision, source.Conversation.Snapshot.DurableLastEntrySequence));
@@ -51,9 +56,9 @@ public sealed class TenantAutomationMutationService(ITenantAutomationMutationSto
             await TenantAutomationInvocationRules.RequesterAsync(source, iam, ct).ConfigureAwait(false);
             var resolved = await ResolveInvocationAsync(source, ct).ConfigureAwait(false);
             if (TenantAutomationRules.Hash(resolved.Configuration) != value.Invocation!.ConfigurationHash) throw new SecurityConflictException("automation_configuration_changed");
-            var pin = source.Conversation is null ? ExecutionModelPolicy.Resolve(models, resolved.Configuration.Configuration.Definition, source.Reader.Agent.Instance, source.Current!).Pin
-                : TenantAutomationConversationRules.Model(source.Current!, source.Conversation, resolved.Configuration.Configuration.Definition, models);
-            if (pin is null || JsonSerializer.Serialize(pin) != JsonSerializer.Serialize(value.Invocation.Model)) throw new AccessDeniedException("automation_model_unavailable");
+            var pin = value.Invocation.Model;
+            if (!ExecutionModelPolicy.Validate(models, pin, resolved.Configuration.Configuration.Definition, source.Current!).Accepted)
+                throw new AccessDeniedException("automation_model_unavailable");
             return;
         }
         if (value.ToolName is ToolCatalog.AutomationDelete or ToolCatalog.AutomationDisable) return;
@@ -63,10 +68,10 @@ public sealed class TenantAutomationMutationService(ITenantAutomationMutationSto
         {
             var target = TenantAutomationConversationRules.Require(proposed, source.Conversation);
             await TenantAutomationConversationRules.AuthoringAsync(reader.Security, reader.Agent.PrincipalId, proposed, target, iam, ct).ConfigureAwait(false);
-            _ = TenantAutomationConversationRules.Model(proposed, target, reader.Current, models);
+            TenantAutomationConversationRules.RequireSelectable(proposed, target, reader.Current, models);
         }
         if (proposed.Status == AutomationStatus.Active && (proposed.IsSchedule && proposed.NextOccurrenceAtUtc is null
-            || !TenantAutomationConversationRules.Existing(proposed) && !ExecutionModelPolicy.Resolve(models, reader.Current, reader.Agent.Instance, proposed).Accepted))
+            || !TenantAutomationConversationRules.Existing(proposed) && !ExecutionModelPolicy.Selectable(models, reader.Current, reader.Agent.Instance, proposed)))
             throw new AccessDeniedException("automation_model_unavailable");
     }
     public async ValueTask<OperationAuthorizationDecision> DecisionAsync(TenantAutomationMutationPreparation prepared, CancellationToken ct)

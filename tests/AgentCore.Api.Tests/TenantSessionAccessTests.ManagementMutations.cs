@@ -83,7 +83,7 @@ public sealed partial class TenantSessionAccessTests
         "settings.patch" => JsonSerializer.Serialize(new { expectedInstanceRevision = 3, section = "instructions", set = new { agentInstructions = ManagementInstructions }, clear = Array.Empty<string>() }),
         "management.freeze" => """{"expectedInstanceRevision":3}""",
         "management.policy.update" => """{"expectedInstanceRevision":3,"mode":"Assisted","scopes":["Settings"],"managedAutoApply":[]}""",
-        "automation.preferences.patch" => JsonSerializer.Serialize(new { expectedInstanceRevision = 3, offeringId = model, reasoningEffort = (string?)null }),
+        "automation.preferences.patch" => JsonSerializer.Serialize(new { expectedInstanceRevision = 3, modelPreference = new { mode = "fixed", offeringId = model, reasoning = new { mode = "modelDefault" } } }),
         _ => throw new ArgumentException()
     };
     [Theory]
@@ -160,7 +160,7 @@ public sealed partial class TenantSessionAccessTests
                 if (tool == "settings.patch") Assert.Equal(ManagementInstructions, saved.SettingsOverrides!.AgentInstructions!.Value);
                 if (tool == "management.freeze") Assert.True(saved.HarnessManagement!.Policy.Frozen);
                 if (tool == "management.policy.update") Assert.Equal(AgentCore.Domain.Definitions.HarnessManagementMode.Assisted, saved.HarnessManagement!.Overrides!.Mode!.Value);
-                if (tool == "automation.preferences.patch") Assert.Equal(key, saved.UnattendedOfferingId);
+                if (tool == "automation.preferences.patch") Assert.Equal(key, saved.UnattendedModel?.OfferingId);
                 await host.Services.GetRequiredService<ITenantManagementStore>().RequireTenantManagementReadSourcesAsync(new(tenant, final.AgentRunId), TenantManagementReadReferences.Read(final.Checkpoint), null);
                 var recorded = await Json(await owner.GetAsync(api + $"/approvals/{request.RequestId}"));
                 var current = Assert.Single(recorded.GetProperty("review").GetProperty("changes").EnumerateArray(), c => c.GetProperty("field").GetString() == "Current configuration");

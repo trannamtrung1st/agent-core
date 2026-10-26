@@ -24,7 +24,7 @@ public static class AgentRunContextContinuationFactory
             runId, activationId, previous.RootActivationId, source.AgentRunId, source.ActivationId, ExecutionOrigin.ContextContinuation);
         var selected = snapshot.ModelSelection ?? throw new ArgumentException("Context continuation needs a resolved model.");
         return AgentRun.Create(runId, source.Owner, new(activation, configuration.Definition.Id, configuration.Definition.Version, snapshot.PinnedPersona!, responseId,
-            AgentRunOutputContract.ConversationResponse, budget, configuration, executionContext: context), new(selected.OfferingId, selected.ConnectionId, selected.ExternalModelId, selected.ReasoningEffort, selected.Binding),
+            AgentRunOutputContract.ConversationResponse, budget, configuration, executionContext: context), new(selected.OfferingId, selected.ConnectionId, selected.ExternalModelId, selected.ReasoningEffort, selected.Binding, selected.Decision),
             1, at, skills, skills.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray());
     }
 }

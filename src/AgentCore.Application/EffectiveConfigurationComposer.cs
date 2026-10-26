@@ -35,7 +35,7 @@ internal static class EffectiveConfigurationComposer
         var applicationEventAllowed = OccurrenceCompatibility.Allows(definition, TriggerSourceKind.ApplicationEvent);
         Domain.Conversation.SessionModelSelection? model = null; ModelDescriptor? descriptor = null; string? unavailable = null;
         try { model = SessionModelBinder.PinDefault(catalog, definition); descriptor = catalog.Get(model.OfferingId); }
-        catch (AgentCoreException error) when (error.Code is "ModelUnavailable" or "ModelRouteStale" or "ModelCapabilityUnsupported" or "ValidationError")
+        catch (AgentCoreException error) when (error.Code is "ModelUnavailable" or "ModelRouteStale" or "ModelCapabilityUnsupported" or "ValidationError" or "ModelRoutingUnavailable")
         { unavailable = error.Code; }
         var adminContext = new AgentContext(
             definition,
@@ -67,10 +67,10 @@ internal static class EffectiveConfigurationComposer
             Persona: instance.Persona,
             ProviderPreferences: definition.ProviderPreferences,
             EffectiveModel: new AdminEffectiveModel(
-                model?.OfferingId ?? definition.ModelDefaults?.OfferingId ?? catalog.DefaultOfferingId,
-                descriptor?.DisplayName ?? "Model unavailable",
-                model is null ? SessionModelBinder.IsInheritedOffering(definition.ModelDefaults?.OfferingId) ? "tenantDefault" : "agentDefault" : SessionModelBinder.ToWire(model.SelectionSource),
-                model?.ReasoningEffort ?? definition.ModelDefaults?.ReasoningEffort,
+                definition.ModelDefaults?.Mode == "auto" ? "" : model?.OfferingId ?? definition.ModelDefaults?.OfferingId ?? catalog.DefaultOfferingId,
+                definition.ModelDefaults?.Mode == "auto" ? "Auto · resolves for each new Run" : descriptor?.DisplayName ?? "Model unavailable",
+                definition.ModelDefaults?.Mode == "auto" ? "auto" : model is null ? SessionModelBinder.IsInheritedOffering(definition.ModelDefaults?.OfferingId) ? "tenantDefault" : "agentDefault" : SessionModelBinder.ToWire(model.SelectionSource),
+                model?.ReasoningEffort ?? definition.ModelDefaults?.Reasoning?.Effort,
                 model?.ExternalModelId, Available: model is not null && descriptor is not null,
                 UnavailableReason: unavailable),
             EffectiveToolAllowlist: offeredTools,
@@ -92,7 +92,6 @@ internal static class EffectiveConfigurationComposer
                 AllowsScheduleSource: scheduleAllowed,
                 AllowsApplicationEventSource: applicationEventAllowed,
                 CanAcceptNewTriggeredWork: instanceActive && descriptor?.Tools == true && (scheduleAllowed || applicationEventAllowed)),
-            UnattendedOfferingId: instance.UnattendedOfferingId,
-            UnattendedReasoningEffort: instance.UnattendedReasoningEffort);
+            UnattendedModel: instance.UnattendedModel);
     }
 }

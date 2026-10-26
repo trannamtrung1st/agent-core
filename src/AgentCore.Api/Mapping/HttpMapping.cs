@@ -338,7 +338,7 @@ public static partial class HttpMapping
             display,
             SessionModelBinder.ToWire(selection.SelectionSource),
             selection.ReasoningEffort,
-            selection.ExternalModelId, selection.ConnectionId, selection.Binding?.ConnectionLabel ?? catalog?.Get(selection.OfferingId)?.ConnectionLabel);
+            selection.ExternalModelId, selection.ConnectionId, selection.Binding?.ConnectionLabel ?? catalog?.Get(selection.OfferingId)?.ConnectionLabel, selection.Decision is not null);
     }
 
     public static ModelCatalogResponse ToCatalog(IModelCatalog catalog) =>

@@ -11,12 +11,12 @@ namespace AgentCore.Application.Security;
 
 public sealed record TenantAutomationTriggerChange(Guid? TriggerId, AutomationTrigger Configuration, bool Enabled = true, long ExpectedRevision = 0);
 public sealed record TenantAutomationChange(bool Enabled, string Name, string Instructions, TriggerSchedule? Schedule,
-    string? OfferingId = null, string? ReasoningEffort = null, bool RequiresTools = true, bool RequiresVision = false,
+    AgentCore.Domain.Models.ModelPreference? ModelPreference = null, bool RequiresTools = true, bool RequiresVision = false,
     IReadOnlyList<TenantAutomationTriggerChange>? Events = null, Guid? ReportToSessionId = null, Guid? TargetSessionId = null,
     string? PresetId = null, int? PresetVersion = null, Guid? PinnedSpaceId = null, Guid? PinnedEnvironmentId = null);
 
 public sealed partial class TenantAutomationService(IIamStore security, ITenantAutomationStore store, ITenantAgentStore agents,
-    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer iam, ITenantModelCatalogReader modelCatalogs, IIdGenerator ids, TimeProvider time, IEventFilterEvaluator? filters = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null, ITenantSessionStore? sessions = null)
+    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer iam, ITenantModelCatalogReader modelCatalogs, IIdGenerator ids, TimeProvider time, IEventFilterEvaluator? filters = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null, ITenantSessionStore? sessions = null, AutoModelRouter? routing = null)
 {
     private readonly SemaphoreSlim dueGate = new(1, 1);
     private string? dueCursor;
@@ -62,8 +62,8 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
         var conversation = TenantAutomationConversationRules.Existing(proposed)
             ? TenantAutomationConversationRules.Require(proposed, sessions is null ? null : await sessions.FindTenantSessionAsync(tenant, proposed.ExecutionTarget.SessionId!.Value, ct)) : null;
         await TenantAutomationConversationRules.AuthoringAsync(state, human.PrincipalId, proposed, conversation, iam, ct);
-        if (conversation is not null) _ = TenantAutomationConversationRules.Model(proposed, conversation, policy, models);
-        if (proposed.Status == AutomationStatus.Active && (proposed.IsSchedule && proposed.NextOccurrenceAtUtc is null || conversation is null && !ExecutionModelPolicy.Resolve(models, policy, agent.Instance, proposed).Accepted))
+        if (conversation is not null) TenantAutomationConversationRules.RequireSelectable(proposed, conversation, policy, models);
+        if (proposed.Status == AutomationStatus.Active && (proposed.IsSchedule && proposed.NextOccurrenceAtUtc is null || conversation is null && !ExecutionModelPolicy.Selectable(models, policy, agent.Instance, proposed)))
             throw new AccessDeniedException("automation_model_unavailable");
         var audit = new AuthorizationAudit(ids.NewId(), tenant, human.PrincipalId, permission, proposed.AutomationId.ToString("D"), "allowed", "automation_saved", at);
         if (!await store.TrySaveTenantAutomationAsync(Next(state), securityRevision, proposed, automationRevision, instanceRevision, human, permission, audit, ct)) throw new SecurityConflictException("stale_revision");
@@ -159,8 +159,10 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
         var sourceKind = manual ? TriggerSourceKind.ManualInvocation : eventSource?.SourceKind ?? TriggerSourceKind.Schedule;
         var admissionDecision = await TenantAutomationAdmissionApprovalRules.EvaluateAsync(state, current, agent, resolved.Configuration.Definition, human?.PrincipalId, iam, ct, sourceKind, eventSource, eventDelivery is not null ? TenantEventAdmissionRules.EmailAccounts(eventDelivery) : eventBucket is not null ? TenantEventAdmissionRules.EmailAccounts(eventBucket) : []);
         var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
-        var model = conversation is null ? ExecutionModelPolicy.Resolve(models, resolved.Configuration.Definition, agent.Instance, current)
-            : new ExecutionModelDecision(TenantAutomationConversationRules.Model(current, conversation, resolved.Configuration.Definition, models), null);
+        var model = conversation is null ? routing is null ? ExecutionModelPolicy.Resolve(models, resolved.Configuration.Definition, agent.Instance, current) : await ExecutionModelPolicy.ResolveAsync(routing, models, resolved.Configuration.Definition, agent.Instance, current, ct)
+            : routing is null ? new ExecutionModelDecision(TenantAutomationConversationRules.Model(current, conversation, resolved.Configuration.Definition, models), null)
+            : new ExecutionModelDecision(await TenantAutomationConversationRules.ModelAsync(routing, current, conversation, resolved.Configuration.Definition, models, ct), null);
+        _ = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         if (!model.Accepted || model.Pin is null) throw new AccessDeniedException("automation_model_unavailable");
         TriggerOccurrence occurrence; Automation next;
         if (manual)
@@ -183,7 +185,7 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
         }
         var graph = conversation is null ? BackgroundSessionAdmissionFactory.ForOccurrence(ids.NewSessionId(), ids.NewId(), ids.NewId(), ids.NewId(), ids.NewId(), occurrence,
             resolved.Configuration.Definition, agent.Instance.Persona, agent.Instance.PersonaRevision, model.Pin, resolved.Skills, at, current.Name,
-            ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved.Configuration, manual ? human?.PrincipalId : null)
+            ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved.Configuration, manual ? human?.PrincipalId : null, ExecutionModelPolicy.Preference(resolved.Configuration.Definition, agent.Instance, current))
             : (Session: conversation.Snapshot, Run: TenantAutomationConversationRules.ForOccurrence(conversation, occurrence, agent, resolved,
                 ids.NewId(), ids.NewId(), ids.NewId(), model.Pin, at, manual ? human?.PrincipalId : null));
         await configurations.RequireCurrentSpaceAsync(graph.Run, ct).ConfigureAwait(false);
@@ -199,7 +201,7 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
             var initial = initialOccurrence;
             var intent = new PreparedAutomationAdmission(tenant, current, next, initial, requestId, graph.Session.SessionId, conversation is null ? graph.Session.Entries[0].EntryId : ids.NewId(),
                 graph.Run.ActivationId, graph.Run.AgentRunId, graph.Run.ResponseId!.Value, human?.PrincipalId, admissionDecision.Permission,
-                TenantAutomationRules.Hash(resolved), new(model.Pin.OfferingId, model.Pin.ConnectionId, model.Pin.ExternalModelId, model.Pin.ReasoningEffort, model.Pin.Binding), eventSource,
+                TenantAutomationRules.Hash(resolved), new(model.Pin.OfferingId, model.Pin.ConnectionId, model.Pin.ExternalModelId, model.Pin.ReasoningEffort, model.Pin.Binding, model.Pin.Decision), eventSource,
                 conversation is null ? null : new(conversation.Snapshot.Revision, conversation.Snapshot.DurableLastEntrySequence));
             var op = TenantApprovalRules.PrepareAutomationAdmission(ids.NewId(), agent.Instance.InstanceId, intent, agent.Instance.Revision, agent.Instance.PersonaRevision);
             op = TenantApprovalRules.ForRun(op, graph.Run);

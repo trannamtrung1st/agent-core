@@ -7,16 +7,34 @@ namespace AgentCore.Application.Models;
 
 public static class SessionModelBinder
 {
+    public static SessionModelSelection BindPreference(IModelCatalog catalog, AgentCore.Domain.Models.ModelPreference preference,
+        AgentCore.Domain.Models.ModelPreference? definitionDefault = null)
+    {
+        preference.Validate(); definitionDefault?.Validate();
+        var effective = preference.Mode == "inherit" ? definitionDefault ?? preference : preference;
+        var reasoning = preference.Reasoning ?? effective.Reasoning;
+        if (effective.Mode == "auto" || reasoning?.Mode == "auto")
+            throw new AgentCoreException("ModelRoutingUnavailable", "Auto resolves once at new Run admission.", 409);
+        var selected = Bind(catalog, preference.OfferingId, reasoning?.Effort, ModelSelectionSource.User, definitionDefault);
+        if (reasoning?.Mode == "modelDefault")
+        {
+            var descriptor = catalog.Get(selected.OfferingId)!;
+            selected = Bind(descriptor, descriptor.DefaultReasoningEffort, selected.SelectionSource);
+        }
+        return selected;
+    }
+
     public static bool IsInheritedOffering(string? offeringId) => offeringId is null;
 
     // The same inherited choice drives public Chat discovery and actual admission.
     // Missing/disabled references remain the chosen ID; discovery must not substitute a model.
     public static (string OfferingId, string? Effort, ModelSelectionSource Source) InheritedChoice(
-        IModelCatalog catalog, AgentModelDefaults? defaults)
+        IModelCatalog catalog, AgentCore.Domain.Models.ModelPreference? defaults)
     {
+        if (defaults?.Mode == "auto") return ("", null, ModelSelectionSource.Auto);
         var agentChoice = defaults?.OfferingId is not null;
         return (agentChoice ? defaults!.OfferingId!.Trim() : catalog.DefaultOfferingId,
-            NormalizeEffort(defaults?.ReasoningEffort) ?? (agentChoice ? null : catalog.DefaultReasoningEffort),
+            NormalizeEffort(defaults?.Reasoning?.Effort) ?? (agentChoice ? null : catalog.DefaultReasoningEffort),
             agentChoice ? ModelSelectionSource.AgentDefault : ModelSelectionSource.TenantDefault);
     }
 
@@ -25,10 +43,12 @@ public static class SessionModelBinder
         string? requestedOfferingId,
         string? requestedEffort,
         ModelSelectionSource explicitSource,
-        AgentModelDefaults? agentDefaults = null)
+        AgentCore.Domain.Models.ModelPreference? agentDefaults = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
 
+        if (requestedOfferingId is null && agentDefaults?.Mode == "auto")
+            throw new AgentCoreException("ModelRoutingUnavailable", "Auto resolves once at new Run admission; no deterministic effective model exists yet.", 409);
         var hasExplicitModel = !IsInheritedOffering(requestedOfferingId);
         string key;
         ModelSelectionSource source;
@@ -52,7 +72,7 @@ public static class SessionModelBinder
         if (effort is null && !hasExplicitModel)
             effort = InheritedChoice(catalog, agentDefaults).Effort;
 
-        return Bind(descriptor, effort, source) with { HasExplicitReasoningEffort = NormalizeEffort(requestedEffort) is not null };
+        return Bind(descriptor, effort, source);
     }
 
     public static SessionModelSelection Bind(
@@ -94,7 +114,6 @@ public static class SessionModelBinder
             descriptor.ExternalModelId,
             source,
             effort,
-            HasExplicitReasoningEffort: NormalizeEffort(requestedEffort) is not null,
             Binding: descriptor.Route is { } route && descriptor.CapabilityProfile is { } profile
                 ? new(route, profile, descriptor.DisplayName, descriptor.ConnectionLabel!) : null);
     }
@@ -110,10 +129,9 @@ public static class SessionModelBinder
                 ?? throw new AgentCoreException("ModelUnavailable", "The selected model is unavailable. Select an enabled offering for a new Run.", 409);
             if (existing.SelectionSource == ModelSelectionSource.Host && descriptor.Route != existing.Binding?.Route)
                 throw new AgentCoreException("ModelRouteStale", "The admitted model route changed. Start new work with a current model.", 409);
-            return Bind(descriptor, existing.SelectionSource == ModelSelectionSource.Host || existing.HasExplicitReasoningEffort ? existing.ReasoningEffort : null, existing.SelectionSource)
-                with { HasExplicitReasoningEffort = existing.HasExplicitReasoningEffort };
+            return Bind(descriptor, existing.ReasoningEffort, existing.SelectionSource);
         }
-        return Bind(catalog, null, existing?.HasExplicitReasoningEffort == true ? existing.ReasoningEffort : null,
+        return Bind(catalog, null, null,
             ModelSelectionSource.TenantDefault, definition.ModelDefaults);
     }
 
@@ -124,6 +142,7 @@ public static class SessionModelBinder
             ModelSelectionSource.AgentDefault => "agentDefault",
             ModelSelectionSource.User => "user",
             ModelSelectionSource.Host => "host",
+            ModelSelectionSource.Auto => "auto",
             _ => throw new ArgumentOutOfRangeException(nameof(source))
         };
 

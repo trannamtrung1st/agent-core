@@ -1,3 +1,4 @@
+import { modelPreferenceKey } from './modelPreference';
 import { IdentityError } from "./identity";
 import { normalizeDraftParts } from "./messageParts";
 import { HttpTransportType, HubConnection, HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
@@ -2208,14 +2209,14 @@ export async function applySessionModel(key: string, reasoningEffort: string | n
   try {
     const saved = await tenantSelectChatModel(session, key === INHERIT_MODEL ? null : key, reasoningEffort);
     if (!sameSessionId(session, useSessionStore.getState().sessionId)) return;
-    useSessionStore.setState({ ...modelFieldsFromSelection(saved.model), modelMutationPending: false, sessionError: null, error: null, errorFatal: false });
+    useSessionStore.setState({ ...modelFieldsFromSelection(saved.model, saved.modelPreference), modelMutationPending: false, sessionError: null, error: null, errorFatal: false });
   } catch (error) {
     if (!sameSessionId(session, useSessionStore.getState().sessionId)) return;
     // Read current state after an uncertain/refused command. Never replay the change.
     try {
       const saved = await getSession(session);
       if (sameSessionId(session, useSessionStore.getState().sessionId))
-        useSessionStore.setState({ ...modelFieldsFromSelection(saved.model) });
+        useSessionStore.setState({ ...modelFieldsFromSelection(saved.model, saved.modelPreference) });
     } catch { /* Keep the last known selection visible until an explicit reload succeeds. */ }
     if (sameSessionId(session, useSessionStore.getState().sessionId))
       useSessionStore.setState({ modelMutationPending: false,
@@ -2488,7 +2489,7 @@ async function showPausedSession(
       lifecycleStatus: view.lifecycleStatus ?? "paused",
       pauseReason: view.pauseReason ?? null,
       lastServerSequence: view.lastEntrySequence ?? 0,
-      ...modelFieldsFromSelection(view.model),
+      ...modelFieldsFromSelection(view.model, view.modelPreference),
       error: null,
       errorFatal: false
     });
@@ -2577,7 +2578,7 @@ async function showEndedSession(
       agentCompletion: view.agentCompletion ?? "disabled", lifecycleReason: view.lifecycleReason ?? null, lifecycleSource: view.lifecycleSource ?? null,
       lifecycleStatus: view.lifecycleStatus ?? "ended",
       lastServerSequence: view.lastEntrySequence ?? 0,
-      ...modelFieldsFromSelection(view.model),
+      ...modelFieldsFromSelection(view.model, view.modelPreference),
       error: null,
       errorFatal: false
     });
@@ -2670,7 +2671,7 @@ function mergePendingAttachments(restored: PendingAttachment[]): PendingAttachme
 
 function composerModelValue(snapshot = useSessionStore.getState()): string {
   return modelSelectValue(
-    snapshot.sessionOfferingId,
+    modelPreferenceKey(snapshot.sessionModelPreference, snapshot.sessionOfferingId),
     snapshot.pendingOfferingId,
     snapshot.sessionId != null,
     snapshot.modelCatalogDefaultOfferingId);

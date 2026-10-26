@@ -62,7 +62,8 @@ public sealed class SnapshotRecord
     public string? ModelConnectionId { get; set; }
     public string? ExternalModelId { get; set; }
     public string? ModelSelectionSource { get; set; }
-    public bool ModelHasExplicitReasoningEffort { get; set; }
+    public string? ModelPreferenceJson { get; set; }
+    public string? ModelDecisionJson { get; set; }
     public string? ModelBindingJson { get; set; }
     public string? ModelReasoningEffort { get; set; }
     public int SummaryFormatVersion { get; set; }
@@ -503,8 +504,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.DefinitionId).HasMaxLength(128).IsRequired();
             entity.Property(row => row.PersonaJson).IsRequired();
             entity.Property(row => row.Lifecycle).HasMaxLength(32).IsRequired();
-            entity.Property(row => row.UnattendedOfferingId).HasMaxLength(128);
-            entity.Property(row => row.UnattendedReasoningEffort).HasMaxLength(64);
+            entity.Property(row => row.UnattendedModelJson);
             entity.Property(row => row.Revision).IsConcurrencyToken();
             entity.HasIndex(row => row.DefinitionId);
         });
@@ -577,8 +577,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.SourceSessionId).HasMaxLength(36);
             entity.Property(row => row.SourceEventId).HasMaxLength(36);
             entity.Property(row => row.SuspensionReason).HasMaxLength(200);
-            entity.Property(row => row.ModelOverrideOfferingId).HasMaxLength(128);
-            entity.Property(row => row.ModelOverrideReasoningEffort).HasMaxLength(64);
+            entity.Property(row => row.ModelPreferenceJson);
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.Status });
             entity.HasIndex(row => new { row.Status, row.NextOccurrenceAtUtc, row.AutomationId });
         });

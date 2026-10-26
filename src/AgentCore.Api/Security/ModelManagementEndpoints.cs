@@ -69,6 +69,19 @@ internal static class ModelManagementEndpoints
         tenant.MapPut("/models/default", (TenantModelDefaultRequest body, HttpContext http, TenantModelManagementService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
             Results.Json(ModelManagementMapping.Map(await service.SaveDefaultAsync(IdentityHttp.TenantHuman(http), IdentityHttp.TenantContext(http).TenantId,
                 body.OfferingId, body.ReasoningEffort, body.ExpectedRevision, body.ExpectedSettingsRevision, ct)))));
+        tenant.MapGet("/models/routing/status", (HttpContext http, TenantModelManagementService service, AgentCore.Application.Decisions.IDecisionEngine engine, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var result = await service.RoutingStatusAsync(IdentityHttp.TenantHuman(http), IdentityHttp.TenantContext(http).TenantId, engine, ct);
+            return Results.Json(new { status = System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(result.Status.ToString()), result.EngineId, result.EngineVersion, result.PreAdmissionSupported, result.ShadowMode });
+        }));
+        tenant.MapPut("/models/routing", (AutoRoutingPolicyRequest body, HttpContext http, TenantModelManagementService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+            Results.Json(ModelManagementMapping.Map(await service.SaveRoutingAsync(IdentityHttp.TenantHuman(http), IdentityHttp.TenantContext(http).TenantId,
+                new(body.Routing.Enabled, body.Routing.AllowConfiguredDefault, body.Routing.MinimumProbability), body.ExpectedRevision, body.ExpectedSettingsRevision, ct)))));
+        app.MapGet("/api/v2/system/decision-intelligence", (HttpContext http, IIamStore security, SystemModelPresetService service, AgentCore.Application.Decisions.IDecisionEngine engine, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var result = await service.DecisionStatusAsync(await IdentityHttp.SystemHumanAsync(http, security, ct), engine, ct);
+            return Results.Json(new { status = System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(result.Status.ToString()), result.EngineId, result.EngineVersion, result.PreAdmissionSupported, result.ShadowMode });
+        })).RequireAuthorization();
         var system = app.MapGroup("/api/v2/system/model-presets").RequireAuthorization();
         system.MapGet("", (HttpContext http, IIamStore security, SystemModelPresetService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
             Results.Json((await service.ReadSummariesAsync(await IdentityHttp.SystemHumanAsync(http, security, ct), ct)).Select(ModelManagementMapping.Map))));

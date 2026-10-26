@@ -78,7 +78,7 @@ public sealed partial class TenantAgentConfigurationService
         if (current.Lifecycle != AgentInstanceLifecycle.Active) throw new ArgumentException("Archived Instances are read-only.");
         var effective = InstanceSettingsResolver.Resolve(target, current.SettingsOverrides);
         var models = await ModelCatalogForAgentAsync(actor, tenant, current.InstanceId, ct).ConfigureAwait(false);
-        ExecutionModelPolicy.RequireSelectable(models, effective.ModelDefaults?.OfferingId, effective.ModelDefaults?.ReasoningEffort);
+        ExecutionModelPolicy.RequireSelectable(models, effective.ModelDefaults);
         var skills = new InstanceSkillSnapshot(snapshot.Skills.DefinitionStates.Concat(target.SkillList
             .Where(s => !snapshot.Skills.DefinitionStates.Any(old => old.DefinitionSkillId == s.Id))
             .Select(s => new AgentDefinitionSkillState(current.InstanceId, s.Id, null, 1, time.GetUtcNow()))).ToArray(), snapshot.Skills.InstanceSkills);

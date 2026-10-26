@@ -49,7 +49,7 @@ public sealed class ExecutionModelPolicyTests
             Catalog(),
             definition,
             Instance(definition, "dca30000-0000-4000-8000-000000000003", null),
-            Registration("missing-model", null, requiresVision: false));
+            Registration("dca30000-0000-4000-8000-000000000099", null, requiresVision: false));
         Assert.Null(decision.Pin);
         Assert.Equal(ExecutionModelPolicy.UnavailableCode, decision.FailureCode);
     }
@@ -75,7 +75,7 @@ public sealed class ExecutionModelPolicyTests
         var decision = ExecutionModelPolicy.Resolve(
             Catalog(),
             definition,
-            Instance(definition, "text-only", null),
+            Instance(definition, "dca30000-0000-4000-8000-000000000004", null),
             registration: null);
         Assert.Equal("text-only", decision.Pin!.ExternalModelId);
         Assert.Equal(ExecutionModelPolicy.CapabilityCode, decision.FailureCode);
@@ -156,7 +156,7 @@ public sealed class ExecutionModelPolicyTests
                     [],
                     null, DeveloperRoleSupport: true),
                 new ModelDescriptor(
-                    "text-only",
+                    "dca30000-0000-4000-8000-000000000004",
                     "Text only",
                     "dca20000-0000-4000-8000-000000000001",
                     "text-only",
@@ -177,8 +177,7 @@ public sealed class ExecutionModelPolicyTests
             AgentInstanceLifecycle.Active,
             Now,
             Now,
-            UnattendedOfferingId: offeringId,
-            UnattendedReasoningEffort: effort);
+            UnattendedModel: offeringId is null ? null : AgentCore.Domain.Models.ModelPreference.Fixed(offeringId, effort));
 
     private static Automation Registration(
         string? offeringId,
@@ -197,8 +196,7 @@ public sealed class ExecutionModelPolicyTests
             1,
             new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, null, null, Now, Now),
             null,
-            offeringId,
-            effort,
+            offeringId is null ? null : AgentCore.Domain.Models.ModelPreference.Fixed(offeringId, effort),
             requiresVision);
 
     private static async Task<AgentDefinition> LoadAsync(string id, int version)

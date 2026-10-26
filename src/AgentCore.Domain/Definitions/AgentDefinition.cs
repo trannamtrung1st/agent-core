@@ -17,7 +17,7 @@ public sealed record AgentDefinition(
     ProviderPreferences ProviderPreferences,
     IReadOnlyDictionary<string, string> Metadata,
     DefinitionExecutionPolicy? ExecutionPolicy = null,
-    AgentModelDefaults? ModelDefaults = null,
+    AgentCore.Domain.Models.ModelPreference? ModelDefaults = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     MemoryPolicy? MemoryPolicy = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -102,6 +102,3 @@ public sealed record ProviderPreferences(
     string? SpeechRecognizer,
     string? SpeechSynthesizer,
     string InterruptionClassifier = "heuristic");
-
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record AgentModelDefaults(string? OfferingId, string? ReasoningEffort);

@@ -25,15 +25,15 @@ public sealed class SessionModelBinderTests
     }
 
     [Fact]
-    public void Default_refresh_preserves_explicit_reasoning_effort_but_inherits_unspecified_effort()
+    public void Concrete_inherited_projection_refreshes_current_definition_default()
     {
         var catalog = TestModelCatalogs.Synthetic();
         var explicitEffort = SessionModelBinder.Bind(catalog, null, "high", ModelSelectionSource.User);
-        Assert.True(explicitEffort.HasExplicitReasoningEffort);
-        Assert.Equal("high", SessionModelBinder.RefreshDefault(catalog, SampleDefinitions.Examiner with { ModelDefaults = new("dca30000-0000-4000-8000-000000000001", "low") }, explicitEffort).ReasoningEffort);
+        Assert.Equal("high", explicitEffort.ReasoningEffort);
+        Assert.Equal("low", SessionModelBinder.RefreshDefault(catalog, SampleDefinitions.Examiner with { ModelDefaults = AgentCore.Domain.Models.ModelPreference.Fixed("dca30000-0000-4000-8000-000000000001", "low") }, explicitEffort).ReasoningEffort);
         var inherited = SessionModelBinder.PinDefault(catalog);
-        Assert.False(inherited.HasExplicitReasoningEffort);
-        Assert.Equal("low", SessionModelBinder.RefreshDefault(catalog, SampleDefinitions.Examiner with { ModelDefaults = new("dca30000-0000-4000-8000-000000000001", "low") }, inherited).ReasoningEffort);
+        Assert.Equal(ModelSelectionSource.TenantDefault, inherited.SelectionSource);
+        Assert.Equal("low", SessionModelBinder.RefreshDefault(catalog, SampleDefinitions.Examiner with { ModelDefaults = AgentCore.Domain.Models.ModelPreference.Fixed("dca30000-0000-4000-8000-000000000001", "low") }, inherited).ReasoningEffort);
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public sealed class SessionModelBinderTests
             requestedOfferingId: null,
             requestedEffort: null,
             ModelSelectionSource.User,
-            new AgentModelDefaults("dca30000-0000-4000-8000-000000000002", null));
+            AgentCore.Domain.Models.ModelPreference.Fixed("dca30000-0000-4000-8000-000000000002", null));
         Assert.Equal("dca30000-0000-4000-8000-000000000002", selection.OfferingId);
         Assert.Equal(ModelSelectionSource.AgentDefault, selection.SelectionSource);
         Assert.Null(selection.ReasoningEffort);

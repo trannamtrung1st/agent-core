@@ -42,8 +42,7 @@ public sealed record AdminEffectiveConfigurationResponse(
     AdminMemoryPolicyResponse MemoryPolicy,
     AdminTriggerPolicyResponse? TriggerPolicy,
     AdminDurableExecutionEligibilityResponse DurableExecutionEligibility,
-    string? UnattendedOfferingId = null,
-    string? UnattendedReasoningEffort = null,
+    ModelPreferenceDto? UnattendedModel = null,
     AdminBrowserConfigurationResponse? Browser = null,
     System.Text.Json.JsonElement? ExecutionBudgets = null);
 
@@ -298,15 +297,13 @@ public sealed record AdminAgentInstanceResponse(
     long Revision,
     long PersonaRevision,
     AdminPersonaResponse Persona,
-    string? UnattendedOfferingId = null,
-    string? UnattendedReasoningEffort = null,
+    ModelPreferenceDto? UnattendedModel = null,
     AdminBrowserConfigurationResponse? Browser = null,
     System.Text.Json.JsonElement? ExecutionBudgets = null);
 
 public sealed record AdminSetUnattendedModelRequest(
     long ExpectedRevision,
-    string? OfferingId,
-    string? ReasoningEffort);
+    ModelPreferenceDto? ModelPreference);
 
 public sealed record AdminUpdateAgentInstancePersonaRequest(
     long ExpectedRevision,

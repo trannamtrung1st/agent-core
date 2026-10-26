@@ -78,7 +78,7 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(root + "/sessions", new { agentInstanceId = instance,
             expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision, modelKey = "default" })).StatusCode);
         var session = await Json(await owner.PostAsJsonAsync(root + "/sessions", new { agentInstanceId = instance,
-            expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision, offeringId, reasoningEffort = "high" }));
+            expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision, retentionKind = "saved", modelPreference = new { mode = "fixed", offeringId, reasoning = new { mode = "fixed", effort = "high" } } }));
         var savedSelection = (await Json(await owner.GetAsync(root + "/sessions/" + session.GetProperty("sessionId").GetString() + "/conversation"))).GetProperty("model");
         Assert.Equal(offeringId.ToString("D"), savedSelection.GetProperty("offeringId").GetString());
         Assert.Equal(connectionId.ToString("D"), savedSelection.GetProperty("connectionId").GetString());
@@ -87,26 +87,26 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Equal("tenantDefault", selectable.GetProperty("defaultSource").GetString());
         var configuredAgent = await Json(await owner.PatchAsJsonAsync(root + $"/agents/{instance}/settings/modelDefaults", new {
             expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision,
-            set = new { offeringId = offeringId.ToString("D"), reasoningEffort = "high" }, clear = Array.Empty<string>() }));
+            set = new { preference = new { mode = "fixed", offeringId = offeringId.ToString("D"), reasoning = new { mode = "fixed", effort = "high" } } }, clear = Array.Empty<string>() }));
         instanceRevision = configuredAgent.GetProperty("instance").GetProperty("revision").GetInt64();
         var inheritedCatalog = await Json(await owner.GetAsync(root + "/chat/models?instanceId=" + instance.ToString("D")));
         Assert.Equal(offeringId.ToString("D"), inheritedCatalog.GetProperty("defaultOfferingId").GetString());
         Assert.Equal("high", inheritedCatalog.GetProperty("defaultReasoningEffort").GetString());
         Assert.Equal("agentDefault", inheritedCatalog.GetProperty("defaultSource").GetString());
         var inheritedSession = await Json(await owner.PostAsJsonAsync(root + "/sessions", new { agentInstanceId = instance,
-            expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }));
+            expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision, retentionKind = "saved" }));
         var inheritedModel = (await Json(await owner.GetAsync(root + "/sessions/" + inheritedSession.GetProperty("sessionId").GetString() + "/conversation"))).GetProperty("model");
         Assert.Equal("agentDefault", inheritedModel.GetProperty("selectionSource").GetString());
         Assert.Equal("high", inheritedModel.GetProperty("reasoningEffort").GetString());
         var explicitSession = await Json(await owner.PostAsJsonAsync(root + "/sessions", new { agentInstanceId = instance,
-            expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision, offeringId }));
+            expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision, retentionKind = "saved", modelPreference = new { mode = "fixed", offeringId } }));
         var explicitModel = (await Json(await owner.GetAsync(root + "/sessions/" + explicitSession.GetProperty("sessionId").GetString() + "/conversation"))).GetProperty("model");
         Assert.Equal("user", explicitModel.GetProperty("selectionSource").GetString());
         Assert.Equal("medium", explicitModel.GetProperty("reasoningEffort").GetString());
         var explicitId = explicitSession.GetProperty("sessionId").GetGuid();
         var currentSession = await Json(await owner.GetAsync(root + $"/sessions/{explicitId}"));
         var switchWitness = new TenantSessionModelRequest(await Revision(owner, tenant), currentSession.GetProperty("revision").GetInt64(),
-            Guid.Parse("dca30000-0000-4000-8000-000000000002"));
+            new("fixed", "dca30000-0000-4000-8000-000000000002"));
         var switched = await Json(await owner.PutAsJsonAsync(root + $"/sessions/{explicitId}/model", switchWitness));
         Assert.Equal("dca30000-0000-4000-8000-000000000002", switched.GetProperty("model").GetProperty("offeringId").GetString());
         Assert.Equal("user", switched.GetProperty("model").GetProperty("selectionSource").GetString());
@@ -119,7 +119,7 @@ public sealed partial class TenantCredentialAccessTests
         var paused = await Json(await owner.PostAsJsonAsync(root + $"/sessions/{explicitId}/pause", new {
             expectedRevision = await Revision(owner, tenant), expectedSessionRevision = inheritedAgain.GetProperty("revision").GetInt64() }));
         Assert.Equal(HttpStatusCode.Conflict, (await owner.PutAsJsonAsync(root + $"/sessions/{explicitId}/model", new TenantSessionModelRequest(
-            await Revision(owner, tenant), paused.GetProperty("revision").GetInt64(), offeringId))).StatusCode);
+            await Revision(owner, tenant), paused.GetProperty("revision").GetInt64(), new("fixed", offeringId.ToString("D"))))).StatusCode);
         var defaultReferences = await Json(await owner.GetAsync(root + $"/models/{offeringId}/references?kind=default&pageSize=1"));
         Assert.Equal(1, defaultReferences.GetProperty("total").GetInt32());
         Assert.Equal(offeringId, defaultReferences.GetProperty("items")[0].GetProperty("offeringId").GetGuid());

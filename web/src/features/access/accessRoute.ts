@@ -1,5 +1,5 @@
 import { draftPages, type DraftPage } from '../admin/adminNavigation';
-export type ModelAdminPage = 'connections' | 'models' | 'defaults';
+export type ModelAdminPage = 'connections' | 'models' | 'defaults' | 'routing';
 export type AccessPage = 'my-profile' | 'governance' | 'access' | 'members' | 'roles' | 'audit' | 'definitions' | 'credentials' | 'events' | 'sandboxes' | 'approvals' | 'agents' | 'spaces' | 'secrets' | 'ai-models';
 export type TenantInstancePage = 'memory' | 'profile' | 'version' | 'skills' | 'resources' | 'state' | 'state-isolation' | 'settings' | 'execution-budgets' | 'self-management' | 'unattended-model' | 'sandbox' | 'access' | 'connections' | 'lifecycle' | 'activity-sessions' | 'activity-runs' | 'automations';
 export type TenantSpacePage = 'overview' | 'members' | 'workspace' | 'environments' | 'access';
@@ -19,7 +19,7 @@ export function parseAccessRoute(path: string): AccessRoute | null {
   if (path === '/account/profile') return { area: 'access', view: 'account', page: 'profile' };
   const ownProfile = new RegExp(`^/t/(${uuid})/profile/?$`, 'i').exec(path);
   if (ownProfile) return { area: 'access', view: 'tenant', tenantId: ownProfile[1].toLowerCase(), page: 'my-profile' };
-  const models = new RegExp(`^/t/(${uuid})/integrations/ai-models(?:/(connections|models|defaults))?/?$`, 'i').exec(path);
+  const models = new RegExp(`^/t/(${uuid})/integrations/ai-models(?:/(connections|models|defaults|routing))?/?$`, 'i').exec(path);
   if (models) return { area: 'access', view: 'tenant', tenantId: models[1].toLowerCase(), page: 'ai-models', modelPage: (models[2]?.toLowerCase() ?? 'connections') as ModelAdminPage };
   const spaces = new RegExp(`^/t/(${uuid})/admin/spaces(?:/(${uuid})(?:/(overview|members|workspace|environments|access))?)?/?$`, 'i').exec(path);
   if (spaces) return { area: 'access', view: 'tenant', tenantId: spaces[1].toLowerCase(), page: 'spaces', spaceId: spaces[2]?.toLowerCase(), spacePage: spaces[3]?.toLowerCase() as TenantSpacePage | undefined };

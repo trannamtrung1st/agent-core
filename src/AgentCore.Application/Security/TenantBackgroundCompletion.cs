@@ -27,7 +27,7 @@ public static class TenantBackgroundCompletionFactory
         return AgentRun.Create(runId, child.Owner, new(activation, resolved.Configuration.Definition.Id, resolved.Configuration.Definition.Version,
             resolved.Persona, responseId, AgentRunOutputContract.CompletionReport,
             ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved.Configuration, executionContext: execution),
-            new(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort, model.Binding), AgentRunLimits.DefaultMaxAttempts, now,
+            new(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort, model.Binding, model.Decision), AgentRunLimits.DefaultMaxAttempts, now,
             resolved.Skills, resolved.Skills.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray());
     }
     public static long? InputBoundary(AgentRun run)
@@ -67,7 +67,7 @@ public static class TenantBackgroundCompletionFactory
 
 // The incumbent supervised tenant coordinator invokes this bounded admission pass.
 public sealed class TenantBackgroundCompletionService(ITenantRuntimeStore storage, TenantRunConfigurationResolver configurations,
-    ITenantModelCatalogReader modelCatalogs, IIdGenerator ids, TimeProvider time, IIamStore security, TenantApprovalService? approvals = null)
+    ITenantModelCatalogReader modelCatalogs, IIdGenerator ids, TimeProvider time, IIamStore security, TenantApprovalService? approvals = null, AutoModelRouter? routing = null)
 {
     public async ValueTask AdmitPendingAsync(int limit, CancellationToken ct)
     {
@@ -76,6 +76,7 @@ public sealed class TenantBackgroundCompletionService(ITenantRuntimeStore storag
             try
             {
                 TenantBackgroundCompletionFactory.RequireParent(source);
+                PreparedBackgroundModel? captured = null;
                 if (approvals is not null)
                 {
                     var read = await approvals.PrepareReportSourceReadAsync(source, ct).ConfigureAwait(false);
@@ -84,19 +85,27 @@ public sealed class TenantBackgroundCompletionService(ITenantRuntimeStore storag
                     var prepared = await approvals.PrepareBackgroundReportAsync(source, ct).ConfigureAwait(false);
                     if (prepared.Request is not null) continue;
                     if (prepared.Decision == OperationDecisionKind.Denied) throw new AccessDeniedException(prepared.ReasonCode);
+                    captured = prepared.Operation.BackgroundReport?.Model;
                 }
                 var resolved = await configurations.ResolveInSpaceAsync(source.Child.Owner.TenantId!.Value, source.Child.AgentInstanceId,
                     source.Parent!.Snapshot.ContextSelection ?? throw new AccessDeniedException("space_context_required"), ct).ConfigureAwait(false);
                 var state = await security.ReadTenantAsync(source.Child.Owner.TenantId.Value, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
                 var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
-                var model = SessionModelBinder.RefreshDefault(models, resolved.Configuration.Configuration.Definition, source.Parent!.Snapshot.ModelSelection)
-                    ?? throw new AccessDeniedException("target_model_unavailable");
+                var definition = resolved.Configuration.Configuration.Definition;
+                var model = captured is not null ? new SessionModelSelection(captured.OfferingId, captured.ConnectionId, captured.ExternalModelId,
+                    ModelSelectionSource.Host, captured.ReasoningEffort, Binding: captured.Binding, Decision: captured.Decision)
+                    : routing is null ? SessionModelBinder.BindPreference(models, source.Parent!.Snapshot.ModelPreference ?? AgentCore.Domain.Models.ModelPreference.Inherit, definition.ModelDefaults)
+                    : await routing.ResolveAsync(models, source.Parent!.Snapshot.ModelPreference ?? AgentCore.Domain.Models.ModelPreference.Inherit,
+                        definition.ModelDefaults, false, true, "completionReport", new Dictionary<string, string> { ["inputMode"] = "completionReport" }, ct).ConfigureAwait(false);
+                if (!ExecutionModelPolicy.Matches(models, new(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort,
+                    ExecutionModelSource.ConversationDefault, model.Binding, model.Decision), out _)) throw new AccessDeniedException("target_model_unavailable");
+                _ = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
                 var report = TenantBackgroundCompletionFactory.Create(source, resolved.Configuration, model, ids.NewId(), ids.NewId(), ids.NewId(), time.GetUtcNow());
                 _ = await storage.AdmitTenantBackgroundCompletionAsync(report, source.Parent.Snapshot.Revision, ids.NewId(), ct).ConfigureAwait(false);
             }
             catch (AccessDeniedException error) when (error.ReasonCode == "completion_read_review_required") { } // Keep the independent read-consent intent pending.
             catch (SecurityConflictException) { } // Fresh bounded pass resolves a busy/stale parent; no replay of effects.
-            catch (AgentCore.Application.Sessions.AgentCoreException error) when (error.Code is "ModelUnavailable" or "ModelRouteStale" or "ModelCapabilityUnsupported" or "ValidationError")
+            catch (AgentCore.Application.Sessions.AgentCoreException error) when (error.Code is "ModelUnavailable" or "ModelRouteStale" or "ModelCapabilityUnsupported" or "ModelRoutingUnavailable" or "ValidationError")
             {
                 await storage.SkipTenantBackgroundCompletionAsync(source.Child.Owner, source.Child.AgentRunId, "target_model_unavailable", ct).ConfigureAwait(false);
             }

@@ -210,9 +210,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AgentCore.Domain.Security.Tenant", b =>
                 {
-                    b.Property<int?>("SavedChatRetentionDays")
-                        .HasColumnType("INTEGER");
-
                     b.Property<Guid>("TenantId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
@@ -226,6 +223,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.Property<long>("Revision")
                         .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SavedChatRetentionDays")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Slug")
@@ -1103,12 +1103,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("SettingsOverridesJson")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("UnattendedOfferingId")
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UnattendedReasoningEffort")
-                        .HasMaxLength(64)
+                    b.Property<string>("UnattendedModelJson")
                         .HasColumnType("TEXT");
 
                     b.Property<long>("UpdatedAtUtc")
@@ -1505,12 +1500,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("ModelOverrideOfferingId")
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelOverrideReasoningEffort")
-                        .HasMaxLength(64)
+                    b.Property<string>("ModelPreferenceJson")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
@@ -3021,10 +3011,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SessionRecord", b =>
                 {
-                    b.Property<int>("RetentionKind").HasColumnType("INTEGER");
-                    b.Property<int?>("RetainAfterTerminalDays").HasColumnType("INTEGER");
-                    b.Property<long?>("RetentionDueAtUtc").HasColumnType("INTEGER");
-
                     b.Property<string>("SessionId")
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
@@ -3083,6 +3069,15 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<long?>("PinnedPersonaRevision")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("RetainAfterTerminalDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("RetentionDueAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("RetentionKind")
+                        .HasColumnType("INTEGER");
+
                     b.Property<long>("Revision")
                         .HasColumnType("INTEGER");
 
@@ -3115,9 +3110,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AgentInstanceId");
 
-                    b.HasIndex("DurablyDeletedAtUtc", "ArchivedAtUtc", "UpdatedAtUtc", "SessionId");
-
                     b.HasIndex("RetentionDueAtUtc", "SessionId");
+
+                    b.HasIndex("DurablyDeletedAtUtc", "ArchivedAtUtc", "UpdatedAtUtc", "SessionId");
 
                     b.ToTable("Sessions", (string)null);
                 });
@@ -3160,10 +3155,13 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("ModelConnectionId")
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("ModelHasExplicitReasoningEffort")
-                        .HasColumnType("INTEGER");
+                    b.Property<string>("ModelDecisionJson")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ModelOfferingId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelPreferenceJson")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ModelReasoningEffort")
@@ -3389,6 +3387,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("RoutingJson")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("TenantId");
 
                     b.HasIndex("TenantId", "DefaultOfferingId");
@@ -3464,6 +3465,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("LiveSessionId")
                         .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelDecisionJson")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ModelBindingJson")
@@ -4218,7 +4222,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.ToTable("TenantApprovalRequests", null, t =>
                         {
-                            t.HasCheckConstraint("CK_TenantApprovalRequest_Values", AgentCore.Infrastructure.Security.ModelSpaceApprovalPersistence.ValuesConstraint);
+                            t.HasCheckConstraint("CK_TenantApprovalRequest_Values", DecisionIntelligencePreferences.ApprovalValuesConstraint);
                         });
                 });
 
@@ -4657,7 +4661,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.ToTable("TenantOperationReceipts", null, t =>
                         {
-                            t.HasCheckConstraint("CK_TenantOperationReceipt_AutomationMutation", FrozenMigrationMetadata.Read("9da94804e5b4b5f3b726382e84023bac3e5859bfc9e4ca030fc701193ad9e04c"));
+                            t.HasCheckConstraint("CK_TenantOperationReceipt_AutomationMutation", "AutomationMutationJson IS NULL OR COALESCE((Outcome=0 AND ReasonCode='automation_mutation_completed' AND length(CAST(AutomationMutationJson AS BLOB)) BETWEEN 2 AND 1024 AND json_valid(AutomationMutationJson) AND json_type(AutomationMutationJson)='object' AND json_type(AutomationMutationJson,'$.AutomationId')='text' AND length(json_extract(AutomationMutationJson,'$.AutomationId'))=36 AND json_type(AutomationMutationJson,'$.ExpectedRevision')='integer' AND json_type(AutomationMutationJson,'$.Revision')='integer' AND json_extract(AutomationMutationJson,'$.ExpectedRevision')>=0 AND json_extract(AutomationMutationJson,'$.Revision')=json_extract(AutomationMutationJson,'$.ExpectedRevision')+1 AND json_extract(AutomationMutationJson,'$.ToolName') IN ('automation.create','automation.update','automation.enable','automation.disable','automation.delete','automation.run') AND json_type(AutomationMutationJson,'$.AfterHash')='text' AND length(json_extract(AutomationMutationJson,'$.AfterHash'))=64 AND json_extract(AutomationMutationJson,'$.AfterHash') NOT GLOB '*[^0-9a-f]*' AND (json_extract(AutomationMutationJson,'$.ExpectedRevision')=0 AND json_extract(AutomationMutationJson,'$.BeforeHash') IS NULL OR json_extract(AutomationMutationJson,'$.ExpectedRevision')>0 AND length(json_extract(AutomationMutationJson,'$.BeforeHash'))=64) AND (json_extract(AutomationMutationJson,'$.ToolName')='automation.run' AND json_type(AutomationMutationJson,'$.InvocationOccurrenceId')='text' AND length(json_extract(AutomationMutationJson,'$.InvocationOccurrenceId'))=36 AND json_type(AutomationMutationJson,'$.InvocationSessionId')='text' AND length(json_extract(AutomationMutationJson,'$.InvocationSessionId'))=36 AND json_type(AutomationMutationJson,'$.InvocationRunId')='text' AND length(json_extract(AutomationMutationJson,'$.InvocationRunId'))=36 OR json_extract(AutomationMutationJson,'$.ToolName')<>'automation.run' AND json_extract(AutomationMutationJson,'$.InvocationOccurrenceId') IS NULL AND json_extract(AutomationMutationJson,'$.InvocationSessionId') IS NULL AND json_extract(AutomationMutationJson,'$.InvocationRunId') IS NULL)),0)");
 
                             t.HasCheckConstraint("CK_TenantOperationReceipt_Http", "HttpJson IS NULL OR COALESCE(Outcome=0 AND ReasonCode='http_request_completed' AND RequestId IS NOT NULL AND length(CAST(HttpJson AS BLOB)) BETWEEN 2 AND 16384 AND json_valid(HttpJson) AND json_type(HttpJson)='object' AND json_type(HttpJson,'$.StatusCode')='integer' AND json_extract(HttpJson,'$.StatusCode') BETWEEN 100 AND 599 AND json_type(HttpJson,'$.FinalUrl')='text' AND length(json_extract(HttpJson,'$.FinalUrl')) BETWEEN 1 AND 4096 AND (json_extract(HttpJson,'$.FinalUrl') LIKE 'https://%' OR json_extract(HttpJson,'$.FinalUrl') LIKE 'http://%') AND (json_type(HttpJson,'$.ContentType')='null' OR json_type(HttpJson,'$.ContentType')='text' AND length(json_extract(HttpJson,'$.ContentType'))<=200) AND json_type(HttpJson,'$.ProjectedBodyBytes')='integer' AND json_extract(HttpJson,'$.ProjectedBodyBytes') BETWEEN 0 AND 65536 AND json_type(HttpJson,'$.BodySha256')='text' AND length(json_extract(HttpJson,'$.BodySha256'))=64 AND json_extract(HttpJson,'$.BodySha256') NOT GLOB '*[^0-9a-f]*' AND json_type(HttpJson,'$.Truncated') IN ('true','false'),0)");
 
@@ -4668,6 +4672,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_TenantOperationReceipt_PublicDownload", "PublicDownloadJson IS NULL OR COALESCE(length(PublicDownloadJson)<=32768 AND json_valid(PublicDownloadJson) AND Outcome=0 AND json_type(PublicDownloadJson,'$.RequestedUrl')='text' AND length(json_extract(PublicDownloadJson,'$.RequestedUrl')) BETWEEN 1 AND 4096 AND json_type(PublicDownloadJson,'$.FinalUrl')='text' AND length(json_extract(PublicDownloadJson,'$.FinalUrl')) BETWEEN 1 AND 4096 AND json_type(PublicDownloadJson,'$.Path')='text' AND (json_extract(PublicDownloadJson,'$.Path') LIKE '/home/%' OR json_extract(PublicDownloadJson,'$.Path') LIKE '/working/%') AND json_type(PublicDownloadJson,'$.ContentType')='text' AND length(json_extract(PublicDownloadJson,'$.ContentType')) BETWEEN 1 AND 200 AND json_type(PublicDownloadJson,'$.ByteCount')='integer' AND json_extract(PublicDownloadJson,'$.ByteCount') BETWEEN 0 AND 2147483647 AND json_type(PublicDownloadJson,'$.Sha256')='text' AND length(json_extract(PublicDownloadJson,'$.Sha256'))=64 AND json_extract(PublicDownloadJson,'$.Sha256') NOT GLOB '*[^0-9a-f]*',0)");
 
                             t.HasCheckConstraint("CK_TenantOperationReceipt_Source", "(RequestId IS NOT NULL AND SourceCallId IS NULL AND ParametersHash IS NULL) OR (RequestId IS NULL AND SourceCallId IS NOT NULL AND length(SourceCallId) BETWEEN 1 AND 200 AND ParametersHash IS NOT NULL AND length(ParametersHash) = 64)");
+
                             t.HasCheckConstraint("CK_TenantOperationReceipt_Values", "Outcome IN (0,1,2) AND InstanceRevision >= 1 AND PersonaRevision >= 1 AND length(ActionHash) = 64 AND length(ReasonCode) BETWEEN 1 AND 128");
                         });
                 });

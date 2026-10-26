@@ -314,7 +314,7 @@ test('Agent defaults refresh with identity and an explicit same-offering pin sta
         templateId: 'examiner', version: 1, expectedRevision: await f.revision()
       });
       await call(f.api, f.root + `/agents/${saved.instance.instanceId}/settings/modelDefaults`, {
-        expectedRevision: await f.revision(), expectedInstanceRevision: saved.instance.revision, set: { offeringId, reasoningEffort }, clear: []
+        expectedRevision: await f.revision(), expectedInstanceRevision: saved.instance.revision, set: { preference: { mode: 'fixed', offeringId, reasoning: { mode: reasoningEffort ? 'fixed' : 'modelDefault', effort: reasoningEffort } } }, clear: []
       }, 'PATCH');
       return saved.instance.instanceId;
     }
@@ -400,8 +400,8 @@ test('configured native offering flows through unattended and Automation selecto
     await editor.getByRole('button', { name: 'Execution options', exact: true }).click();
     await select(page, 'Automation execution model', label); await select(page, 'Automation reasoning effort', 'low');
     await editor.getByRole('button', { name: 'Save Automation', exact: true }).click(); await expect(editor).toHaveCount(0);
-    const registration = (await call<{ items: { modelOverrideOfferingId: string; modelOverrideReasoningEffort: string }[] }>(f.api, f.root + `/agents/${id}/automations`)).items[0];
-    expect(registration).toMatchObject({ modelOverrideOfferingId: offering.offeringId, modelOverrideReasoningEffort: 'low' });
+    const registration = (await call<{ items: { modelPreference: { mode: string; offeringId: string; reasoning: { mode: string; effort: string } } }[] }>(f.api, f.root + `/agents/${id}/automations`)).items[0];
+    expect(registration).toMatchObject({ modelPreference: { mode: 'fixed', offeringId: offering.offeringId, reasoning: { mode: 'fixed', effort: 'low' } } });
     await page.getByRole('button', { name: 'Run now', exact: true }).click();
     await page.getByRole('dialog', { name: 'Run saved Automation now?', exact: true }).getByRole('button', { name: 'Run now', exact: true }).click();
     const link = page.getByRole('link', { name: 'Review the exact admission request', exact: true }); await expect(link).toBeVisible();

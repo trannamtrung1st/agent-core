@@ -150,7 +150,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
                         entries.Count == 0 ? 0 : entries.Max(e => e.Sequence), entries.OrderBy(e => e.Sequence).ToArray(), active, "none", "none",
                         recipient.LifecycleStatus, ModelSelection: recipient.Model, AgentRunId: active is null ? null : source!.Run.AgentRunId,
                         OutputActivity: active is null ? "Idle" : "Generating", HasOlderHistory: history.HasOlder, HistoryBeforeSequence: history.NextBefore, RetentionKind: recipient.RetentionKind,
-                        RetentionDueAtUtc: recipient.RetentionDueAtUtc, AgentCompletion: recipient.AgentCompletion, LifecycleReason: recipient.LifecycleReason, LifecycleSource: recipient.LifecycleSource);
+                        RetentionDueAtUtc: recipient.RetentionDueAtUtc, AgentCompletion: recipient.AgentCompletion, LifecycleReason: recipient.LifecycleReason, LifecycleSource: recipient.LifecycleSource, ModelPreference: recipient.ModelPreference);
                     ready = ready with { InputTransport = speech?.EffectivePlan.InputTransport ?? "none", OutputTransport = speech?.EffectivePlan.OutputTransport ?? "none" };
                     var output = new SessionOutput(Context(session), active, new ReadyOutput(ready));
                     var mapped = SessionEventMapper.Map(output, subscription.Attachment, ++subscription.Sequence);
@@ -240,7 +240,18 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
                     throw new SecurityConflictException("stale_revision");
             }
             if (state.Closed || state.Current != subscription) return;
-            await hubs.Clients.Client(connectionId).SendAsync("SessionEvent", SessionEventMapper.Map(output, subscription.Attachment, ++subscription.Sequence), bounded.Token).ConfigureAwait(false);
+            var mapped = SessionEventMapper.Map(output, subscription.Attachment, ++subscription.Sequence);
+            if (output.Payload is ResponseStartedOutput)
+            {
+                var pin = source.Run.PinnedModel;
+                // Frozen Run facts only: never re-resolve a model label/route from mutable settings.
+                mapped.Payload["model"] = new Dictionary<string, object?> {
+                    ["offeringId"] = pin.OfferingId, ["connectionId"] = pin.ConnectionId, ["externalModelId"] = pin.ExternalModelId,
+                    ["displayName"] = pin.Binding?.ModelLabel ?? pin.ExternalModelId, ["connectionLabel"] = pin.Binding?.ConnectionLabel,
+                    ["selectionSource"] = pin.Decision?.Basis is "ranked" or "singleEligible" or "configuredDefault" ? "auto" : "host",
+                    ["reasoningEffort"] = pin.ReasoningEffort, ["observedFromRun"] = true };
+            }
+            await hubs.Clients.Client(connectionId).SendAsync("SessionEvent", mapped, bounded.Token).ConfigureAwait(false);
             if (output.Payload is ResponseStartedOutput && output.ResponseId is { } response) subscription.ObserveRun(response, source.Run.AgentRunId);
             if (output.ResponseId is { } delivered)
             {

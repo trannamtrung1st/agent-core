@@ -8,11 +8,12 @@ const fetchMock = vi.fn<typeof fetch>();
 const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 beforeEach(() => {
   resetIdentityCsrf(); fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock);
-  fetchMock.mockImplementation(async (path, options) => String(path).endsWith('/csrf') ? response({ token: 'csrf' }) : response(options?.method === 'PATCH' ? { ...modelPreset, revision: 2 } : [{ ...modelPreset, offeringReferences: 3 }]));
+  fetchMock.mockImplementation(async (path, options) => String(path).endsWith('/decision-intelligence') ? response({ status: 'disabled', engineId: 'localKev', engineVersion: 'pinned', shadowMode: true, preAdmissionSupported: true }) : String(path).endsWith('/csrf') ? response({ token: 'csrf' }) : response(options?.method === 'PATCH' ? { ...modelPreset, revision: 2 } : [{ ...modelPreset, offeringReferences: 3 }]));
 });
 it('offers read-only inspection without protected-key controls or mutation actions', async () => {
   render(<App><SystemModelPresets permissions={['system.model-presets.read']} /></App>);
   await screen.findByText(modelPreset.label, { exact: true });
+  expect(await screen.findByText('Decision service: disabled', { exact: true })).toBeVisible();
   expect(screen.getByText('3 registrations', { exact: true })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Add model preset' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Inspect preset GPT-6 Luna' }));

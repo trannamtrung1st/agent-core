@@ -11,12 +11,16 @@ namespace AgentCore.Application.Security;
 public sealed partial class TenantRunExecutionAuthority
 {
     public async ValueTask<SessionModelSelection> BindNewRunModelAsync(AgentRun source, AgentDefinition definition,
-        SessionModelSelection? selection, CancellationToken ct)
+        SessionModelSelection? selection, CancellationToken ct, AgentCore.Domain.Models.ModelPreference? preference = null)
     {
         var current = await ResolveCurrentAsync(source, ct).ConfigureAwait(false);
         var catalog = await (configurationModels ?? throw new AccessDeniedException("model_context_required"))
             .ReadAsync(current.State, ct).ConfigureAwait(false);
-        return SessionModelBinder.RefreshDefault(catalog, definition, selection);
+        var chosen = routing is null ? SessionModelBinder.RefreshDefault(catalog, definition, selection)
+            : await routing.ResolveAsync(catalog, preference ?? AgentCore.Domain.Models.ModelPreference.Inherit, definition.ModelDefaults,
+                false, true, "continuation", new Dictionary<string, string> { ["inputMode"] = "continuation" }, ct);
+        _ = await (configurationModels ?? throw new AccessDeniedException("model_context_required")).ReadAsync(current.State, ct);
+        return chosen;
     }
     // Prepared for the existing atomic response-outcome transaction, not a new worker or admission endpoint.
     public async ValueTask<TenantConfigurationContinuationAdmission?> PrepareConfigurationContinuationAsync(TenantRuntimeFrame frame,
@@ -50,7 +54,9 @@ public sealed partial class TenantRunExecutionAuthority
             if (resolved.Agent.Instance.Revision != pending.Value.Task.InstanceRevision || definition.SelfManagement is not { } policy || !ManagementTools.Enabled(policy)
                 || !RolePermissions.AllowsTool(definition, pending.Value.Task.Target) || !configurationTools.IsConfigured(pending.Value.Task.Target)) return null;
             var models = await configurationModels.ReadAsync(current.State, ct).ConfigureAwait(false);
-            var selected = SessionModelBinder.RefreshDefault(models, definition, snapshot.ModelSelection);
+            var selected = routing is null ? SessionModelBinder.RefreshDefault(models, definition, snapshot.ModelSelection)
+                : await routing.ResolveAsync(models, snapshot.ModelPreference ?? AgentCore.Domain.Models.ModelPreference.Inherit, definition.ModelDefaults, false, true,
+                    "configurationContinuation", new Dictionary<string, string> { ["inputMode"] = "configurationContinuation" }, ct);
             if (selected is null) return null;
             var next = AgentRunAdmissionFactory.ForConfigurationContinuation(ids.NewId(), ids.NewId(), ids.NewId(), snapshot with {
                 ModelSelection = selected, PinnedPersona = resolved.Configuration.Persona }, source, pending.Value.Task, time.GetUtcNow(), resolved.Configuration.Skills,
@@ -61,7 +67,7 @@ public sealed partial class TenantRunExecutionAuthority
         }
         catch (AccessDeniedException) { return null; }
         catch (SecurityConflictException) { return null; }
-        catch (Sessions.AgentCoreException error) when (error.Code is "ModelUnavailable" or "ModelRouteStale" or "ModelCapabilityUnsupported" or "ValidationError")
+        catch (Sessions.AgentCoreException error) when (error.Code is "ModelUnavailable" or "ModelRouteStale" or "ModelCapabilityUnsupported" or "ModelRoutingUnavailable" or "ValidationError")
         { return null; }
     }
 }

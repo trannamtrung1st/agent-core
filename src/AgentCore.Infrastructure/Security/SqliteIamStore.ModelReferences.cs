@@ -50,13 +50,13 @@ public sealed partial class SqliteIamStore
                 """,
             ModelReferenceKind.Definitions => """
                 SELECT d.DefinitionId AS ResourceId, d.DraftId AS ReferenceId,
-                  COALESCE(json_extract(d.CandidateJson,'$.modelDefaults.offeringId'), (SELECT lower(DefaultOfferingId) FROM TenantModelSettings WHERE lower(TenantId) = $tenant)) AS OfferingId,
+                  CASE WHEN json_extract(d.CandidateJson,'$.modelDefaults.mode')='auto' THEN NULL ELSE COALESCE(json_extract(d.CandidateJson,'$.modelDefaults.offeringId'), (SELECT lower(DefaultOfferingId) FROM TenantModelSettings WHERE lower(TenantId) = $tenant)) END AS OfferingId,
                   COALESCE(json_extract(d.CandidateJson,'$.identity.name'), d.DefinitionId) AS Label,
                   CASE WHEN json_extract(d.CandidateJson,'$.modelDefaults.offeringId') IS NULL THEN 'Draft inherits organization default' ELSE 'Definition draft' END AS Usage, d.Revision, 'Draft' AS State, NULL AS AgentId, NULL AS SessionId
                 FROM AgentDefinitionDrafts d JOIN TenantAgentDefinitions o ON o.DefinitionId = d.DefinitionId
                 WHERE lower(o.TenantId) = $tenant AND o.DeletedAt IS NULL
                 UNION ALL
-                SELECT p.DefinitionId, 'v' || p.Version, COALESCE(json_extract(p.PayloadJson,'$.modelDefaults.offeringId'), (SELECT lower(DefaultOfferingId) FROM TenantModelSettings WHERE lower(TenantId) = $tenant)),
+                SELECT p.DefinitionId, 'v' || p.Version, CASE WHEN json_extract(p.PayloadJson,'$.modelDefaults.mode')='auto' THEN NULL ELSE COALESCE(json_extract(p.PayloadJson,'$.modelDefaults.offeringId'), (SELECT lower(DefaultOfferingId) FROM TenantModelSettings WHERE lower(TenantId) = $tenant)) END,
                   COALESCE(json_extract(p.PayloadJson,'$.identity.name'), p.DefinitionId),
                   'Published Definition v' || p.Version || CASE WHEN json_extract(p.PayloadJson,'$.modelDefaults.offeringId') IS NULL THEN ' inherits organization default' ELSE '' END, p.MetadataRevision, CASE p.Status WHEN 0 THEN 'Published' ELSE 'Deprecated' END, NULL, NULL
                 FROM AgentDefinitionPublications p JOIN TenantAgentDefinitions o ON o.DefinitionId = p.DefinitionId
@@ -64,25 +64,26 @@ public sealed partial class SqliteIamStore
                 """,
             ModelReferenceKind.Instances => """
                 SELECT a.InstanceId AS ResourceId, 'conversation' AS ReferenceId,
-                  COALESCE(CASE WHEN json_type(a.SettingsOverridesJson,'$.modelOfferingId') = 'object'
-                    THEN json_extract(a.SettingsOverridesJson,'$.modelOfferingId.value')
-                    ELSE json_extract(p.PayloadJson,'$.modelDefaults.offeringId') END, (SELECT lower(DefaultOfferingId) FROM TenantModelSettings WHERE lower(TenantId) = $tenant)) AS OfferingId,
+                  CASE WHEN json_type(a.SettingsOverridesJson,'$.modelPreference.value')='null' THEN (SELECT lower(DefaultOfferingId) FROM TenantModelSettings WHERE lower(TenantId) = $tenant)
+                    WHEN json_extract(a.SettingsOverridesJson,'$.modelPreference.value.mode')='fixed' THEN json_extract(a.SettingsOverridesJson,'$.modelPreference.value.offeringId')
+                    WHEN json_extract(a.SettingsOverridesJson,'$.modelPreference.value.mode')='auto' OR json_extract(p.PayloadJson,'$.modelDefaults.mode')='auto' THEN NULL
+                    ELSE COALESCE(json_extract(p.PayloadJson,'$.modelDefaults.offeringId'), (SELECT lower(DefaultOfferingId) FROM TenantModelSettings WHERE lower(TenantId) = $tenant)) END AS OfferingId,
                   COALESCE(json_extract(a.PersonaJson,'$.name'),a.InstanceId) AS Label,
-                  CASE WHEN json_extract(a.SettingsOverridesJson,'$.modelOfferingId.value') IS NOT NULL THEN 'Instance conversation override'
-                    WHEN COALESCE(json_type(a.SettingsOverridesJson,'$.modelOfferingId'),'null') <> 'object' AND json_extract(p.PayloadJson,'$.modelDefaults.offeringId') IS NOT NULL
+                  CASE WHEN json_extract(a.SettingsOverridesJson,'$.modelPreference.value.offeringId') IS NOT NULL THEN 'Instance conversation override'
+                    WHEN json_type(a.SettingsOverridesJson,'$.modelPreference.value') IS NOT 'null' AND json_extract(p.PayloadJson,'$.modelDefaults.offeringId') IS NOT NULL
                     THEN 'Inherited Definition default' ELSE 'Inherited organization default' END AS Usage,
                   a.Revision, a.Lifecycle AS State, NULL AS AgentId, NULL AS SessionId
                 FROM AgentInstances a JOIN SystemIdentities i ON i.AgentInstanceId = a.InstanceId
                 LEFT JOIN AgentDefinitionPublications p ON p.DefinitionId = a.DefinitionId AND p.Version = a.ActiveVersion
                 WHERE lower(i.TenantId) = $tenant AND i.Kind = $agentKind AND i.Status <> $removed
                 UNION ALL
-                SELECT a.InstanceId, 'unattended', a.UnattendedOfferingId,
+                SELECT a.InstanceId, 'unattended', json_extract(a.UnattendedModelJson,'$.offeringId'),
                   COALESCE(json_extract(a.PersonaJson,'$.name'),a.InstanceId), 'Unattended preference', a.Revision, a.Lifecycle, NULL, NULL
                 FROM AgentInstances a JOIN SystemIdentities i ON i.AgentInstanceId = a.InstanceId
                 WHERE lower(i.TenantId) = $tenant AND i.Kind = $agentKind AND i.Status <> $removed
                 """,
             ModelReferenceKind.Automations => """
-                SELECT a.AutomationId AS ResourceId, 'override' AS ReferenceId, a.ModelOverrideOfferingId AS OfferingId,
+                SELECT a.AutomationId AS ResourceId, 'override' AS ReferenceId, json_extract(a.ModelPreferenceJson,'$.OfferingId') AS OfferingId,
                   a.Name AS Label, 'Automation override' AS Usage, a.Revision, CAST(a.Status AS TEXT) AS State,
                   a.AgentInstanceId AS AgentId, NULL AS SessionId
                 FROM Automations a WHERE lower(a.TenantId) = $tenant

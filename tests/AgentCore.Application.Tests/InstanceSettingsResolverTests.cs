@@ -15,6 +15,19 @@ public sealed class InstanceSettingsResolverTests
 {
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value);
     [Fact]
+    public void Canonical_model_inheritance_preserves_lower_choice_and_separate_reasoning_intent()
+    {
+        var definition = SampleDefinitions.Examiner with { ModelDefaults = AgentCore.Domain.Models.ModelPreference.Fixed("dca30000-0000-4000-8000-000000000001", "low") };
+        var overrides = new InstanceSettingsOverrides(ModelPreference: new(new("inherit", Reasoning: new("fixed", "high"))));
+        var effective = InstanceSettingsResolver.Resolve(definition, overrides);
+        Assert.Equal(definition.ModelDefaults.OfferingId, effective.ModelDefaults!.OfferingId);
+        Assert.Equal("high", effective.ModelDefaults.Reasoning!.Effort);
+        effective = InstanceSettingsResolver.Resolve(definition, new(ModelPreference: new(AgentCore.Domain.Models.ModelPreference.Auto)));
+        Assert.Equal("auto", effective.ModelDefaults!.Mode);
+        effective = InstanceSettingsResolver.Resolve(definition, new(ModelPreference: new(null)));
+        Assert.Null(effective.ModelDefaults); // An explicit sparse clear remains distinct from inherit.
+    }
+    [Fact]
     public void Sparse_fields_follow_new_defaults_and_clear_restores_inheritance()
     {
         var v1 = SampleDefinitions.Examiner;

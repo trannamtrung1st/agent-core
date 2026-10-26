@@ -9,6 +9,7 @@ using AgentCore.Domain.Security;
 using AgentCore.Domain.Triggers;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AgentCore.Api.Tests;
 public sealed partial class TenantAgentAccessTests
@@ -21,6 +22,11 @@ public sealed partial class TenantAgentAccessTests
         public ModelDescriptor Default => inner.Default;
         public IReadOnlyList<ModelDescriptor> Models => inner.Models.Where(m => !HideDefault || m.OfferingId != DefaultOfferingId).ToArray();
         public ModelDescriptor? Get(string key) => HideDefault && key == DefaultOfferingId ? null : inner.Get(key);
+    }
+    private sealed class PresetCatalogReader(IModelCatalog catalog) : ITenantModelCatalogReader
+    {
+        public ValueTask<IModelCatalog> ReadAsync(AgentCore.Domain.Security.TenantSecurityState state, CancellationToken ct = default)
+            => ValueTask.FromResult(catalog);
     }
     private static JsonObject PresetCommand(JsonElement editor, string preset)
     {
@@ -131,7 +137,7 @@ public sealed partial class TenantAgentAccessTests
         var login = (await factory.Services.GetRequiredService<IdentityService>().SignInAsync("owner@example.test", "explicit-synthetic-test-password"))!;
         var human = state.Users.Single(u => u.AccountId == login.Account.AccountId); var at = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()); var id = Guid.NewGuid();
         var forged = new Automation(id, current.Owner, AutomationStatus.Disabled, current.Instructions, current.Triggers, null, null, 0, 1, current.TriggerRevision,
-            new(TriggerAuthorizationOrigin.AdminOwner, null, null, at, at, "forged-preset", 1), null, current.ModelOverrideOfferingId, current.ModelOverrideReasoningEffort, current.RequiresVision, current.Name, current.ExecutionTarget, current.CompletionDelivery, current.RequiresTools);
+            new(TriggerAuthorizationOrigin.AdminOwner, null, null, at, at, "forged-preset", 1), null, current.ModelPreference, current.RequiresVision, current.Name, current.ExecutionTarget, current.CompletionDelivery, current.RequiresTools);
         await Assert.ThrowsAsync<ArgumentException>(() => store.TrySaveTenantAutomationAsync(state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } }, state.Tenant.Revision,
             forged, 0, 1, new(login.Account.AccountId, login.Session.SessionId, human.PrincipalId), "automations.create", new(Guid.NewGuid(), tenant, human.PrincipalId, "automations.create", id.ToString("D"), "allowed", "automation_saved", at)).AsTask());
         Assert.Null(await store.FindTenantAutomationAsync(tenant, id)); Assert.Equal(state.Tenant.Revision, (await security.ReadTenantAsync(tenant))!.Tenant.Revision);
@@ -140,16 +146,16 @@ public sealed partial class TenantAgentAccessTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_automation_preset_disabled_drafts_can_retain_an_unavailable_saved_model_but_cannot_enable_or_select_an_unknown_replacement(bool sqlite)
     {
-        var catalog = new PresetModelCatalog(); await using var factory = new RuntimeStateFactory(sqlite, catalog: catalog);
+        var catalog = new PresetModelCatalog(); await using var factory = new RuntimeStateFactory(sqlite, catalog: catalog, configure: services => services.Replace(Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Singleton<ITenantModelCatalogReader>(new PresetCatalogReader(catalog))));
         using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance) = await OwnedMemoryAgent(owner, enabled: false, automation: true); var api = $"/api/v2/tenants/{tenant}/agents/{instance}/automations";
-        var body = PresetCommand(await Json(await owner.GetAsync(api + "/editor")), "consolidate-continuity"); body["offeringId"] = catalog.DefaultOfferingId;
+        var body = PresetCommand(await Json(await owner.GetAsync(api + "/editor")), "consolidate-continuity"); body["modelPreference"] = JsonSerializer.SerializeToNode(new { mode = "fixed", offeringId = catalog.DefaultOfferingId });
         var first = await Json(await owner.PostAsJsonAsync(api, body)); var id = first.GetProperty("automationId").GetGuid();
         catalog.HideDefault = true; body["name"] = "Retained disabled model"; body["expectedRevision"] = await Revision(owner, tenant); body["expectedAutomationRevision"] = 1;
-        var retained = await Json(await owner.PutAsJsonAsync(api + $"/{id}", body)); Assert.Equal("disabled", retained.GetProperty("status").GetString()); Assert.Equal(catalog.DefaultOfferingId, retained.GetProperty("modelOverrideOfferingId").GetString());
-        body["expectedRevision"] = await Revision(owner, tenant); body["expectedAutomationRevision"] = retained.GetProperty("revision").GetInt64(); body["offeringId"] = "missing-new-model";
+        var retained = await Json(await owner.PutAsJsonAsync(api + $"/{id}", body)); Assert.Equal("disabled", retained.GetProperty("status").GetString()); Assert.Equal(catalog.DefaultOfferingId, retained.GetProperty("modelPreference").GetProperty("offeringId").GetString());
+        body["expectedRevision"] = await Revision(owner, tenant); body["expectedAutomationRevision"] = retained.GetProperty("revision").GetInt64(); body["modelPreference"] = JsonSerializer.SerializeToNode(new { mode = "fixed", offeringId = "missing-new-model" });
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PutAsJsonAsync(api + $"/{id}", body)).StatusCode);
-        body["offeringId"] = catalog.DefaultOfferingId; body["enabled"] = true; body["schedule"] = JsonSerializer.SerializeToNode(new { kind = "oneShot", timeZone = "UTC", atUtc = DateTimeOffset.UtcNow.AddMinutes(30).ToString("O") });
+        body["modelPreference"] = JsonSerializer.SerializeToNode(new { mode = "fixed", offeringId = catalog.DefaultOfferingId }); body["enabled"] = true; body["schedule"] = JsonSerializer.SerializeToNode(new { kind = "oneShot", timeZone = "UTC", atUtc = DateTimeOffset.UtcNow.AddMinutes(30).ToString("O") });
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PutAsJsonAsync(api + $"/{id}", body)).StatusCode);
         catalog.HideDefault = false; Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + $"/{id}", body)).StatusCode);
     }

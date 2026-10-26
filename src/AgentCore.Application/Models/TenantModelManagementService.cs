@@ -12,7 +12,7 @@ public sealed record ModelOfferingChange(Guid ConnectionId, Guid? PresetId, stri
     ModelTransport Transport, ModelCapabilityProfile Capabilities, bool Enabled, bool Retired, bool RestoreAvailability = false);
 public sealed record ModelAdministrationAccess(bool CanCreateConnection, bool CanCreateOffering, bool CanManageDefault,
     IReadOnlyList<Guid> ManageConnectionIds, IReadOnlyList<Guid> TestConnectionIds, IReadOnlyList<Guid> ManageOfferingIds);
-public sealed record ModelOfferingAvailability(Guid OfferingId, bool Available, string Reason);
+public sealed record ModelOfferingAvailability(Guid OfferingId, bool Available, string Reason, AgentCore.Application.Observability.ModelRoundSummary? Observations = null);
 public sealed record TenantModelAdminView(IReadOnlyList<ProviderConnection> Connections, IReadOnlyList<ModelOffering> Offerings,
     TenantModelSettings Settings, IReadOnlyList<ModelPreset> Presets, long SecurityRevision, IReadOnlyList<ModelOfferingAvailability> Availability, ModelAdministrationAccess Access);
 
@@ -40,7 +40,9 @@ public sealed partial class TenantModelManagementService(IIamStore security, ITe
                 : offering.Observation == ModelObservation.NotReturned ? "not_returned"
                 : !source.Routes.Any(r => r.Offering.OfferingId == offering.OfferingId) ? "credential_unavailable"
                 : !ModelRouteRules.Supports(offering.Capabilities, offering.Kind, ModelPurpose.Conversation) ? "capabilities_unverified" : "available";
-            return new ModelOfferingAvailability(offering.OfferingId, reason == "available", reason);
+            return new ModelOfferingAvailability(offering.OfferingId, reason == "available", reason,
+                source.Routes.SingleOrDefault(r => r.Offering.OfferingId == offering.OfferingId) is { } route
+                    ? AgentCore.Application.Observability.ModelRoundObservations.Read(tenant, offering.OfferingId, time.GetUtcNow(), ModelRouteRules.Pin(route)) : null);
         }).ToArray();
         async Task<bool> Allowed(string permission, AccessScope scope) =>
             (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get(permission), scope, ct)).Allowed;
@@ -112,9 +114,28 @@ public sealed partial class TenantModelManagementService(IIamStore security, ITe
         string? effort, long expectedSecurityRevision, long expectedRevision, CancellationToken ct = default)
     {
         var state = await WriteState(human, tenant, AccessScope.ForTenant(tenant), "models.manage", expectedSecurityRevision, ct);
-        var value = Validate(() => ModelManagementRules.Freeze(new TenantModelSettings(tenant, offering, effort, checked(expectedRevision + 1))));
+        var current = await store.ReadTenantModelsAsync(tenant, ct);
+        var value = Validate(() => ModelManagementRules.Freeze(new TenantModelSettings(tenant, offering, effort, checked(expectedRevision + 1), current.Settings.Routing)));
         if (!await store.TrySaveTenantModelSettingsAsync(Advance(state), expectedSecurityRevision, value, expectedRevision, human,
             Audit(human, tenant, "models.manage", tenant), ct)) throw new SecurityConflictException("stale_revision");
+        return value;
+    }
+    public async ValueTask<AgentCore.Application.Decisions.DecisionEngineStatus> RoutingStatusAsync(HumanSessionReference human, Guid tenant, AgentCore.Application.Decisions.IDecisionEngine engine, CancellationToken ct)
+    {
+        var state = await State(human, tenant, ct);
+        await Require(state, human, "models.manage", AccessScope.ForTenant(tenant), ct);
+        var result = await engine.StatusAsync(ct);
+        await Complete(human, tenant, state.Tenant.Revision, ct);
+        return result;
+    }
+    public async ValueTask<TenantModelSettings> SaveRoutingAsync(HumanSessionReference human, Guid tenant, AutoRoutingPolicy routing,
+        long expectedSecurityRevision, long expectedRevision, CancellationToken ct = default)
+    {
+        var state = await WriteState(human, tenant, AccessScope.ForTenant(tenant), "models.manage", expectedSecurityRevision, ct);
+        var current = await store.ReadTenantModelsAsync(tenant, ct);
+        var value = Validate(() => ModelManagementRules.Freeze(current.Settings with { Revision = checked(expectedRevision + 1), Routing = routing }));
+        if (!await store.TrySaveTenantModelSettingsAsync(Advance(state), expectedSecurityRevision, value, expectedRevision, human,
+            Audit(human, tenant, "models.manage", tenant) with { ReasonCode = "model_routing_changed" }, ct)) throw new SecurityConflictException("stale_revision");
         return value;
     }
     private ValueTask<TenantSecurityState> State(HumanSessionReference human, Guid tenant, CancellationToken ct) =>

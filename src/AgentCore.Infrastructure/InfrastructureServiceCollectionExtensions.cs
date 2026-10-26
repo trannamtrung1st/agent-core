@@ -50,6 +50,29 @@ public static class InfrastructureServiceCollectionExtensions
         BrowserOptions? browser = null)
     {
         services.AddHttpErrorDiagnostics();
+        services.TryAddSingleton<AutoModelRouter>();
+        var decisionSynthetic = string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase);
+        services.TryAddSingleton(provider =>
+        {
+            var section = provider.GetService<IConfiguration>()?.GetSection(AgentCore.Infrastructure.Decisions.DecisionIntelligenceOptions.SectionName);
+            var options = section?.Get<AgentCore.Infrastructure.Decisions.DecisionIntelligenceOptions>(binder => binder.ErrorOnUnknownConfiguration = true)
+                ?? new AgentCore.Infrastructure.Decisions.DecisionIntelligenceOptions();
+            options.Validate(decisionSynthetic); return options;
+        });
+        services.AddHttpClient("DecisionIntelligence", client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(AgentCore.Infrastructure.Decisions.LocalKevDecisionAdapter.CreateHandler);
+        services.TryAddSingleton<AgentCore.Application.Decisions.IDecisionBackend>(provider =>
+        {
+            var options = provider.GetRequiredService<AgentCore.Infrastructure.Decisions.DecisionIntelligenceOptions>();
+            return options.Backend switch
+            {
+                AgentCore.Infrastructure.Decisions.DecisionBackendKind.AuthorizedLlm => new AgentCore.Infrastructure.Decisions.AuthorizedLlmDecisionAdapter(provider.GetRequiredService<ILanguageModelResolver>()),
+                AgentCore.Infrastructure.Decisions.DecisionBackendKind.Synthetic => new AgentCore.Infrastructure.Decisions.SyntheticDecisionAdapter(),
+                _ => new AgentCore.Infrastructure.Decisions.LocalKevDecisionAdapter(provider.GetRequiredService<IHttpClientFactory>().CreateClient("DecisionIntelligence"), options)
+            };
+        });
+        services.TryAddSingleton<AgentCore.Application.Decisions.IDecisionEngine, AgentCore.Infrastructure.Decisions.DecisionEngine>();
+
         persistence ??= new PersistenceOptions();
         persistence.WorkspaceRoot = Path.GetFullPath(persistence.WorkspaceRoot);
         browser ??= new BrowserOptions();

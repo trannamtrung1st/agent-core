@@ -10,7 +10,7 @@ public static class TenantAutomationEndpoints
 {
     [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
     public sealed record SaveRequest(bool Enabled, string Name, string Instructions, AutomationTiming? Schedule, long ExpectedRevision,
-        long ExpectedInstanceRevision, long ExpectedAutomationRevision = 0, string? OfferingId = null, string? ReasoningEffort = null, bool RequiresTools = true, bool RequiresVision = false, IReadOnlyList<AutomationTriggerDto>? Triggers = null, Guid? ReportToSessionId = null, Guid? TargetSessionId = null, string? PresetId = null, int? PresetVersion = null, Guid? PinnedSpaceId = null, Guid? PinnedEnvironmentId = null);
+        long ExpectedInstanceRevision, long ExpectedAutomationRevision = 0, ModelPreferenceDto? ModelPreference = null, bool RequiresTools = true, bool RequiresVision = false, IReadOnlyList<AutomationTriggerDto>? Triggers = null, Guid? ReportToSessionId = null, Guid? TargetSessionId = null, string? PresetId = null, int? PresetVersion = null, Guid? PinnedSpaceId = null, Guid? PinnedEnvironmentId = null);
     public sealed record Witness(long ExpectedRevision, long ExpectedInstanceRevision, long ExpectedAutomationRevision);
     public static void Map(WebApplication app)
     {
@@ -67,7 +67,7 @@ public static class TenantAutomationEndpoints
         }));
     }
     private static HumanSessionReference Human(HttpContext http, Guid account, Guid principal) => new(account, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), principal);
-    private static TenantAutomationChange Change(SaveRequest value) => new(value.Enabled, value.Name, value.Instructions, value.Schedule is null ? null : AutomationHttpMapping.Parse(value.Schedule), value.OfferingId, value.ReasoningEffort, value.RequiresTools, value.RequiresVision,
+    private static TenantAutomationChange Change(SaveRequest value) => new(value.Enabled, value.Name, value.Instructions, value.Schedule is null ? null : AutomationHttpMapping.Parse(value.Schedule), ModelManagementMapping.Input(value.ModelPreference), value.RequiresTools, value.RequiresVision,
         value.Triggers?.Select(t => new TenantAutomationTriggerChange(t.TriggerId is null ? null : Guid.Parse(t.TriggerId),
             AutomationHttpMapping.ParseTrigger(t), t.Enabled, t.TriggerId is null ? 0 : t.Revision)).ToArray(), value.ReportToSessionId, value.TargetSessionId, value.PresetId, value.PresetVersion, value.PinnedSpaceId, value.PinnedEnvironmentId);
     private static void Route(Automation value, Guid instance) { if (value.Owner.AgentInstanceId != instance) throw new AccessDeniedException("resource_unavailable"); }
@@ -78,7 +78,7 @@ public static class TenantAutomationEndpoints
         items = view.Items.Select(i => new { automation = Safe(i.Automation), i.CanUpdate, i.CanCancel, i.CanRun }) };
     private static object Safe(Automation value) => new {
         value.AutomationId, value.PinnedSpaceId, value.PinnedEnvironmentId, agentInstanceId = value.Owner.AgentInstanceId, value.Name, value.Instructions, value.Provenance.PresetId, value.Provenance.PresetVersion, status = value.Status.ToString().ToLowerInvariant(),
-        value.Revision, value.TriggerRevision, value.NextOccurrenceAtUtc, value.OccurrenceCount, value.ExpiresAtUtc, value.ModelOverrideOfferingId, value.ModelOverrideReasoningEffort,
+        value.Revision, value.TriggerRevision, value.NextOccurrenceAtUtc, value.OccurrenceCount, value.ExpiresAtUtc, value.ModelPreference,
         value.RequiresTools, value.RequiresVision, executionTarget = value.ExecutionTarget.Kind == AutomationExecutionTargetKind.ExistingSession ? "existingSession" : "backgroundSession", targetSessionId = value.ExecutionTarget.SessionId, completionDelivery = value.CompletionDelivery.SessionId is null ? "none" : "toSession", reportToSessionId = value.CompletionDelivery.SessionId, value.SuspensionReason,
         createdAt = value.Provenance.CreatedAt, updatedAt = value.Provenance.UpdatedAt, triggers = value.Triggers.Select(AutomationHttpMapping.TriggerRecord)
     };

@@ -38,7 +38,7 @@ for (const tool of ['settings.patch', 'management.policy.update', 'management.fr
     await call(api, prefix + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await revision() });
     const arguments_ = tool === 'settings.patch' ? { expectedInstanceRevision: 1, section: 'instructions', set: { agentInstructions: nextInstructions }, clear: [] }
       : tool === 'management.policy.update' ? { expectedInstanceRevision: 1, mode: 'Assisted', scopes: ['Settings'], managedAutoApply: [] }
-      : tool === 'management.freeze' ? { expectedInstanceRevision: 1 } : { expectedInstanceRevision: 1, offeringId: key, reasoningEffort: null };
+      : tool === 'management.freeze' ? { expectedInstanceRevision: 1 } : { expectedInstanceRevision: 1, modelPreference: { mode: 'fixed', offeringId: key } };
     await page.goto(`/t/${tenant}`);
     const input = page.getByRole('textbox', { name: 'Message', exact: true }); await expect(input).toBeEnabled(); await input.fill('synthetic-tenant-management-mutation: ' + JSON.stringify({ tool, arguments: arguments_ })); await page.getByRole('button', { name: 'Send', exact: true }).click();
     const approvals = page.getByRole('region', { name: 'Conversation approvals', exact: true }); await expect(approvals.getByText('Change exact Agent configuration', { exact: true })).toBeVisible();
@@ -53,7 +53,7 @@ for (const tool of ['settings.patch', 'management.policy.update', 'management.fr
     await expect(page.getByText(decision === 'approve' ? 'The exact Agent configuration change was recorded. Current Run settings stayed pinned.' : 'The Agent configuration change was withheld. No settings were changed by this request.', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0); if (decision === 'approve') await expect(approvals.getByText('Configuration updated', { exact: true })).toBeVisible();
     const path = prefix + `/agents/${agent.instance.instanceId}`;
-    const saved = await call<{ instance: { revision: number; unattendedOfferingId: string | null } }>(api, path);
+    const saved = await call<{ instance: { revision: number; unattendedModel: { offeringId: string | null } | null } }>(api, path);
     expect(saved.instance.revision).toBe(decision === 'approve' ? 2 : 1);
     if (decision === 'approve') {
       if (tool === 'settings.patch') {
@@ -64,7 +64,7 @@ for (const tool of ['settings.patch', 'management.policy.update', 'management.fr
         const management = await call<{ policy: { effective: { frozen: boolean; mode: string } } }>(api, path + '/self-management');
         if (tool === 'management.freeze') expect(management.policy.effective.frozen).toBe(true); else expect(management.policy.effective.mode).toBe('Assisted');
       }
-      if (tool === 'automation.preferences.patch') expect(saved.instance.unattendedOfferingId).toBe(key);
+      if (tool === 'automation.preferences.patch') expect(saved.instance.unattendedModel?.offeringId).toBe(key);
       if (tool === 'management.freeze') {
         await input.fill('Continue ordinary conversation while management is frozen.');
         await page.getByRole('button', { name: 'Send', exact: true }).click();

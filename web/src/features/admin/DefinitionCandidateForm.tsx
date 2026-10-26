@@ -1,10 +1,10 @@
-import { modelChoiceOptions } from "../models/modelLabels";
+import { preferenceFields, preferenceFromFields, type ModelPreference } from '../../services/modelPreference';
+import { ExecutionModelFields } from './ExecutionModelFields';
 import { DeleteOutlined } from "@ant-design/icons";
 import { Alert,Button,Collapse,Flex,Input,InputNumber,Select,Switch,Typography,theme } from "antd";
 import { useId } from "react";
 import { type AdminAuthoringOptions } from "../../services/adminApi";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
-import { orderedReasoningEfforts,retainedReasoningEffort } from "../models/reasoningEfforts";
 import { draftSettingGroups,type DraftPage } from './adminNavigation';
 import { AgentConfigurationPanel,AgentIdentitySections } from "./AgentConfigurationLayout";
 import { AutomationTriggerPermissions } from "./AutomationTriggerPermissions";
@@ -20,7 +20,6 @@ readNumber,
 readString,
 triggerPolicyDefaults,
 writeMetadataRows,
-writeModelDefault,
 writeNullableString,
 writePath,
 type DefinitionCandidate
@@ -66,16 +65,12 @@ export function DefinitionCandidateForm({
   onCandidateChange: (candidate: DefinitionCandidate) => void;
 }) {
   const goals = readCandidateStringList(candidate, ["goals"]);
-  const offeringId = readString(candidate, ["modelDefaults", "offeringId"]);
-  const reasoningEffort = readString(candidate, ["modelDefaults", "reasoningEffort"]);
+  const preference = candidate.modelDefaults as ModelPreference | undefined;
+  const { key: offeringId, effort: reasoningEffort } = preferenceFields(preference);
   const speechRecognizer = readString(candidate, ["providerPreferences", "speechRecognizer"]);
   const speechSynthesizer = readString(candidate, ["providerPreferences", "speechSynthesizer"]);
   const interruptionClassifier = readString(candidate, ["providerPreferences", "interruptionClassifier"]);
   const voiceOn = readBoolean(candidate, ["voice", "enabled"]);
-  const selectedModel = authoring?.models.find((item) => item.offeringId === offeringId) ?? null;
-  const reasoningChoices = orderedReasoningEfforts(selectedModel
-    ? selectedModel.supportedReasoningEfforts
-    : authoring?.models.flatMap((item) => item.supportedReasoningEfforts) ?? []);
   const speechMissing = voiceOn && (speechRecognizer.trim().length === 0 || speechSynthesizer.trim().length === 0);
   const goalRows = goals.length > 0 ? goals : [""];
   const metadataRows = readMetadataRows(candidate);
@@ -392,43 +387,9 @@ export function DefinitionCandidateForm({
             {
               key: "modelDefaults", label: "Model defaults", children: (
                 <section className="admin-draft-form-section admin-settings-form" aria-label="Model defaults">
-                  <div className="admin-draft-field-grid admin-settings-field-grid">
-                    <SelectField
-                      label="Model"
-                      hint={offeringId && !selectedModel ? "The saved offering is unavailable. Choose an available model or clear this default." : "Optional catalog model. Empty sets no model default."}
-                      allowClear
-                      value={offeringId}
-                      options={modelChoiceOptions(authoring?.models ?? [], offeringId)}
-                      disabled={busy || readOnly}
-                      onChange={(value) => {
-                        const key = typeof value === "string" ? value : "";
-                        let next = writeModelDefault(candidate, "offeringId", key);
-                        const model = authoring?.models.find((item) => item.offeringId === key);
-                        const allowed = model?.supportedReasoningEfforts ?? [];
-                        const currentEffort = readString(next, ["modelDefaults", "reasoningEffort"]);
-                        if (currentEffort.length > 0 && !allowed.includes(currentEffort)) {
-                          next = writeModelDefault(next, "reasoningEffort", retainedReasoningEffort(model, currentEffort));
-                        }
-                        onCandidateChange(next);
-                      }}
-                    />
-                    <SelectField
-                      label="Reasoning"
-                      hint={offeringId && !selectedModel ? "The saved model is unavailable. Its effort is retained until you choose an available model or clear the default." : selectedModel && selectedModel.supportedReasoningEfforts.length === 0
-                        ? "This model has no reasoning effort."
-                        : "Optional effort supported by the selected model."}
-                      allowClear
-                      value={reasoningEffort}
-                      options={labeledOptions(
-                        reasoningChoices.map((item) => ({ value: item, label: effortLabel(item) })),
-                        reasoningEffort
-                      )}
-                      disabled={busy || readOnly || !!offeringId && !selectedModel || (selectedModel !== null && selectedModel.supportedReasoningEfforts.length === 0)}
-                      onChange={(value) =>
-                        onCandidateChange(writeModelDefault(candidate, "reasoningEffort", typeof value === "string" ? value : ""))
-                      }
-                    />
-                  </div>
+                  <ExecutionModelFields models={authoring?.models ?? []} offeringId={offeringId} reasoningEffort={reasoningEffort}
+                    disabled={busy || readOnly} modelLabel="Definition model" effortLabel="Definition reasoning" defaultLabel="Use organization default" showLabels
+                    onChange={(key, effort) => onCandidateChange(writePath(candidate, ["modelDefaults"], preferenceFromFields(key, effort)))} />
                 </section>
               )
             },
@@ -779,10 +740,6 @@ function NumberField({
       {error ? <Typography.Text id={errorId} type="danger" role="alert">{error}</Typography.Text> : null}
     </label>
   );
-}
-
-function effortLabel(value: string) {
-  return value.length === 0 ? value : `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }
 
 function labeledOptions(

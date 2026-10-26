@@ -13,7 +13,7 @@ public sealed partial class TenantSessionService
     // The API's existing Runtime host reserves a quiescent Session before this command.
     // Both stores repeat the no-active-Run and revision checks inside the owning transaction.
     public async ValueTask<TenantSession> SelectModelAsync(Guid tenant, Guid sessionId, TenantSessionInitiator human,
-        long securityRevision, long sessionRevision, string? offeringId, string? reasoningEffort, CancellationToken ct = default)
+        long securityRevision, long sessionRevision, AgentCore.Domain.Models.ModelPreference preference, CancellationToken ct = default)
     {
         var state = await Human(tenant, human, ct).ConfigureAwait(false);
         var current = await sessions.FindTenantSessionAsync(tenant, sessionId, ct).ConfigureAwait(false)
@@ -34,8 +34,13 @@ public sealed partial class TenantSessionService
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
         var effective = InstanceSettingsResolver.Resolve(baseline, parent.Instance.SettingsOverrides);
         var catalog = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
-        var model = SessionModelBinder.Bind(catalog, offeringId, reasoningEffort, ModelSelectionSource.User, effective.ModelDefaults);
-        var change = new TenantSessionChange(sessionId, sessionRevision, TenantSessionAction.SelectModel, Model: model);
+        preference.Validate();
+        ExecutionModelPolicy.RequireSelectable(catalog, preference);
+        var effectivePreference = preference.Mode == "inherit" ? effective.ModelDefaults ?? preference : preference;
+        var requestedModel = effectivePreference.Mode == "auto" || preference.Reasoning?.Mode == "auto" || effectivePreference.Reasoning?.Mode == "auto" ? null : SessionModelBinder.BindPreference(catalog, preference, effective.ModelDefaults);
+        // A preference edit does not rewrite an already observed Run outcome.
+        var model = current.Snapshot.ModelSelection?.Decision is not null ? current.Snapshot.ModelSelection : requestedModel;
+        var change = new TenantSessionChange(sessionId, sessionRevision, TenantSessionAction.SelectModel, Model: model, ModelPreference: preference);
         var now = DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds());
         _ = TenantSessionMutations.Apply(current.Snapshot, change, now);
         var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };

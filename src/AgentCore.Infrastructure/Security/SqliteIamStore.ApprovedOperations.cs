@@ -255,7 +255,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
                 if (managementChange.Binding is { } bindingPlan && !await StageTenantCredentialBinding(db, request.TenantId, bindingPlan.Value, bindingPlan.Remove, bindingPlan.CredentialRevision, audit, ct).ConfigureAwait(false))
                     throw new SecurityConflictException("management_source_changed");
                 owned.Instance.HarnessManagementJson = updated.HarnessManagement is null ? null : JsonSerializer.Serialize(updated.HarnessManagement, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-                owned.Instance.UnattendedOfferingId = updated.UnattendedOfferingId; owned.Instance.UnattendedReasoningEffort = updated.UnattendedReasoningEffort;
+                owned.Instance.UnattendedModelJson = System.Text.Json.JsonSerializer.Serialize(updated.UnattendedModel, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                 await SqliteAgentInstanceStore.StageAutomationPolicyAsync(db, new(updated.InstanceId, target.Instance.Revision, AutomationPolicyChanges: managementChange.AutomationPolicyChanges), at, ct, request.TenantId).ConfigureAwait(false);
             }
             owned.Instance.Revision = updated.Revision; owned.Instance.UpdatedAtUtc = at.ToUnixTimeMilliseconds();

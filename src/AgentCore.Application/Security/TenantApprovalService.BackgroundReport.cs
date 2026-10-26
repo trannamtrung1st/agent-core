@@ -25,7 +25,7 @@ public sealed partial class TenantApprovalService
         var p = new PreparedBackgroundReport(context.TenantId, run.SessionId, run.AgentRunId, run.Revision, source.Parent!.Owner.SessionId,
             source.Parent.Snapshot.Revision, source.Parent.Snapshot.DurableLastEntrySequence, ids.NewId(), ids.NewId(), ids.NewId(),
             BackgroundCompletionProjection.Build(run, run.Admission.TaskIntent?.Text ?? source.ChildSession.Snapshot.Title, [], source.Parent.Snapshot.DurableLastEntrySequence),
-            TenantBackgroundCreationRules.Hash(current.Configuration), new(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort, model.Binding),
+            TenantBackgroundCreationRules.Hash(current.Configuration), new(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort, model.Binding, model.Decision),
             source.Parent.Snapshot.ContextSelection ?? throw new AccessDeniedException("space_context_required"));
         var op = TenantApprovalRules.PrepareBackgroundReport(ids.NewId(), run.AgentInstanceId, p, current.Agent.Instance.Revision, current.Agent.Instance.PersonaRevision);
         op = TenantApprovalRules.ForRun(op, run);

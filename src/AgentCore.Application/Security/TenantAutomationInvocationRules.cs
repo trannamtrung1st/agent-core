@@ -56,7 +56,7 @@ public static class TenantAutomationInvocationRules
         var conversation = plan.Conversation is null ? null : TenantAutomationConversationRules.Require(current, source.Conversation, plan.Conversation);
         var graph = conversation is null ? BackgroundSessionAdmissionFactory.ForOccurrence(plan.SessionId, plan.EntryId, plan.ActivationId, plan.RunId, plan.ResponseId,
             initial, resolved.Configuration.Definition, resolved.Persona, resolved.Configuration.PersonaRevision, plan.Model, resolved.Skills, at, current.Name,
-            ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved.Configuration, Requester(source))
+            ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved.Configuration, Requester(source), AgentCore.Application.Models.ExecutionModelPolicy.Preference(resolved.Configuration.Definition, source.Reader.Agent.Instance, current))
             : (Session: conversation.Snapshot, Run: TenantAutomationConversationRules.ForOccurrence(conversation, initial, source.Reader.Agent, resolved,
                 plan.ActivationId, plan.RunId, plan.ResponseId, plan.Model, at, Requester(source)));
         var accepted = routed.WithExecutionAcceptance(plan.SessionId, plan.RunId, routed.RoutingRevision, at);

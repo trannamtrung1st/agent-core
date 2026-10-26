@@ -95,6 +95,6 @@ public sealed partial class TenantCredentialAccessTests
         Assert.True(run.Status == AgentRunStatus.Completed, $"{run.Status}: {run.Failure}");
         var retained = (await sessions.FindTenantSessionAsync(tenant, session))!.Snapshot;
         Assert.Equal(1, retained.Definition.Version); Assert.Equal(original.SpeechLocaleOverride, retained.SpeechLocaleOverride);
-        Assert.Equal(JsonSerializer.Serialize(original.ModelSelection), JsonSerializer.Serialize(retained.ModelSelection)); Assert.True(retained.ModelSelection!.HasExplicitReasoningEffort);
+        Assert.Equal(JsonSerializer.Serialize(original.ModelSelection), JsonSerializer.Serialize(retained.ModelSelection)); Assert.Equal("high", retained.ModelSelection!.ReasoningEffort);
     }
 }

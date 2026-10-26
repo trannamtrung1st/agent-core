@@ -136,16 +136,7 @@ public static class AgentDefinitionValidator
 
         if (definition.ModelDefaults is { } modelDefaults)
         {
-            if (modelDefaults.OfferingId is { } id && (!Guid.TryParseExact(id, "D", out var offering) || offering == Guid.Empty || offering.ToString("D") != id))
-            {
-                throw new ArgumentException("modelDefaults.offeringId must be a canonical nonempty UUID.");
-            }
-
-            if (modelDefaults.ReasoningEffort is { Length: > 0 } effort
-                && effort.Length > 32)
-            {
-                throw new ArgumentException("modelDefaults.reasoningEffort is invalid.");
-            }
+            modelDefaults.Validate();
         }
 
         ValidateExecutionPolicy(DefinitionExecutionPolicies.Of(definition));

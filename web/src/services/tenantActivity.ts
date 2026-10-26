@@ -6,7 +6,7 @@ type SessionRow = { tenantId: string; sessionId: string; agentInstanceId: string
   status: string; lifecycleStatus: string; archivedAt: string | null; agentId: string; agentVersion: number; agentName: string; agentRole: string;
   canManage: boolean; origin: string; surfaces: string[]; initialRunId: string | null; canContinue: boolean; securityRevision: number };
 type RunRow = { runId: string; sessionId: string; agentInstanceId: string; context: { activationId: string; tenantId: string }; status: string; revision: number;
-  createdAt: string; updatedAt: string; activationKind: string; outputContract: string; modelOfferingId: string; attemptCount: number; maxAttempts: number; progressSummary: string | null;
+  createdAt: string; updatedAt: string; activationKind: string; outputContract: string; modelDecision?: { basis: string; engineId: string; engineVersion: string; settingsRevision: number; preferenceSource: string; policyRevision: string; diagnosticCode: string | null } | null; reasoningEffort?: string | null; modelOfferingId: string; attemptCount: number; maxAttempts: number; progressSummary: string | null;
   objective: string | null; outcomeText: string | null; outcomeKind: string | null; failureCode: string | null; failureSummary: string | null; diagnosticId: string | null; canCancel: boolean; cancellationRequested: boolean };
 type BackgroundRow = { session: SessionRow; initialRun: RunRow | null; initialTitle: string | null; completionDelivery: { status: string; targetSessionId: string | null; reason: string | null } | null };
 type Page<T> = { items: T[]; total: number; page: number; pageSize: number; securityRevision: number };
@@ -26,7 +26,7 @@ export function tenantActivitySource(tenant: string, instance: string, principal
       status: row.status, revision: row.revision, attemptCount: row.attemptCount, maxAttempts: row.maxAttempts, cancellationAvailable: row.canCancel, cancellationRequested: row.cancellationRequested,
       taskIntent: row.objective, contextProvenanceAvailable: false, progress: row.progressSummary, nextRetryAt: null, createdAt: row.createdAt, updatedAt: row.updatedAt, approval: null,
       outcome: row.outcomeKind ? { kind: titleCase(row.outcomeKind), summary: row.outcomeText ?? '', outcomeEntryId: null, attentionRequired: row.outcomeKind === 'needsAttention' } : null,
-      failureCode: row.failureCode, failureSummary: row.failureSummary, diagnosticId: row.diagnosticId, knownEffectSummary: null, modelOfferingId: row.modelOfferingId,
+      failureCode: row.failureCode, failureSummary: row.failureSummary, diagnosticId: row.diagnosticId, knownEffectSummary: null, modelOfferingId: row.modelOfferingId, modelDecision: row.modelDecision, reasoningEffort: row.reasoningEffort,
       responseId: null, automationId: null, experienceId: null, sourceOccurrenceId: null };
   }
   function background(row: BackgroundRow): BackgroundSession {

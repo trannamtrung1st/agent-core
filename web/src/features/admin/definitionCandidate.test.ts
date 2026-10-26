@@ -10,7 +10,6 @@ import {
   candidatesEqual,
   patchRecord,
   readSkills,
-  writeModelDefault,
   writePath,
   writeSkills
 } from "./definitionCandidate";
@@ -19,7 +18,7 @@ const sample = {
   schemaVersion: 2,
   definitionId: "examiner",
   identity: { name: "Alex", role: "Examiner", description: "Practice.", tone: "Calm" },
-  modelDefaults: { offeringId: "dca30000-0000-4000-8000-000000000001", reasoningEffort: "low" },
+  modelDefaults: { mode: "fixed", offeringId: "dca30000-0000-4000-8000-000000000001", reasoning: { mode: "fixed", effort: "low" } },
   metadata: { owner: "kept" },
   voice: { enabled: false, voiceId: "verse", speakingRate: 1 }
 };
@@ -141,12 +140,6 @@ describe("definitionCandidate", () => {
     expect(candidateForPersistence(voiced)).toBe(voiced);
   });
 
-  it("clears model defaults only when both fields are blank", () => {
-    const clearedKey = writeModelDefault(sample, "offeringId", " ");
-    expect(clearedKey.modelDefaults).toEqual({ offeringId: null, reasoningEffort: "low" });
-    const cleared = writeModelDefault(clearedKey, "reasoningEffort", "");
-    expect(cleared.modelDefaults).toBeNull();
-  });
 
   it("keeps a trailing comma in skill list fields while editing", () => {
     const edited = writeSkills(sample, [

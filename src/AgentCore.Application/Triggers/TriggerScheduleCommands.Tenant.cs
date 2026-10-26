@@ -102,7 +102,7 @@ public static partial class TriggerScheduleCommands
         var pinnedSpace = Pin("pinnedSpaceId", current?.PinnedSpaceId);
         var spaceChanged = current?.PinnedSpaceId != pinnedSpace;
         var pinnedEnvironment = Pin("pinnedEnvironmentId", spaceChanged ? null : current?.PinnedEnvironmentId);
-        return new(enabled, name, instructions, schedule, Setting("offeringId", current?.ModelOverrideOfferingId), Setting("reasoningEffort", current?.ModelOverrideReasoningEffort),
+        return new(enabled, name, instructions, schedule, args.TryGetProperty("modelPreference", out var preference) ? preference.Deserialize<AgentCore.Domain.Models.ModelPreference>(new JsonSerializerOptions(JsonSerializerDefaults.Web)) : current?.ModelPreference,
             OptionalRequirement(args, "requiresTools") ?? current?.RequiresTools ?? true, OptionalRequirement(args, "requiresVision") ?? current?.RequiresVision ?? false,
             events, delivery.SessionId, target.SessionId, preset?.PresetId, preset?.PresetVersion, pinnedSpace, pinnedEnvironment);
     }

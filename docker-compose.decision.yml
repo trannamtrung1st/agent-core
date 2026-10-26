@@ -1,0 +1,44 @@
+# Optional overlay, never included by the default stack. Explicit cache download first.
+services:
+  agent-core:
+    environment:
+      DecisionIntelligence__Enabled: "${DecisionIntelligence__Enabled:-false}"
+      DecisionIntelligence__Backend: LocalKev
+      DecisionIntelligence__Endpoint: http://decision:8009
+      DecisionIntelligence__ApiKey: "${KEV_API_KEY:?Configure the private decision-service key}"
+      DecisionIntelligence__ShadowMode: "${DecisionIntelligence__ShadowMode:-true}"
+    networks: [default, decision-internal]
+  decision:
+    build:
+      context: .
+      dockerfile: deploy/decision/Dockerfile
+    image: agent-core-decision:kev-1.0-6b719c3
+    environment:
+      KEV_API_KEY: "${KEV_API_KEY:?Configure the private decision-service key}"
+      HF_HUB_OFFLINE: "1"
+      KEV_PREFIX_CACHE: "0"
+      KEV_TRUNCATE_STATES: "0"
+    volumes: [decision-cache:/cache]
+    networks: [decision-internal]
+    read_only: true
+    tmpfs: [/tmp:size=256m, /home/decision/.cache:size=64m]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 24g
+    cpus: 4
+    shm_size: 1g
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: "no"
+    stop_grace_period: 15s
+networks:
+  decision-internal:
+    internal: true
+volumes:
+  decision-cache:

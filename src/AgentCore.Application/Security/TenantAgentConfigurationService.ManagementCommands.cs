@@ -69,10 +69,10 @@ public sealed partial class TenantAgentConfigurationService
                 args.GetProperty("clear").EnumerateArray().Select(p => p.GetString()!).ToArray(), ct).ConfigureAwait(false);
         if (arguments.Tool == "automation.preferences.patch")
         {
-            var model = args.GetProperty("offeringId").GetString(); var effort = args.GetProperty("reasoningEffort").GetString();
+            var preference = args.GetProperty("modelPreference").Deserialize<AgentCore.Domain.Models.ModelPreference>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
             var models = await modelCatalogs.ReadAsync(reader.Security, ct).ConfigureAwait(false);
-            ExecutionModelPolicy.RequireSelectable(models, model, effort);
-            return new(owner.InstanceId, owner.Revision, SetUnattendedModel: true, UnattendedOfferingId: model, UnattendedReasoningEffort: effort);
+            ExecutionModelPolicy.RequireSelectable(models, preference);
+            return new(owner.InstanceId, owner.Revision, SetUnattendedModel: true, UnattendedModel: preference);
         }
         if (arguments.Tool == "management.freeze")
             return new(owner.InstanceId, owner.Revision, HarnessManagement: HarnessManagementRules.PrepareFreeze(owner, reader.Baseline));

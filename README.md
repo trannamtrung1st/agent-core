@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+Decision Intelligence now has a local foundation, canonical inherit/fixed/Auto preferences, tenant Routing controls and immutable per-Run decisions. It is disabled/shadow by default. [Delivery evidence](docs/reports/decision-intelligence-delivery-2026-10-26.md) separates verified Synthetic behavior from pending real Kev quality/GPU qualification; [operator runbook](docs/decision-intelligence-runbook.md) covers the optional service and offline migration.
+
 The Account/tenant IAM successor has completed local implementation and Synthetic proposal acceptance in the final delivery. [Final delivery](docs/reports/tenant-final-delivery-2026-10-24.md) records exact source/commit status, all method/I/O/worker and UI evidence, operating instructions and measured limits. The final 80-file scope is approved for direct commit to main; live-provider/customer outcomes, physical-device certification, rollout and optional CI are not implied. Historical reports retain their own source versions.
 
 The [IAM stabilization follow-up](docs/reports/iam-stabilization-2026-10-24.md) owns subsequent launcher, Compose/HTTPS, canonical Playwright and approval-review integration evidence; earlier delivery fingerprints remain historical.

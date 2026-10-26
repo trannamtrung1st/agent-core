@@ -23,7 +23,7 @@ public sealed class MemoryStoreContractTests
             Guid.NewGuid(), 8, 3, preset.Kind, preset.ExternalModelId, preset.Transport);
         var binding = new AgentCore.Domain.Models.ModelBinding(route, preset.Capabilities, "Captured model label", "Captured connection label");
         var selection = new SessionModelSelection(route.OfferingId.ToString("D"), route.ConnectionId.ToString("D"), route.ExternalModelId,
-            ModelSelectionSource.User, "medium", true, binding);
+            ModelSelectionSource.User, "medium", binding);
         var provenance = new ModelGenerationProvenance(selection.OfferingId, selection.ConnectionId, selection.ExternalModelId, "medium", binding);
         foreach (var store in new IMemoryStore[] { new InMemoryMemoryStore(), sqlite.Store })
         {

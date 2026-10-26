@@ -6,7 +6,7 @@ public sealed record HealthResponse(string Status, string Profile, int ProtocolV
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record TenantSessionCreateRequest(Guid AgentInstanceId, long ExpectedRevision, long ExpectedInstanceRevision,
-    string Mode = "text", Guid? OfferingId = null, string? ReasoningEffort = null, string? RetentionKind = null);
+    string Mode = "text", ModelPreferenceDto? ModelPreference = null, string? RetentionKind = null);
 
 /// <param name="Source">Ignored on all lifecycle routes; authority is fixed per route (user vs host).</param>
 public sealed record TransitionLifecycleRequest(string Target, string? Source = null, string? Reason = null);
@@ -60,7 +60,7 @@ public sealed record SessionModelSelectionResponse(
     string SelectionSource,
     string? ReasoningEffort,
     string? ExternalModelId = null,
-    string? ConnectionId = null, string? ConnectionLabel = null);
+    string? ConnectionId = null, string? ConnectionLabel = null, bool ObservedFromRun = false);
 
 public sealed record ModelCapabilityResponse(bool Tools, bool Vision, bool StructuredOutput, bool Reasoning);
 
@@ -282,4 +282,4 @@ public sealed record ChatAgentInstanceListResponse(IReadOnlyList<ChatAgentInstan
 public sealed record SchedulerReadinessResponse(string Status, string? LastPassAt, string? LastSuccessAt);
 
 [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
-public sealed record TenantSessionModelRequest(long ExpectedRevision, long ExpectedSessionRevision, Guid? OfferingId = null, string? ReasoningEffort = null);
+public sealed record TenantSessionModelRequest(long ExpectedRevision, long ExpectedSessionRevision, ModelPreferenceDto? ModelPreference = null);

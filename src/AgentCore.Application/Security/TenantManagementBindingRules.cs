@@ -81,7 +81,7 @@ public static class TenantManagementBindingRules
         if (IsTool(value.ToolName) != (value.Binding is not null)) throw new ArgumentException("Use one exact binding plan.");
         if (value.Binding is not { } binding) return;
         if (value.Settings is not null || value.Management is not null || value.AutomationChanges is not null || value.Resource is not null || value.Skill is not null
-            || value.Harness is not null || value.Remedy is not null || value.UnattendedOfferingId is not null || value.UnattendedReasoningEffort is not null
+            || value.Harness is not null || value.Remedy is not null || value.UnattendedModel is not null
             || binding.Value.BindingId == Guid.Empty || binding.Value.CredentialId == Guid.Empty || binding.Value.AgentInstanceId == Guid.Empty
             || binding.Value.Reference != CredentialRules.Reference(binding.Value.Reference) || binding.Value.Revision < 1 || binding.CredentialRevision < 1
             || binding.Remove != (value.ToolName == "credentials.binding.remove") || !TenantMemoryOperationRules.ValidHash(binding.CredentialFingerprint)

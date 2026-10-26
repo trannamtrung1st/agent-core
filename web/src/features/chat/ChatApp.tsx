@@ -1,3 +1,4 @@
+import { modelPreferenceKey } from '../../services/modelPreference';
 import { MenuOutlined, PlusOutlined } from "@ant-design/icons";
 import { Alert, App as AntApp, Button, Drawer, Flex, Layout, Segmented, Switch, Tooltip, Typography, theme } from "antd";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -169,7 +170,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
   const readonly = isReadonlySession(state);
   const modelBusy = isSessionModelBusy(state);
   const modelValue = modelSelectValue(
-    state.sessionOfferingId,
+    modelPreferenceKey(state.sessionModelPreference, state.sessionOfferingId),
     state.pendingOfferingId,
     inSession,
     state.modelCatalogDefaultOfferingId
@@ -182,22 +183,21 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
     pendingSendQueue: state.pendingSendQueue
   });
   const selectedModel = selectedCatalogModel(state.modelCatalog, modelValue, state.modelCatalogDefaultOfferingId);
-  const effortValue = effortSelectValue(
-    selectedModel,
-    state.sessionModelEffort,
-    state.pendingReasoningEffort,
-    inSession,
-    !inSession && (!state.pendingOfferingId || state.pendingOfferingId === INHERIT_MODEL) ? state.modelCatalogDefaultEffort : null
-  );
+  const effortValue = inSession && state.sessionModelPreference
+    ? state.sessionModelPreference.reasoning?.mode === "auto" ? "auto"
+      : state.sessionModelPreference.reasoning?.mode === "fixed" ? state.sessionModelPreference.reasoning.effort ?? null
+      : state.sessionModelPreference.mode === "inherit" && state.sessionModelPreference.reasoning?.mode === "modelDefault" ? "modelDefault" : null
+    : !inSession ? state.pendingReasoningEffort : effortSelectValue(selectedModel, state.sessionModelEffort, state.pendingReasoningEffort, inSession, null);
+
   const modelDisabled = readonly || modelBusy || state.mode !== "text" || inSession && state.connection !== "ready";
   const changeModel = (key: string) => {
     const choice = key;
     void applySessionModel(
       choice,
-      choice === INHERIT_MODEL ? null : nextEffortForModel(state.modelCatalog, key, state.modelCatalogDefaultOfferingId, effortValue)
+      choice === "auto" ? "auto" : choice === INHERIT_MODEL ? null : nextEffortForModel(state.modelCatalog, key, state.modelCatalogDefaultOfferingId, effortValue)
     );
   };
-  const inheritedModel = inSession ? state.sessionModelSource === "tenantDefault" || state.sessionModelSource === "agentDefault" : modelValue === INHERIT_MODEL;
+  const inheritedModel = inSession ? state.sessionModelPreference?.mode === "inherit" || state.sessionModelPreference === null && (state.sessionModelSource === "tenantDefault" || state.sessionModelSource === "agentDefault") : modelValue === INHERIT_MODEL;
   const changeEffort = (effort: string | null) => {
     void applySessionModel(
       inheritedModel ? INHERIT_MODEL : modelValue,
@@ -213,6 +213,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
       modelValue={modelValue}
       inheritSelected={inheritedModel}
       unavailableLabel={state.sessionModelDisplayName}
+      lastResolved={state.sessionModelObserved && state.sessionModelDisplayName ? `${state.sessionModelDisplayName}${state.sessionModelEffort ? ` · ${state.sessionModelEffort} reasoning` : ""}` : null}
       effortValue={effortValue}
       disabled={inSession ? modelDisabled : state.modelCatalogLoading || !bootstrapped || state.connection !== "idle"}
       onModelChange={changeModel}
@@ -233,7 +234,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
     description: canConfigureConnection ? 'Connect a provider, add an enabled model and choose an organization default. Starter presets contain no credentials.' : 'Ask an organization owner to configure an available model. Starter presets contain no credentials.',
     href: canConfigureConnection ? tenantModelsPath(tenantContext.tenant.tenantId, 'connections') : null,
     action: 'Connect a provider'
-  } : inheritedModel && !selectedModel ? {
+  } : inheritedModel && !selectedModel && state.modelCatalogDefaultSource !== "auto" ? {
     title: 'Choose a model for this chat',
     description: 'The inherited default is unavailable. Choose an available model in the composer, or ask an organization owner to set a default.',
     href: canConfigureDefault ? tenantModelsPath(tenantContext.tenant.tenantId, 'defaults') : null,
