@@ -1,0 +1,102 @@
+[
+  {
+    "split": "calibration",
+    "purpose": "ModelRouting",
+    "n": 2,
+    "accepted": 2,
+    "correct": 2,
+    "configuredConstantBaseline": 0.5,
+    "brier": 0.03412301,
+    "logLoss": 0.12407935639644074,
+    "ece10": 0.11445,
+    "reliabilityBins": [
+      {
+        "lower": 0.8,
+        "n": 1,
+        "confidence": 0.8226,
+        "accuracy": 1
+      },
+      {
+        "lower": 0.9,
+        "n": 1,
+        "confidence": 0.9485,
+        "accuracy": 1
+      }
+    ],
+    "p50Ms": 1048.99495,
+    "p95NearestRankMs": 1063.605,
+    "minTopProbability": 0.8226
+  },
+  {
+    "split": "calibration",
+    "purpose": "ReasoningEffort",
+    "n": 2,
+    "accepted": 2,
+    "correct": 2,
+    "configuredConstantBaseline": 0.5,
+    "brier": 0.0012488400000000017,
+    "logLoss": 0.025217568197341854,
+    "ece10": 0.024900000000000033,
+    "reliabilityBins": [
+      {
+        "lower": 0.9,
+        "n": 2,
+        "confidence": 0.9751,
+        "accuracy": 1
+      }
+    ],
+    "p50Ms": 607.77745,
+    "p95NearestRankMs": 608.7024,
+    "minTopProbability": 0.973
+  },
+  {
+    "split": "heldout",
+    "purpose": "ModelRouting",
+    "n": 12,
+    "accepted": 12,
+    "correct": 12,
+    "configuredConstantBaseline": 0.5,
+    "brier": 0.034029416666666666,
+    "logLoss": 0.12561392273715144,
+    "ece10": 0.11603333333333332,
+    "reliabilityBins": [
+      {
+        "lower": 0.8,
+        "n": 6,
+        "confidence": 0.8245666666666667,
+        "accuracy": 1
+      },
+      {
+        "lower": 0.9,
+        "n": 6,
+        "confidence": 0.9433666666666667,
+        "accuracy": 1
+      }
+    ],
+    "p50Ms": 1033.6419,
+    "p95NearestRankMs": 1039.4512,
+    "minTopProbability": 0.8176
+  },
+  {
+    "split": "heldout",
+    "purpose": "ReasoningEffort",
+    "n": 12,
+    "accepted": 12,
+    "correct": 12,
+    "configuredConstantBaseline": 0.5,
+    "brier": 0.001701918333333333,
+    "logLoss": 0.028992864384076313,
+    "ece10": 0.028558333333333352,
+    "reliabilityBins": [
+      {
+        "lower": 0.9,
+        "n": 12,
+        "confidence": 0.9714416666666666,
+        "accuracy": 1
+      }
+    ],
+    "p50Ms": 605.77305,
+    "p95NearestRankMs": 637.2457,
+    "minTopProbability": 0.9599
+  }
+]

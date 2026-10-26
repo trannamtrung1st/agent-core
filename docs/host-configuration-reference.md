@@ -243,7 +243,7 @@ The active startup preset is [`.env.example`](../.env.example). Optional shapes 
 | `Endpoint` | `http://127.0.0.1:8009`; configurable HTTP port (1–65535) on literal loopback, `decision`, or Docker Desktop's `host.docker.internal`; no path/credentials/query/fragment/redirect/proxy. Named Docker destinations must resolve to private IPv4/loopback addresses. |
 | `ApiKey` | Private optional bearer; configured values must be 16–256 printable non-space ASCII. Missing reports notConfigured |
 | `ModelId` | `jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52`; exact pinned artifact only |
-| `RequestTimeoutMs` | `500`, allowed 50–10000; cancellation bound, no latency SLA |
+| `RequestTimeoutMs` | `500`, allowed 50–10000; one shared routing cancellation budget for model plus effort, no latency SLA. The measured warmed M2/MLX operator test profile uses an explicit `2000` override with concurrency `1`, not a global default increase |
 | `MaxConcurrentRequests` | `4`, allowed 1–16; no application waiting queue or retry |
 | `MaxStateCharacters` | `8000`, allowed 512–16000; max 32 candidates / 16 named signals |
 | `ShadowMode` | `true`; recommendations cannot replace the deterministic allowed default |

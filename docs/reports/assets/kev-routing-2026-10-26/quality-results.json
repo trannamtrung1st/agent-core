@@ -1,0 +1,712 @@
+{
+  "fixtureSha256": "29fd15e499dd8e45f7b67ff5c132c915c5d5f459ba4a29a3788445691e45f501",
+  "policyRevision": "routing-v2",
+  "threshold": 0.7,
+  "admissionBudgetMs": 2000,
+  "total": 28,
+  "heldout": 24,
+  "accepted": 28,
+  "correct": 28,
+  "rows": [
+    {
+      "id": "ModelRouting-cal-0",
+      "split": "calibration",
+      "purpose": "ModelRouting",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "greeting",
+        "reasoningDemand": "light",
+        "containsCode": "False",
+        "inputCharacters": "39",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "direct",
+      "selected": "direct",
+      "basis": "ranked",
+      "error": null,
+      "elapsedMs": 1063.605,
+      "probabilities": {
+        "dca30000-0000-4000-8000-000000000001": 0.8226,
+        "dca30000-0000-4000-8000-000000000002": 0.1774
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ModelRouting-cal-1",
+      "split": "calibration",
+      "purpose": "ModelRouting",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "analysis",
+        "reasoningDemand": "substantial",
+        "containsCode": "False",
+        "inputCharacters": "65",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "reasoning",
+      "selected": "reasoning",
+      "basis": "ranked",
+      "error": null,
+      "elapsedMs": 1034.3849,
+      "probabilities": {
+        "dca30000-0000-4000-8000-000000000001": 0.0515,
+        "dca30000-0000-4000-8000-000000000002": 0.9485
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ModelRouting-light-0",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "greeting",
+        "reasoningDemand": "light",
+        "containsCode": "False",
+        "inputCharacters": "15",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "direct",
+      "selected": "direct",
+      "basis": "ranked",
+      "error": null,
+      "elapsedMs": 1029.4312,
+      "probabilities": {
+        "dca30000-0000-4000-8000-000000000001": 0.8239,
+        "dca30000-0000-4000-8000-000000000002": 0.1761
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ModelRouting-light-1",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "lookup",
+        "reasoningDemand": "light",
+        "containsCode": "False",
+        "inputCharacters": "29",
+        "inputMode": "unattended",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "direct",
+      "selected": "direct",
+      "basis": "ranked",
+      "error": null,
+      "elapsedMs": 1038.7677,
+      "probabilities": {
+        "dca30000-0000-4000-8000-000000000001": 0.8339,
+        "dca30000-0000-4000-8000-000000000002": 0.1661
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ModelRouting-light-2",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "lookup",
+        "reasoningDemand": "light",
+        "containsCode": "False",
+        "inputCharacters": "43",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "direct",
+      "selected": "direct",
+      "basis": "ranked",
+      "error": null,
+      "elapsedMs": 1029.5253,
+      "probabilities": {
+        "dca30000-0000-4000-8000-000000000001": 0.8267,
+        "dca30000-0000-4000-8000-000000000002": 0.1733
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ModelRouting-light-3",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "greeting",
+        "reasoningDemand": "light",
+        "containsCode": "False",
+        "inputCharacters": "37",
+        "inputMode": "unattended",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "direct",
+      "selected": "direct",
+      "basis": "ranked",
+      "error": null,
+      "elapsedMs": 1029.9067,
+      "probabilities": {
+        "dca30000-0000-4000-8000-000000000001": 0.826,
+        "dca30000-0000-4000-8000-000000000002": 0.174
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ModelRouting-light-4",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "greeting",
+        "reasoningDemand": "light",
+        "containsCode": "False",
+        "inputCharacters": "37",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "direct",
+      "selected": "direct",
+      "basis": "ranked",
+      "error": null,
+      "elapsedMs": 1033.489,
+      "probabilities": {
+        "dca30000-0000-4000-8000-000000000001": 0.8176,
+        "dca30000-0000-4000-8000-000000000002": 0.1824
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ModelRouting-light-5",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "greeting",
+        "reasoningDemand": "light",
+        "containsCode": "False",
+        "inputCharacters": "33",
+        "inputMode": "unattended",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "direct",
+      "selected": "direct",
+      "basis": "ranked",
+      "error": null,
+      "elapsedMs": 1031.0809,
+      "probabilities": {
+        "dca30000-0000-4000-8000-000000000001": 0.8193,
+        "dca30000-0000-4000-8000-000000000002": 0.1807
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ModelRouting-substantial-0",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "analysis",
+        "reasoningDemand": "substantial",
+        "containsCode": "True",
+        "inputCharacters": "15",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "reasoning",
+      "selected": "reasoning",
+      "basis": "ranked",
+      "error": null,
+      "elapsedMs": 1028.8672,
+      "probabilities": {
+        "dca30000-0000-4000-8000-000000000001": 0.062,
+        "dca30000-0000-4000-8000-000000000002": 0.938
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ModelRouting-substantial-1",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "analysis",
+        "reasoningDemand": "substantial",
+        "containsCode": "False",
+        "inputCharacters": "97",
+        "inputMode": "unattended",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "reasoning",
+      "selected": "reasoning",
+      "basis": "ranked",
+      "error": null,
+      "elapsedMs": 1038.4724,
+      "probabilities": {
+        "dca30000-0000-4000-8000-000000000001": 0.0543,
+        "dca30000-0000-4000-8000-000000000002": 0.9457
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ModelRouting-substantial-2",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "analysis",
+        "reasoningDemand": "substantial",
+        "containsCode": "True",
+        "inputCharacters": "80",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "reasoning",
+      "selected": "reasoning",
+      "basis": "ranked",
+      "error": null,
+      "elapsedMs": 1033.7948,
+      "probabilities": {
+        "dca30000-0000-4000-8000-000000000001": 0.0624,
+        "dca30000-0000-4000-8000-000000000002": 0.9376
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ModelRouting-substantial-3",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "analysis",
+        "reasoningDemand": "substantial",
+        "containsCode": "False",
+        "inputCharacters": "69",
+        "inputMode": "unattended",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "reasoning",
+      "selected": "reasoning",
+      "basis": "ranked",
+      "error": null,
+      "elapsedMs": 1037.3168,
+      "probabilities": {
+        "dca30000-0000-4000-8000-000000000001": 0.0556,
+        "dca30000-0000-4000-8000-000000000002": 0.9444
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ModelRouting-substantial-4",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "analysis",
+        "reasoningDemand": "substantial",
+        "containsCode": "False",
+        "inputCharacters": "87",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "reasoning",
+      "selected": "reasoning",
+      "basis": "ranked",
+      "error": null,
+      "elapsedMs": 1039.4512,
+      "probabilities": {
+        "dca30000-0000-4000-8000-000000000001": 0.0517,
+        "dca30000-0000-4000-8000-000000000002": 0.9483
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ModelRouting-substantial-5",
+      "split": "heldout",
+      "purpose": "ModelRouting",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "analysis",
+        "reasoningDemand": "substantial",
+        "containsCode": "False",
+        "inputCharacters": "84",
+        "inputMode": "unattended",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "reasoning",
+      "selected": "reasoning",
+      "basis": "ranked",
+      "error": null,
+      "elapsedMs": 1034.1633,
+      "probabilities": {
+        "dca30000-0000-4000-8000-000000000001": 0.0538,
+        "dca30000-0000-4000-8000-000000000002": 0.9462
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ReasoningEffort-cal-0",
+      "split": "calibration",
+      "purpose": "ReasoningEffort",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "greeting",
+        "reasoningDemand": "light",
+        "containsCode": "False",
+        "inputCharacters": "39",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "low",
+      "selected": "low",
+      "basis": "fixedAutoReasoning",
+      "error": null,
+      "elapsedMs": 608.7024,
+      "probabilities": {
+        "low": 0.9772,
+        "high": 0.0228
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ReasoningEffort-cal-1",
+      "split": "calibration",
+      "purpose": "ReasoningEffort",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "analysis",
+        "reasoningDemand": "substantial",
+        "containsCode": "False",
+        "inputCharacters": "65",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "high",
+      "selected": "high",
+      "basis": "fixedAutoReasoning",
+      "error": null,
+      "elapsedMs": 606.8525,
+      "probabilities": {
+        "low": 0.027,
+        "high": 0.973
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ReasoningEffort-light-0",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "greeting",
+        "reasoningDemand": "light",
+        "containsCode": "False",
+        "inputCharacters": "15",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "low",
+      "selected": "low",
+      "basis": "fixedAutoReasoning",
+      "error": null,
+      "elapsedMs": 607.167,
+      "probabilities": {
+        "low": 0.9756,
+        "high": 0.0244
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ReasoningEffort-light-1",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "lookup",
+        "reasoningDemand": "light",
+        "containsCode": "False",
+        "inputCharacters": "29",
+        "inputMode": "unattended",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "low",
+      "selected": "low",
+      "basis": "fixedAutoReasoning",
+      "error": null,
+      "elapsedMs": 608.6391,
+      "probabilities": {
+        "low": 0.9678,
+        "high": 0.0322
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ReasoningEffort-light-2",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "lookup",
+        "reasoningDemand": "light",
+        "containsCode": "False",
+        "inputCharacters": "43",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "low",
+      "selected": "low",
+      "basis": "fixedAutoReasoning",
+      "error": null,
+      "elapsedMs": 608.3198,
+      "probabilities": {
+        "low": 0.9629,
+        "high": 0.0371
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ReasoningEffort-light-3",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "greeting",
+        "reasoningDemand": "light",
+        "containsCode": "False",
+        "inputCharacters": "37",
+        "inputMode": "unattended",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "low",
+      "selected": "low",
+      "basis": "fixedAutoReasoning",
+      "error": null,
+      "elapsedMs": 602.7993,
+      "probabilities": {
+        "low": 0.977,
+        "high": 0.023
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ReasoningEffort-light-4",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "greeting",
+        "reasoningDemand": "light",
+        "containsCode": "False",
+        "inputCharacters": "37",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "low",
+      "selected": "low",
+      "basis": "fixedAutoReasoning",
+      "error": null,
+      "elapsedMs": 606.5496,
+      "probabilities": {
+        "low": 0.9766,
+        "high": 0.0234
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ReasoningEffort-light-5",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "greeting",
+        "reasoningDemand": "light",
+        "containsCode": "False",
+        "inputCharacters": "33",
+        "inputMode": "unattended",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "low",
+      "selected": "low",
+      "basis": "fixedAutoReasoning",
+      "error": null,
+      "elapsedMs": 602.7517,
+      "probabilities": {
+        "low": 0.9764,
+        "high": 0.0236
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ReasoningEffort-substantial-0",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "analysis",
+        "reasoningDemand": "substantial",
+        "containsCode": "True",
+        "inputCharacters": "15",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "high",
+      "selected": "high",
+      "basis": "fixedAutoReasoning",
+      "error": null,
+      "elapsedMs": 601.146,
+      "probabilities": {
+        "low": 0.0365,
+        "high": 0.9635
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ReasoningEffort-substantial-1",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "analysis",
+        "reasoningDemand": "substantial",
+        "containsCode": "False",
+        "inputCharacters": "97",
+        "inputMode": "unattended",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "high",
+      "selected": "high",
+      "basis": "fixedAutoReasoning",
+      "error": null,
+      "elapsedMs": 604.7722,
+      "probabilities": {
+        "low": 0.0232,
+        "high": 0.9768
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ReasoningEffort-substantial-2",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "analysis",
+        "reasoningDemand": "substantial",
+        "containsCode": "True",
+        "inputCharacters": "80",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "high",
+      "selected": "high",
+      "basis": "fixedAutoReasoning",
+      "error": null,
+      "elapsedMs": 637.2457,
+      "probabilities": {
+        "low": 0.0401,
+        "high": 0.9599
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ReasoningEffort-substantial-3",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "analysis",
+        "reasoningDemand": "substantial",
+        "containsCode": "False",
+        "inputCharacters": "69",
+        "inputMode": "unattended",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "high",
+      "selected": "high",
+      "basis": "fixedAutoReasoning",
+      "error": null,
+      "elapsedMs": 609.8635,
+      "probabilities": {
+        "low": 0.0264,
+        "high": 0.9736
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ReasoningEffort-substantial-4",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "analysis",
+        "reasoningDemand": "substantial",
+        "containsCode": "False",
+        "inputCharacters": "87",
+        "inputMode": "text",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "high",
+      "selected": "high",
+      "basis": "fixedAutoReasoning",
+      "error": null,
+      "elapsedMs": 601.5012,
+      "probabilities": {
+        "low": 0.0264,
+        "high": 0.9736
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    },
+    {
+      "id": "ReasoningEffort-substantial-5",
+      "split": "heldout",
+      "purpose": "ReasoningEffort",
+      "signals": {
+        "signalSchema": "task-hints-v1",
+        "taskKind": "analysis",
+        "reasoningDemand": "substantial",
+        "containsCode": "False",
+        "inputCharacters": "84",
+        "inputMode": "unattended",
+        "attachmentCount": "0",
+        "requiresVision": "False"
+      },
+      "expected": "high",
+      "selected": "high",
+      "basis": "fixedAutoReasoning",
+      "error": null,
+      "elapsedMs": 604.9965,
+      "probabilities": {
+        "low": 0.0264,
+        "high": 0.9736
+      },
+      "engineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 # Real Kev native and held-out verification — 26 October 2026
 
+Follow-up: [routing-v2 verification](kev-routing-verification-2026-10-26.md) supersedes this report’s coarse-routing input/quality gap. The original primitive fixture and measurements below remain historical; the follow-up adds actual ModelRouting/ReasoningEffort held-out evidence, strict ranked tenant admission and a shared routing budget.
+
 ## Overall verdict
 
 **The requested available-hardware Decision Intelligence implementation and verification are complete.** Real pinned Kev-4B runs natively through MLX/bfloat16 on this Apple M2 Mac. Authenticated choice/yes-no/score, the shared routing policy, actual IAM/Run admission/replay/SQLite reopen, migration/Synthetic integration and Docker-to-native inference all pass. The frozen held-out evaluation records 33/36 correct overall and 28/28 correct among decisions accepted at the unchanged 0.7 threshold; all three errors are below threshold.

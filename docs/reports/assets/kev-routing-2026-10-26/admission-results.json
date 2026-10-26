@@ -1,0 +1,103 @@
+{
+  "policyRevision": "routing-v2",
+  "admissionBudgetMs": 2000,
+  "complexAdmissionMs": 2118.5833,
+  "greetingAdmissionMs": 1056.2289,
+  "Calls": 3,
+  "StageElapsedMs": [
+    1050.8043,
+    615.9695,
+    1034.4144
+  ],
+  "complexPin": {
+    "OfferingId": "01a1781d-6987-7260-91fa-b06abce98a72",
+    "ConnectionId": "01a1781d-68ae-7953-a338-c4b45d349bc1",
+    "ExternalModelId": "alternate-model",
+    "ReasoningEffort": "high",
+    "Decision": {
+      "Basis": "ranked",
+      "EngineId": "localKev",
+      "EngineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52",
+      "SettingsRevision": 2,
+      "PreferenceSource": "session",
+      "PolicyRevision": "routing-v2",
+      "DiagnosticCode": null
+    },
+    "Binding": {
+      "Route": {
+        "TenantId": "01a1781d-65ea-7295-9b69-de82f9f4693e",
+        "OfferingId": "01a1781d-6987-7260-91fa-b06abce98a72",
+        "OfferingRevision": 1,
+        "ConnectionId": "01a1781d-68ae-7953-a338-c4b45d349bc1",
+        "ConnectionRevision": 1,
+        "CredentialId": "01a1781d-67c2-7d1c-97f2-fb9a0f11a79c",
+        "CredentialRevision": 1,
+        "SecretRevision": 0,
+        "Kind": 1,
+        "ExternalModelId": "alternate-model",
+        "Transport": 1
+      },
+      "Capabilities": {
+        "Tools": true,
+        "Vision": true,
+        "Hierarchy": 2,
+        "SemanticMode": 0,
+        "StructuredOutput": true,
+        "ForcedToolChoice": true,
+        "ReasoningEfforts": [
+          "low",
+          "high"
+        ],
+        "DefaultReasoningEffort": "low",
+        "Source": 3,
+        "VerifiedAt": "2026-10-26T12:09:15.911455+00:00"
+      },
+      "ModelLabel": "Deliberate reasoning",
+      "ConnectionLabel": "Exact connection"
+    }
+  },
+  "greetingPin": {
+    "OfferingId": "01a1781d-68f8-7326-b34f-86521669672f",
+    "ConnectionId": "01a1781d-68ae-7953-a338-c4b45d349bc1",
+    "ExternalModelId": "claude-haiku-5-5",
+    "ReasoningEffort": null,
+    "Decision": {
+      "Basis": "ranked",
+      "EngineId": "localKev",
+      "EngineVersion": "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52",
+      "SettingsRevision": 2,
+      "PreferenceSource": "session",
+      "PolicyRevision": "routing-v2",
+      "DiagnosticCode": null
+    },
+    "Binding": {
+      "Route": {
+        "TenantId": "01a1781d-65ea-7295-9b69-de82f9f4693e",
+        "OfferingId": "01a1781d-68f8-7326-b34f-86521669672f",
+        "OfferingRevision": 2,
+        "ConnectionId": "01a1781d-68ae-7953-a338-c4b45d349bc1",
+        "ConnectionRevision": 1,
+        "CredentialId": "01a1781d-67c2-7d1c-97f2-fb9a0f11a79c",
+        "CredentialRevision": 1,
+        "SecretRevision": 0,
+        "Kind": 1,
+        "ExternalModelId": "claude-haiku-5-5",
+        "Transport": 1
+      },
+      "Capabilities": {
+        "Tools": true,
+        "Vision": true,
+        "Hierarchy": 2,
+        "SemanticMode": 0,
+        "StructuredOutput": true,
+        "ForcedToolChoice": true,
+        "ReasoningEfforts": [],
+        "DefaultReasoningEffort": null,
+        "Source": 3,
+        "VerifiedAt": "2026-10-26T12:09:15.89786+00:00"
+      },
+      "ModelLabel": "Direct response",
+      "ConnectionLabel": "Exact connection"
+    }
+  }
+}
