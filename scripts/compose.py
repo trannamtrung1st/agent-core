@@ -8,13 +8,27 @@ import sys
 root = Path(__file__).resolve().parents[1]
 policy = runpy.run_path(str(root / 'scripts/dev-env.py'))
 args = sys.argv[1:]
-# Resolve the same explicit files passed to Compose. Without one, use root .env.
-files = [Path(args[n + 1]) for n, arg in enumerate(args[:-1]) if arg == '--env-file']
-if any(arg.startswith('--env-file=') for arg in args):
-    files += [Path(arg.split('=', 1)[1]) for arg in args if arg.startswith('--env-file=')]
-if not files:
-    files = [root / '.env']
 try:
+    # Resolve against the caller's cwd before changing to the project root. Pass
+    # those exact paths to Compose, retaining override order across both forms.
+    files = []
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == '--env-file':
+            if index + 1 == len(args):
+                raise ValueError('Missing path for --env-file.')
+            index += 1
+            file = Path(args[index]).resolve()
+            args[index] = str(file)
+            files.append(file)
+        elif arg.startswith('--env-file='):
+            file = Path(arg.split('=', 1)[1]).resolve()
+            args[index] = '--env-file=' + str(file)
+            files.append(file)
+        index += 1
+    if not files:
+        files = [root / '.env']
     values = {}
     for file in files:
         values.update(policy['read_env'](file))

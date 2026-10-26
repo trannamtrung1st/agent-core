@@ -1,5 +1,5 @@
 # Authenticated Synthetic app, after explicit identity bootstrap:
-#   docker compose -f docker-compose.yml -f docker-compose.https.yml up --build -d
+#   python3 scripts/compose.py -f docker-compose.yml -f docker-compose.https.yml up --build -d
 # Set AGENTCORE_TLS_CERTIFICATE_PATH to an absolute, private PFX readable by the
 # container UID (1654), and AGENTCORE_TLS_PASSWORD to its password in private .env
 # or the calling environment. Bootstrap/certificate setup:
@@ -11,8 +11,8 @@ services:
       context: .
       dockerfile: Dockerfile
       # MessagePack stays the default. JSON inspection is a frontend build arg (baked at SPA build):
-      # docker compose -f docker-compose.yml -f docker-compose.https.yml build --build-arg VITE_AGENTCORE_REALTIME_PROTOCOL=json
-      # docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
+      # python3 scripts/compose.py -f docker-compose.yml -f docker-compose.https.yml build --build-arg VITE_AGENTCORE_REALTIME_PROTOCOL=json
+      # python3 scripts/compose.py -f docker-compose.yml -f docker-compose.https.yml up -d
       # Runtime/container env after build does not change the protocol.
     image: agent-core:synthetic
     ports:

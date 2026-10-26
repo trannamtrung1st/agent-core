@@ -1,7 +1,7 @@
 # Real/hosted overlay for the same one-container image and SQLite volume.
 # The base profile stays Synthetic and key-free; authenticated launch uses HTTPS.
 #
-#   docker compose -f docker-compose.yml -f docker-compose.real.yml -f docker-compose.https.yml up --build -d
+#   python3 scripts/compose.py -f docker-compose.yml -f docker-compose.real.yml -f docker-compose.https.yml up --build -d
 #
 # Initialize IAM explicitly, then configure the tenant's protected model credential,
 # connection, offerings and default through AI models. Real boot needs no model key.

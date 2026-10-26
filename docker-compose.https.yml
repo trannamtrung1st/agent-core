@@ -1,6 +1,6 @@
 # Explicit HTTPS entry for the packaged app. Supply a private, readable PFX and
 # password through the operator environment; never commit either value.
-# docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
+# python3 scripts/compose.py -f docker-compose.yml -f docker-compose.https.yml up -d
 services:
   agent-core:
     ports: !override
