@@ -9,6 +9,7 @@ import { EvaluationAttemptInspector } from '../access/EvaluationAttemptInspector
 import { useAccessDraftGuard } from '../access/useAccessDraftGuard';
 import { ArtifactView } from "./ArtifactView";
 import { GoalPlanEditor } from './GoalPlanEditor';
+import { requiredPrerequisiteIds } from './goalCheckpoints';
 import { SessionSandboxFrame } from './SessionSandboxFrame';
 import { AgentRunDetailDrawer } from './AgentRunDetails';
 
@@ -92,6 +93,7 @@ export function SessionGoalsDrawer({ tenant, session, instance, source, open, na
   }
   const next = goal?.plan.checkpoints.find(p => ![4,5].includes(goal.checkpoints.find(c => c.checkpointId === p.checkpointId)!.status) && p.dependencies.every(id => goal.checkpoints.find(c => c.checkpointId === id)?.status === 4));
   const required = goal?.plan.checkpoints.filter(p => p.required) ?? [];
+  const prerequisites = goal ? requiredPrerequisiteIds(goal) : new Set<string>();
   const verified = required.filter(p => goal?.checkpoints.find(c => c.checkpointId === p.checkpointId)?.status === 4).length;
   return <>{guard.holder}<SessionSandboxFrame title="Session goals" open={open} narrow={narrow} openerRef={openerRef} onClose={guard.close} blocked={busy}>
     <Flex wrap gap={token.paddingXS} justify="space-between"><Button icon={<ReloadOutlined aria-hidden />} disabled={busy || loading} onClick={() => void refresh(true)}>Refresh goals</Button>
@@ -139,14 +141,17 @@ export function SessionGoalsDrawer({ tenant, session, instance, source, open, na
             {e.kind === 0 && <Button onClick={() => setEvaluationId(e.sourceId)}>Inspect Evaluation</Button>}
             {e.runId && <Button onClick={() => void inspectRun(e.runId!)}>Inspect evidence Run</Button>}
             {e.kind === 1 && <ArtifactView tenantId={tenant} sessionId={session} artifactId={e.sourceId} />}
+            {state.status === 4 && e.kind !== 2 && editable && goal.status === 1 && !goal.pendingPlan && <Button disabled={busy} onClick={() => command(4, { checkpointId: p.checkpointId, evidence: e })}>Recheck saved {e.kind === 0 ? 'Evaluation' : 'receipt'}</Button>}
           </Flex>)}
-          {editable && goal.status === 1 && !goal.pendingPlan && (state.status !== 4 || p.verification.some(v => v.kind !== 2)) && eligible && <Button onClick={() => { setCheckpointAction(p.checkpointId); setAction({ ...blankAction, runId: state.sourceRunId ?? '', evidenceKind: p.verification.find(v => v.kind !== 2)?.kind ?? 0 }); }}>Report or verify checkpoint</Button>}
-          {checkpointAction === p.checkpointId && editable && goal.status === 1 && !goal.pendingPlan && (state.status !== 4 || p.verification.some(v => v.kind !== 2)) && eligible && <Flex vertical gap={token.paddingSM}>
+          {state.status === 4 && <Typography.Text type="secondary">Verified evidence is preserved. Rechecking uses the saved proof and cannot replace it.</Typography.Text>}
+          {editable && goal.status === 1 && !goal.pendingPlan && state.status !== 4 && eligible && <Button onClick={() => { setCheckpointAction(p.checkpointId); setAction({ ...blankAction, runId: state.sourceRunId ?? '', evidenceKind: p.verification.find(v => v.kind !== 2)?.kind ?? 0 }); }}>Report or verify checkpoint</Button>}
+          {checkpointAction === p.checkpointId && editable && goal.status === 1 && !goal.pendingPlan && state.status !== 4 && eligible && <Flex vertical gap={token.paddingSM}>
             {state.status !== 4 && <><Form.Item label="Progress or acceptance reason" style={{ margin: 0 }}><Input.TextArea aria-label="Progress or acceptance reason" rows={2} maxLength={2000} value={action.note} onChange={e => setAction(a => ({ ...a, note: e.target.value }))} /></Form.Item>
             <Flex wrap gap={token.paddingXS}><Button disabled={busy || !action.note.trim()} onClick={() => command(3, { checkpointId: p.checkpointId, note: action.note, action: 'report' })}>Report progress</Button><Button disabled={busy || !action.note.trim()} onClick={() => command(3, { checkpointId: p.checkpointId, note: action.note, action: 'blocked' })}>Report blocker</Button>
-              {!p.required && <Button disabled={busy || !action.note.trim()} onClick={() => command(3, { checkpointId: p.checkpointId, note: action.note, action: 'skip' })}>Skip optional checkpoint</Button>}
+              {!p.required && <Button disabled={busy || !action.note.trim() || prerequisites.has(p.checkpointId)} onClick={() => command(3, { checkpointId: p.checkpointId, note: action.note, action: 'skip' })}>Skip optional checkpoint</Button>}
               {view.canAccept && p.verification.some(v => v.kind === 2) && <><Button disabled={busy || !action.note.trim()} onClick={() => confirmAction(modal, { title: 'Accept this checkpoint?', content: `${p.expectedOutcome} — Your signed-in acceptance will be recorded against plan revision ${goal.planRevision}.`, okText: 'Accept criterion', onOk: () => command(5, { checkpointId: p.checkpointId, note: action.note, action: 'accept' }) })}>Accept criterion</Button><Button disabled={busy || !action.note.trim()} onClick={() => command(5, { checkpointId: p.checkpointId, note: action.note, action: 'reject' })}>Reject criterion</Button></>}
             </Flex></>}
+            {!p.required && prerequisites.has(p.checkpointId) && <Typography.Text type="secondary">Cannot skip: an unfinished required outcome depends on this checkpoint. Verify it or propose a revised plan.</Typography.Text>}
             {p.verification.some(v => v.kind !== 2) && <>
               <Form.Item label="Evidence method" style={{ margin: 0 }}><Select aria-label="Evidence method" value={action.evidenceKind} options={p.verification.filter(v => v.kind !== 2).map(v => ({ value: v.kind, label: verificationLabel[v.kind] }))} onChange={kind => setAction(a => ({ ...a, evidenceKind: kind }))} /></Form.Item>
               <Form.Item label="Exact source Run ID" style={{ margin: 0 }}><Input aria-label="Exact source Run ID" value={action.runId} onChange={e => setAction(a => ({ ...a, runId: e.target.value }))} /></Form.Item>

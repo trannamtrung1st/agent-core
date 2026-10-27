@@ -91,3 +91,33 @@ Local readiness does not certify production data conversion, customer backup res
 The qualified implementation starts at baseline `9f5c22bcd0b5bb2c376b2a9f65c9b953bf5d091f`. A sorted manifest of {path,sha256} for the 97 changed/new implementation and test files under src/tests/web has SHA-256 `87a9b7ae8340fc7f1f0e927cfbac7c1df5d512997c4adfca98c98cfe3d6bd748` (compact JSON, sorted keys). The local manifest is `/tmp/session-goals-source-manifest.json`. Qualified implementation commit: `b2ab0d21d34451a645b7dfa0951e4aeabb914667`. All 97 manifest entries were checked against that commit with matching hashes. The following documentation-only handoff commit records this immutable identity without changing implementation or tests.
 
 Documentation checks passed: 14 changed Markdown documents, 1800 relative local links/anchors, balanced fences and the complete new Goal creation JSON example. `git diff --check` passed. README/TODO/implementation plan agree on Initiative 8 and retain historical milestone scope. The final local verdict is **Ready** with the explicit external limits above; no material finding remains in the requested implementation scope. No further code refinement is planned.
+
+## Focused stabilization after implementation review
+
+The owner review of `4330b0238c251195701092c01e9e91921b4b2ec2` identified three reachable transition defects. This follow-up corrects those defects only, without a schema change, new scheduler or architecture redesign. The earlier delivery evidence above describes its original implementation commit; the following evidence supersedes its transition-closure claim.
+
+- Initial acceptance remains available for a Proposed Goal. Accept/reject decisions on an Active or Paused Goal require an actual pending revision. Rejected decisions leave security/Goal/plan revisions, progress, blockers, pending evidence and immutable activity unchanged. Original request-key replay still returns its saved receipt.
+- A Verified checkpoint keeps its successful evidence, source Run, note and status. A different failed/stale/missing reference is rejected before replacement. A fresh request for the identical saved nonhuman proof records an audited recheck without altering the checkpoint; replay of that same request key adds nothing. Current loss of source access cannot erase the historical fact. Final Goal completion continues to qualify required saved sources against current authority. No implicit evidence invalidation was added.
+- Optional checkpoints cannot be skipped while they are direct or transitive prerequisites of an unfinished required outcome. Independent optional work remains skippable. The UI disables protected Skip with a reason, removes replacement inputs from Verified rows and offers a saved-proof recheck.
+
+The new store regressions reproduced the defects before correction. The initial proof fixture used a predicate unsupported for Run subjects and correctly produced Inconclusive; it was corrected to an actual independently assessed Failed Evaluation. The corrected proof regression then reproduced the overwrite on both stores. After the fix, **8 new InMemory/SQLite cases passed**, and the complete focused offline Goal group passed **32 cases**. Tests cover Active/Paused repeated decisions, accepted-command replay, progress/blocker/pending-evidence retention, exact successful proof, actual Failed replacement, stale/missing references, source-read denial, durable SQLite reopen, direct/transitive skip restrictions and successful required delivery after independent optional work is skipped.
+
+Focused checks run for this follow-up:
+
+```sh
+dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --no-restore --filter 'FullyQualifiedName~Goals_stabilization' --nologo -m:1 -nodeReuse:false -p:UseSharedCompilation=false
+dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --no-build --no-restore --filter 'FullyQualifiedName~Goals_&FullyQualifiedName!~Goals_native' --nologo
+dotnet test tests/AgentCore.Domain.Tests/AgentCore.Domain.Tests.csproj --no-build --no-restore --filter 'FullyQualifiedName~GoalRulesTests' --nologo
+# From web/:
+pnpm exec vitest run src/features/chat/goalCheckpoints.test.ts src/services/tenantSessionGoals.test.ts
+pnpm exec playwright test --config playwright.session-goals.config.ts
+pnpm run build
+```
+
+Domain validation passed (1 case); focused frontend tests passed (6 cases). Backend build passed with zero warnings/errors and the frontend production build passed with the existing chunk-size advisory. The final combined browser run passed both journeys (2 cases, 31.3 seconds). The new stabilization journey passed after correcting a test locator that matched both displayed progress and the retained textbox. It exercises real protected HTTP and Ant Design controls: rejects invalid repeated plan decisions without losing the blocker, disables transitive/direct prerequisite Skip, skips an independent appendix, verifies prerequisites, executes a bound Synthetic Run, consumes exact saved Evaluation evidence, rechecks its unchanged proof, rejects a replacement and completes the Goal while the Session stays Active.
+
+Playwright MCP additionally exercised the changed controls in the same running Synthetic SQLite app: protected Skip was disabled with the expected explanation; an independent optional checkpoint was skipped; human prerequisites were accepted; a real bound Run completed; its exact saved Evaluation passed; verifying and rechecking left the checkpoint byte-for-byte unchanged and replacement inputs absent. Reload retained Verified status. The drawer stayed within the viewport at 320 and 1440 pixels. Existing Ant Design controls, typography, spacing and Drawer ownership were reused; no system tokens or visual identity changed. The design hook reported no deterministic issue; the preexisting stale sidecar remains outside this focused scope.
+
+Native Sandbox, physical-device/live-provider checks and optional CI were not rerun: the correction changes transitions and UI commands, and the focused tests consume actual saved Evaluation results without new native execution. No production data was migrated or reset. No remaining material finding is known for the three reviewed paths; Initiative 8 can close after this stabilization, and Initiative 9 is not started by this commit.
+
+Stabilization source/test fingerprint: `4aebfffff2388701562b6e212d46f73a49f5bc295a657a4b8649f96eb3f6e19f` for the 8 changed/new implementation and test files (sorted {path,sha256} manifest, compact JSON with sorted keys). Local manifest: `/tmp/session-goals-stabilization-source-manifest.json`. Relative links/anchors, balanced fences and `git diff --check` passed.

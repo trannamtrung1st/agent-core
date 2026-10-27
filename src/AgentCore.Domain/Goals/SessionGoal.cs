@@ -75,6 +75,20 @@ public static class GoalRules
     { if (string.IsNullOrWhiteSpace(value) || value.Length > max || value.Any(c => char.IsControl(c) && c is not ('\n' or '\r' or '\t'))) throw new ArgumentException($"Text must contain 1–{max} safe characters."); }
     public static bool DependenciesVerified(SessionGoal goal, Guid checkpoint) => goal.Plan.Checkpoints.Single(c => c.CheckpointId == checkpoint).Dependencies
         .All(id => goal.Checkpoints.Single(c => c.CheckpointId == id).Status == GoalCheckpointStatus.Verified);
+    public static bool CanSkip(SessionGoal goal, Guid checkpoint)
+    {
+        var plans = goal.Plan.Checkpoints.ToDictionary(c => c.CheckpointId);
+        if (!plans.TryGetValue(checkpoint, out var candidate) || candidate.Required) return false;
+        var needed = new HashSet<Guid>();
+        void Visit(Guid id)
+        {
+            foreach (var dependency in plans[id].Dependencies)
+                if (needed.Add(dependency)) Visit(dependency);
+        }
+        foreach (var required in goal.Plan.Checkpoints.Where(c => c.Required && goal.Checkpoints.Single(s => s.CheckpointId == c.CheckpointId).Status != GoalCheckpointStatus.Verified))
+            Visit(required.CheckpointId);
+        return !needed.Contains(checkpoint);
+    }
     public static GoalCheckpointPlan? Next(SessionGoal goal) => goal.Plan.Checkpoints.FirstOrDefault(c => goal.Checkpoints.Single(s => s.CheckpointId == c.CheckpointId).Status
         is not (GoalCheckpointStatus.Verified or GoalCheckpointStatus.Skipped) && DependenciesVerified(goal, c.CheckpointId));
     public static bool Verified(SessionGoal goal) => goal.Plan.Checkpoints.Where(c => c.Required).All(c => goal.Checkpoints.Single(s => s.CheckpointId == c.CheckpointId).Status == GoalCheckpointStatus.Verified);

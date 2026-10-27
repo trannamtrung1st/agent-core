@@ -44,6 +44,8 @@ public static class GoalTransitions
             else if (c.Kind == GoalCommandKind.PlanDecision)
             {
                 if (!human) throw new AccessDeniedException("human_acceptance_required");
+                if (next.PendingPlan is null && !(next.Status == GoalStatus.Proposed && c.Action == "accept"))
+                    throw new SecurityConflictException("goal_plan_decision_not_pending");
                 if (c.Action == "reject") next = next with { PendingPlan = null };
                 else if (c.Action == "accept")
                 {
@@ -75,10 +77,20 @@ public static class GoalTransitions
                 {
                     var plan = next.Plan.Checkpoints.SingleOrDefault(p => p.CheckpointId == c.CheckpointId) ?? throw new ArgumentException("Checkpoint not found.");
                     var checkpoint = next.Checkpoints.Single(p => p.CheckpointId == c.CheckpointId);
-                    if (checkpoint.Status == GoalCheckpointStatus.Verified && c.Kind != GoalCommandKind.Verify || !GoalRules.DependenciesVerified(next, checkpoint.CheckpointId)) throw new SecurityConflictException("checkpoint_not_eligible");
-                    if (c.Kind == GoalCommandKind.Progress)
+                    if (!GoalRules.DependenciesVerified(next, checkpoint.CheckpointId)) throw new SecurityConflictException("checkpoint_not_eligible");
+                    if (checkpoint.Status == GoalCheckpointStatus.Verified)
+                    {
+                        if (c.Kind != GoalCommandKind.Verify) throw new SecurityConflictException("checkpoint_not_eligible");
+                        if (c.Evidence is not { Kind: not GoalVerificationKind.HumanAcceptance } saved || !(checkpoint.Evidence ?? []).Contains(saved))
+                            throw new SecurityConflictException("checkpoint_verified_evidence_immutable");
+                        // A fresh recheck is audited, but the historical verified fact is immutable.
+                        // Completion below still qualifies saved sources against current authority.
+                    }
+                    else if (c.Kind == GoalCommandKind.Progress)
                     {
                         GoalRules.Text(c.Note, 2000);
+                        if (c.Action == "skip" && !GoalRules.CanSkip(next, checkpoint.CheckpointId))
+                            throw new ArgumentException("Required checkpoints and prerequisites of unfinished required outcomes cannot be skipped.");
                         checkpoint = checkpoint with { Note = c.Note, SourceRunId = r.Actor.Agent?.RunId ?? checkpoint.SourceRunId,
                             Status = c.Action switch { "blocked" => GoalCheckpointStatus.Blocked, "skip" when !plan.Required => GoalCheckpointStatus.Skipped,
                                 null or "report" => GoalCheckpointStatus.InProgress, _ => throw new ArgumentException("Required checkpoints cannot be skipped.") } };
