@@ -1,5 +1,7 @@
 # Executable Sandbox Scripts — local delivery verification
 
+Implementation source: `ab5be94b6281599020a07cfdda9199c4cab1a5ac`. This follow-up records the verified implementation commit; it changes no runtime behavior.
+
 Date: 2026-10-27. Baseline: `a213ec2d92ab4a316d4c41280b2152755321c552`.
 
 Initiative 7 is ready for closure for the requested local implementation scope. Native Sandbox Scripts execute through the existing OpenSandbox adapter, produce trusted structured findings and retain no-replay cleanup/recovery ownership. Initiative 8 — Session Goals may consume these immutable references through the existing owners. No new application milestone, hosted CI or production certification is asserted.
@@ -98,3 +100,5 @@ Migration `20261027020000_EvaluationSandboxExecutions` preserves current durable
 Canonical architecture/interfaces, backend/frontend/API, persistence, testing/operations, README, roadmap, implementation plan and TODO are synchronized. Historical verification reports are unchanged. No shared visual tokens or second UI kit were introduced, so the design-system presentation contract is unchanged.
 
 Review verdict: requirements, ownership, current authority, isolation, lifecycle, installed-data preservation, responsive UI, bounded evidence/audits and local verification are satisfied for this scope. Remaining limits are the explicitly rejected hooks/input sources, incumbent sampled storage enforcement, trusted local Docker/OpenSandbox deployment, optional CI, production rollout and broader live-provider/device certification. These do not represent deferred native execution work in Initiative 7.
+
+Final quiescence: the task-owned Synthetic API and Vite processes were stopped. Authenticated Sandbox inventory and daemon workload-container count were both zero. The preexisting local Sandbox server and its configuration/data were retained. Local screenshots remain under ignored `local/verification/native-evaluation-2026-10-27/`.
