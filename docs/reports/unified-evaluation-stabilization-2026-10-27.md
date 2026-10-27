@@ -1,5 +1,7 @@
 # Unified evaluation stabilization — 2026-10-27
 
+Verified implementation source: [`75b02977e9189ff6f3e12253d531be86653b53fc`](https://github.com/trannamtrung1st/agent-core/commit/75b02977e9189ff6f3e12253d531be86653b53fc). The following report-only commit records this immutable source identity; application and test sources are unchanged.
+
 This bounded follow-up addresses the seven findings against `c36dfabe7d7cbbcba479a98c5fc8a47cf390f528` and `20726166a769779ee38e61f4ada8b10d3817f6ed`. The [original delivery report](unified-scripts-evaluation-2026-10-27.md) remains historical evidence for that source. The unified evaluation foundation is implemented; independently authorized, isolated executable Sandbox Scripts remain deferred. This report does not declare the original end-to-end Initiative 7 scope complete or accept a new application milestone.
 
 ## Disposition
