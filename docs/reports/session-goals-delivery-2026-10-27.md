@@ -1,6 +1,6 @@
 # Session Goals delivery — 2026-10-27
 
-Status: **Ready for the completed local Initiative 8 scope.** Deployment, hosted CI and live-provider certification are separate. Initiative 9 (Task Delegation) and Group Chat are not started.
+Status: **Initiative 8 closed for its verified local scope.** Deployment, hosted CI and live-provider certification are separate. Initiative 9 (Task Delegation) and Group Chat are not started.
 
 ## Scope and ownership
 
@@ -121,3 +121,17 @@ Playwright MCP additionally exercised the changed controls in the same running S
 Native Sandbox, physical-device/live-provider checks and optional CI were not rerun: the correction changes transitions and UI commands, and the focused tests consume actual saved Evaluation results without new native execution. No production data was migrated or reset. No remaining material finding is known for the three reviewed paths; Initiative 8 can close after this stabilization, and Initiative 9 is not started by this commit.
 
 Stabilization source/test fingerprint: `4aebfffff2388701562b6e212d46f73a49f5bc295a657a4b8649f96eb3f6e19f` for the 8 changed/new implementation and test files (sorted {path,sha256} manifest, compact JSON with sorted keys). Local manifest: `/tmp/session-goals-stabilization-source-manifest.json`. Relative links/anchors, balanced fences and `git diff --check` passed.
+
+## Initiative 8 closure
+
+The owner accepted the transition stabilization at `c10beaf42e2a120ef71ba4869ee6b0b23d0716d5` and requested closure after the final wording refinement. **Initiative 8 — Session Goals is closed for its verified local scope.** Initiative 9 — Task Delegation & Communication is next and remains unstarted. No further discretionary Session Goals refinement is planned.
+
+The final refinement renames the Verified-checkpoint action to **Record evidence audit** and explicitly states that it audits the saved reference without revalidating its source. The same label applies to saved Evaluation and receipt evidence. This replaces the earlier UI “Recheck” terminology in this report; historical verification results remain tied to their original source. The backend command, immutable proof, audit semantics and final completion qualification are unchanged. Canonical ports/frontend specifications, README, TODO, roadmap and implementation status now agree.
+
+Focused verification for this wording-only closure:
+
+- `pnpm exec playwright test --config playwright.session-goals.config.ts session-goals-stabilization.spec.ts` from `web/`: **1 passed** (15.2 seconds). The actual Synthetic SQLite journey displayed the new explanatory copy, recorded the audit with unchanged saved checkpoint evidence, rejected evidence replacement and completed the Goal while the Session stayed Active. It also retained the repeated-decision and prerequisite-skip regression checks.
+- Playwright MCP independently opened a retained task-owned Synthetic Goal with a completed Run and exact Passed Evaluation. Clicking Record evidence audit returned HTTP 200 and advanced the Goal revision from 9 to 10 while preserving the entire Verified checkpoint byte-for-byte. The changed action/copy fit at 320 and 1440 pixels without horizontal document overflow; the existing Ant Design Drawer, Flex and Typography spacing owners remain unchanged. No page errors or failed requests occurred during that interaction. Initial navigation encountered an expired verification login; signing in again restored access before the check.
+- `pnpm run build` from `web/`: **passed**, including TypeScript; the existing large-chunk advisory remains. `git diff --check` and changed-document relative link/anchor and fence checks passed.
+
+The prior 32-case backend Goal matrix, 6 frontend cases, 2 browser journeys and original native qualification remain the accepted baseline; they were not all rerun for this text-only change. No backend behavior, migration, scheduler or execution owner changed. Hosted CI, external deployment, live-provider certification and physical-device checks remain outside this local closure. The user review found no remaining critical/high-severity issue, and the final wording concern is resolved without expanding scope.

@@ -71,3 +71,7 @@ Initiative 7 is implemented and locally verified, including the previously defer
 Manual, AfterRun and OnFailure native Scripts inspect bounded immutable terminal Run evidence in a fresh environment. BeforeRun/Publication native configurations are explicitly rejected. Existing Runtime, approvals, evaluation and Sandbox owners remain authoritative; no new scheduler, Session or Run is created. Initiative 7 is locally complete after the [settlement-concurrency follow-up](reports/native-evaluation-settlement-2026-10-27.md); Initiative 8 — Session Goals can consume immutable evaluation references. This does not start a new application milestone or claim hosted CI, live model quality or production platform certification.
 
 Historical [foundation](reports/unified-scripts-evaluation-2026-10-27.md) and [stabilization](reports/unified-evaluation-stabilization-2026-10-27.md) ledgers preserve the sources and gaps they originally observed.
+
+## Initiative 8 — Session Goals closure
+
+Initiative 8 is closed for its verified local scope, including the transition stabilization and final audit-wording clarification. [Delivery and closure evidence](reports/session-goals-delivery-2026-10-27.md#initiative-8-closure) retain the exact local checks and external limits. Initiative 9 — Task Delegation & Communication is next and remains unstarted; it requires its own authorized specification and scope.

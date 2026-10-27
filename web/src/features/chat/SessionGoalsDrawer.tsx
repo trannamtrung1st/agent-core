@@ -141,9 +141,9 @@ export function SessionGoalsDrawer({ tenant, session, instance, source, open, na
             {e.kind === 0 && <Button onClick={() => setEvaluationId(e.sourceId)}>Inspect Evaluation</Button>}
             {e.runId && <Button onClick={() => void inspectRun(e.runId!)}>Inspect evidence Run</Button>}
             {e.kind === 1 && <ArtifactView tenantId={tenant} sessionId={session} artifactId={e.sourceId} />}
-            {state.status === 4 && e.kind !== 2 && editable && goal.status === 1 && !goal.pendingPlan && <Button disabled={busy} onClick={() => command(4, { checkpointId: p.checkpointId, evidence: e })}>Recheck saved {e.kind === 0 ? 'Evaluation' : 'receipt'}</Button>}
+            {state.status === 4 && e.kind !== 2 && editable && goal.status === 1 && !goal.pendingPlan && <Button disabled={busy} onClick={() => command(4, { checkpointId: p.checkpointId, evidence: e })}>Record evidence audit</Button>}
           </Flex>)}
-          {state.status === 4 && <Typography.Text type="secondary">Verified evidence is preserved. Rechecking uses the saved proof and cannot replace it.</Typography.Text>}
+          {state.status === 4 && <Typography.Text type="secondary">Verified evidence is preserved. This action audits the saved reference without revalidating its source.</Typography.Text>}
           {editable && goal.status === 1 && !goal.pendingPlan && state.status !== 4 && eligible && <Button onClick={() => { setCheckpointAction(p.checkpointId); setAction({ ...blankAction, runId: state.sourceRunId ?? '', evidenceKind: p.verification.find(v => v.kind !== 2)?.kind ?? 0 }); }}>Report or verify checkpoint</Button>}
           {checkpointAction === p.checkpointId && editable && goal.status === 1 && !goal.pendingPlan && state.status !== 4 && eligible && <Flex vertical gap={token.paddingSM}>
             {state.status !== 4 && <><Form.Item label="Progress or acceptance reason" style={{ margin: 0 }}><Input.TextArea aria-label="Progress or acceptance reason" rows={2} maxLength={2000} value={action.note} onChange={e => setAction(a => ({ ...a, note: e.target.value }))} /></Form.Item>

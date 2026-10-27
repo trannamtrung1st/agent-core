@@ -107,11 +107,11 @@ S3 tool/Skill and context/memory relevance, S4 initiative/event relevance and S5
 
 Completed locally, including [settlement-concurrency hardening](docs/reports/native-evaluation-settlement-2026-10-27.md): unified immutable catalogs/evidence, guarded publication, trusted hooks/verification, bounded model judging, Manual assessment and independently reviewed native Sandbox Scripts. [Native delivery verification](docs/reports/native-evaluation-scripts-2026-10-27.md) records actual OpenSandbox execution on InMemory/SQLite, cancellation/revocation, no-replay restart recovery, concurrent isolation, installed-data preservation and the real Ant Design UI workflow. BeforeRun/Publication native Scripts are explicitly unsupported. Required uncertainty remains fail-closed and factual source Runs stay unchanged.
 
-Historical [foundation](docs/reports/unified-scripts-evaluation-2026-10-27.md) and [stabilization](docs/reports/unified-evaluation-stabilization-2026-10-27.md) evidence remains unchanged. Hosted CI and production/live-provider certification are separate. Proceed to Initiative 8 — Session Goals using current execution owners and immutable evaluation references; no new initiative is started by this completion.
+Historical [foundation](docs/reports/unified-scripts-evaluation-2026-10-27.md) and [stabilization](docs/reports/unified-evaluation-stabilization-2026-10-27.md) evidence remains unchanged. Hosted CI and production/live-provider certification are separate. Initiative 8 — Session Goals is now closed locally using current execution owners and immutable evaluation references.
 
 ### 8. Session Goals
 
-Implemented explicit Session Goals in their creating Space, accepted criteria/checkpoints, protected human/model progress, independent verification, immutable Run bindings and bounded continuation through existing execution owners. [Delivery and final review](docs/reports/session-goals-delivery-2026-10-27.md) record local qualification and external deployment limits. Session lifecycle remains independent; Environments remain variable profiles. Initiative 9 is not started.
+Closed locally after the transition stabilization and audit-wording refinement. Implemented explicit Session Goals in their creating Space, accepted criteria/checkpoints, protected human/model progress, independent verification, immutable Run bindings and bounded continuation through existing execution owners. [Delivery and final review](docs/reports/session-goals-delivery-2026-10-27.md) record local qualification and external deployment limits. Session lifecycle remains independent; Environments remain variable profiles. Initiative 9 — Task Delegation & Communication is next and remains unstarted.
 
 ### 9. Task Delegation & Communication
 
