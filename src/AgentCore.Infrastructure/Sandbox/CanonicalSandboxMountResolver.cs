@@ -40,6 +40,13 @@ internal sealed class CanonicalSandboxMountResolver(OpenSandboxOptions options)
         return Build(Path.Combine(root, "working"), Path.Combine(root, "home"), access, ct: ct, privatePath: Path.Combine(root, "private"), privateAccess: access, workingReadOnly: workingReadOnly) with { VerificationRoot = root };
     }
 
+    internal Mounts Evaluation(Guid id, CancellationToken ct)
+    {
+        ValidateConfiguration();
+        var root = Path.Combine(options.CanonicalRoot(), ".evaluations", id.ToString("N"));
+        return Build(Path.Combine(root, "working"), Path.Combine(root, "home"), HomeAccess.ReadOnly, ct: ct);
+    }
+
     private Mounts Build(string workingPath, string homePath, HomeAccess access, bool create = true,
         bool validateHardLinks = true, CancellationToken ct = default, SandboxWorkspaceAccess? workspaceAccess = null, string? privatePath = null, HomeAccess privateAccess = HomeAccess.Disabled, bool workingReadOnly = false)
     {

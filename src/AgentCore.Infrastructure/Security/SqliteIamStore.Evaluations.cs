@@ -152,7 +152,10 @@ public sealed partial class SqliteIamStore : ITenantEvaluationStore
             EvaluationStoreRules.AttemptChange(value, before, expectedAttemptRevision, audit.ActorPrincipalId);
             var suite = await Suite(db, value.TenantId, value.SuiteId, value.SuiteVersion, ct);
             if (suite is null || suite.ContentHash != value.SuiteHash) return false;
-            EvaluationStoreRules.Findings(value, before, suite, audit.ActorPrincipalId);
+            var nativeIds = value.Findings.Select(f => f.SandboxExecutionId).OfType<Guid>().ToArray();
+            var nativeRows = await db.Set<EvaluationSandboxRow>().Where(r => r.TenantId == value.TenantId && nativeIds.Contains(r.ExecutionId)).ToArrayAsync(ct);
+            var nativeFacts = nativeRows.Select(EvaluationSandboxPersistence.Value).ToDictionary(r => r.ExecutionId);
+            EvaluationStoreRules.Findings(value, before, suite, audit.ActorPrincipalId, id => nativeFacts.GetValueOrDefault(id));
             if (value.SubjectKind == EvaluationSubjectKind.DefinitionDraft)
             {
                 var snapshot = await DefinitionSnapshot(db, value.TenantId, value.SubjectId, ct);

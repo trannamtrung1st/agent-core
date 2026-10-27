@@ -23,6 +23,7 @@ public sealed class TenantSandboxExecutionAuthority(TenantOperationAuthorizer op
         var lease = saved.Lease ?? throw new AccessDeniedException("resource_unavailable");
         var request = await approvals.FindApprovalAsync(tenant, execution.ApprovalRequestId ?? Guid.Empty, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("sandbox_approval_mismatch");
+        if (request.Operation.SandboxCommand?.Evaluation is not null) throw new AccessDeniedException("evaluation_execution_context_required");
         var decision = await decisions.FindApprovalDecisionAsync(tenant, request.RequestId, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("approval_unavailable");
         var source = run.AgentRunId == request.RunId ? null : await runs.FindTenantRunAsync(tenant, request.RunId, ct).ConfigureAwait(false);

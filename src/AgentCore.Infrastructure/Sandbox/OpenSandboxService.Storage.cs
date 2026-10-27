@@ -5,7 +5,7 @@ namespace AgentCore.Infrastructure.Sandbox;
 
 public sealed partial class OpenSandboxService
 {
-    private async Task<Execution> GuardCommandStorageAsync(SandboxLease lease, Func<CancellationToken, Task<Execution>> command, CancellationToken ct, CanonicalSandboxMountResolver.Mounts? verification = null)
+    private async Task<Execution> GuardCommandStorageAsync(SandboxLease lease, Func<CancellationToken, Task<Execution>> command, CancellationToken ct, CanonicalSandboxMountResolver.Mounts? isolatedMounts = null)
     {
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(ct);
         Exception? limitFailure = null;
@@ -24,8 +24,8 @@ public sealed partial class OpenSandboxService
         }
         async ValueTask Check(CancellationToken token)
         {
-            if (verification is null) await CheckMountedAuthorityAsync(lease, token);
-            CanonicalSandboxMountResolver.CheckUsage(verification ?? ResolveMounts(lease), lease.Profile.StorageBytes, token);
+            if (isolatedMounts is null) await CheckMountedAuthorityAsync(lease, token);
+            CanonicalSandboxMountResolver.CheckUsage(isolatedMounts ?? ResolveMounts(lease), lease.Profile.StorageBytes, token);
         }
         var watcher = Watch();
         try

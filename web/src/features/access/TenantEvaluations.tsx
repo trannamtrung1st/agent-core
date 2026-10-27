@@ -35,7 +35,7 @@ function EvaluationCatalog({ context, scripts = false }: { context: TenantContex
   const id = (row: EvaluationSuite | ScriptVersion) => 'scriptId' in row ? row.scriptId : row.suiteId;
   const retire = (row: EvaluationSuite | ScriptVersion) => confirmAction(modal, { title: `${row.archived ? 'Restore' : 'Archive'} ${row.name}?`, content: 'This saves a new catalog version. Immutable references and past evidence are retained. Archival prevents new evaluations using this catalog item.', okText: row.archived ? 'Restore item' : 'Archive item', onOk: () => command.run(async signal => identityRequest<EvaluationSuite | ScriptVersion>(tenantApi(tenant, `/${family}/${id(row)}/versions`), { method: 'POST', signal, body: { ...row, archived: !row.archived, expectedVersion: row.version, expectedRevision: await freshTenantRevision(tenant, signal) } }), result => { if (id(result) !== id(row) || result.version !== row.version + 1) throw new IdentityCompletionError(); void message.success('Catalog version stored.'); state.reload(); }) });
   return <Flex vertical gap="var(--ac-space-section)">
-    {scripts && <Alert type="info" showIcon title="Explicit execution authority" description="Assertions run only against permitted snapshots. Sandbox bodies are saved as immutable content; this release returns Inconclusive until independent Sandbox authority and isolated input dispatch are available. Saving never executes a process." />}
+    {scripts && <Alert type="info" showIcon title="Explicit execution authority" description="Assertions inspect permitted snapshots. Sandbox Scripts run against isolated terminal Run evidence after exact Review in Approvals, with current caller and agent execution authority. Saving never executes a process." />}
     <AdminCollectionToolbar label={`${scripts ? 'Scripts' : 'Suites'} on this page`} value={search} onChange={setSearch} showScrollHint={false} filters={<Flex wrap gap="var(--ac-space-compact)"><Button onClick={state.reload}>Refresh</Button>{canManage && <Button type="primary" onClick={() => setEditing(null)}>New {scripts ? 'Script' : 'Suite'}</Button>}</Flex>} />
     {command.error !== undefined && <AccessError error={command.error} retry={state.reload} />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={state.reload} /> : <Table<EvaluationSuite | ScriptVersion> className="admin-collection-table" rowKey={id} dataSource={state.data?.items.filter(r => r.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()))}
@@ -70,19 +70,19 @@ function ScriptEditor({ tenant, existing, onClose, onSaved }: { tenant: string; 
     <Typography.Paragraph type="secondary">Save immutable content for use by Suite checks. Every execution repeats current subject, Script and operation authority.</Typography.Paragraph>
     {command.error !== undefined && <AccessError error={command.error} />}
     <Form form={form} id="script-version-form" layout="vertical" disabled={command.busy || command.requiresReload} initialValues={existing ?? { name: '', kind: 0, predicate: 4, expected: 'email.send', hooks: [3] }} onValuesChange={() => setDirty(true)} onFinishFailed={failure => showAdminFormValidation(message, form, failure)}
-      onFinish={value => void command.run(async signal => evaluationCatalogWrite<ScriptVersion>(tenantApi(tenant, existing ? `/scripts/${existing.scriptId}/versions` : '/scripts'), { ...value, body: kind === 1 ? value.body : null, expectedVersion: existing?.version ?? 0, expectedRevision: await freshTenantRevision(tenant, signal) }, signal), result => { if (result.tenantId !== tenant || result.version !== (existing?.version ?? 0) + 1 || !result.contentHash) throw new IdentityCompletionError(); guard.release(); void message.success('Immutable Script version saved.'); onSaved(); })}>
+      onFinish={value => void command.run(async signal => evaluationCatalogWrite<ScriptVersion>(tenantApi(tenant, existing ? `/scripts/${existing.scriptId}/versions` : '/scripts'), { ...value, body: kind === 1 ? value.body : null, sandboxProfileId: kind === 1 ? value.sandboxProfileId : null, sandboxTimeoutSeconds: kind === 1 ? value.sandboxTimeoutSeconds : 10, sandboxInput: kind === 1 ? value.sandboxInput : 0, expectedVersion: existing?.version ?? 0, expectedRevision: await freshTenantRevision(tenant, signal) }, signal), result => { if (result.tenantId !== tenant || result.version !== (existing?.version ?? 0) + 1 || !result.contentHash) throw new IdentityCompletionError(); guard.release(); void message.success('Immutable Script version saved.'); onSaved(); })}>
       <Form.Item name="name" label="Script name" rules={[{ required: true, whitespace: true }, { max: 128 }]}><Input maxLength={128} autoFocus /></Form.Item>
-      <Form.Item name="kind" label="Execution kind"><Select options={[{ value: 0, label: 'Deterministic assertion' }, { value: 1, label: 'Sandbox script' }]} /></Form.Item>
-      {kind === 1 ? <><Alert type="warning" showIcon title="Native execution unavailable" description="Catalog content is retained. Evaluation returns Inconclusive until independent approved dispatch and isolated inputs are available." /><Form.Item name="body" label="Sandbox script body" rules={[{ required: true, whitespace: true }, { max: 16000 }]}><Input.TextArea rows={8} maxLength={16000} spellCheck={false} /></Form.Item></> : <>
+      <Form.Item name="kind" label="Execution kind"><Select onChange={value => { if (value === 1) form.setFieldValue('hooks', (form.getFieldValue('hooks') as number[]).filter(h => h !== 0)); }} options={[{ value: 0, label: 'Deterministic assertion' }, { value: 1, label: 'Sandbox script' }]} /></Form.Item>
+      {kind === 1 ? <><SandboxScriptFields tenant={tenant} /><Form.Item name="body" label="Sandbox script body" rules={[{ required: true, whitespace: true }, { max: 16000 }]}><Input.TextArea rows={8} maxLength={16000} spellCheck={false} /></Form.Item></> : <>
         <Form.Item name="predicate" label="Assertion"><Select options={predicates.map((label, value) => ({ label, value }))} /></Form.Item><Form.Item name="expected" label="Capability name or resource path" rules={[{ max: 256 }]}><Input maxLength={256} /></Form.Item>
       </>}
-      <Form.Item name="hooks" label="Allowed lifecycle hooks" rules={[{ required: true, type: 'array', min: 1 }]}><Checkbox.Group options={hookLabels.slice(0, 4).map((label, value) => ({ label, value }))} /></Form.Item>
+      <Form.Item name="hooks" label="Allowed lifecycle hooks" rules={[{ required: true, type: 'array', min: 1 }]}><Checkbox.Group options={hookLabels.slice(0, 4).map((label, value) => ({ label, value, disabled: kind === 1 && value === 0 }))} /></Form.Item>
     </Form>
   </Drawer></>;
 }
 function EvaluationResults({ context }: { context: TenantContext }) {
   const params = new URLSearchParams(window.location.search); const [kind, setKind] = useState(Number(params.get('subjectKind') ?? 1)); const [subject, setSubject] = useState(params.get('subjectId') ?? ''); const [source, setSource] = useState(params.get('subjectId') ?? '');
-  const [attempt, setAttempt] = useState<string>(); const [page, setPage] = useState(0); const tenant = context.tenant.tenantId;
+  const [attempt, setAttempt] = useState<string | undefined>(params.get('attemptId') ?? undefined); const [page, setPage] = useState(0); const tenant = context.tenant.tenantId;
   const { modal } = App.useApp(); const [suiteId, setSuiteId] = useState<string>();
   const state = useIdentityQuery<EvaluationPage<EvaluationAttempt>>(source ? tenantApi(tenant, `/evaluation-attempts?subjectKind=${kind}&subjectId=${encodeURIComponent(source)}&page=${page}&pageSize=20`) : null);
   const command = useEvaluationLaunch(tenant, result => { setAttempt(result.attemptId); state.reload(); }); const recovering = !!command.pending;
@@ -111,4 +111,16 @@ function EvaluationResults({ context }: { context: TenantContext }) {
     ]} />}
     {attempt && <EvaluationAttemptInspector tenant={tenant} id={attempt} canReview={context.permissions.includes('evaluations.review')} onClose={() => setAttempt(undefined)} onSaved={state.reload} />}
   </Flex>;
+}
+
+function SandboxScriptFields({ tenant }: { tenant: string }) {
+  const profiles = useEvaluationCatalog<{ profile: { id: string; name: string; enabled: boolean } }>(tenant, 'sandbox-profiles');
+  return <>
+    <Alert type="info" showIcon title="Independent Sandbox execution" description="Manual, After Run and On failure can inspect an exact terminal Run. Each execution needs current caller and agent permissions plus exact operation Review. Inputs mount read-only at /home/input.json; /working is disposable. Egress is denied. Profile setup scripts do not run. Before Run and Publication are unsupported." />
+    {profiles.error && <AccessError error={profiles.error} retry={profiles.reload} />}
+    <Form.Item name="sandboxProfileId" label="Sandbox profile" rules={[{ required: true, message: 'Choose a readable saved profile. Its exact revision is pinned at admission.' }]}><Select loading={profiles.loading} options={profiles.data?.items.filter(p => p.profile.enabled).map(p => ({ value: p.profile.id, label: p.profile.name }))} /></Form.Item>
+    <Form.Item name="sandboxInput" label="Required evidence" initialValue={0} rules={[{ required: true }]}><Select options={[{ value: 0, label: 'Run metadata only' }, { value: 1, label: 'Saved Run output' }, { value: 2, label: 'Admitted task input, when pinned' }]} /></Form.Item>
+    <Typography.Paragraph type="secondary">Missing or unreadable required evidence is Inconclusive. Current workspaces are never substituted for historical inputs.</Typography.Paragraph>
+    <Form.Item name="sandboxTimeoutSeconds" label="Command limit (seconds)" initialValue={10} rules={[{ required: true, type: 'number', min: 1, max: 30 }]}><InputNumber min={1} max={30} precision={0} /></Form.Item>
+  </>;
 }

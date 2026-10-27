@@ -132,6 +132,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
     public ValueTask<TenantApprovalRequest?> TryCreateApprovalAsync(TenantSecurityState next, long expectedSecurityRevision,
         TenantApprovalRequest request, long expectedRunRevision, Guid? generation, AuthorizationAudit audit, CancellationToken ct = default)
     {
+        if (request.Operation.SandboxCommand?.Evaluation is not null) throw new ArgumentException("Use independent evaluation admission.");
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
         if (request.TenantId != next.Tenant.TenantId || request.Status != TenantApprovalStatus.Pending || request.Revision != 1
             || next.Tenant.Revision != checked(expectedSecurityRevision + 1) || audit.ActorPrincipalId != request.ExecutorPrincipalId
@@ -205,6 +206,20 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             {
                 ValidateAgentActor(before, request.ExecutorPrincipalId);
                 if (request.OriginalInitiatorPrincipalId is { } requester) ValidateAgentActor(before, requester);
+            }
+            if (request.Operation.SandboxCommand?.Evaluation is { } evaluation)
+            {
+                var execution = sandboxEvaluations.GetValueOrDefault((request.TenantId, evaluation.ExecutionId));
+                var attempt = execution is null ? null : evaluationAttempts.GetValueOrDefault((request.TenantId, execution.AttemptId));
+                if (execution is null || attempt is null || execution.Approval.Operation != request.Operation || execution.Approval.RequestId != request.RequestId) return ValueTask.FromResult(false);
+                if (request.Status != TenantApprovalStatus.Cancelled)
+                {
+                    if (execution.Phase != AgentCore.Domain.Evaluations.EvaluationSandboxPhase.AwaitingReview || execution.ExpiresAt <= ApprovalNow) return ValueTask.FromResult(false);
+                    AgentCore.Application.Evaluations.EvaluationSandboxAuthority.ReviewerPermissionsAsync(before, request, execution, attempt, human.PrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
+                }
+                if (grant is not null) throw new ArgumentException("Evaluation Review grants no exceptional operation permission.");
+                _approvals[request.RequestId] = request; _approvalDecisions.Add(request.RequestId, decision); _approvalSignals.Add(signal.SignalId, signal);
+                _tenants[request.TenantId] = next; _audit.Add(audit); return ValueTask.FromResult(true);
             }
             if (request.Operation.AutomationAdmission is not null)
             {
@@ -384,6 +399,11 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             if (!_approvalSignals.TryGetValue(signal.SignalId, out var saved) || saved != signal || saved.ProcessedAt is not null || at < saved.CreatedAt
                 || !_approvals.TryGetValue(signal.RequestId, out var request) || request.TenantId != signal.TenantId || request.Revision != signal.DecisionRevision
                 || request.Status == TenantApprovalStatus.Pending) return ValueTask.FromResult(false);
+            if (request.Operation.SandboxCommand?.Evaluation is not null)
+            {
+                _approvalSignals[signal.SignalId] = signal with { Revision = checked(signal.Revision + 1), ProcessedAt = at };
+                return ValueTask.FromResult(true); // No wait/resume or mutation of the historical subject Run.
+            }
             var source = sessionBacking.ReadTenantRun(signal.TenantId, signal.RunId);
             if (source is null || request.RunId != source.AgentRunId || source.ApprovalRequestId != request.RequestId) return ValueTask.FromResult(false);
             if (!source.IsTerminal && source.Checkpoint is not null)

@@ -78,6 +78,7 @@ public sealed partial class TenantSandboxApprovedOperationService(ITenantRunStor
         var session = await runtime.ReadTenantSandboxRuntimeAsync(tenant, frame.SessionId, ct: ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
         var request = await approvals.FindApprovalAsync(tenant, requestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
+        if (request.Operation.SandboxCommand?.Evaluation is not null) throw new AccessDeniedException("evaluation_execution_context_required");
         var call = "operation:" + request.Operation.OperationId.ToString("D");
         var old = await runtime.FindTenantSandboxOperationAsync(tenant, frame.SessionId, run.AgentRunId, call, ct).ConfigureAwait(false);
         if (old is not null)

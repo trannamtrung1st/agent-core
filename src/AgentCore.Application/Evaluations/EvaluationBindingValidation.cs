@@ -9,21 +9,28 @@ public static class EvaluationBindingValidation
             || !script.Hooks.Contains(EvaluationHook.BeforeRun) || script.Predicate != EvaluationPredicate.InputPresent)
             throw new ArgumentException("Required Before Run Scripts must be available deterministic input assertions with Before Run eligibility. Native Sandbox and completed-output checks cannot satisfy this gate.");
     }
+    private static void RequireNativeHook(EvaluationBinding binding, ScriptVersion? script)
+    {
+        if (script?.Kind == ScriptKind.Sandbox && (binding.Hook is EvaluationHook.BeforeRun or EvaluationHook.Publication || !script.Hooks.Contains(binding.Hook)))
+            throw new ArgumentException("This Sandbox Script requires an eligible Manual, After Run or On failure terminal Run binding; Before Run and Publication cannot support independent execution Review.");
+    }
     public static void Require(EvaluationBinding binding, EvaluationSuiteVersion suite, Func<ScriptReference, ScriptVersion?> resolve)
     {
         EvaluationRules.ValidatePolicy(binding, suite);
-        if (binding.Policy != EvaluationPolicy.RequirePassBeforeRun) return;
-        foreach (var reference in suite.Checks.Where(c => c.Required).Select(c => c.Script).OfType<ScriptReference>())
-            RequireScript(reference, resolve(reference));
+        foreach (var check in suite.Checks.Where(c => c.Script is not null))
+        {
+            var script = resolve(check.Script!); RequireNativeHook(binding, script);
+            if (binding.Policy == EvaluationPolicy.RequirePassBeforeRun && check.Required) RequireScript(check.Script!, script);
+        }
     }
     public static async ValueTask RequireAsync(EvaluationBinding binding, EvaluationSuiteVersion suite, Func<ScriptReference, ValueTask<ScriptVersion?>> resolve)
     {
         EvaluationRules.ValidatePolicy(binding, suite);
-        if (binding.Policy != EvaluationPolicy.RequirePassBeforeRun) return;
-        foreach (var check in suite.Checks.Where(c => c.Required && c.Script is not null))
+        foreach (var check in suite.Checks.Where(c => c.Script is not null))
         {
             var script = await resolve(check.Script!);
-            RequireScript(check.Script!, script);
+            RequireNativeHook(binding, script);
+            if (binding.Policy == EvaluationPolicy.RequirePassBeforeRun && check.Required) RequireScript(check.Script!, script);
         }
     }
     public static ValueTask RequireAsync(ITenantEvaluationStore store, Guid tenant, EvaluationBinding binding, EvaluationSuiteVersion suite, CancellationToken ct) =>

@@ -105,11 +105,9 @@ S3 tool/Skill and context/memory relevance, S4 initiative/event relevance and S5
 
 ### 7. Unified Scripts & Evaluation
 
-The common local foundation and tenant cutover are implemented; full Initiative 7 executable Scripts scope remains open. [Delivery ledger](docs/reports/unified-scripts-evaluation-2026-10-27.md) records exact-source verification and remaining qualification. Sandbox bodies remain nonexecuting/Inconclusive until independent exact Review and isolated dispatch are qualified; no unsafe substitute or native success claim is made. Goals/Delegation should consume versioned results/verification summaries through existing owners.
+Completed locally and ready for closure: unified immutable catalogs/evidence, guarded publication, trusted hooks/verification, bounded model judging, Manual assessment and independently reviewed native Sandbox Scripts. [Native delivery verification](docs/reports/native-evaluation-scripts-2026-10-27.md) records actual OpenSandbox execution on InMemory/SQLite, cancellation/revocation, no-replay restart recovery, concurrent isolation, installed-data preservation and the real Ant Design UI workflow. BeforeRun/Publication native Scripts are explicitly unsupported. Required uncertainty remains fail-closed and factual source Runs stay unchanged.
 
-[Evaluation stabilization](docs/reports/unified-evaluation-stabilization-2026-10-27.md) fixes hook trust, compatibility/applicability, read-only recovery, sparse Instance selection and bounded denial scanning. Independent approved Sandbox dispatch/isolation remains deferred; no hosted CI or native execution completion is inferred.
-
-Consolidate lifecycle scripts/hooks, structured results/evidence, Script/Agent/Manual evaluation, Agent Run and execution verification, evaluation configuration/management and Action Policies. Outcomes should be usable by Goals and Delegation through existing execution owners. Extend current evaluation facilities where appropriate. Automated evaluation remains separate from future human organizational review roles.
+Historical [foundation](docs/reports/unified-scripts-evaluation-2026-10-27.md) and [stabilization](docs/reports/unified-evaluation-stabilization-2026-10-27.md) evidence remains unchanged. Hosted CI and production/live-provider certification are separate. Proceed to Initiative 8 — Session Goals using current execution owners and immutable evaluation references; no new initiative is started by this completion.
 
 ### 8. Session Goals
 

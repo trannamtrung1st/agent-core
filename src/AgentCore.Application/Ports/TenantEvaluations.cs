@@ -7,7 +7,7 @@ public sealed record EvaluationPage<T>(IReadOnlyList<T> Items, int Total, int Pa
 public sealed record EvaluationAttemptSource(Guid AttemptId, Guid SuiteId, int SuiteVersion);
 public sealed record DraftSuiteSaved(EvaluationSuiteVersion Suite, long DraftRevision);
 
-public interface ITenantEvaluationStore
+public partial interface ITenantEvaluationStore
 {
     ValueTask<int> RecoverExpiredEvaluationsAsync(DateTimeOffset now, int limit, CancellationToken ct = default);
     ValueTask<EvaluationGovernance> ReadEvaluationGovernanceAsync(Guid tenant, CancellationToken ct = default);

@@ -19,7 +19,8 @@ public sealed record PreparedCredentialConnectionCheck(Guid CredentialId, Guid B
 
 public sealed record PreparedSandboxCommand(Guid SessionId, string ProfileId, long ProfileRevision, string CommandJson,
     long ExpectedLeaseRevision, Guid? ExpectedGeneration, Guid? RegistryCredentialId, long? RegistryCredentialRevision,
-    long? RegistrySecretRevision, HomeAccess HomeAccess, SandboxWorkspaceAccess? WorkspaceAccess = null);
+    long? RegistrySecretRevision, HomeAccess HomeAccess, SandboxWorkspaceAccess? WorkspaceAccess = null,
+    AgentCore.Domain.Evaluations.SandboxEvaluationReference? Evaluation = null);
 
 public enum SandboxControlKind { StopProcess, ResetEnvironment }
 public sealed record PreparedSandboxControl(SandboxControlKind Kind, Guid SessionId, string ProfileId, long ProfileRevision,
@@ -248,6 +249,8 @@ public sealed record PreparedTenantOperation(Guid OperationId, Guid InstanceId, 
             resourceType = ResourceType, resourceId = ResourceId, preferences = Preferences }),
         TenantOperationKind.CredentialConnectionCheck => JsonSerializer.Serialize(new { operation = "credentials.connection.check", permission = Permission,
             resourceType = ResourceType, resourceId = ResourceId }),
+        TenantOperationKind.SandboxCommand when SandboxCommand!.Evaluation is not null => JsonSerializer.Serialize(new { operation = "evaluation.sandbox.execute", evaluation = SandboxCommand.Evaluation,
+            profileId = SandboxCommand.ProfileId, commandJson = SandboxCommand.CommandJson }),
         TenantOperationKind.SandboxCommand => JsonSerializer.Serialize(new { operation = "sandbox.command.execute", permission = Permission,
             resourceType = ResourceType, resourceId = ResourceId, sessionId = SandboxCommand!.SessionId,
             profileId = SandboxCommand.ProfileId, commandJson = SandboxCommand.CommandJson }),

@@ -113,7 +113,7 @@ public sealed partial class InMemoryIamStore : ITenantEvaluationStore
             EvaluationStoreRules.AttemptChange(value, before, expectedAttemptRevision, audit.ActorPrincipalId);
             var suite = Suite(value.TenantId, value.SuiteId, value.SuiteVersion);
             if (suite is null || suite.ContentHash != value.SuiteHash) return null;
-            EvaluationStoreRules.Findings(value, before, suite, audit.ActorPrincipalId);
+            EvaluationStoreRules.Findings(value, before, suite, audit.ActorPrincipalId, id => sandboxEvaluations.GetValueOrDefault((value.TenantId, id)));
             if (value.SubjectKind == EvaluationSubjectKind.DefinitionDraft)
             {
                 var snapshot = EvaluationSnapshot(value.TenantId, value.SubjectId);

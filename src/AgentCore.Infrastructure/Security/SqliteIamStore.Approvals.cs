@@ -510,6 +510,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
     public async ValueTask<TenantApprovalRequest?> TryCreateApprovalAsync(TenantSecurityState next, long expectedSecurityRevision,
         TenantApprovalRequest request, long expectedRunRevision, Guid? generation, AuthorizationAudit audit, CancellationToken ct = default)
     {
+        if (request.Operation.SandboxCommand?.Evaluation is not null) throw new ArgumentException("Use independent evaluation admission.");
         if (request.TenantId != next.Tenant.TenantId || request.Status != TenantApprovalStatus.Pending || request.Revision != 1
             || audit.TenantId != request.TenantId || audit.ActorPrincipalId != request.ExecutorPrincipalId || audit.Action != "approvals.request"
             || audit.Target != request.RequestId.ToString("D")) throw new ArgumentException("Invalid approval request transaction.");
@@ -583,6 +584,22 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         var row = await db.Set<TenantApprovalRecord>().SingleOrDefaultAsync(r => r.TenantId == request.TenantId && r.RequestId == request.RequestId, ct).ConfigureAwait(false);
         if (row is null || row.Revision != expectedRequestRevision || row.Status != (int)TenantApprovalStatus.Pending) return false;
         TenantApprovalRules.ValidateDecision(row.Domain(), request, expectedRequestRevision, decision, grant, signal, human, audit);
+        if (request.Operation.SandboxCommand?.Evaluation is { } evaluation)
+        {
+            var nativeRow = await db.Set<AgentCore.Infrastructure.Persistence.EvaluationSandboxRow>().SingleOrDefaultAsync(r => r.TenantId == request.TenantId && r.ExecutionId == evaluation.ExecutionId, ct);
+            var execution = nativeRow is null ? null : AgentCore.Infrastructure.Persistence.EvaluationSandboxPersistence.Value(nativeRow);
+            var attemptRow = execution is null ? null : await db.Set<AgentCore.Infrastructure.Persistence.EvaluationAttemptRow>().SingleOrDefaultAsync(r => r.TenantId == request.TenantId && r.AttemptId == execution.AttemptId, ct);
+            if (execution is null || attemptRow is null || execution.Approval.Operation != request.Operation || execution.Approval.RequestId != request.RequestId) return false;
+            if (request.Status != TenantApprovalStatus.Cancelled)
+            {
+                if (execution.Phase != AgentCore.Domain.Evaluations.EvaluationSandboxPhase.AwaitingReview || execution.ExpiresAt <= ApprovalNow) return false;
+                var nativeState = (await ReadTenantAsync(db, request.TenantId, ct))!;
+                await AgentCore.Application.Evaluations.EvaluationSandboxAuthority.ReviewerPermissionsAsync(nativeState, request, execution,
+                    AgentCore.Infrastructure.Persistence.EvaluationPersistence.Value(attemptRow), human.PrincipalId, new IamAuthorizer(this), ct);
+            }
+            if (grant is not null) throw new ArgumentException("Evaluation Review grants no exceptional operation permission.");
+            db.Entry(row).CurrentValues.SetValues(TenantApprovalRecord.From(request)); db.Add(decision); db.Add(signal); return true;
+        }
         if (request.Operation.AutomationAdmission is not null)
         {
             if (request.ExpiresAt <= ApprovalNow) throw new SecurityConflictException("approval_expired");
@@ -749,6 +766,11 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         if (saved != signal || saved is null || saved.ProcessedAt is not null || at < saved.CreatedAt) return false;
         var request = await db.Set<TenantApprovalRecord>().SingleOrDefaultAsync(r => r.TenantId == signal.TenantId && r.RequestId == signal.RequestId, ct).ConfigureAwait(false);
         if (request is null || request.Revision != signal.DecisionRevision || request.Status == (int)TenantApprovalStatus.Pending || request.RunId != signal.RunId.ToString("D")) return false;
+        if (request.Domain().Operation.SandboxCommand?.Evaluation is not null)
+        {
+            db.Entry(saved).CurrentValues.SetValues(signal with { Revision = checked(signal.Revision + 1), ProcessedAt = at });
+            await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return true;
+        }
         var row = await OwnedRuns(db, signal.TenantId).SingleOrDefaultAsync(r => r.AgentRunId == request.RunId, ct).ConfigureAwait(false);
         if (row is null) return false;
         var run = AgentRunStoreMapping.ToDomain(row);

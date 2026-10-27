@@ -23,6 +23,7 @@ public sealed partial class TenantApprovalService
     private async ValueTask<TenantApprovalReview> ReviewAsync(TenantApprovalView view, TenantSecurityState state,
         TenantSessionInitiator human, CancellationToken ct)
     {
+        if (view.Request.Operation.SandboxCommand?.Evaluation is not null) return await ReviewEvaluationSandboxAsync(view, state, human, ct);
         if (view.Request.Operation.AutomationAdmission is not null) return await ReviewAutomationAdmissionAsync(view, state, human, ct).ConfigureAwait(false);
         var r = view.Request; var op = r.Operation; var at = time.GetUtcNow();
         var target = await agents.FindTenantAgentAsync(r.TenantId, op.InstanceId, ct).ConfigureAwait(false);

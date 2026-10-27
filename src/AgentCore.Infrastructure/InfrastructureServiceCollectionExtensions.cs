@@ -94,6 +94,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<ISandboxStore>(provider => string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase)
             ? new SqliteSandboxStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()) : new InMemorySandboxStore(provider.GetRequiredService<InMemoryAdminEventStore>()));
         services.TryAddSingleton<OpenSandboxService>();
+        services.TryAddSingleton<IEvaluationSandboxExecutor>(provider => provider.GetRequiredService<OpenSandboxService>());
         services.TryAddSingleton<ISandboxService>(provider => provider.GetRequiredService<OpenSandboxService>());
         services.TryAddSingleton<ITenantSandboxVerifier>(provider => provider.GetRequiredService<OpenSandboxService>());
         services.TryAddSingleton<ITenantSpaceWorkspaceCleanup>(provider => provider.GetRequiredService<FileSpaceWorkspaceStore>());

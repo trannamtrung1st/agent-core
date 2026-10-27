@@ -12,7 +12,7 @@ public sealed partial class OpenSandboxService
     private string? _tenantRecoveryCursor;
     private static readonly HttpClient RetirementClient = new(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(20) };
 
-    private async ValueTask RequireTenantRetirementCapabilityAsync(CancellationToken ct, bool verification = false)
+    private async ValueTask RequireTenantRetirementCapabilityAsync(CancellationToken ct, bool verification = false, bool evaluation = false)
     {
         try
         {
@@ -22,6 +22,7 @@ public sealed partial class OpenSandboxService
             if (!response.IsSuccessStatusCode) throw new AccessDeniedException("tenant_sandbox_recovery_unavailable");
             using var document = await ReadRetirementResponseAsync(response, ct);
             if (document is null || document.RootElement.GetProperty("contractVersion").GetInt32() != 1 || !document.RootElement.GetProperty(verification ? "verificationFencing" : "retirementFencing").GetBoolean()
+                || evaluation && (!document.RootElement.TryGetProperty("evaluationIsolationFencing", out var evaluationFence) || !evaluationFence.GetBoolean())
                 || verification && (!document.RootElement.TryGetProperty("verificationScopeVersion", out var scopeVersion) || scopeVersion.GetInt32() != 2))
                 throw new AccessDeniedException("tenant_sandbox_recovery_unavailable");
         }

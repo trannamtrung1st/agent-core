@@ -88,13 +88,13 @@ public sealed partial class TenantDefinitionIntegrationTests
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var actor = owner.OwnerPrincipalId; var tenant = owner.TenantId; var service = f.Evaluations();
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision;
-        var script = await service.SaveScriptAsync(actor, tenant, f.Ids.NewId(), new("Read-only shell check", ScriptKind.Sandbox, EvaluationPredicate.OutputPresent, null, "test -f output.txt", [EvaluationHook.Manual], 0, await Revision()), null);
+        var script = await service.SaveScriptAsync(actor, tenant, f.Ids.NewId(), new("Read-only shell check", ScriptKind.Sandbox, EvaluationPredicate.OutputPresent, null, "test -f output.txt", [EvaluationHook.Manual], 0, await Revision(), SandboxProfileId: "fixture"), null);
         var suite = await service.SaveSuiteAsync(actor, tenant, f.Ids.NewId(), new("Native checks", [new("file", "File exists", EvaluatorKind.Script, true, Script: new(script.ScriptId, script.Version, script.ContentHash)), new("judge", "Judge output", EvaluatorKind.Agent, true, Rubric: "Check factual evidence.")], 0, await Revision()), null);
         var draft = await f.Service.CreateAsync(actor, tenant, "Native unavailable", await Revision());
         var result = await service.RunAsync(actor, tenant, new(EvaluationSubjectKind.DefinitionDraft, draft.DraftId, draft.Revision, suite.SuiteId, suite.Version, "native-refusal", await Revision()), null);
         Assert.Equal(EvaluationOutcome.Inconclusive, result.Outcome);
-        Assert.Contains(result.Findings, r => r.ReasonCode == "sandbox_evaluation_authority_unavailable"); Assert.Contains(result.Findings, r => r.ReasonCode == "evaluator_unavailable");
-        var updated = await service.SaveScriptAsync(actor, tenant, script.ScriptId, new("Changed shell check", ScriptKind.Sandbox, script.Predicate, null, "test -f different.txt", script.Hooks, 1, await Revision()), null);
+        Assert.Contains(result.Findings, r => r.ReasonCode == "sandbox_evaluation_terminal_source_required"); Assert.Contains(result.Findings, r => r.ReasonCode == "evaluator_unavailable");
+        var updated = await service.SaveScriptAsync(actor, tenant, script.ScriptId, new("Changed shell check", ScriptKind.Sandbox, script.Predicate, null, "test -f different.txt", script.Hooks, 1, await Revision(), SandboxProfileId: "fixture"), null);
         Assert.NotEqual(script.ContentHash, updated.ContentHash);
         Assert.Equal(script.ContentHash, (await service.ScriptAsync(actor, tenant, script.ScriptId, 1, null)).ContentHash);
         var system = (await f.Iam.ReadSystemAsync()).Principals.Single(p => p.AccountId == owner.AccountId);

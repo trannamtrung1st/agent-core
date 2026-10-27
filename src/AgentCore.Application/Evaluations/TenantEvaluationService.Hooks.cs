@@ -39,6 +39,7 @@ public sealed partial class TenantEvaluationService
     }
     public async ValueTask ObserveTerminalsAsync(int limit, CancellationToken ct)
     {
+        await ContinueSandboxEvaluationsAsync(limit, ct);
         _ = await store.RecoverExpiredEvaluationsAsync(time.GetUtcNow(), limit, ct);
         limit = Math.Clamp(limit, 1, 32);
         lock (deferredGate) if (scanPauseUntil > time.GetUtcNow()) return;
@@ -95,7 +96,7 @@ public sealed partial class TenantEvaluationService
             {
                 // Both assertion and model checks are read-only. Native effects still require independent Sandbox admission.
                 foreach (var check in suite.Checks) findings.Add(await Evaluate(check, suite, source, binding.Hook, linked.Token, attempt));
-                var status = findings.Any(f => f.ReasonCode == "review_required") ? EvaluationStatus.Pending : EvaluationStatus.Completed;
+                var status = findings.Any(f => f.ReasonCode is "review_required" or "sandbox_approval_required") ? EvaluationStatus.Pending : EvaluationStatus.Completed;
                 return settled = await Settle(attempt, findings, status, null, null, linked.Token);
             }
             catch (OperationCanceledException)

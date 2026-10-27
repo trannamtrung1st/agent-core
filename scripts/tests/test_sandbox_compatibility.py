@@ -35,6 +35,18 @@ def fixture(home="rw", desktop=True, working="rw", private=None):
 
 
 class CompatibilityTests(unittest.TestCase):
+    def test_evaluation_mounts_require_exact_disposable_identity_read_only_input_and_no_private_mount(self):
+        execution = "4" * 32
+        labels = {**LABELS, "agent-core-generation": execution, "agent-core-session": execution, "agent-core-evaluation-attempt": "5" * 32}
+        working = f"/canonical/.evaluations/{execution}/working:/working:rw"
+        home = f"/canonical/.evaluations/{execution}/home:/home:ro"
+        self.assertEqual({"/home", "/working"}, set(compat.validate_binds([working, home], ROOTS, TENANT, labels)))
+        for binds, proof in (([working, home.replace(":ro", ":rw")], labels), ([working], labels),
+                             ([working, home, f"{PRIVATE}:/private:ro"], labels), ([working, home], LABELS),
+                             ([working, home.replace(execution, "6" * 32)], labels), ([working, home], {**labels, "agent-core-session": "7" * 32})):
+            with self.subTest(binds=binds), self.assertRaises(ValueError):
+                compat.validate_binds(binds, ROOTS, TENANT, proof)
+
     def test_browser_acceptance_uses_a_disposable_namespace_accepted_by_mount_authority(self):
         sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
         runner_spec = importlib.util.spec_from_file_location("sandbox_runner", Path(__file__).resolve().parents[1] / "opensandbox-local.py")

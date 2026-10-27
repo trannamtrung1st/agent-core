@@ -10,7 +10,7 @@ namespace AgentCore.Application.Evaluations;
 
 public sealed record SuiteWrite(string Name, IReadOnlyList<EvaluationCheck> Checks, int ExpectedVersion, long ExpectedRevision, bool Archived = false);
 public sealed record ScriptWrite(string Name, ScriptKind Kind, EvaluationPredicate Predicate, string? Expected, string? Body,
-    IReadOnlyList<EvaluationHook> Hooks, int ExpectedVersion, long ExpectedRevision, bool Archived = false);
+    IReadOnlyList<EvaluationHook> Hooks, int ExpectedVersion, long ExpectedRevision, bool Archived = false, string? SandboxProfileId = null, int SandboxTimeoutSeconds = 10, SandboxEvaluationInput SandboxInput = SandboxEvaluationInput.RunMetadata);
 public sealed record EvaluationRequest(EvaluationSubjectKind SubjectKind, Guid SubjectId, long SubjectRevision, Guid SuiteId, int SuiteVersion,
     string DedupKey, long ExpectedRevision, EvaluationHook Hook = EvaluationHook.Manual);
 public sealed record ManualAssessment(string CheckId, EvaluationOutcome Outcome, string Reason, long ExpectedRevision, long ExpectedAttemptRevision);
@@ -19,7 +19,8 @@ public sealed record ManualAssessment(string CheckId, EvaluationOutcome Outcome,
 public sealed partial class TenantEvaluationService(IIamStore security, ITenantEvaluationStore store, ITenantDefinitionStore definitions,
     ITenantRunStore runs, ITenantSessionStore sessions, IamAuthorizer authorizer,
     IdentityService identity, IIdGenerator ids, TimeProvider time, AgentDefinitionDraftSyntheticEvaluationRunner synthetic,
-    IDefinitionResourceContentStore content, EvaluationModelEvaluator? modelEvaluator = null)
+    IDefinitionResourceContentStore content, EvaluationModelEvaluator? modelEvaluator = null,
+    IEvaluationSandboxExecutor? nativeSandbox = null, EvaluationSandboxAuthority? nativeAuthority = null)
 {
     private readonly SemaphoreSlim slots = new(EvaluationRules.MaxConcurrent);
     public async ValueTask<EvaluationPage<EvaluationSuiteVersion>> SuitesAsync(Guid actor, Guid tenant, int page, int size, HumanSessionReference? human, CancellationToken ct = default)
@@ -63,7 +64,7 @@ public sealed partial class TenantEvaluationService(IIamStore security, ITenantE
         Revision(state, request.ExpectedRevision);
         if (request.Body is { } body) DefinitionResourcePolicies.RejectSecretsInTextualContent("text/plain", System.Text.Encoding.UTF8.GetBytes(body));
         var value = EvaluationRules.Freeze(new ScriptVersion(tenant, id, request.ExpectedVersion + 1, request.Name, request.Kind, request.Predicate, request.Expected,
-            request.Body, request.Hooks, "", actor, time.GetUtcNow(), request.Archived));
+            request.Body, request.Hooks, "", actor, time.GetUtcNow(), request.Archived, request.SandboxProfileId, request.SandboxTimeoutSeconds, request.SandboxInput));
         if (!await store.TrySaveScriptAsync(Advance(state), state.Tenant.Revision, value, request.ExpectedVersion, Audit(state, actor, "scripts.manage", id), human, ct)) throw new SecurityConflictException("stale_revision");
         return value;
     }
@@ -74,6 +75,7 @@ public sealed partial class TenantEvaluationService(IIamStore security, ITenantE
         if (snapshot.Revision != draftRevision) throw new SecurityConflictException("stale_revision");
         var value = EvaluationRules.Freeze(new EvaluationSuiteVersion(tenant, draftId, request.ExpectedVersion + 1, request.Name, request.Checks, "", actor, time.GetUtcNow(), draftId, DefinitionId: Guid.Parse(snapshot.Draft!.Draft.DefinitionId)));
         await ScriptPermissions(state, actor, value, false, ct);
+        await EvaluationBindingValidation.RequireAsync(store, tenant, new(draftId, value.Version, EvaluationHook.Publication), value, ct);
         return await store.TrySaveDraftSuiteAsync(Advance(state), state.Tenant.Revision, draftId, draftRevision, value,
             Audit(state, actor, "evaluations.manage", draftId), human, ct) ?? throw new SecurityConflictException("stale_revision");
     }
@@ -115,7 +117,7 @@ public sealed partial class TenantEvaluationService(IIamStore security, ITenantE
             try
             {
                 foreach (var check in suite.Checks) findings.Add(await Evaluate(check, suite, subject, request.Hook, linked.Token, attempt, human));
-                return settled = await Settle(attempt, findings, findings.Any(f => f.ReasonCode == "review_required") ? EvaluationStatus.Pending : EvaluationStatus.Completed, null, human, linked.Token);
+                return settled = await Settle(attempt, findings, findings.Any(f => f.ReasonCode is "review_required" or "sandbox_approval_required") ? EvaluationStatus.Pending : EvaluationStatus.Completed, null, human, linked.Token);
             }
             catch (OperationCanceledException)
             {
@@ -165,27 +167,27 @@ public sealed partial class TenantEvaluationService(IIamStore security, ITenantE
         await SuitePermission(state, actor, suite, "review", ct); Revision(state, request.ExpectedRevision);
         if (!Enum.IsDefined(request.Outcome) || string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Length > EvaluationRules.MaxFindingsCharacters) throw new ArgumentException("Choose an outcome and enter a reason of at most 2000 characters.");
         if (attempt.Status != EvaluationStatus.Pending || attempt.Revision != request.ExpectedAttemptRevision
-            || !attempt.Findings.Any(f => f.CheckId == request.CheckId && f.Kind == EvaluatorKind.Manual && f.ReasonCode == "review_required")) throw new SecurityConflictException("evaluation_immutable");
+            || !attempt.Findings.Any(f => f.CheckId == request.CheckId && f.Kind == EvaluatorKind.Manual && f.ReasonCode is "review_required" or "sandbox_approval_required")) throw new SecurityConflictException("evaluation_immutable");
         var subject = await Subject(state, actor, attempt.SubjectKind, attempt.SubjectId, false, ct);
         if (subject.Revision != attempt.SubjectRevision || subject.Fingerprint != attempt.SourceFingerprint) throw new SecurityConflictException("evaluation_source_changed");
         var findings = attempt.Findings.Select(f => f.CheckId == request.CheckId ? f with { Outcome = request.Outcome, ReasonCode = "human_attestation", Summary = request.Reason.Trim(), ReviewerId = actor, ReviewedAt = time.GetUtcNow() } : f).ToArray();
-        return await Settle(attempt, findings, findings.Any(f => f.ReasonCode == "review_required") ? EvaluationStatus.Pending : EvaluationStatus.Completed, null, human, ct);
+        return await Settle(attempt, findings, findings.Any(f => f.ReasonCode is "review_required" or "sandbox_approval_required") ? EvaluationStatus.Pending : EvaluationStatus.Completed, null, human, ct);
     }
-    private async ValueTask<EvaluationAttempt> Settle(EvaluationAttempt before, IReadOnlyList<EvaluationFinding> findings, EvaluationStatus status, string? reason, HumanSessionReference? human, CancellationToken ct)
+    private async ValueTask<EvaluationAttempt> Settle(EvaluationAttempt before, IReadOnlyList<EvaluationFinding> findings, EvaluationStatus status, string? reason, HumanSessionReference? human, CancellationToken ct, bool native = false)
     {
         var state = await State(human?.PrincipalId ?? before.ActorId, before.TenantId, human, ct); var actor = human?.PrincipalId ?? before.ActorId;
         var suite = (await store.FindSuiteAsync(before.TenantId, before.SuiteId, before.SuiteVersion, ct))!;
-        await SuitePermission(state, actor, suite, before.Status == EvaluationStatus.Pending ? "review" : "run", ct);
-        var source = await Subject(state, actor, before.SubjectKind, before.SubjectId, before.Status != EvaluationStatus.Pending, ct);
+        await SuitePermission(state, actor, suite, before.Status == EvaluationStatus.Pending && !native ? "review" : "run", ct);
+        var source = await Subject(state, actor, before.SubjectKind, before.SubjectId, before.Status != EvaluationStatus.Pending || native, ct);
         if (human is null && source.Run?.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is { } original)
             _ = await Subject(state, original, before.SubjectKind, before.SubjectId, false, ct);
-        await ScriptPermissions(state, actor, suite, before.Status != EvaluationStatus.Pending, ct);
+        await ScriptPermissions(state, actor, suite, before.Status != EvaluationStatus.Pending || native, ct);
         if (status is EvaluationStatus.Cancelled or EvaluationStatus.Indeterminate)
             findings = suite.Checks.Select(c => findings.FirstOrDefault(f => f.CheckId == c.CheckId)
                 ?? Finding(c, EvaluationOutcome.Inconclusive, reason ?? "evaluation_interrupted", "This check did not complete; older evidence does not establish the current attempt.")).ToArray();
         var value = before with { Status = status, Findings = findings, Outcome = status == EvaluationStatus.Completed ? EvaluationRules.Aggregate(findings) : EvaluationOutcome.Inconclusive,
             ReasonCode = reason, UpdatedAt = time.GetUtcNow(), Revision = before.Revision + 1, CommitSequence = null };
-        if (!await store.TrySaveAttemptAsync(Advance(state), state.Tenant.Revision, value, before.Revision, Audit(state, actor, before.Status == EvaluationStatus.Pending ? "evaluations.review" : "evaluations.run", before.AttemptId), human, ct)) throw new SecurityConflictException("evaluation_source_changed");
+        if (!await store.TrySaveAttemptAsync(Advance(state), state.Tenant.Revision, value, before.Revision, Audit(state, actor, before.Status == EvaluationStatus.Pending && !native ? "evaluations.review" : "evaluations.run", before.AttemptId), human, ct)) throw new SecurityConflictException("evaluation_source_changed");
         return (await store.FindAttemptAsync(before.TenantId, before.AttemptId, ct))!;
     }
     private async ValueTask<EvaluationFinding> Evaluate(EvaluationCheck check, EvaluationSuiteVersion suite, SubjectSnapshot subject, EvaluationHook hook, CancellationToken ct, EvaluationAttempt? attempt = null, HumanSessionReference? human = null)
@@ -217,7 +219,7 @@ public sealed partial class TenantEvaluationService(IIamStore security, ITenantE
         {
             var script = (await store.FindScriptAsync(suite.TenantId, reference.ScriptId, reference.Version, ct))!;
             if (!script.Hooks.Contains(hook == EvaluationHook.Publication ? EvaluationHook.Manual : hook)) return Finding(check, EvaluationOutcome.Inconclusive, "script_hook_denied", "This Script version does not allow this hook.");
-            if (script.Kind == ScriptKind.Sandbox) return Finding(check, EvaluationOutcome.Inconclusive, "sandbox_evaluation_authority_unavailable", "Evaluation cannot claim a terminal Run's Sandbox authority. Admit an independent authorized operation with isolated inputs.");
+            if (script.Kind == ScriptKind.Sandbox) return await PrepareSandboxCheck(check, script, subject, attempt, human, ct);
             check = check with { Predicate = script.Predicate, Expected = script.Expected };
         }
         if (subject.Draft is { } draft && (int)check.Predicate <= (int)EvaluationPredicate.ExternalActionDenied)

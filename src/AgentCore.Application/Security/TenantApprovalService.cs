@@ -43,7 +43,8 @@ public sealed partial class TenantApprovalService(IIamStore security,
     TenantContinuityReadService? continuityReads = null,
     TenantExperienceOperationService? experienceOperations = null,
     TenantManagementOperationTarget? managementTargets = null,
-    TenantPublicWebOperationTarget? webTargets = null)
+    TenantPublicWebOperationTarget? webTargets = null,
+    AgentCore.Application.Evaluations.EvaluationSandboxAuthority? evaluationSandbox = null)
 {
     // Trusted internal typed preparation. No model-supplied tenant, principal, permission, grant or arbitrary action JSON.
     public ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(TenantRunReference reference, AgentIdentity persona,
@@ -363,6 +364,8 @@ public sealed partial class TenantApprovalService(IIamStore security,
         if (!string.Equals(request.Operation.ActionHash, actionHash, StringComparison.Ordinal)) throw new SecurityConflictException("operation_mismatch");
         var at = time.GetUtcNow();
         if (at >= request.ExpiresAt) throw new SecurityConflictException("approval_expired");
+        if (request.Operation.SandboxCommand?.Evaluation is not null)
+            return await ChangeEvaluationSandboxAsync(state, request, human, outcome, ct);
         if (request.Operation.AutomationAdmission is not null) return await ChangeAutomationAdmissionAsync(state, request, human, outcome, ct).ConfigureAwait(false);
         if (outcome != TenantApprovalStatus.Cancelled)
         {
@@ -552,6 +555,11 @@ public sealed partial class TenantApprovalService(IIamStore security,
 
     private async ValueTask RequireRead(TenantSecurityState state, Guid human, TenantApprovalRequest request, CancellationToken ct, TenantOperationReceipt? recorded = null)
     {
+        if (request.Operation.SandboxCommand?.Evaluation is not null)
+        {
+            await (evaluationSandbox ?? throw new AccessDeniedException("approval_unavailable")).ReadAsync(state, request, human, ct);
+            return;
+        }
         if (request.Operation.ArtifactPublication is not null)
             await TenantArtifactReviewRules.ReadAsync(state, request, human, authorizer, ct).ConfigureAwait(false);
         if (request.Operation.WorkspaceMutation is not null)

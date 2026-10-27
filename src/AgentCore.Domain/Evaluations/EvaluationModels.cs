@@ -6,6 +6,7 @@ namespace AgentCore.Domain.Evaluations;
 
 public enum EvaluatorKind { Script, Agent, Manual }
 public enum ScriptKind { Assertion, Sandbox }
+public enum SandboxEvaluationInput { RunMetadata, RunOutput, AdmittedInput }
 public enum EvaluationHook { BeforeRun, AfterRun, OnFailure, Manual, Publication }
 public enum EvaluationPolicy { RecordOnly, RequirePassBeforeRun, RequirePassForVerifiedOutcome, RequirePassBeforePublication, RequestManualAssessment }
 public enum EvaluationOutcome { Passed, Failed, Inconclusive }
@@ -23,10 +24,10 @@ public sealed record EvaluationSuiteVersion(Guid TenantId, Guid SuiteId, int Ver
     Guid? DraftId = null, bool Archived = false, Guid? DefinitionId = null);
 public sealed record ScriptVersion(Guid TenantId, Guid ScriptId, int Version, string Name, ScriptKind Kind,
     EvaluationPredicate Predicate, string? Expected, string? Body, IReadOnlyList<EvaluationHook> Hooks,
-    string ContentHash, Guid CreatedBy, DateTimeOffset CreatedAt, bool Archived = false);
+    string ContentHash, Guid CreatedBy, DateTimeOffset CreatedAt, bool Archived = false, string? SandboxProfileId = null, int SandboxTimeoutSeconds = 10, SandboxEvaluationInput SandboxInput = SandboxEvaluationInput.RunMetadata);
 public sealed record EvaluationFinding(string CheckId, EvaluatorKind Kind, bool Required, EvaluationOutcome Outcome,
     string ReasonCode, string Summary, Guid? ReviewerId = null, DateTimeOffset? ReviewedAt = null,
-    string? ModelIdentity = null);
+    string? ModelIdentity = null, Guid? SandboxExecutionId = null);
 public sealed record EvaluationLifecycleOrigin(Guid RunId, long RunRevision, Guid ExecutorId, Guid? OriginalInitiatorId);
 public sealed record EvaluationAttempt(Guid AttemptId, Guid TenantId, EvaluationSubjectKind SubjectKind, Guid SubjectId,
     long SubjectRevision, string SourceFingerprint, Guid SuiteId, int SuiteVersion, string SuiteHash,
@@ -78,8 +79,12 @@ public static class EvaluationRules
             || script.Kind == ScriptKind.Sandbox && string.IsNullOrWhiteSpace(script.Body)
             || script.Kind == ScriptKind.Assertion && script.Body is not null)
             throw new ArgumentException("Invalid Script kind, content or hooks.");
+        if (script.Kind == ScriptKind.Sandbox && !script.Archived && (script.SandboxProfileId is not { Length: > 0 and <= 64 }
+            || !System.Text.RegularExpressions.Regex.IsMatch(script.SandboxProfileId, "^[a-z][a-z0-9-]*$")
+            || !Enum.IsDefined(script.SandboxInput) || script.SandboxTimeoutSeconds is < 1 or > 30 || script.Hooks.Any(h => h is EvaluationHook.BeforeRun or EvaluationHook.Publication)))
+            throw new ArgumentException("Sandbox Scripts require a saved profile, a 1–30 second limit and Manual, After Run or On failure hooks. Before Run and Publication cannot wait for independent execution Review.");
         var hooks = Array.AsReadOnly(script.Hooks.Order().ToArray());
-        return script with { Hooks = hooks, ContentHash = Hash(new { script.Kind, script.Predicate, script.Expected, script.Body, Hooks = hooks }) };
+        return script with { Hooks = hooks, ContentHash = Hash(new { script.Kind, script.Predicate, script.Expected, script.Body, Hooks = hooks, script.SandboxProfileId, script.SandboxTimeoutSeconds, script.SandboxInput }) };
     }
     public static string BindingKey(EvaluationBinding b) => $"{b.SuiteId:D}:{b.Version}:{(int)b.Hook}:{(int)b.Policy}";
     public static IReadOnlyList<EvaluationBinding>? ResolveInstance(IReadOnlyList<EvaluationBinding>? defaults, string[]? selected)

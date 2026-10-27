@@ -57,24 +57,35 @@ public static class EvaluationStoreRules
             || EvaluationRules.Hash(value.ModelPins) != EvaluationRules.Hash(before.ModelPins))
             throw new SecurityConflictException("evaluation_immutable");
         if (value.Status == EvaluationStatus.Completed && (value.Outcome != EvaluationRules.Aggregate(value.Findings)
-            || value.Findings.Any(f => f.ReasonCode == "review_required"))) throw new ArgumentException("Final outcome must match the checks.");
-        if (value.Status == EvaluationStatus.Pending && value.Findings.All(f => f.ReasonCode != "review_required"))
+            || value.Findings.Any(f => f.ReasonCode is "review_required" or "sandbox_approval_required"))) throw new ArgumentException("Final outcome must match the checks.");
+        if (value.Status == EvaluationStatus.Pending && value.Findings.All(f => f.ReasonCode is not ("review_required" or "sandbox_approval_required")))
             throw new ArgumentException("Pending assessment requires a Manual check.");
         // Only unresolved Manual findings can change during review. Deterministic/model facts are immutable.
         if (before.Status == EvaluationStatus.Pending && (value.Findings.Count != before.Findings.Count
-            || before.Findings.Where(f => f.Kind != EvaluatorKind.Manual || f.ReasonCode != "review_required").Any(f => !value.Findings.Contains(f))))
+            || before.Findings.Where(f => !(f.Kind == EvaluatorKind.Manual && f.ReasonCode == "review_required") && !(f.SandboxExecutionId is not null && f.ReasonCode == "sandbox_approval_required")).Any(f => !value.Findings.Contains(f))))
             throw new SecurityConflictException("evaluation_immutable");
     }
-    public static void Findings(EvaluationAttempt value, EvaluationAttempt? before, EvaluationSuiteVersion suite, Guid actor)
+    public static void Findings(EvaluationAttempt value, EvaluationAttempt? before, EvaluationSuiteVersion suite, Guid actor, Func<Guid, EvaluationSandboxExecution?>? native = null)
     {
         if (before is null) return;
         if (value.Findings.Select(f => f.CheckId).Distinct(StringComparer.Ordinal).Count() != value.Findings.Count
             || value.Findings.Any(f => !suite.Checks.Any(c => c.CheckId == f.CheckId && c.Kind == f.Kind && c.Required == f.Required))
             || value.Status is EvaluationStatus.Completed or EvaluationStatus.Pending && value.Findings.Count != suite.Checks.Count)
             throw new ArgumentException("Findings must match the exact pinned Suite.");
+        foreach (var finding in value.Findings.Where(f => f.SandboxExecutionId is not null))
+        {
+            var execution = native?.Invoke(finding.SandboxExecutionId!.Value);
+            if (execution is null || execution.TenantId != value.TenantId || execution.AttemptId != value.AttemptId
+                || execution.CheckId != finding.CheckId || !suite.Checks.Any(c => c.CheckId == finding.CheckId && c.Script == execution.Script)
+                || finding.Kind != EvaluatorKind.Script)
+                throw new ArgumentException("Native evidence must belong to this exact Attempt, check and Script.");
+        }
         if (before.Status == EvaluationStatus.Pending)
         {
             var changed = value.Findings.Where(f => !before.Findings.Contains(f)).ToArray();
+            if (changed.Length == 1 && changed[0].SandboxExecutionId is { } executionId && native?.Invoke(executionId) is { Phase: EvaluationSandboxPhase.Settled } execution
+                && execution.AttemptId == value.AttemptId && before.Findings.SingleOrDefault(f => f.CheckId == changed[0].CheckId) is { ReasonCode: "sandbox_approval_required" } previous
+                && changed[0] == EvaluationSandboxRules.Finding(previous, execution)) return;
             if (changed.Length != 1 || changed[0] is not { Kind: EvaluatorKind.Manual, ReasonCode: "human_attestation", ReviewedAt: not null }
                 || changed[0].ReviewerId != actor) throw new ArgumentException("Review must attribute exactly one pending Manual check to the signed-in actor.");
         }

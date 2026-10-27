@@ -231,7 +231,7 @@ def install(app):
     def capabilities():
         if not isinstance(sandbox_service, DockerSandboxService):
             raise HTTPException(409, detail="Exact Docker generation retirement is unavailable.")
-        return {"contractVersion": 1, "retirementFencing": True, "verificationFencing": True, "verificationScopeVersion": 2}
+        return {"contractVersion": 1, "retirementFencing": True, "verificationFencing": True, "verificationScopeVersion": 2, "evaluationIsolationFencing": True}
 
     app.get("/agent-core/generations/capabilities")(capabilities)
     # Inherits the same private authentication middleware as lifecycle and mount attestation.
