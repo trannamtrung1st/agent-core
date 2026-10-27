@@ -20,7 +20,7 @@ public sealed partial class TenantAttachmentRuntimeContextService(TenantOperatio
         var current = await configurations.ResolveAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
         TenantAttachmentRules.Session(session.Owner, session, current.Agent, true);
         if (run.Owner != frame.Owner || run.Admission.OutputContract is not (AgentRunOutputContract.ConversationResponse or AgentRunOutputContract.BackgroundOutcome or AgentRunOutputContract.CompletionReport)
-            || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation or ExecutionOrigin.ImmediateBackground or ExecutionOrigin.CompletionReport or ExecutionOrigin.ContextContinuation or ExecutionOrigin.ConfigurationContinuation)
+            || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation or ExecutionOrigin.ImmediateBackground or ExecutionOrigin.CompletionReport or ExecutionOrigin.ContextContinuation or ExecutionOrigin.GoalContinuation or ExecutionOrigin.ConfigurationContinuation)
                 && !AgentCore.Application.Tools.TenantTaskExecutionContract.IsIndependent(run)) throw new AccessDeniedException("resource_unavailable");
         return new(run, state, session, current.Agent);
     }

@@ -6,7 +6,7 @@ namespace AgentCore.Application.Execution;
 
 /// <summary>One claim/recovery path for both immediate admission and scheduler dispatch.</summary>
 public sealed class AgentRunCoordinator(IAgentRunStore store, IAgentRunDispatcher dispatcher,
-    IIdGenerator ids, TimeProvider time, AgentCore.Application.Evaluations.TenantEvaluationService? evaluations = null, Microsoft.Extensions.Logging.ILogger<AgentRunCoordinator>? logger = null) : IAsyncDisposable
+    IIdGenerator ids, TimeProvider time, AgentCore.Application.Evaluations.TenantEvaluationService? evaluations = null, Microsoft.Extensions.Logging.ILogger<AgentRunCoordinator>? logger = null, AgentCore.Application.Goals.GoalContinuationService? goals = null) : IAsyncDisposable
 {
     private Task? evaluationSweep;
     private readonly CancellationTokenSource evaluationShutdown = new();
@@ -26,6 +26,7 @@ public sealed class AgentRunCoordinator(IAgentRunStore store, IAgentRunDispatche
         var pendingSessions = await store.ListPendingInputSessionsAsync(limit, cancellationToken).ConfigureAwait(false);
         foreach (var sessionId in pendingSessions)
             await dispatcher.RepairPendingInputsAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        if (goals is not null) await goals.ObserveAsync(limit, cancellationToken).ConfigureAwait(false);
         var due = await store.ListRunnableAsync(time.GetUtcNow(), limit, cancellationToken).ConfigureAwait(false);
         var dispatched = 0;
         foreach (var run in due)

@@ -13,7 +13,7 @@ public sealed record TenantApprovalResume(Guid SourceRunId, Guid RequestId, Guid
 public sealed class AgentRunAdmission
 {
     public AgentRunAdmission(Activation activation, string definitionId, int definitionVersion,
-        AgentIdentity pinnedPersona, Guid? responseId, AgentRunOutputContract outputContract, EffectiveExecutionBudget? executionBudget = null, AgentRunConfiguration? configuration = null, ComposerRunInput? composerInput = null, AgentRunTaskIntent? taskIntent = null, TrustedExecutionContext? executionContext = null, TenantApprovalResume? approvalResume = null)
+        AgentIdentity pinnedPersona, Guid? responseId, AgentRunOutputContract outputContract, EffectiveExecutionBudget? executionBudget = null, AgentRunConfiguration? configuration = null, ComposerRunInput? composerInput = null, AgentRunTaskIntent? taskIntent = null, TrustedExecutionContext? executionContext = null, TenantApprovalResume? approvalResume = null, AgentCore.Domain.Goals.GoalWorkContext? goalWork = null)
     {
         ArgumentNullException.ThrowIfNull(activation);
         ArgumentNullException.ThrowIfNull(pinnedPersona);
@@ -46,6 +46,12 @@ public sealed class AgentRunAdmission
                     && !(outputContract == AgentRunOutputContract.ConversationResponse && executionContext?.OriginalInitiatorPrincipalId is not null && HasConfigurationBoundary(activation)) || approvalResume.SourceInputEntryIds.Count > Activation.MaxSourceEntries)
                 || approvalResume.SourceInputEntryIds.Any(id => id == Guid.Empty) || approvalResume.SourceInputEntryIds.Distinct().Count() != approvalResume.SourceInputEntryIds.Count))
             throw new ArgumentException("Approval continuation requires its exact trusted operation and original input references.");
+        if (goalWork is not null && (new[] { goalWork.GoalId, goalWork.CheckpointId, goalWork.SessionId, goalWork.SpaceId }.Any(id => id == Guid.Empty)
+            || goalWork.SessionId != activation.SessionId || goalWork.PlanRevision < 1 || goalWork.GoalRevision < 1 || goalWork.FocusRevision < 1
+            || goalWork.PlanHash.Length != 64 || goalWork.CheckpointHash.Length != 64 || goalWork.InputSequence < 1 || goalWork.TaskJson.Length > 16000
+            || activation.Kind is not (ActivationKind.UserTurn or ActivationKind.GoalContinuation or ActivationKind.ApprovalContinuation)))
+            throw new ArgumentException("Goal work requires a bounded exact admission witness.");
+        GoalWork = goalWork;
         ApprovalResume = approvalResume is null ? null : approvalResume with { SourceInputEntryIds = Array.AsReadOnly(approvalResume.SourceInputEntryIds.ToArray()) };
         Configuration = configuration;
         ExecutionBudget = executionBudget;
@@ -64,9 +70,10 @@ public sealed class AgentRunAdmission
         using var document = System.Text.Json.JsonDocument.Parse(evidence); var value = document.RootElement;
         return value.TryGetProperty("EnvironmentKind", out var kind) && kind.ValueKind == System.Text.Json.JsonValueKind.String && (kind.GetString() == "configuration"
                 && value.TryGetProperty("ContinuationTarget", out var target) && target.ValueKind == System.Text.Json.JsonValueKind.String && target.GetString() is { Length: > 0 and <= 64 }
-                || kind.GetString() == "context-transition" && value.TryGetProperty("ContextTransition", out var transition) && transition.ValueKind == System.Text.Json.JsonValueKind.Object)
+                || (kind.GetString() == "goal-continuation" || kind.GetString() == "context-transition") && (kind.GetString() == "goal-continuation" || value.TryGetProperty("ContextTransition", out var transition) && transition.ValueKind == System.Text.Json.JsonValueKind.Object))
             && value.TryGetProperty("InputBoundarySequence", out var boundary) && boundary.ValueKind == System.Text.Json.JsonValueKind.Number && boundary.TryGetInt64(out var sequence) && sequence >= 0;
     }
+    public AgentCore.Domain.Goals.GoalWorkContext? GoalWork { get; }
     public AgentRunTaskIntent? TaskIntent { get; }
     public TenantApprovalResume? ApprovalResume { get; }
     public TrustedExecutionContext? ExecutionContext { get; }

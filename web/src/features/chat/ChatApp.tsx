@@ -1,5 +1,5 @@
 import { modelPreferenceKey } from '../../services/modelPreference';
-import { MenuOutlined, PlusOutlined } from "@ant-design/icons";
+import { AimOutlined, MenuOutlined, PlusOutlined } from "@ant-design/icons";
 import { Alert, App as AntApp, Button, Drawer, Flex, Layout, Segmented, Switch, Tooltip, Typography, theme } from "antd";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { appMessageConfig } from "../../app/appFeedback";
@@ -18,6 +18,7 @@ import { tenantModelsPath } from '../access/accessRoute';
 import { conversationStatusLabel, conversationStatusTone, mapAgentActivity, pausedSessionMessage } from "./activityState";
 import { AgentPicker } from "./AgentPicker";
 import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
+import { SessionGoalsDrawer } from "./SessionGoalsDrawer";
 import { ChatHeader } from "./ChatHeader";
 import { parseChatIdentityKey, resolveNewChatIdentityPresentation } from "./chatIdentity";
 import { messageTimestamp } from "./chatTime";
@@ -94,11 +95,14 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
   const [bootstrapped, setBootstrapped] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
 
+  const [goalsOpen, setGoalsOpen] = useState(false);
+  const requestedGoalId = new URLSearchParams(window.location.search).get("goal");
+  const goalsButtonRef = useRef<HTMLButtonElement>(null);
   const [workOpen, setWorkOpen] = useState(false);
   const [sandboxOpen, setSandboxOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const filesButtonRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { setFilesOpen(false); setSandboxOpen(false); if (expired) setWorkOpen(false); }, [state.sessionId, tenantContext.tenant.tenantId, expired]);
+  useEffect(() => { setFilesOpen(false); setSandboxOpen(false); setGoalsOpen(!expired && !!requestedGoalId); if (expired) setWorkOpen(false); }, [state.sessionId, tenantContext.tenant.tenantId, expired, requestedGoalId]);
   const sandboxButtonRef = useRef<HTMLButtonElement>(null);
   const [attentionItems, setAttentionItems] = useState<{ run: AgentRun; delivery?: string }[]>([]);
   const [backgroundInstanceId, setBackgroundInstanceId] = useState<string | null>(null);
@@ -355,7 +359,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
                   </Typography.Text></Tooltip>
                 </Flex>
               }
-              additionalActions={tenantActions}
+              additionalActions={<>{state.sessionId && !expired && <Tooltip title="Session goals"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Session goals" ref={goalsButtonRef} icon={<AimOutlined />} onClick={() => setGoalsOpen(true)} /></Tooltip>}{tenantActions}</>}
 
               sessionsToggle={<Flex gap={8}>
                 {isNarrow ? (
@@ -554,6 +558,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
         </Layout>
         {!expired && backgroundInstanceId && activitySource ? <BackgroundWorkDrawer source={activitySource} instanceId={backgroundInstanceId} open={workOpen} wide={!isNarrow}
           onClose={() => setWorkOpen(false)} afterClose={() => workButtonRef.current?.focus()} /> : null}
+        {state.sessionId && !expired && <SessionGoalsDrawer key={`goals:${tenantContext.tenant.tenantId}:${tenantContext.principalId}:${state.sessionId}:${requestedGoalId ?? ''}`} tenant={tenantContext.tenant.tenantId} session={state.sessionId} instance={backgroundInstanceId ?? ''} source={activitySource} open={goalsOpen} narrow={isNarrow} readonly={readonly} refreshKey={`${state.agentRunId ?? ''}:${state.liveResponseId ?? ''}`} openerRef={goalsButtonRef} onClose={() => setGoalsOpen(false)} onWorked={() => { void openCatalogSession({ sessionId: state.sessionId!, status: "created", archived: false, ended: false }); }} />}
         {state.sessionId && !expired && <TenantSessionFilesDrawer key={`files:${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={filesOpen} narrow={isNarrow} openerRef={filesButtonRef} onClose={() => setFilesOpen(false)} />}
         {state.sessionId && !expired && <TenantSessionSandboxDrawer key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={sandboxOpen} openerRef={sandboxButtonRef} narrow={isNarrow} onClose={() => setSandboxOpen(false)} />}
 

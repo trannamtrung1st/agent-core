@@ -75,7 +75,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
     }
     private static async Task<long> TenantInputBoundaryAsync(AgentCoreDbContext db, AgentRun run, CancellationToken ct)
     {
-        if ((TenantContextContinuationRules.InputBoundary(run) ?? TenantConfigurationContinuationRules.InputBoundary(run) ?? TenantBackgroundCompletionFactory.InputBoundary(run) ?? TenantAutomationConversationRules.InputBoundary(run)) is { } reportBoundary) return reportBoundary;
+        if ((run.Admission.GoalWork?.InputSequence ?? TenantContextContinuationRules.InputBoundary(run) ?? TenantConfigurationContinuationRules.InputBoundary(run) ?? TenantBackgroundCompletionFactory.InputBoundary(run) ?? TenantAutomationConversationRules.InputBoundary(run)) is { } reportBoundary) return reportBoundary;
         var sources = TenantApprovalContinuationRules.Inputs(run).Select(id => id.ToString("D")).ToArray();
         var inputs = await db.Entries.Where(e => e.SessionId == run.SessionId.ToString("D") && sources.Contains(e.EntryId))
             .Select(e => new { e.EntrySequence, e.Role, e.Status }).ToArrayAsync(ct).ConfigureAwait(false);
@@ -102,7 +102,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
             foreach (var row in rows)
             {
                 var run = AgentRunStoreMapping.ToDomain(row);
-                if (run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ConfigurationContinuation or ActivationKind.ContextContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground or ActivationKind.CoreEvent or ActivationKind.ApplicationEvent)) continue;
+                if (run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ConfigurationContinuation or ActivationKind.ContextContinuation or ActivationKind.GoalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground or ActivationKind.CoreEvent or ActivationKind.ApplicationEvent)) continue;
                 if (run.Status != AgentRunStatus.WaitingForSignal || AgentRunWaitExecution.IsReady(run, at,
                     await TenantWaitChildren(db, run, run.Wait!, false, ct).ConfigureAwait(false))) ready.Add(run);
                 if (ready.Count == Math.Clamp(limit, 1, 100)) break;
@@ -120,7 +120,20 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         if (runtimeGeneration is { } generation && run.Claim?.Generation != generation) throw new AccessDeniedException("tenant_runtime_unavailable");
         if (command is AgentRunCommand.Claim)
         {
-            if (run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ConfigurationContinuation or ActivationKind.ContextContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground or ActivationKind.CoreEvent or ActivationKind.ApplicationEvent)) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
+            if (run.Admission.GoalWork is { } goalWork)
+            {
+                var goalRow = await db.Set<SessionGoalRow>().AsNoTracking().Include(g => g.Checkpoints).SingleOrDefaultAsync(g => g.TenantId == owner.TenantId && g.GoalId == goalWork.GoalId, ct);
+                var sessionRow = await db.Sessions.AsNoTracking().Include(s => s.Snapshot).SingleAsync(s => s.SessionId == row.SessionId, ct);
+                var later = await db.Entries.AnyAsync(e => e.SessionId == row.SessionId && e.Role == nameof(ConversationRole.User) && e.EntrySequence > goalWork.InputSequence, ct);
+                if (!AgentCore.Application.Goals.GoalContinuationRules.CanDispatch(goalRow is null ? null : GoalPersistence.Value(goalRow), run, SqliteMemoryStore.ToSnapshot(sessionRow, []), later, (clock ?? TimeProvider.System).GetUtcNow()))
+                {
+                    var cancelled = TenantRunCancellationRules.Cancel(run, (clock ?? TimeProvider.System).GetUtcNow());
+                    AgentRunStoreMapping.Apply(row, cancelled);
+                    db.Add(new AuthorizationAudit(diagnosticId, owner.TenantId!.Value, owner.ExecutorPrincipalId!.Value, "goals.dispatch.withheld", goalWork.GoalId.ToString("D"), "denied", "goal_boundary_changed", (clock ?? TimeProvider.System).GetUtcNow()));
+                    await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return cancelled;
+                }
+            }
+            if (run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ConfigurationContinuation or ActivationKind.ContextContinuation or ActivationKind.GoalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground or ActivationKind.CoreEvent or ActivationKind.ApplicationEvent)) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
             _ = await TenantExecutionLineage.RootAsync(run, this, ct).ConfigureAwait(false);
             if (run.ApprovalRequestId is { } approvalId)
             {

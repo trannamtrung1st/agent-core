@@ -167,7 +167,7 @@ public sealed class SessionModelSelectionTests
         var output = new CapturingSessionOutput();
         var resolver = new RecordingResolver();
         var created = await SessionRuntimeFixture.SeedAsync(store, SampleDefinitions.Examiner, time.GetUtcNow(),
-            purpose: new SessionPurpose(SessionPurposeKind.Goal, "Collect a spoken sample"),
+            purpose: new SessionPurpose(SessionPurposeKind.Ongoing, "Collect a spoken sample"),
             policy: new SessionCompletionPolicy(AgentCompletionAuthority.Advisory, true, true),
             selection: SessionModelBinder.Bind(TestModelCatalogs.Synthetic(), "dca30000-0000-4000-8000-000000000001", null, ModelSelectionSource.User));
         await using var runtime = CreateRuntime(output, time, store, created, resolver.Conversation, resolver);

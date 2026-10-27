@@ -51,7 +51,7 @@ public sealed class TenantArtifactReferenceService(ITenantArtifactStore artifact
     private void Require(AgentRun run, TenantRuntimeFrame frame)
     {
         if (run.Owner != frame.Owner || run.SessionId != frame.SessionId || run.AgentRunId != frame.RunId
-            || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation or ExecutionOrigin.ContextContinuation or ExecutionOrigin.ConfigurationContinuation)
+            || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation or ExecutionOrigin.ContextContinuation or ExecutionOrigin.GoalContinuation or ExecutionOrigin.ConfigurationContinuation)
             || run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse) throw new AccessDeniedException("artifact_reference_unavailable");
         TenantLocalEffectRules.RequireDirectRun(run, frame.Generation, time.GetUtcNow());
     }

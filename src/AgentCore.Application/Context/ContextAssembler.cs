@@ -80,7 +80,7 @@ public sealed record ContextSection
     {
         if (source is not (ContextSourceKind.Definition or ContextSourceKind.Instance or ContextSourceKind.Space or ContextSourceKind.Membership or ContextSourceKind.Environment or ContextSourceKind.Session
             or ContextSourceKind.AgentRun or ContextSourceKind.Automation or ContextSourceKind.DefinitionSkill or ContextSourceKind.InstanceSkill)
-            || semantics is not (ContextSemantics.Instruction or ContextSemantics.TrustedFact)
+            || semantics is not (ContextSemantics.Instruction or ContextSemantics.TrustedFact) && !(semantics == ContextSemantics.CurrentTask && id == ContextSectionId.RunTask && source == ContextSourceKind.AgentRun)
             || id >= ContextSectionId.Summary || id < ContextSectionId.AgentIdentity)
             throw new ArgumentException("Invalid Runtime source, section or semantics.");
         var valid = id switch
@@ -101,7 +101,7 @@ public sealed record ContextSection
             _ => false
         };
         if (!valid) throw new ArgumentException("Runtime section source/semantics do not match its contract.");
-        return new(id, ContextLayer.Runtime, source, semantics, new(ModelRole.Developer, text), revision);
+        return new(id, ContextLayer.Runtime, source, semantics, new(semantics == ContextSemantics.CurrentTask ? ModelRole.User : ModelRole.Developer, text), revision);
     }
     public static ContextSection Evidence(ContextSectionId id, ContextSourceKind source, string text, string? revision = null)
     {

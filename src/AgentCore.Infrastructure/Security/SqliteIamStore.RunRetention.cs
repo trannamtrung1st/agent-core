@@ -8,6 +8,7 @@ public sealed partial class SqliteIamStore
 {
     private static async Task RetireRunContent(AgentCoreDbContext db, Guid tenant, string session, DateTimeOffset at, CancellationToken ct)
     {
+        await RetireGoals(db, tenant, session, ct);
         var rows = await db.AgentRuns.Where(r => r.TenantId == tenant && r.SessionId == session).ToArrayAsync(ct).ConfigureAwait(false);
         var ids = rows.Select(r => r.AgentRunId).ToArray();
         var reports = await db.BackgroundCompletionReceipts.Where(r => ids.Contains(r.ChildAgentRunId)

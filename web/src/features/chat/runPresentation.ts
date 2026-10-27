@@ -14,7 +14,7 @@ export function runOriginLabel(origin: string) {
 
 export function runActivationLabel(kind: string) {
   return ({ UserTurn: "Chat turn", Initiative: "Initiative", ScheduledWork: "Scheduled task", ApplicationEvent: "Application event", CoreEvent: "Core Event",
-    ImmediateBackground: "Immediate task", ManualBackground: "Manual task", BackgroundCompleted: "Completion report", ConfigurationContinuation: "Configuration continuation" } as Record<string, string>)[kind] ?? kind;
+    ImmediateBackground: "Immediate task", ManualBackground: "Manual task", BackgroundCompleted: "Completion report", GoalContinuation: "Goal continuation", ContextContinuation: "Context continuation", ConfigurationContinuation: "Configuration continuation" } as Record<string, string>)[kind] ?? kind;
 }
 
 export function runBudgetLabel(value: string) {

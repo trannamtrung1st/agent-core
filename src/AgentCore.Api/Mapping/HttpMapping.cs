@@ -389,12 +389,11 @@ public static partial class HttpMapping
         value?.Trim().ToLowerInvariant() switch
         {
             null or "" or "ongoing" => SessionPurposeKind.Ongoing,
-            "goal" => SessionPurposeKind.Goal,
-            _ => throw AgentCoreErrors.Validation("purpose.kind must be ongoing or goal.")
+            _ => throw AgentCoreErrors.Validation("purpose.kind must be ongoing. Use tenant Session Goals for durable objectives.")
         };
 
     private static string ToPurposeKind(SessionPurposeKind kind) =>
-        kind == SessionPurposeKind.Goal ? "goal" : "ongoing";
+        kind == SessionPurposeKind.Ongoing ? "ongoing" : throw new ArgumentException("Unknown Session purpose.");
 
     private static AgentCompletionAuthority ParseAgentCompletion(string? value) =>
         value?.Trim().ToLowerInvariant() switch

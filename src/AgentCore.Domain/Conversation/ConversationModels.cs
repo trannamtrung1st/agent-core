@@ -352,7 +352,7 @@ public sealed record SessionSnapshot(
     AgentCore.Domain.Spaces.SessionContextSelection? ContextSelection = null,
     SessionRetentionKind RetentionKind = SessionRetentionKind.Saved,
     int? RetainAfterTerminalDays = null,
-    DateTimeOffset? RetentionDueAtUtc = null, AgentCore.Domain.Models.ModelPreference? ModelPreference = null)
+    DateTimeOffset? RetentionDueAtUtc = null, AgentCore.Domain.Models.ModelPreference? ModelPreference = null, Guid? FocusedGoalId = null, long GoalFocusRevision = 0, Guid? GoalFocusRequestId = null)
 {
     private IReadOnlyList<Guid> _pendingAgentInputIds = ValidatePendingInputs(PendingAgentInputIds ?? []);
     public IReadOnlyList<Guid> PendingAgentInputIds

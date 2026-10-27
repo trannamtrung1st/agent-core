@@ -18,7 +18,7 @@ public sealed class CompletionEvaluatorTests
 
         var disabledGoal = Snapshot(
             now,
-            new SessionPurpose(SessionPurposeKind.Goal, "Finish the briefing"),
+            new SessionPurpose(SessionPurposeKind.Ongoing, "Finish the briefing"),
             SessionCompletionPolicy.Default);
         Assert.Equal(AgentCompletionAuthority.Disabled, disabledGoal.CompletionPolicy!.AgentCompletion);
         Assert.False(CompletionEvaluator.ShouldEvaluate(disabledGoal));
@@ -30,7 +30,7 @@ public sealed class CompletionEvaluatorTests
         var now = new DateTimeOffset(2026, 9, 19, 5, 0, 0, TimeSpan.Zero);
         var snapshot = Snapshot(
             now,
-            new SessionPurpose(SessionPurposeKind.Goal, "Wrap up"),
+            new SessionPurpose(SessionPurposeKind.Ongoing, "Wrap up"),
             new SessionCompletionPolicy(AgentCompletionAuthority.Allowed, true, true));
         var continueDecision = await CompletionEvaluator.EvaluateAsync(
             new ScriptedLanguageModel(completionDecision: """{"decision":"continue","reason":"still open"}"""),
@@ -53,7 +53,7 @@ public sealed class CompletionEvaluatorTests
         var now = new DateTimeOffset(2026, 9, 19, 5, 0, 0, TimeSpan.Zero);
         var snapshot = Snapshot(
             now,
-            new SessionPurpose(SessionPurposeKind.Goal),
+            new SessionPurpose(SessionPurposeKind.Ongoing),
             new SessionCompletionPolicy(AgentCompletionAuthority.Allowed, true, true));
         var malformed = await CompletionEvaluator.EvaluateAsync(
             new ScriptedLanguageModel(completionDecision: "not-json"),
@@ -77,7 +77,7 @@ public sealed class CompletionEvaluatorTests
         var request = CompletionEvaluator.CreateEvaluationRequest(
             Snapshot(
                 now,
-                new SessionPurpose(SessionPurposeKind.Goal, "Collect a name"),
+                new SessionPurpose(SessionPurposeKind.Ongoing, "Collect a name"),
                 new SessionCompletionPolicy(AgentCompletionAuthority.Advisory, true, true)),
             now);
         var system = request.Context!.Text(ContextSectionId.CoreCompletion);

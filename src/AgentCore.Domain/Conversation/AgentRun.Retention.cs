@@ -18,7 +18,7 @@ public sealed partial class AgentRun
         if ((Checkpoint is null || Checkpoint.PayloadJson == RetiredConversationCheckpoint)
             && Progress is null && (preserveResult || Result is null || Result.Text == RetiredConversationText)
             && (Failure is null || Failure.Summary == RetiredConversationText) && known == KnownEffectSummary
-            && SideEffect.ExternalEffect?.DirectOperation is null) return this;
+            && SideEffect.ExternalEffect?.DirectOperation is null && (Admission.GoalWork is null || Admission.GoalWork.TaskJson.Length == 0)) return this;
         var checkpoint = Checkpoint is null ? null : new AgentRunCheckpoint(RetiredConversationCheckpoint,
             Checkpoint.StepCount, Checkpoint.OutputBytes, Checkpoint.RemainingOverallBudgetMs, Checkpoint.ActiveExecutionMs, Checkpoint.BudgetRecordedAtUtc);
         var result = preserveResult || Result is null ? Result : new AgentRunResult(RetiredConversationText,
@@ -26,7 +26,10 @@ public sealed partial class AgentRun
         var failure = Failure is null ? null : new AgentRunFailure(Failure.Code, RetiredConversationText, Failure.FailedAtUtc, Failure.DiagnosticId);
         var effect = SideEffect.ExternalEffect is { DirectOperation: not null } origin
             ? new AgentRunSideEffect(SideEffect.Disposition, SideEffect.ToolCallId, SideEffect.ActionHash, SideEffect.UpdatedAtUtc, origin with { DirectOperation = null }) : SideEffect;
-        return new(AgentRunId, Owner, Admission, PinnedModel, Status, checked(Revision + 1), AttemptCount, MaxAttempts,
+        var admission = Admission.GoalWork is null ? Admission : new AgentRunAdmission(Admission.Activation, Admission.DefinitionId, Admission.DefinitionVersion, Admission.PinnedPersona,
+            Admission.ResponseId, Admission.OutputContract, Admission.ExecutionBudget, Admission.Configuration, Admission.ComposerInput, Admission.TaskIntent, Admission.ExecutionContext, Admission.ApprovalResume,
+            Admission.GoalWork with { TaskJson = "" });
+        return new(AgentRunId, Owner, admission, PinnedModel, Status, checked(Revision + 1), AttemptCount, MaxAttempts,
             NextRetryAtUtc, Claim, CancellationRequested, CancellationRequestedAtUtc, known, null, checkpoint, result, failure, effect,
             CreatedAtUtc, at < UpdatedAtUtc ? UpdatedAtUtc : at, PinnedSkillCatalog, ActiveSkillKeys, SkillLoadCount,
             LoadedCapabilityIds, CapabilityLoadCount, Wait, WaitCount, TotalWaitSeconds, ApprovalRequestId);

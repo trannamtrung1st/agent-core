@@ -1,3 +1,4 @@
+import { sessionPath } from "../../app/sessionRoute";
 import { followAppLink } from '../../app/appLink';
 import { CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, LoadingOutlined, RedoOutlined, StopOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Collapse, Descriptions, Drawer, Empty, Flex, Spin, Tag, Typography, theme } from "antd";
@@ -97,6 +98,7 @@ export function AgentRunDetails({ run, onChange, showContextProvenance = false, 
         {run.executionDiagnostic.protocolRecovery.strategy ? <Typography.Text type="secondary">Recorded tool results were retained. The correction cannot run substantive tools.</Typography.Text> : null}
       </Flex>
     </section> : null}
+    {run.goal && <Typography.Paragraph><Typography.Link href={`${sessionPath(run.sessionId)}?goal=${encodeURIComponent(run.goal.goalId)}`} onClick={event => followAppLink(event)}>Inspect Session goal</Typography.Link> · accepted plan {run.goal.planRevision}<br /><Typography.Text type="secondary" style={{ overflowWrap: 'anywhere' }}>Checkpoint {run.goal.checkpointId}</Typography.Text></Typography.Paragraph>}
     <Descriptions size="small" column={1} items={[
       { key: "decision", label: "Model selection", children: run.modelDecision ? <Flex vertical><Typography.Text>{({ fixed: "Fixed", inherited: "Inherited", ranked: "Auto ranked", singleEligible: "Auto · only eligible model", configuredDefault: "Auto · configured default used", fixedAutoReasoning: "Fixed model · Auto reasoning" } as Record<string, string>)[run.modelDecision.basis] ?? "Recorded selection"} · {run.reasoningEffort ?? "Model default"}</Typography.Text><Typography.Text type="secondary" style={{ overflowWrap: "anywhere" }}>{run.modelDecision.engineId} · {run.modelDecision.engineVersion} · policy {run.modelDecision.policyRevision} · settings {run.modelDecision.settingsRevision}{run.modelDecision.diagnosticCode ? ` · ${run.modelDecision.diagnosticCode}` : ''}</Typography.Text></Flex> : 'Captured fixed or inherited selection' },
       { key: "model", label: "Model", children: <Typography.Text className="background-work-progress">{run.modelOfferingId}</Typography.Text> },

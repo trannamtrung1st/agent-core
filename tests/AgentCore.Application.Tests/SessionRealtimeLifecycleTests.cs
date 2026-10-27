@@ -408,7 +408,7 @@ public sealed class SessionRealtimeLifecycleTests
             null,
             time.GetUtcNow(),
             time.GetUtcNow(),
-            Purpose: new SessionPurpose(SessionPurposeKind.Goal, DeadlineAt: time.GetUtcNow().AddMinutes(3)), AgentInstanceId: Guid.NewGuid());
+            Purpose: new SessionPurpose(SessionPurposeKind.Ongoing, DeadlineAt: time.GetUtcNow().AddMinutes(3)), AgentInstanceId: Guid.NewGuid());
         await using var runtime = Create(output, time, new ScriptedLanguageModel(), store, snapshot);
         Assert.True(await runtime.AttachAsync());
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -446,7 +446,7 @@ public sealed class SessionRealtimeLifecycleTests
             null,
             time.GetUtcNow(),
             time.GetUtcNow(),
-            Purpose: new SessionPurpose(SessionPurposeKind.Goal, DeadlineAt: time.GetUtcNow().AddMinutes(5)), AgentInstanceId: Guid.NewGuid());
+            Purpose: new SessionPurpose(SessionPurposeKind.Ongoing, DeadlineAt: time.GetUtcNow().AddMinutes(5)), AgentInstanceId: Guid.NewGuid());
         await using var runtime = Create(output, time, new ScriptedLanguageModel(), store, snapshot);
         Assert.True(await runtime.AttachAsync());
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -490,7 +490,7 @@ public sealed class SessionRealtimeLifecycleTests
             null,
             time.GetUtcNow(),
             time.GetUtcNow(),
-            Purpose: new SessionPurpose(SessionPurposeKind.Goal, DeadlineAt: time.GetUtcNow().AddMinutes(1)), AgentInstanceId: Guid.NewGuid());
+            Purpose: new SessionPurpose(SessionPurposeKind.Ongoing, DeadlineAt: time.GetUtcNow().AddMinutes(1)), AgentInstanceId: Guid.NewGuid());
         await using var runtime = Create(output, time, new ScriptedLanguageModel(), store, snapshot);
         Assert.True(await runtime.AttachAsync());
         await runtime.WaitUntilMailboxDrainedAsync();

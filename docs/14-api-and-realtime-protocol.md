@@ -2172,3 +2172,59 @@ Tenant Script writes add `sandboxProfileId` (saved profile ID), `sandboxTimeoutS
 - `POST /api/v2/tenants/{tenantId}/evaluation-attempts/{attemptId}/cancel-sandbox` requires authenticated human/CSRF and `{ executionId, expectedExecutionRevision, expectedRevision }`. It records a cancellation request for Reserved/Dispatching execution. Only the original requester or current `approvals.cancel` holder may cancel; current source reads remain required. AwaitingReview cancellation uses the exact existing approval endpoint.
 
 The existing approval endpoints decide the exact native Sandbox Review. This Review supplies no exceptional grant and its processed signal does not resume the historical subject Run. No SignalR schema changes are required.
+
+## Tenant Session Goal HTTP contract
+
+All paths below are under `/api/v2/tenants/{tenantId}/sessions/{sessionId}/goals`, require the authenticated tenant context and the existing mutation CSRF protection. Reads require current `sessions.read`, `goals.read` and the Goal's `spaces.read`; commands add `goals.manage`, with human plan/criterion/final decisions also requiring `goals.accept`. The bound Session/Space/Membership and current source permissions remain independent gates.
+
+| Method and suffix | Result / command |
+| --- | --- |
+| GET empty | `SessionGoalsView`: protected `goals` page, focusedGoalId, focusRevision, sessionRevision, securityRevision, canManage, canAccept, currentSpaceId |
+| POST empty | `{goalId,command}`; Create only |
+| GET `/{goalId}` | Protected aggregate |
+| GET `/recovery?requestKey=...` | Original actor's command receipt or null; reauthorizes Goal |
+| PUT `/{goalId}/plan` | Plan proposal |
+| POST `/{goalId}/plan-decision` | Human accept/reject |
+| POST `/{goalId}/checkpoints/{checkpointId}/progress` | Report/block/optional skip |
+| POST `/{goalId}/checkpoints/{checkpointId}/verify` | Exact saved evidence, qualified by Core |
+| POST `/{goalId}/acceptance` | Human checkpoint accept/reject, or final acceptance without checkpointId |
+| POST `/{goalId}/control` | Pause/resume/cancel |
+| POST `/{goalId}/focus` | Focus request with requestId and expected security/Session/Goal revisions |
+| POST `/{goalId}/continue` | Same plus expectedPlanRevision; existing Run receipt, 202 created or 200 exact replay |
+| GET `/{goalId}/activity?page=0&pageSize=20` | Protected immutable paged activity |
+
+Goal enums serialize as integers, matching incumbent Evaluation contracts: Goal status Proposed=0, Active=1, Paused=2, Completed=3, Cancelled=4; checkpoint Pending=0, InProgress=1, Blocked=2, VerificationPending=3, Verified=4, Skipped=5; verification EvaluationPass=0, SourceReceipt=1, HumanAcceptance=2. Command kinds Create=0 through Control=6 follow the order in [the port](04-backend-interfaces.md#session-goal-ports). Route and command identities must agree. Unknown fields and invalid bounded plans are rejected. Existing safe error mapping distinguishes stale revision/conflicting replay from unavailable authority; no unauthorized detail/count is returned.
+
+Complete proposed creation example (example IDs and revisions):
+
+```json
+{
+  "goalId": "11111111-1111-4111-8111-111111111111",
+  "command": {
+    "kind": 0,
+    "requestKey": "human-plan-1",
+    "expectedSecurityRevision": 12,
+    "expectedGoalRevision": 0,
+    "expectedPlanRevision": 0,
+    "plan": {
+      "title": "Deliver a reviewed briefing",
+      "objective": "Produce the requested briefing",
+      "successCriteria": "The reviewer accepts the saved result",
+      "checkpoints": [{
+        "checkpointId": "22222222-2222-4222-8222-222222222222",
+        "title": "Review the briefing",
+        "expectedOutcome": "A qualified human accepts the result",
+        "required": true,
+        "dependencies": [],
+        "verification": [{"kind": 2}]
+      }],
+      "deadlineAt": null,
+      "requireFinalAcceptance": false,
+      "autoContinuation": {"enabled": false, "maxRuns": 0, "until": null}
+    },
+    "confirm": false
+  }
+}
+```
+
+Evaluation verification supplies `kind:4`, current expected revisions and checkpointId, with `evidence:{kind:0,sourceId:<saved attempt UUID>,runId:<bound terminal Run UUID>}`. The accepted checkpoint policy already pins exact Suite ID/version/hash. Success of the HTTP request only records the request; inspect the returned factual checkpoint status. Failed/Pending/Inconclusive evidence cannot become Verified. GoalContinuation adds enum value 11 to Activation/ExecutionOrigin; Goal work travels on existing Runs and response events, with no new realtime method or voice/audio envelope.

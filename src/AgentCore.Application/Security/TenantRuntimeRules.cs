@@ -16,9 +16,10 @@ public static class TenantRuntimeRules
             || run.CancellationRequested || run.Claim.LeaseExpiresAtUtc <= at)
             throw new AccessDeniedException("tenant_runtime_unavailable");
     }
-    public static void ValidateSnapshot(TenantRuntimeFrame frame, SessionSnapshot before, SessionSnapshot next, bool foreground = false, bool contextSwitch = false)
+    public static void ValidateSnapshot(TenantRuntimeFrame frame, SessionSnapshot before, SessionSnapshot next, bool foreground = false, bool contextSwitch = false, bool goalFocus = false)
     {
-        if (!contextSwitch && next.ContextSelection != before.ContextSelection || next.ContextSelection?.TenantId != frame.Owner.TenantId
+        if (!goalFocus && (next.FocusedGoalId != before.FocusedGoalId || next.GoalFocusRevision != before.GoalFocusRevision || next.GoalFocusRequestId != before.GoalFocusRequestId)
+            || !contextSwitch && next.ContextSelection != before.ContextSelection || next.ContextSelection?.TenantId != frame.Owner.TenantId
             || next.SessionId != frame.SessionId || next.AgentInstanceId != frame.Owner.AgentInstanceId || next.ProfileId is not null
             || before.RetentionKind != next.RetentionKind || before.RetainAfterTerminalDays != next.RetainAfterTerminalDays
             || next.RetentionDueAtUtc != (SessionLifecycle.IsTerminal(next.LifecycleStatus) && !SessionLifecycle.IsTerminal(before.LifecycleStatus)

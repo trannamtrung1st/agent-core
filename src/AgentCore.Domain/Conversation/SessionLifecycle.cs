@@ -12,8 +12,7 @@ public enum SessionLifecycleStatus
 
 public enum SessionPurposeKind
 {
-    Ongoing,
-    Goal
+    Ongoing
 }
 
 public enum AgentCompletionAuthority

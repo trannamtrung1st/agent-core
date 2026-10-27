@@ -60,6 +60,9 @@ public static class PermissionCatalog
         Add("agent-definitions", "definition", "delete", PermissionApprovalClass.Sensitive);
         Add("agent-runs", "agent-run", "read", PermissionApprovalClass.ReadOnly);
         Add("agent-runs", "agent-run", "create cancel", PermissionApprovalClass.Mutation);
+        Add("goals", "session", "read", PermissionApprovalClass.ReadOnly);
+        Add("goals", "session", "manage", PermissionApprovalClass.Mutation);
+        Add("goals", "session", "accept", PermissionApprovalClass.Mutation, true);
         Add("sessions", "session", "read", PermissionApprovalClass.ReadOnly);
         Add("sessions", "session", "create manage", PermissionApprovalClass.Mutation);
         Add("sessions", "session", "delete", PermissionApprovalClass.Sensitive);

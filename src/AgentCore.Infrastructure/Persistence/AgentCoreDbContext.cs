@@ -27,6 +27,9 @@ public sealed class SessionRecord
     public string AgentInstanceId { get; set; } = "";
     public string? PinnedPersonaJson { get; set; }
     public long? PinnedPersonaRevision { get; set; }
+    public string? FocusedGoalId { get; set; }
+    public long GoalFocusRevision { get; set; }
+    public string? GoalFocusRequestId { get; set; }
     public string? ContextSelectionJson { get; set; }
     public string PendingAgentInputIdsJson { get; set; } = "[]";
     public string OriginJson { get; set; } = "{\"kind\":0}";
@@ -249,6 +252,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         AgentCore.Infrastructure.Security.IamPersistenceModel.Configure(modelBuilder);
         WorkspaceEffectPersistence.Configure(modelBuilder);
         EvaluationPersistence.Configure(modelBuilder);
+        GoalPersistence.Configure(modelBuilder);
         EvaluationSandboxPersistence.Configure(modelBuilder);
         ModelManagementPersistence.Configure(modelBuilder);
         modelBuilder.Entity<SandboxInstanceVerificationRow>(e => { e.ToTable("SandboxInstanceVerifications"); e.HasKey(r => new { r.InstanceId, r.InstanceRevision }); });

@@ -1,6 +1,6 @@
 namespace AgentCore.Domain.Conversation;
 
-public enum ExecutionOrigin { UserMessage, ImmediateBackground, ConfigurationContinuation, CompletionReport, ScheduledOccurrence, ApplicationEvent, CoreEvent, ManualInvocation, Initiative, ApprovalContinuation, ContextContinuation }
+public enum ExecutionOrigin { UserMessage, ImmediateBackground, ConfigurationContinuation, CompletionReport, ScheduledOccurrence, ApplicationEvent, CoreEvent, ManualInvocation, Initiative, ApprovalContinuation, ContextContinuation, GoalContinuation }
 
 /// <summary>Immutable trusted references. Attribution never carries permission snapshots or login credentials.</summary>
 public sealed record TrustedExecutionContext
@@ -14,7 +14,7 @@ public sealed record TrustedExecutionContext
         AgentRunText.RequireOptionalId(originalInitiatorPrincipalId, "Original initiator");
         AgentRunText.RequireOptionalId(parentRunId, "Parent Run");
         AgentRunText.RequireOptionalId(parentActivationId, "Parent Activation");
-        var continuation = origin is ExecutionOrigin.ImmediateBackground or ExecutionOrigin.ConfigurationContinuation or ExecutionOrigin.CompletionReport or ExecutionOrigin.ApprovalContinuation or ExecutionOrigin.ContextContinuation;
+        var continuation = origin is ExecutionOrigin.ImmediateBackground or ExecutionOrigin.ConfigurationContinuation or ExecutionOrigin.CompletionReport or ExecutionOrigin.ApprovalContinuation or ExecutionOrigin.ContextContinuation or ExecutionOrigin.GoalContinuation;
         if (continuation != (parentRunId is not null && parentActivationId is not null)
             || !continuation && (parentRunId is not null || parentActivationId is not null || rootActivationId != activationId)
             || continuation && (rootActivationId == activationId || parentActivationId == activationId || parentRunId == runId)

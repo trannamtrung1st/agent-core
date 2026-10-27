@@ -26,6 +26,10 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         TenantInputInterruption? interruption = null, IReadOnlyList<UserMessagePart>? parts = null)
         => (await SubmitInputAsync(tenant, sessionId, initiator, messageId, text, attachmentIds, expectedSecurityRevision, expectedSessionRevision, ct, interruption, null, parts).ConfigureAwait(false)).Run;
 
+    public async ValueTask<TenantRunReceipt> SubmitGoalAsync(Guid tenant, Guid session, TenantSessionInitiator human, Guid message, string text,
+        long expectedSecurity, long expectedSession, AgentCore.Domain.Goals.GoalWorkContext binding, CancellationToken ct)
+        => (await SubmitInputAsync(tenant, session, human, message, text, [], expectedSecurity, expectedSession, ct, null, null, goalWork: binding).ConfigureAwait(false)).Run;
+
     public async ValueTask<TenantHumanInputReceipt> SubmitSpeechAsync(TenantVoiceLease lease, Guid streamId, Guid utteranceId, string text, CancellationToken ct = default)
     {
         if (!lease.InputActive || streamId != lease.StreamId || utteranceId == Guid.Empty) throw new AccessDeniedException("voice_lease_unavailable");
@@ -39,7 +43,7 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
     }
     private async ValueTask<TenantHumanInputReceipt> SubmitInputAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
         Guid messageId, string text, IReadOnlyList<Guid> attachmentIds, long expectedSecurityRevision, long expectedSessionRevision,
-        CancellationToken ct, TenantInputInterruption? interruption, TenantSpeechAdmission? speech, IReadOnlyList<UserMessagePart>? parts = null)
+        CancellationToken ct, TenantInputInterruption? interruption, TenantSpeechAdmission? speech, IReadOnlyList<UserMessagePart>? parts = null, AgentCore.Domain.Goals.GoalWorkContext? goalWork = null)
     {
         parts = TenantComposerReferenceService.Normalize(text, parts);
         var requested = attachmentIds.ToArray();
@@ -114,7 +118,7 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
             : AgentCore.Application.Composer.ComposerInputRules.ActiveSkills(definition, resolved.Skills, composerInput.ExplicitSkillKeys);
         var run = AgentRun.Create(runId, AgentRunOwner.ForTenant(tenant, agent.Instance.InstanceId, agent.PrincipalId),
             new(activation, definition.Id, definition.Version, resolved.Persona, responseId, AgentRunOutputContract.ConversationResponse,
-                AgentRunAdmissionFactory.WithCleanupIntent(ExecutionBudgetResolver.Resolve(definition, resolved.InstanceBudgets, true), text), resolved.Configuration, composerInput, executionContext: context),
+                AgentRunAdmissionFactory.WithCleanupIntent(ExecutionBudgetResolver.Resolve(definition, resolved.InstanceBudgets, true), text), resolved.Configuration, composerInput, executionContext: context, goalWork: goalWork),
             new(selected.OfferingId, selected.ConnectionId, selected.ExternalModelId, selected.ReasoningEffort, selected.Binding, selected.Decision), AgentRunLimits.DefaultMaxAttempts, now,
             resolved.Skills, active);
         var admission = new TenantHumanRunAdmission(run, input, expectedSessionRevision, agent.Instance.Revision, sources.Count == 0 ? null : sources.ToArray(), interruption, speech);

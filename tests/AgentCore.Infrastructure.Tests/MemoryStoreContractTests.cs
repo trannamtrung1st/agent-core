@@ -767,7 +767,7 @@ public sealed class MemoryStoreContractTests
         var snapshot = First() with
         {
             Purpose = new SessionPurpose(
-                SessionPurposeKind.Goal,
+                SessionPurposeKind.Ongoing,
                 "Host exam window",
                 deadline,
                 new Dictionary<string, string> { ["integration"] = "exam-app" }),
@@ -782,7 +782,7 @@ public sealed class MemoryStoreContractTests
         };
         await harness.Store.SaveAsync(snapshot, 0);
         var loaded = await harness.Store.LoadMetadataAsync(snapshot.SessionId);
-        Assert.Equal(SessionPurposeKind.Goal, loaded!.Purpose!.Kind);
+        Assert.Equal(SessionPurposeKind.Ongoing, loaded!.Purpose!.Kind);
         Assert.Equal("Host exam window", loaded.Purpose.Description);
         Assert.Equal(deadline, loaded.Purpose.DeadlineAt);
         Assert.Equal("exam-app", loaded.Purpose.Metadata!["integration"]);

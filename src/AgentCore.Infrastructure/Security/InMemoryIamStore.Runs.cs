@@ -72,6 +72,16 @@ public sealed partial class InMemoryIamStore
             TenantSessionRules.RequireExecutor(before, agent); ct.ThrowIfCancellationRequested();
             RequireSpaceExecutionSource(run, before, new IamAuthorizer(this), ct, admission: true).AsTask().GetAwaiter().GetResult();
             var speechSession = sessionBacking.ReadTenantSession(next.Tenant.TenantId, run.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
+            if (run.Admission.GoalWork is { } goalWork)
+            {
+                if (goalWork.InputSequence != admission.Input.Sequence) throw new SecurityConflictException("stale_goal_input_boundary");
+                var goal = goals.GetValueOrDefault((next.Tenant.TenantId, goalWork.GoalId)) ?? throw new AccessDeniedException("resource_unavailable");
+                AgentCore.Application.Goals.GoalAuthority.Binding(goal, speechSession.Snapshot, goalWork);
+                if (goal.Plan.DeadlineAt is { } deadline && deadline <= (clock ?? TimeProvider.System).GetUtcNow()) throw new SecurityConflictException("goal_deadline_elapsed");
+                foreach (var key in new[] { "goals.read", "goals.manage", "agent-runs.create" })
+                    AgentCore.Application.Goals.GoalAuthority.Require(before, initiator.PrincipalId, key, key == "agent-runs.create" ? AccessScope.ForTenant(goal.TenantId) : TenantSessionRules.Scope(goal.TenantId, goal.SessionId), new(this), ct).AsTask().GetAwaiter().GetResult();
+                if (sessionBacking.AgentRuns.Runs.Values.Any(r => r.SessionId == run.SessionId && !r.IsTerminal)) throw new SecurityConflictException("session_in_use");
+            }
             TenantVoiceRules.Speech(admission, initiator, speechSession.Owner, speechSession.Snapshot.Mode, speechOperation);
             TenantInputInterruptionRules.Shape(admission);
             TenantInputInterruptionRules.PermissionsAsync(before, initiator.PrincipalId, admission.Interruption, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
@@ -86,6 +96,15 @@ public sealed partial class InMemoryIamStore
             if (result?.Created == true) attachmentBacking?.BindTenantSources(admission);
             if (result?.Created == true)
             {
+                if (run.Admission.GoalWork is { } work)
+                {
+                    var goal = goals[(next.Tenant.TenantId, work.GoalId)];
+                    var changed = goal with { Revision = goal.Revision + 1, UpdatedAt = run.CreatedAtUtc,
+                        Checkpoints = goal.Checkpoints.Select(c => c.CheckpointId == work.CheckpointId ? c with { Status = AgentCore.Domain.Goals.GoalCheckpointStatus.InProgress, SourceRunId = run.AgentRunId } : c).ToArray() };
+                    var activity = new AgentCore.Domain.Goals.GoalActivity(audit.AuditId, goal.TenantId, goal.SessionId, goal.GoalId, initiator.PrincipalId,
+                        "work:" + run.Admission.Activation.DedupeKey, AgentCore.Domain.Goals.GoalRules.Hash(work), "WorkAdmitted", changed.Revision, goal.PlanRevision, run.CreatedAtUtc, work.CheckpointId, run.AgentRunId);
+                    goals[(goal.TenantId, goal.GoalId)] = changed; goalActivity.Add((activity, AgentCore.Domain.Goals.GoalRules.Freeze(changed)));
+                }
                 if (result.Interrupted is { } stopped)
                 {
                     SettleTenantCompletion(stopped, frame!.Generation);

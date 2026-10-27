@@ -37,10 +37,10 @@ public sealed class SessionLifecycleTests
     {
         var now = new DateTimeOffset(2026, 9, 19, 3, 0, 0, TimeSpan.Zero);
         var purpose = SessionLifecycle.ResolvePurpose(
-            new SessionPurpose(SessionPurposeKind.Goal, "Finish the task"),
+            new SessionPurpose(SessionPurposeKind.Ongoing, "Finish the task"),
             now,
             TimeSpan.FromMinutes(60));
-        Assert.Equal(SessionPurposeKind.Goal, purpose.Kind);
+        Assert.Equal(SessionPurposeKind.Ongoing, purpose.Kind);
         Assert.Equal("Finish the task", purpose.Description);
         Assert.Equal(now.AddMinutes(60), purpose.DeadlineAt);
 
@@ -54,7 +54,7 @@ public sealed class SessionLifecycleTests
         var now = new DateTimeOffset(2026, 9, 19, 3, 0, 0, TimeSpan.Zero);
         var deadline = now.AddHours(3);
         var purpose = SessionLifecycle.ResolvePurpose(
-            new SessionPurpose(SessionPurposeKind.Goal, DeadlineAt: deadline),
+            new SessionPurpose(SessionPurposeKind.Ongoing, DeadlineAt: deadline),
             now,
             TimeSpan.FromMinutes(5));
         Assert.Equal(deadline, purpose.DeadlineAt);
@@ -68,11 +68,11 @@ public sealed class SessionLifecycleTests
             SessionLifecycle.Validate(new SessionPurpose(SessionPurposeKind.Ongoing, new string('a', 2001))));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             SessionLifecycle.Validate(new SessionPurpose(
-                SessionPurposeKind.Goal,
+                SessionPurposeKind.Ongoing,
                 Metadata: Enumerable.Range(0, 17).ToDictionary(i => $"k{i}", i => "v"))));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             SessionLifecycle.Validate(new SessionPurpose(
-                SessionPurposeKind.Goal,
+                SessionPurposeKind.Ongoing,
                 Metadata: new Dictionary<string, string> { ["k"] = new string('x', 4001) })));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             SessionLifecycle.ResolvePurpose(null, DateTimeOffset.UtcNow, TimeSpan.Zero));

@@ -223,6 +223,11 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantEmailMonitoringService>();
         services.TryAddSingleton<TenantAutomationOperationTarget>();
         services.TryAddSingleton<TenantSessionService>();
+        services.TryAddSingleton<ITenantSessionGoalStore>(p => (ITenantSessionGoalStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<AgentCore.Application.Goals.TenantSessionGoalService>();
+        services.TryAddSingleton<AgentCore.Application.Goals.GoalToolService>();
+        services.TryAddSingleton<ITenantGoalContinuationStore>(p => (ITenantGoalContinuationStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<AgentCore.Application.Goals.GoalContinuationService>();
         services.TryAddSingleton<ITenantVoiceModeStore>(p => (ITenantVoiceModeStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantVoiceService>();
         services.TryAddSingleton<TenantSessionForegroundService>();

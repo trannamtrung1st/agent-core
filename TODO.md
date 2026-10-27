@@ -111,7 +111,7 @@ Historical [foundation](docs/reports/unified-scripts-evaluation-2026-10-27.md) a
 
 ### 8. Session Goals
 
-Introduce persistent explicit objectives associated with Sessions/Spaces (a future specification; Environments remain variable profiles), success criteria/checkpoints, agent-driven progress updates, verification-based completion and bounded continuation/recovery. Retain compatibility with Sessions, Activations and Agent Runs and their existing execution/conversation ownership.
+Implemented explicit Session Goals in their creating Space, accepted criteria/checkpoints, protected human/model progress, independent verification, immutable Run bindings and bounded continuation through existing execution owners. [Delivery and final review](docs/reports/session-goals-delivery-2026-10-27.md) record local qualification and external deployment limits. Session lifecycle remains independent; Environments remain variable profiles. Initiative 9 is not started.
 
 ### 9. Task Delegation & Communication
 

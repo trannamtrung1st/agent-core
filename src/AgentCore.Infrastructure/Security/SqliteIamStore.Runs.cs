@@ -103,6 +103,17 @@ public sealed partial class SqliteIamStore
             TenantSessionRules.RequireExecutor((await ReadTenantAsync(db, next.Tenant.TenantId, ct).ConfigureAwait(false))!, agent);
             var row = await db.Sessions.Include(s => s.Snapshot).SingleAsync(s => s.SessionId == root.SessionId, ct).ConfigureAwait(false);
             var current = SqliteMemoryStore.ToSnapshot(row, []);
+            if (run.Admission.GoalWork is { } goalWork)
+            {
+                if (goalWork.InputSequence != admission.Input.Sequence) throw new SecurityConflictException("stale_goal_input_boundary");
+                var goalRow = await db.Set<SessionGoalRow>().Include(g => g.Checkpoints).SingleOrDefaultAsync(g => g.TenantId == root.TenantId && g.GoalId == goalWork.GoalId, ct) ?? throw new AccessDeniedException("resource_unavailable");
+                var goal = GoalPersistence.Value(goalRow); AgentCore.Application.Goals.GoalAuthority.Binding(goal, current, goalWork);
+                if (goal.Plan.DeadlineAt is { } deadline && deadline <= (clock ?? TimeProvider.System).GetUtcNow()) throw new SecurityConflictException("goal_deadline_elapsed");
+                var goalState = (await ReadTenantAsync(db, root.TenantId, ct))!;
+                foreach (var goalPermission in new[] { "goals.read", "goals.manage", "agent-runs.create" })
+                    await AgentCore.Application.Goals.GoalAuthority.Require(goalState, initiator.PrincipalId, goalPermission, goalPermission == "agent-runs.create" ? AccessScope.ForTenant(goal.TenantId) : TenantSessionRules.Scope(goal.TenantId, goal.SessionId), new(this), ct);
+                if (await db.AgentRuns.AnyAsync(r => r.SessionId == root.SessionId && r.Status != (int)AgentRunStatus.Completed && r.Status != (int)AgentRunStatus.Cancelled && r.Status != (int)AgentRunStatus.Failed, ct)) throw new SecurityConflictException("session_in_use");
+            }
             TenantVoiceRules.Speech(admission, initiator, root.Domain(), current.Mode, speechOperation);
             if (frame is not null)
             {
@@ -150,6 +161,18 @@ public sealed partial class SqliteIamStore
                     ?? throw new AccessDeniedException("attachment_unavailable"));
             TenantAttachmentBindingRules.Current(admission, attachmentRows.Select(SqliteAttachmentStore.Domain).ToArray(), (clock ?? TimeProvider.System).GetUtcNow());
             if (frame is not null) await new SqliteMemoryStore(contexts, clock ?? TimeProvider.System).StageTenantRuntimeSaveAsync(db, frame, liveSnapshot!, runtimeExpectedRevision, ct).ConfigureAwait(false);
+            if (run.Admission.GoalWork is { } admittedWork)
+            {
+                var goalRow = await db.Set<SessionGoalRow>().Include(g => g.Checkpoints).SingleAsync(g => g.TenantId == root.TenantId && g.GoalId == admittedWork.GoalId, ct);
+                var goal = GoalPersistence.Value(goalRow);
+                var changed = goal with { Revision = goal.Revision + 1, UpdatedAt = run.CreatedAtUtc,
+                    Checkpoints = goal.Checkpoints.Select(c => c.CheckpointId == admittedWork.CheckpointId ? c with { Status = AgentCore.Domain.Goals.GoalCheckpointStatus.InProgress, SourceRunId = run.AgentRunId } : c).ToArray() };
+                var mapped = GoalPersistence.Row(changed); db.Entry(goalRow).CurrentValues.SetValues(mapped);
+                foreach (var child in goalRow.Checkpoints) db.Entry(child).CurrentValues.SetValues(mapped.Checkpoints.Single(c => c.CheckpointId == child.CheckpointId));
+                var activity = new AgentCore.Domain.Goals.GoalActivity(audit.AuditId, goal.TenantId, goal.SessionId, goal.GoalId, initiator.PrincipalId,
+                    "work:" + run.Admission.Activation.DedupeKey, AgentCore.Domain.Goals.GoalRules.Hash(admittedWork), "WorkAdmitted", changed.Revision, goal.PlanRevision, run.CreatedAtUtc, admittedWork.CheckpointId, run.AgentRunId);
+                db.Add(GoalPersistence.Row(activity, changed));
+            }
             SqliteMemoryStore.ApplySession(row, value); db.Entries.Add(SqliteMemoryStore.ToRecord(root.SessionId, admission.Input));
             db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(value, run)); db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(run));
             db.ActivationSourceEntries.Add(new() { ActivationId = run.ActivationId.ToString("D"), SessionId = root.SessionId, EntryId = admission.Input.EntryId.ToString("D"), Ordinal = 0 });

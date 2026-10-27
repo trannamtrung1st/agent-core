@@ -61,6 +61,8 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
             throw ResetRequired("data_reset_required: Installed schema predates the canonical filesystem baseline.");
         if (migrations.LastOrDefault() == "20261027010000_UnifiedEvaluations" && applied.Length > 0 && applied.Length < migrations.Length)
             throw new InvalidOperationException(EvaluationCutover.Recovery);
+        if (applied.LastOrDefault() == "20261027020000_EvaluationSandboxExecutions" && !applied.Contains("20261027040000_SessionGoals", StringComparer.Ordinal))
+            throw new InvalidOperationException("Session Goal cutover required. Stop all writers and workers, back up SQLite and protected roots, inventory legacy Goal-purpose snapshots, then explicitly apply 20261027040000_SessionGoals with matching backend/SPA. Do not reset customer data. Repair any GoalPurposeCannotMap source before retrying; restore the matching backup to roll back. See docs/15-persistence-and-configuration.md#session-goal-persistence-and-cutover.");
         var isModelUpgrade = migrations.LastOrDefault() == "20261025090000_CanonicalModelIdentity"
             && applied.LastOrDefault() is "20261025085000_TenantDynamicModels" or "20261025080000_SpaceResourceApprovals"
             && applied.SequenceEqual(migrations.Take(applied.Length), StringComparer.Ordinal);
@@ -698,6 +700,9 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
             ? null
             : JsonSerializer.Serialize(snapshot.PinnedPersona, Json);
         row.PinnedPersonaRevision = snapshot.PinnedPersonaRevision;
+        row.FocusedGoalId = snapshot.FocusedGoalId?.ToString("D");
+        row.GoalFocusRevision = snapshot.GoalFocusRevision;
+        row.GoalFocusRequestId = snapshot.GoalFocusRequestId?.ToString("D");
         row.ContextSelectionJson = snapshot.ContextSelection is null ? null : JsonSerializer.Serialize(snapshot.ContextSelection, Json);
         row.PendingAgentInputIdsJson = JsonSerializer.Serialize(snapshot.PendingAgentInputIds, Json);
         row.OriginJson = JsonSerializer.Serialize(snapshot.Origin, Json);
@@ -847,7 +852,8 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
             JsonSerializer.Deserialize<Guid[]>(row.PendingAgentInputIdsJson, Json) ?? throw AgentCoreErrors.Persistence("Pending agent input intent is missing."),
             row.ContextSelectionJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Spaces.SessionContextSelection>(row.ContextSelectionJson, Json),
             (SessionRetentionKind)row.RetentionKind, row.RetainAfterTerminalDays, row.RetentionDueAtUtc is { } due ? FromUnix(due) : null,
-            snapshot.ModelPreferenceJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Models.ModelPreference>(snapshot.ModelPreferenceJson));
+            snapshot.ModelPreferenceJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Models.ModelPreference>(snapshot.ModelPreferenceJson),
+            row.FocusedGoalId is null ? null : Guid.Parse(row.FocusedGoalId), row.GoalFocusRevision, row.GoalFocusRequestId is null ? null : Guid.Parse(row.GoalFocusRequestId));
     }
 
     internal static ConversationEntry ToEntry(EntryRecord row) =>
@@ -905,7 +911,9 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
 
     private static SessionPurpose ReadPurpose(SnapshotRecord snapshot)
     {
-        var kind = ParseEnumOrNull<SessionPurposeKind>(snapshot.PurposeKind) ?? SessionPurposeKind.Ongoing;
+        var kind = snapshot.PurposeKind is null ? SessionPurposeKind.Ongoing
+            : Enum.TryParse<SessionPurposeKind>(snapshot.PurposeKind, out var parsed) && Enum.IsDefined(parsed) ? parsed
+            : throw AgentCoreErrors.Persistence("Session purpose requires the coordinated Session Goals cutover.");
         return new SessionPurpose(
             kind,
             snapshot.PurposeDescription,
@@ -1167,7 +1175,7 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
             await using var reader = await info.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                actual.Add(reader.GetString(2));
+                actual.Add(reader.IsDBNull(2) ? "" : reader.GetString(2));
             }
 
             if (actual.Count == columns.Length && actual.Zip(columns).All(pair => pair.First == pair.Second))
@@ -1205,7 +1213,7 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
             await using var reader = await info.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                actual.Add(reader.GetString(2));
+                actual.Add(reader.IsDBNull(2) ? "" : reader.GetString(2));
             }
 
             if (actual.Count == columns.Length && actual.Zip(columns).All(pair => pair.First == pair.Second))

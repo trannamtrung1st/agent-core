@@ -82,8 +82,8 @@ public sealed partial class SqliteIamStore
             await SettleTenantCompletion(db, cancelled, run.Claim?.Generation, ct).ConfigureAwait(false);
         }
         var next = TenantSessionMutations.RetireDue(current, now);
-        await RetireRunContent(db, owner.TenantId, owner.SessionId, now, ct).ConfigureAwait(false);
         SqliteMemoryStore.ApplySession(row, next);
+        await RetireRunContent(db, owner.TenantId, owner.SessionId, now, ct).ConfigureAwait(false);
         await TenantCoreEventProduction.StageSessionAsync(db, current, next, owner.Domain(), null, ct).ConfigureAwait(false);
         foreach (var entry in await db.Entries.Where(e => e.SessionId == owner.SessionId).ToArrayAsync(ct).ConfigureAwait(false)) RedactSessionEntry(entry);
         foreach (var memory in await db.Set<TenantLearnedMemoryRecord>().Where(m => m.TenantId == owner.TenantId && m.SessionId == owner.SessionId && m.Scope == 0 && m.Status != 2).ToArrayAsync(ct).ConfigureAwait(false))

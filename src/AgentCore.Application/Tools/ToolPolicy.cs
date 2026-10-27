@@ -206,6 +206,8 @@ public static class ToolPolicy
         if (descriptor.Name == ToolCatalog.SessionComplete)
             return context is { ModelSupportsTools: true, ExecutionContext: not null, DetachedExecution: false }
                 && context.CurrentContextTools.Contains(descriptor.Name, StringComparer.Ordinal);
+        if (GoalToolContract.IsTool(descriptor.Name))
+            return context is { ModelSupportsTools: true, ExecutionContext: not null } && context.CurrentContextTools.Contains(descriptor.Name, StringComparer.Ordinal) && AgentCore.Application.Agents.RolePermissions.AllowsTool(definition, descriptor.Name);
         if (TenantContextToolContract.IsTool(descriptor.Name))
             return context is { ModelSupportsTools: true, ExecutionContext: not null } && context.CurrentContextTools.Contains(descriptor.Name, StringComparer.Ordinal) && TenantContextToolContract.Allows(definition, descriptor.Name);
         if (context?.ExecutionContext is { } message && descriptor.Name == ToolCatalog.AppMessageSend)

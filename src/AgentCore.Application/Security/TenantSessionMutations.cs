@@ -55,7 +55,7 @@ public static class TenantSessionMutations
                 : LifecycleTransition.Apply(current, SessionLifecycleStatus.Active, LifecycleTransitionSource.User, at, "reopen"),
             TenantSessionAction.Complete => LifecycleTransition.Apply(current, SessionLifecycleStatus.Completed, LifecycleTransitionSource.User, at, "user-completed"),
             TenantSessionAction.Cancel => LifecycleTransition.Apply(current, SessionLifecycleStatus.Cancelled, LifecycleTransitionSource.User, at, "user-cancelled"),
-            TenantSessionAction.Delete => current with { DurablyDeletedAt = at, Entries = [], Summary = "", SummarizedThroughEntrySequence = 0,
+            TenantSessionAction.Delete => current with { FocusedGoalId = null, GoalFocusRequestId = null, DurablyDeletedAt = at, Entries = [], Summary = "", SummarizedThroughEntrySequence = 0,
                 SummaryFormatVersion = SummaryFormats.Legacy, SummaryGeneratedAt = null, SummaryModel = null, PendingTopic = null, PendingAgentInputIds = [], PendingMode = null },
             _ => throw AgentCoreErrors.Validation("Unknown Session action.")
         };

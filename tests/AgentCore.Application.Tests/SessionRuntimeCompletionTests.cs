@@ -138,7 +138,7 @@ public sealed class SessionRuntimeCompletionTests
             null,
             now,
             now,
-            Purpose: new SessionPurpose(SessionPurposeKind.Goal, "Collect a spoken sample"),
+            Purpose: new SessionPurpose(SessionPurposeKind.Ongoing, "Collect a spoken sample"),
             CompletionPolicy: new SessionCompletionPolicy(authority, true, true), AgentInstanceId: Guid.NewGuid());
 
     private static SessionRuntime Create(

@@ -31,11 +31,11 @@ public static class TenantApprovalContinuationRules
         var old = source.Admission;
         var admission = new AgentRunAdmission(activation, old.DefinitionId, old.DefinitionVersion, old.PinnedPersona, old.ResponseId, old.OutputContract,
             old.ExecutionBudget, old.Configuration, old.ComposerInput, old.TaskIntent, context,
-            new(source.AgentRunId, request.RequestId, request.Operation.OperationId, request.Operation.ActionHash, Inputs(source)));
+            new(source.AgentRunId, request.RequestId, request.Operation.OperationId, request.Operation.ActionHash, Inputs(source)), old.GoalWork);
         return source.ForkApprovalContinuation(ids.RunId, admission, request.RequestId, at);
     }
 
-    private static string CompletionEvidence(AgentRun source) => TenantConfigurationContinuationRules.Target(source) is not null || TenantContextContinuationRules.InputBoundary(source) is not null
+    private static string CompletionEvidence(AgentRun source) => TenantConfigurationContinuationRules.Target(source) is not null || TenantContextContinuationRules.InputBoundary(source) is not null || source.Admission.Activation.Kind == ActivationKind.GoalContinuation
         ? source.Admission.Activation.EvidenceJson! : source.Admission.OutputContract == AgentRunOutputContract.CompletionReport
         ? source.Admission.Activation.EvidenceJson ?? throw new AccessDeniedException("completion_input_unavailable")
         : JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(source.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome || TenantTaskExecutionContract.IsIndependent(source) ? TriggerKind.ManualInvocation : TriggerKind.UserTurn,

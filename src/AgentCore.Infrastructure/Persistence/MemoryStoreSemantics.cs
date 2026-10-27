@@ -43,6 +43,8 @@ internal static class MemoryStoreSemantics
         && left.RetentionKind == right.RetentionKind
         && left.RetainAfterTerminalDays == right.RetainAfterTerminalDays
         && left.RetentionDueAtUtc == right.RetentionDueAtUtc
+        && left.FocusedGoalId == right.FocusedGoalId && left.GoalFocusRevision == right.GoalFocusRevision && left.GoalFocusRequestId == right.GoalFocusRequestId
+        && left.ContextSelection == right.ContextSelection
         && left.Surfaces == right.Surfaces
         && IncomingEntriesMatch(left.Entries, right.Entries);
 

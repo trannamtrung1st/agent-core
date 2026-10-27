@@ -21,7 +21,7 @@ public static class CompletionEvaluator
     {
         var purpose = snapshot.Purpose ?? SessionPurpose.OngoingDefault;
         var policy = snapshot.CompletionPolicy ?? SessionCompletionPolicy.Default;
-        return purpose.Kind == SessionPurposeKind.Goal
+        return !string.IsNullOrWhiteSpace(purpose.Description)
             && policy.AgentCompletion != AgentCompletionAuthority.Disabled
             && !SessionLifecycle.IsTerminal(snapshot.LifecycleStatus)
             && snapshot.Status is not (SessionStatus.Ended or SessionStatus.Ending or SessionStatus.Paused);

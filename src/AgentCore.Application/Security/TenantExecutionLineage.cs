@@ -87,7 +87,7 @@ public static class TenantExecutionLineage
                     throw new AccessDeniedException("tenant_lineage_unavailable");
                 return run;
             }
-            if (context.Origin is not (ExecutionOrigin.ImmediateBackground or ExecutionOrigin.CompletionReport or ExecutionOrigin.ApprovalContinuation or ExecutionOrigin.ConfigurationContinuation or ExecutionOrigin.ContextContinuation)
+            if (context.Origin is not (ExecutionOrigin.ImmediateBackground or ExecutionOrigin.CompletionReport or ExecutionOrigin.ApprovalContinuation or ExecutionOrigin.ConfigurationContinuation or ExecutionOrigin.ContextContinuation or ExecutionOrigin.GoalContinuation)
                 || context.ParentRunId is not { } parentId || context.ParentActivationId is not { } activationId)
                 throw new AccessDeniedException("tenant_lineage_unavailable");
             var parent = await runReader(parentId, ct).ConfigureAwait(false)
@@ -115,6 +115,12 @@ public static class TenantExecutionLineage
                 }
                 else if (childRoot.Admission.Activation.SourceSessionId != run.SessionId) throw new AccessDeniedException("tenant_lineage_unavailable");
             }
+            if (context.Origin == ExecutionOrigin.GoalContinuation
+                && (a.Kind != ActivationKind.GoalContinuation || parent.Status != AgentRunStatus.Completed || parent.CancellationRequested
+                    || parent.SessionId != run.SessionId || run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
+                    || a.SourceEventId != parent.ActivationId || a.SourceEntryIds.Count != 0 || run.MaxAttempts != 1
+                    || run.Admission.GoalWork is not { } goal || parent.Admission.GoalWork?.GoalId != goal.GoalId
+                    || a.DedupeKey != $"goal:{parent.AgentRunId:N}:{goal.GoalId:N}:{goal.PlanRevision}")) throw new AccessDeniedException("tenant_lineage_unavailable");
             if (context.Origin == ExecutionOrigin.ContextContinuation
                 && (a.Kind != ActivationKind.ContextContinuation || parent.Status != AgentRunStatus.Completed || parent.CancellationRequested
                     || parent.SessionId != run.SessionId || run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse

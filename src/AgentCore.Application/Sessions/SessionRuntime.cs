@@ -774,6 +774,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             job.Ended?.TrySetResult(false);
             job.HumanInputCompleted?.TrySetResult(job.InputCommit);
             job.ContextCompleted?.TrySetResult(job.ContextResult);
+            job.GoalFocusCompleted?.TrySetResult(job.GoalFocusResult);
             job.Applied.TrySetResult();
         }
 
@@ -1082,6 +1083,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case TenantInputReceived tenantInput:
                     HandleTenantInput(tenantInput);
                     break;
+                case GoalFocusReceived goalFocus:
+                    HandleGoalFocus(goalFocus);
+                    break;
                 case TenantContextReceived tenantContext:
                     HandleTenantContext(tenantContext);
                     break;
@@ -1233,6 +1237,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case TenantInputReceived tenantInput:
                 tenantInput.Completed.TrySetResult(null);
+                break;
+            case GoalFocusReceived goalFocus:
+                goalFocus.Completed.TrySetResult(null);
                 break;
             case TenantContextReceived tenantContext:
                 tenantContext.Completed.TrySetResult(null);
@@ -2399,7 +2406,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ExecutionContext = capturedRun?.Admission.ExecutionContext,
                     RequesterContext = await RequesterContextAsync(capturedRun, evaluationToken).ConfigureAwait(false),
                     ApprovalOutcome = capturedApprovalOutcome,
-                    RunTaskIntent = capturedRun?.Admission.TaskIntent,
+                    GoalWork = capturedRun?.Admission.GoalWork, RunTaskIntent = capturedRun?.Admission.TaskIntent,
                     CurrentUserEntryIds = trigger.Kind == TriggerKind.UserTurn ? capturedRun?.Admission.Activation.SourceEntryIds : null
                 };
                 var brainStarted = Stopwatch.GetTimestamp();
@@ -6016,6 +6023,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         public TenantMemoryPlan? LearningPlan { get; init; }
         public TenantDeliveryReceipt? Receipt { get; init; }
         public TenantSessionForeground? Foreground { get; init; }
+        public GoalFocus? GoalFocus { get; init; }
+        public TaskCompletionSource<GoalFocusResult?>? GoalFocusCompleted { get; init; }
+        public GoalFocusResult? GoalFocusResult { get; set; }
         public TenantContextSwitch? ContextSwitch { get; init; }
         public TaskCompletionSource<TenantContextSwitchResult?>? ContextCompleted { get; init; }
         public TenantContextSwitchResult? ContextResult { get; set; }
@@ -6107,7 +6117,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         TaskCompletionSource<bool>? ended = null,
         bool userConversationTerminal = false,
         AgentRun? admittedRun = null,
-        AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null, IReadOnlyList<Guid>? completionSourceRunIds = null, bool tenantApprovalBarrier = false, TenantDeliveryReceipt? tenantReceipt = null, TenantSessionForeground? tenantForeground = null, TenantHumanInput? tenantInput = null, TaskCompletionSource<TenantHumanInputCommit?>? tenantInputCompleted = null, TenantContextSwitch? tenantContext = null, TaskCompletionSource<TenantContextSwitchResult?>? tenantContextCompleted = null)
+        AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null, IReadOnlyList<Guid>? completionSourceRunIds = null, bool tenantApprovalBarrier = false, TenantDeliveryReceipt? tenantReceipt = null, TenantSessionForeground? tenantForeground = null, TenantHumanInput? tenantInput = null, TaskCompletionSource<TenantHumanInputCommit?>? tenantInputCompleted = null, TenantContextSwitch? tenantContext = null, TaskCompletionSource<TenantContextSwitchResult?>? tenantContextCompleted = null, GoalFocus? goalFocus = null, TaskCompletionSource<GoalFocusResult?>? goalFocusCompleted = null)
     {
         if (_tenantTerminalCommitted || (_tenantApprovalPending || _tenantApprovalSuspended) && !tenantApprovalBarrier)
         { ended?.TrySetResult(false); tenantInputCompleted?.TrySetResult(null); return; }
@@ -6125,7 +6135,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             BeginUserConversationTerminalPersist();
         }
 
-        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal, admittedRun, runOutcome, completionSourceRunId, completionSourceRunIds) { OnAdmitted = onAdmitted, LearningPlan = userConversationTerminal ? _tenantMemoryPlan : null, Receipt = tenantReceipt, Foreground = tenantForeground, HumanInput = tenantInput, HumanInputCompleted = tenantInputCompleted, ContextSwitch = tenantContext, ContextCompleted = tenantContextCompleted };
+        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal, admittedRun, runOutcome, completionSourceRunId, completionSourceRunIds) { OnAdmitted = onAdmitted, LearningPlan = userConversationTerminal ? _tenantMemoryPlan : null, Receipt = tenantReceipt, Foreground = tenantForeground, HumanInput = tenantInput, HumanInputCompleted = tenantInputCompleted, ContextSwitch = tenantContext, ContextCompleted = tenantContextCompleted, GoalFocus = goalFocus, GoalFocusCompleted = goalFocusCompleted };
         BeginWork();
         _pendingPersist[token] = job;
         if (!_persistJobs.Writer.TryWrite(job))
@@ -6166,11 +6176,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     _snapshot = _snapshot with { Status = _durableSnapshot.Status, LifecycleStatus = _durableSnapshot.LifecycleStatus,
                         LifecycleReason = _durableSnapshot.LifecycleReason, LifecycleSource = _durableSnapshot.LifecycleSource,
                         LifecycleChangedAt = _durableSnapshot.LifecycleChangedAt, RetentionDueAtUtc = _durableSnapshot.RetentionDueAtUtc };
-                if (job.Receipt is not null || job.Foreground is not null || job.HumanInput is not null || job.ContextSwitch is not null)
+                if (job.Receipt is not null || job.Foreground is not null || job.HumanInput is not null || job.ContextSwitch is not null || job.GoalFocus is not null)
                 {
                     // A refused human receipt/surface change must not fail the independently
                     // authorized Run or leak uncommitted state into an ordinary snapshot.
-                    job.Ended?.TrySetException(input.Error); job.HumanInputCompleted?.TrySetException(input.Error); job.ContextCompleted?.TrySetException(input.Error); return;
+                    job.Ended?.TrySetException(input.Error); job.HumanInputCompleted?.TrySetException(input.Error); job.ContextCompleted?.TrySetException(input.Error); job.GoalFocusCompleted?.TrySetException(input.Error); return;
                 }
                 if (_runtimeOwner?.TenantId is not null && _boundAgentRun is not null
                     && input.Error is AgentCore.Application.Security.AccessDeniedException denied
@@ -6244,7 +6254,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (job.Receipt is { } receipt && saved.Entries.SingleOrDefault(e => e.EntryId == receipt.EntryId) is { } received)
                     _tenantReceiptEvidence[received.EntryId] = received;
                 if (job.InputCommit?.Admission.Created != false) AdoptPersisted(job.Proposed, saved, job.Kind);
-                if (_runtimeOwner?.TenantId is not null) _snapshot = CarryTenantReceipts(_snapshot, saved) with { ContextSelection = saved.ContextSelection, Surfaces = _snapshot.Surfaces | saved.Surfaces,
+                if (_runtimeOwner?.TenantId is not null) _snapshot = CarryTenantReceipts(_snapshot, saved) with { FocusedGoalId = saved.FocusedGoalId, GoalFocusRevision = saved.GoalFocusRevision, GoalFocusRequestId = saved.GoalFocusRequestId, ContextSelection = saved.ContextSelection, Surfaces = _snapshot.Surfaces | saved.Surfaces,
                     LastEntrySequence = Math.Max(_snapshot.DurableLastEntrySequence, saved.DurableLastEntrySequence),
                     LastUserActivityAt = (_snapshot.LastUserActivityAt ?? DateTimeOffset.MinValue) > (saved.LastUserActivityAt ?? DateTimeOffset.MinValue) ? _snapshot.LastUserActivityAt : saved.LastUserActivityAt };
                 if (job.InputCommit?.Interrupted is { } interrupted)
@@ -6296,6 +6306,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             CompleteTenantInputInterruption(job.HumanInputCompleted);
             job.HumanInputCompleted?.TrySetResult(job.InputCommit);
             job.ContextCompleted?.TrySetResult(job.ContextResult);
+            job.GoalFocusCompleted?.TrySetResult(job.GoalFocusResult);
             job.Applied.TrySetResult();
         }
     }
@@ -6404,7 +6415,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     }
 
     private static bool IsCoalescableCheckpoint(PersistJob job) =>
-        job.Kind == PersistKind.Checkpoint && job.Then is null && job.Ended is null && job.HumanInput is null && job.ContextSwitch is null;
+        job.Kind == PersistKind.Checkpoint && job.Then is null && job.Ended is null && job.HumanInput is null && job.ContextSwitch is null && job.GoalFocus is null;
 
     private async Task<PersistJob> CoalesceQueuedCheckpointsAsync(PersistJob job, CancellationToken cancellationToken)
     {
@@ -6444,6 +6455,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         job.Ended?.TrySetResult(false);
         if (error is not null) job.HumanInputCompleted?.TrySetException(error);
         else job.HumanInputCompleted?.TrySetResult(job.InputCommit);
+        if (error is not null) job.GoalFocusCompleted?.TrySetException(error);
+        else job.GoalFocusCompleted?.TrySetResult(job.GoalFocusResult);
         if (error is not null) job.ContextCompleted?.TrySetException(error);
         else job.ContextCompleted?.TrySetResult(job.ContextResult);
         job.Applied.TrySetResult();
@@ -6539,7 +6552,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         // the atomic terminal path, rather than a possibly older mailbox projection.
         var tenantTerminalRun = job.UserConversationTerminal && _boundAgentRun is { } terminalSource
             ? await _agentRuns.GetAsync(terminalSource.Owner, terminalSource.AgentRunId, cancellationToken).ConfigureAwait(false) : null;
-        if (job.ContextSwitch is { } contextSwitch)
+        if (_runtimeOwner?.TenantId is not null && job.GoalFocus is null) toSave = toSave with { FocusedGoalId = _durableSnapshot.FocusedGoalId, GoalFocusRevision = _durableSnapshot.GoalFocusRevision, GoalFocusRequestId = _durableSnapshot.GoalFocusRequestId };
+        if (job.GoalFocus is { } focus)
+        {
+            // Resolve from the latest durable fence, not an older queued checkpoint.
+            toSave = toSave with { FocusedGoalId = focus.GoalId, GoalFocusRevision = _durableSnapshot.GoalFocusRevision + 1, GoalFocusRequestId = focus.RequestId };
+            job.GoalFocusResult = await ((ITenantRuntimeGoalWriter)_store).SaveGoalFocusAsync(toSave, _durableRevision, focus, cancellationToken).ConfigureAwait(false);
+            toSave = toSave with { Revision = job.GoalFocusResult.SessionRevision };
+        }
+        else if (job.ContextSwitch is { } contextSwitch)
         {
             job.ContextResult = await ((ITenantRuntimeContextWriter)_store).SaveContextAsync(toSave, _durableRevision, contextSwitch, cancellationToken).ConfigureAwait(false);
             toSave = toSave with { ContextSelection = job.ContextResult.Selection, Revision = job.ContextResult.SessionRevision };

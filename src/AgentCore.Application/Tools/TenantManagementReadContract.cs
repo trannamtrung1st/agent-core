@@ -22,7 +22,7 @@ public static class TenantManagementReadContract
         && definition.SelfManagement is { } policy && ManagementTools.Enabled(policy)
         && (ManagementTools.Area(tool) is not { } scope || policy.Allows(scope));
     public static bool Shape(TrustedExecutionContext? execution, AgentRunOutputContract output, AgentRunTaskIntent? intent) =>
-        execution is { OriginalInitiatorPrincipalId: not null, Origin: ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation or ExecutionOrigin.ContextContinuation }
+        execution is { OriginalInitiatorPrincipalId: not null, Origin: ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation or ExecutionOrigin.ContextContinuation or ExecutionOrigin.GoalContinuation }
         && output == AgentRunOutputContract.ConversationResponse && intent?.Source != AgentRunTaskSource.Automation;
     public static bool Allows(AgentRun run) => Shape(run.Admission.ExecutionContext, run.Admission.OutputContract, run.Admission.TaskIntent);
     public static IReadOnlyList<string> Allowed(AgentDefinition definition, AgentContext? context)

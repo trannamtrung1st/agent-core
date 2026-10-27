@@ -82,6 +82,7 @@ export type SessionResponse = {
 };
 
 export type AgentRun = {
+  goal?: { goalId: string; checkpointId: string; planRevision: number } | null;
   verificationSummary?: { status: string; requiredChecks: number; passedChecks: number; attemptIds: string[] } | null;
   evaluationUrl?: string;
   taskIntent?: string | null;

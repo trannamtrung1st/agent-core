@@ -73,6 +73,7 @@ public sealed record AgentContext(
     public string? EffectiveSpeechLocale { get; init; }
     public AgentRunConfiguration? Configuration { get; init; }
     public AgentRunContinuitySettings? CurrentContinuitySettings { get; init; }
+    public AgentCore.Domain.Goals.GoalWorkContext? GoalWork { get; init; }
     public AgentRunTaskIntent? RunTaskIntent { get; init; }
     public TrustedExecutionContext? ExecutionContext { get; init; }
     public Security.TenantRequesterContext? RequesterContext { get; init; }

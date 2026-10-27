@@ -8,6 +8,7 @@ public sealed partial class InMemoryIamStore
     // The caller holds the IAM and backing admission gates, as for normal deletion.
     private void RetireRunContent(Guid tenant, Guid session, DateTimeOffset at)
     {
+        RetireGoals(tenant, session);
         foreach (var run in sessionBacking.AgentRuns.Runs.Values.Where(r => r.Owner.TenantId == tenant && r.SessionId == session).ToArray())
         {
             var reportPending = sessionBacking.AgentRuns.CompletionReceipts.TryGetValue(run.AgentRunId, out var row)

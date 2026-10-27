@@ -27,7 +27,7 @@ public sealed partial class InMemoryIamStore
         }
     }
     private void SaveTenantRuntimeState(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision,
-        DateTimeOffset at, bool foreground = false, bool contextSwitch = false)
+        DateTimeOffset at, bool foreground = false, bool contextSwitch = false, bool goalFocus = false)
     {
         var previous = sessionBacking.ReadTenantSession(frame.Owner.TenantId!.Value, frame.SessionId)
             ?? throw new AccessDeniedException("session_unavailable");
@@ -52,7 +52,7 @@ public sealed partial class InMemoryIamStore
                 fact = CoreEventPersistence.Session(previous.Snapshot, snapshot, TenantCoreRoot(run),
                     TriggerOwner.ForTenant(frame.Owner.TenantId.Value, frame.Owner.AgentInstanceId, frame.Owner.ExecutorPrincipalId!.Value));
         }
-        sessionBacking.SaveTenantRuntime(frame, snapshot, expectedRevision, at, foreground, contextSwitch);
+        sessionBacking.SaveTenantRuntime(frame, snapshot, expectedRevision, at, foreground, contextSwitch, goalFocus);
         AppendTenantCore(fact);
     }
     private void AppendTenantCoreRun(AgentRun previous, AgentRun next)
