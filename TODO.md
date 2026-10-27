@@ -151,6 +151,7 @@ These are strategy ideas, not software features or implementation commitments.
 
 - **Human AI Reviewer / Auditor:** a potential human role reviewing agent work, system quality, safety and operational efficiency, including whether AI reduces operating cost. This is not a new AI Auditor feature and is separate from automated Evaluation.
 - **Marketing & Commercialization:** KOL/influencer reviews and partnerships; community/forum posts, demonstrations, tutorials and social media. Preserve the commercial video concept: one person appears to work alongside several coworkers throughout a day; the ending reveals collaboration with Agent Core agents. Explore AI employees as a possible future offering, and subscriptions, BYOK, bundled provider usage, pricing and billing as business-model options.
+- **Idea**: maybe you don't need a strong AI to make you less capable, but need a helpful, economical and controllable to help you achieve your goal [TBD].
 
 ## Maintainer notes
 
