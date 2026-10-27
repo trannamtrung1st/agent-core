@@ -21,6 +21,6 @@ public sealed partial class InMemoryIamStore
         if (admission && (space.Revision != pin.SpaceRevision || member!.Revision != pin.MembershipRevision
             || pin.EnvironmentId is { } selected && FindEnvironmentAsync(tenant, pin.SpaceId, selected, ct).Result?.Revision != pin.EnvironmentRevision))
             throw new SecurityConflictException("space_context_changed");
-        await TenantSpaceContextResolver.RequireCurrentPermissionsAsync(state, run.Owner.ExecutorPrincipalId!.Value, pin.SpaceId, pin.EnvironmentId is not null, iam, ct, run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId).ConfigureAwait(false);
+        await TenantSpaceContextResolver.RequireCurrentPermissionsAsync(state, run.Owner.ExecutorPrincipalId!.Value, pin.SpaceId, pin.EnvironmentId is not null, iam, ct, run.Admission.DelegatedTask is null && run.Admission.AgentMessage is null ? run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId : null).ConfigureAwait(false);
     }
 }

@@ -15,7 +15,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_Artifact_source_captures_owned_binary_bytes_and_refuses_changed_source(bool sqlite, bool working)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         byte[] original = [0, 255, 128, 1, 2, 3]; await SeedRuntimeWorkspace(f, s, working, "source.bin", original);
         var owner = WorkspaceOwner(s, working);
         var path = owner.LogicalRoot + "/source.bin";
@@ -43,7 +43,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [InlineData(false, false, true)] [InlineData(true, false, true)] [InlineData(false, true, true)] [InlineData(true, true, true)]
     public async Task Tenant_Artifact_sources_preserve_complete_Office_packages_and_actual_owned_location(bool sqlite, bool workbook, bool working)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var processor = new OfficeProcessor();
         var bytes = workbook ? processor.CreateWorkbook(new([new("Dữ liệu", [[new("number", Number: 0), new("boolean", Boolean: false), new("text", Text: "Private Office body")]])]), default).Bytes
             : processor.CreateDocument(new("Exact report", [new(null, ["Private Office body: thử nghiệm"], null)]), default).Bytes;
@@ -58,7 +58,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_Artifact_source_refuses_foreign_same_Account_owners_mismatched_Sessions_and_nonconcrete_paths_without_creating_roots(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var store = WorkspaceReader(f);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var store = WorkspaceReader(f);
         var system = (await f.Iam.ReadSystemAsync()).Principals.Single(p => p.AccountId == s.Owner.AccountId);
         var beta = await f.Access.CreateTenantAsync(system.PrincipalId, s.Owner.AccountId, "Beta", "beta");
         var betaActor = s.Owner with { PrincipalId = beta.Users.Single().PrincipalId };
@@ -81,7 +81,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_Artifact_source_applies_configured_and_global_bounds_and_revalidation_reports_missing_source_safely(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         await SeedRuntimeWorkspace(f, s, false, "source.bin", [0, 1, 2, 3, 4]); var owner = WorkspaceOwner(s);
         var restricted = new FileSpaceWorkspaceStore(Path.Combine(f.Root, "workspaces"), (ITenantSpaceStore)f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantAgentDecommissionStore)f.Iam, f.Sandboxes, maxFileBytes: 4);
         Assert.Equal("WorkspaceQuotaExceeded", (await Assert.ThrowsAsync<AgentCoreException>(() => restricted.CaptureArtifactSourceTenantAsync(owner, "/home/source.bin").AsTask())).Code);

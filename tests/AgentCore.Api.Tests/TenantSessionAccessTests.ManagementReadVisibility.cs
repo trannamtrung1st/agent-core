@@ -45,7 +45,7 @@ public sealed partial class TenantSessionAccessTests
             var members = await Json(await owner.GetAsync(api + "/members"));
             var principal = members.GetProperty("items").EnumerateArray().Single(x => x.GetProperty("login").GetString() == "MANAGEMENT-OBSERVER@EXAMPLE.TEST").GetProperty("principalId").GetGuid();
             var readRole = await Json(await owner.PostAsJsonAsync(api + "/roles", new { name = "Exact Agent read", permissions = new[] { "agents.read" }, expectedRevision = await Revision(owner, tenant) }));
-            var other = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
+            var other = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 35, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
             foreach (var target in new[] { other, instance })
             {
                 var assignment = await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = principal, roleId = readRole.GetProperty("roleId").GetGuid(), resourceType = "agent", resourceId = target, expectedRevision = await Revision(owner, tenant) });

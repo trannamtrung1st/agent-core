@@ -5,6 +5,7 @@ import { navigateToAppPath } from '../../app/appRoute';
 import type { TenantContext } from '../../services/identity';
 import { tenantAgentApi, type TenantAgentEditor } from '../../services/tenantAgentConfiguration';
 import { tenantActivitySource } from '../../services/tenantActivity';
+import { InstanceCommunicationSection } from '../admin/InstanceCommunicationSection';
 import { InstanceSessionsSection } from '../admin/InstanceActivitySection';
 import { InstanceRunsSection } from '../admin/InstanceRunsSection';
 import { AccessError, AccessLoading } from './AccessFeedback';
@@ -27,6 +28,7 @@ export function TenantAgentActivity({ context, id, page }: { context: TenantCont
       <Button onClick={() => { view.reload(); setReload(value => value + 1); }}>Reload Activity</Button></Flex>
     {view.loading ? <AccessLoading /> : view.error ? <AccessError error={view.error} retry={view.reload} /> : view.data && <>
       <TenantAgentHeading view={view.data} configuration={false} archivedDescription="Activity remains readable. Restore this instance before continuing its conversations." />
+      <InstanceCommunicationSection key={`${tenant}:${id}:${context.principalId}`} tenant={tenant} instance={id} />
       {page === 'activity-sessions' ? <InstanceSessionsSection key={`${source.scope}:${reload}`} instanceId={id} open archived={view.data.agent.instance.lifecycle !== 'Active'} source={source} activityPath={path} /> : <>
         <InstanceRunsSection key={`${source.scope}:${reload}`} instanceId={id} open inline onClose={() => undefined} source={source} activityPath={path} onRun={select} />
         <InstanceRunsSection instanceId={id} open={!!runId} selectedAgentRunId={runId} detailsOnly afterClose={() => { if (runOpener.current?.isConnected) runOpener.current.focus(); }} onClose={() => select()} source={source} activityPath={path} />

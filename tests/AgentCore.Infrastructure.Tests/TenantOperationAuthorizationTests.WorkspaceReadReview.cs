@@ -21,7 +21,7 @@ public sealed partial class TenantOperationAuthorizationTests
 
     private async Task WorkspaceReadReviewJourney(bool sqlite, bool working, bool list, bool search = false)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, working); var grant = await GrantWorkspaceRuntimeReads(f, s);
         await Policies(f).SaveAsync(s.Tenant, s.Owner, "workspaces.read", new(OperationApprovalMode.Always, false), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 0);
         var runtime = (ITenantRuntimeStore)f.Iam; var runs = (ITenantRunStore)f.Iam; var reads = WorkspaceRuntimeReads(f);

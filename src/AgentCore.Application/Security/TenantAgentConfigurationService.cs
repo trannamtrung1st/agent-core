@@ -51,6 +51,14 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
 
     }
 
+    public ValueTask<TenantAgent> UpdateCooperationAsync(Guid actor, Guid tenant, Guid id, AgentCore.Domain.Tasks.AgentCooperationPolicy policy,
+        long securityRevision, long instanceRevision, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate(id, async token =>
+    {
+        policy.Validate();
+        var state = await ChangeState(actor, tenant, id, securityRevision, token).ConfigureAwait(false);
+        return await Commit(actor, tenant, state, new(id, instanceRevision, Cooperation: policy), "agents.cooperation.update", token, initiator).ConfigureAwait(false);
+    }, ct);
+
     public ValueTask<TenantAgent> UpdatePersonaAsync(Guid actor, Guid tenant, Guid id, AgentIdentity persona,
         long securityRevision, long instanceRevision, long personaRevision, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate(id, async token =>
     {

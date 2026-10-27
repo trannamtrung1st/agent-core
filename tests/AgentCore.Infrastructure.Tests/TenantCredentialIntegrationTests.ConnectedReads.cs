@@ -37,7 +37,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var human = new HumanSessionReference(owner.AccountId, session.SessionId, owner.OwnerPrincipalId);
         var credential = await ConnectForCheck(f, owner.TenantId, new(human.AccountId, human.AuthenticationSessionId, human.PrincipalId), purpose);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision;
-        var agent = await f.Agents.CreateAsync(human.PrincipalId, owner.TenantId, "general-assistant", 32, await Revision());
+        var agent = await f.Agents.CreateAsync(human.PrincipalId, owner.TenantId, "general-assistant", 35, await Revision());
         var value = (await f.Credentials.FindTenantCredentialAsync(owner.TenantId, credential))!.Value;
         await f.BindingService.BindAsync(human.PrincipalId, owner.TenantId, agent.Instance.InstanceId, credential, "exact-account", await Revision(), agent.Instance.Revision, value.Revision);
         return new(owner.TenantId, agent.Instance.InstanceId, credential, human);

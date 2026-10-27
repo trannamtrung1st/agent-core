@@ -30,7 +30,7 @@ public sealed partial class SqliteIamStore
     }
     private async ValueTask<TenantSession?> ReadSandboxSession(AgentCoreDbContext db, Guid tenant, Guid session, CancellationToken ct)
     {
-        var root = await db.Set<TenantSessionRecord>().AsNoTracking().SingleOrDefaultAsync(s => s.TenantId == tenant && s.SessionId == session.ToString("D"), ct).ConfigureAwait(false);
+        var root = await OwnedSessions(db, tenant, session.ToString("D")).AsNoTracking().SingleOrDefaultAsync(s => s.SessionId == session.ToString("D"), ct).ConfigureAwait(false);
         if (root is null) return null;
         var row = await db.Sessions.AsNoTracking().Include(s => s.Snapshot).SingleOrDefaultAsync(s => s.SessionId == root.SessionId && s.DurablyDeletedAtUtc == null && (s.RetentionDueAtUtc == null || s.RetentionDueAtUtc > (clock ?? TimeProvider.System).GetUtcNow().ToUnixTimeMilliseconds()), ct).ConfigureAwait(false);
         return row is null ? null : new(root.Domain(), SqliteMemoryStore.ToSnapshot(row, []));

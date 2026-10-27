@@ -6,27 +6,9 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class SyntheticAuthorizationAuditTests
 {
-    [Theory] [InlineData(true)] [InlineData(false)]
-    public async Task Synthetic_completion_read_continuation_uses_saved_consent_without_original_prompt(bool approved)
-    {
-        var child = Guid.NewGuid();
-        var request = new ModelRequest(Guid.NewGuid(), [new(ModelRole.System, "Continue the approved task."),
-            new(ModelRole.Tool, System.Text.Json.JsonSerializer.Serialize(new { backgroundSessionId = child }), ToolCallId: "read-start", Name: ToolCatalog.BackgroundStart),
-            new(ModelRole.Tool, "{}", ToolCallId: "read-duration", Name: ToolCatalog.ExecutionWait),
-            new(ModelRole.Tool, approved ? """{"readAuthorized":true,"completion":{}}""" : """{"readAuthorized":false}""", ToolCallId: "read-consent", Name: ToolCatalog.RequestAuthorization)]);
-        var events = new List<ModelGenerationEvent>();
-        await foreach (var item in new ScriptedLanguageModel(["fallback"]).GenerateAsync(request)) events.Add(item);
-        if (approved)
-        {
-            var call = Assert.Single(events.OfType<ModelToolCallEvent>()).Call;
-            Assert.Equal(ToolCatalog.BackgroundInspect, call.Name); Assert.Contains(child.ToString("D"), call.ArgumentsJson);
-        }
-        else Assert.Contains(events.OfType<ModelTextDelta>(), item => item.Text.Contains("not delivered", StringComparison.Ordinal));
-    }
-
     [Theory]
     [InlineData(true)] [InlineData(false)]
-    public async Task Synthetic_background_creation_continuation_reports_saved_result_without_original_prompt(bool started)
+    public async Task Synthetic_retired_creation_receipt_never_resumes_child_admission(bool started)
     {
         var call = new ModelToolCall("review-creation", ToolCatalog.RequestAuthorization,
             """{"operation":"start_background_work","task":{"objective":"Check progress","title":"Progress","reportCompletion":true}}""");
@@ -36,21 +18,21 @@ public sealed class SyntheticAuthorizationAuditTests
         var events = new List<ModelGenerationEvent>();
         await foreach (var item in new ScriptedLanguageModel(["fallback"]).GenerateAsync(request)) events.Add(item);
         Assert.Empty(events.OfType<ModelToolCallEvent>());
-        Assert.Contains(events.OfType<ModelTextDelta>(), item => item.Text.Contains(started ? "exact reviewed background task was created" : "not authorized", StringComparison.Ordinal));
+        Assert.Contains(events, item => item is ModelCompleted);
     }
 
     [Fact]
-    public async Task Synthetic_background_creation_allowed_policy_uses_direct_tool_once()
+    public async Task Synthetic_retired_creation_allowed_result_never_creates_a_child()
     {
         var call = new ModelToolCall("check-creation", ToolCatalog.RequestAuthorization,
             """{"operation":"start_background_work","task":{"objective":"Check progress","title":"Progress","reportCompletion":true}}""");
         var request = new ModelRequest(Guid.NewGuid(), [new(ModelRole.User, "[test:background-start] [test:background-creation-review]"),
             new(ModelRole.Assistant, "", ToolCalls: [call]),
             new(ModelRole.Tool, """{"decision":"allowed"}""", ToolCallId: call.Id, Name: call.Name)],
-            Tools: [TenantApprovalToolContract.Descriptor(backgroundStart: true).ModelDefinition, new(ToolCatalog.BackgroundStart, "Start", "{}")]);
+            Tools: [TenantApprovalToolContract.Descriptor(taskDelegation: true).ModelDefinition, new("background.start", "Start", "{}")]);
         var events = new List<ModelGenerationEvent>();
         await foreach (var item in new ScriptedLanguageModel(["fallback"]).GenerateAsync(request)) events.Add(item);
-        Assert.Equal(ToolCatalog.BackgroundStart, Assert.Single(events.OfType<ModelToolCallEvent>()).Call.Name);
+        Assert.Empty(events.OfType<ModelToolCallEvent>());
     }
     [Theory]
     [InlineData("work-drive", true)] [InlineData("bad/reference", true)] [InlineData("work-drive", false)]

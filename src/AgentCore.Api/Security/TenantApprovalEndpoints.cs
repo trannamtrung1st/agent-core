@@ -52,9 +52,8 @@ public static class TenantApprovalEndpoints
             TenantOperationKind.AutomationRead => ("Inspect exact Automation metadata", "inspect_automations"),
             TenantOperationKind.AutomationAdmission => ("Admit exact Automation occurrence", "admit_automation_occurrence"),
             TenantOperationKind.ReportSourceRead => ("Read exact background report source", "inspect_background_report_source"),
-            TenantOperationKind.CompletionRead => ("Read exact background result", "inspect_background_completion"),
             TenantOperationKind.BackgroundReport => ("Deliver exact background completion", "deliver_background_completion"),
-            TenantOperationKind.BackgroundStart => ("Start exact background work", "start_background_work"),
+            TenantOperationKind.TaskDelegation => ("Delegate exact task", "delegate_task"),
             TenantOperationKind.WorkspaceMutation => ("Change exact workspace paths", "mutate_workspace"),
             TenantOperationKind.ExperienceOperation => (op.ExperienceOperation!.ToolName switch { "experience.source" => "Inspect exact Experience source", "experience.record" => "Record exact Experience", _ => "Consolidate exact Experience" }, AgentCore.Application.Tools.TenantExperienceToolContract.OperationName(op.ExperienceOperation.ToolName)),
             TenantOperationKind.ContinuityRead => (op.ContinuityRead!.ToolName == "continuity.search" ? "Search historical continuity" : "Inspect exact historical continuity", "inspect_continuity"),
@@ -76,7 +75,7 @@ public static class TenantApprovalEndpoints
                 ? ("Stop exact Sandbox process", "stop_sandbox_process") : ("Reset existing Sandbox environment", "reset_sandbox_environment"),
             TenantOperationKind.SandboxCommand => ("Run exact Sandbox command", "run_sandbox_command"),
             _ => throw new InvalidOperationException("Unsupported prepared operation.") };
-        return new(r.RequestId, r.TenantId, op.AutomationAdmission is null ? r.RunId : null, op.AutomationAdmission is null ? r.SessionId : null, r.RootActivationId, r.ExecutorPrincipalId, r.OriginalInitiatorPrincipalId,
+        return new(r.RequestId, r.TenantId, op.AutomationAdmission is null && !TenantTaskConsentRules.IsHuman(r) ? r.RunId : null, op.AutomationAdmission is null ? r.SessionId : null, r.RootActivationId, r.ExecutorPrincipalId, r.OriginalInitiatorPrincipalId,
             Camel(r.Kind), Camel(r.Status), r.Revision, view.SecurityRevision, r.CreatedAt, r.ExpiresAt,
             summary, r.Permission,
             new(r.ResourceType, r.ResourceId), new(op.OperationId, operation,
@@ -86,10 +85,11 @@ public static class TenantApprovalEndpoints
                 op.SandboxCommand is { } sandbox ? new(sandbox.SessionId, sandbox.ProfileId, sandbox.ProfileRevision, sandbox.CommandJson,
                     sandbox.ExpectedLeaseRevision, sandbox.ExpectedGeneration, sandbox.HomeAccess.ToString()) : null),
             view.Decision is { } d ? new(d.HumanPrincipalId, Camel(d.Status), d.DecidedAt) : null,
-            view.OperationResult is { } result ? new(result.OperationId, Camel(result.Outcome), result.ReasonCode, result.InstanceRevision, result.PersonaRevision, result.RecordedAt, BrowserArtifactResult(result.BrowserArtifactsJson), view.AccountResult is { } account ? new(account.Status, account.DraftId, account.FileId, account.Path, account.ByteSize, account.Sha256, account.Items?.Select(i => new TenantAccountActionItemResultDto(i.FileId, i.Status)).ToArray()) : null, result.Http is { } http ? new(http.StatusCode,http.FinalUrl,http.ContentType,http.ProjectedBodyBytes,http.BodySha256,http.Truncated) : null) : null,
+            view.OperationResult is { } result ? new(result.OperationId, Camel(result.Outcome), result.ReasonCode, result.InstanceRevision, result.PersonaRevision, result.RecordedAt, BrowserArtifactResult(result.BrowserArtifactsJson), view.AccountResult is { } account ? new(account.Status, account.DraftId, account.FileId, account.Path, account.ByteSize, account.Sha256, account.Items?.Select(i => new TenantAccountActionItemResultDto(i.FileId, i.Status)).ToArray()) : null, result.Http is { } http ? new(http.StatusCode,http.FinalUrl,http.ContentType,http.ProjectedBodyBytes,http.BodySha256,http.Truncated) : null, result.TaskAdmission is { } admitted ? new(admitted.TaskId, admitted.Revision) : null) : null,
             review is null ? null : new(review.AgentName, review.RequesterName, review.ReviewerName,
                 review.Changes.Select(c => new TenantApprovalChangeDto(c.Field, c.Before, c.After, c.BeforeAvailable, c.AfterAvailable, c.RestoresDefault)).ToArray(),
-                review.CanDecide, review.CanCancel, review.DecisionUnavailableReason, review.IndependentReview, review.ServerNow, review.ExecutionState), op.ReportSourceRead?.ParentSessionId ?? op.BackgroundReport?.ParentSessionId);
+                review.CanDecide, review.CanCancel, review.DecisionUnavailableReason, review.IndependentReview, review.ServerNow, review.ExecutionState), op.ReportSourceRead?.ParentSessionId ?? op.BackgroundReport?.ParentSessionId,
+            view.HumanTaskOutcome is { } humanTask ? new(humanTask.Admitted, humanTask.ReasonCode, humanTask.RecordedAt, humanTask.TaskAdmission is { } humanReceipt ? new(humanReceipt.TaskId, humanReceipt.Revision) : null) : null);
     }
     private static T? Parse<T>(string? value) where T : struct, Enum => value is null ? null
         : Enum.TryParse<T>(value, true, out var parsed) && Enum.IsDefined(parsed) && !int.TryParse(value, out _) ? parsed

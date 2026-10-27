@@ -78,8 +78,6 @@ public sealed partial class SqliteAgentRunStore
         if (receipt is not null)
         {
             var item = CompletionInboxMapping.Read(receipt);
-            if (item.Status == CompletionInboxStatus.Handled) return new("handled", item.ParentSessionId, item.HandledByRunId, null);
-            if (item.Status == CompletionInboxStatus.Claimed) return new("claimed", item.ParentSessionId, item.ClaimRunId, null);
             if (item.Status == CompletionInboxStatus.Pending) return new("pending", item.ParentSessionId, null, null);
         }
         return CompletionDeliveryProjection.Build(session, reportRow is null ? null : AgentRunStoreMapping.ToDomain(reportRow), receipt is not null, receipt?.SkipReason);

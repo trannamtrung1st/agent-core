@@ -109,7 +109,7 @@ public sealed class TenantActivityService(IIamStore security, ITenantSessionStor
                 initial = await Run(state, run, human, ct).ConfigureAwait(false);
                 var receipt = run.Result?.OutcomeKind == AgentRunOutcomeKind.Continued ? null : await runs.FindTenantCompletionAsync(run.Owner, run.AgentRunId, ct).ConfigureAwait(false);
                 Guid? target = receipt?.ParentSessionId is { } parent && await Can(state, human.PrincipalId, "sessions.read", TenantSessionRules.Scope(tenant, parent), ct).ConfigureAwait(false) ? parent : null;
-                delivery = run.Result?.OutcomeKind == AgentRunOutcomeKind.Continued ? null : new(receipt?.Status == CompletionInboxStatus.DeliveryQueued ? "admitted" : receipt?.Status.ToString() ?? (origin.ReportCompletionToOrigin ? "Pending" : "NotRequested"), target, receipt?.SkipReason);
+                delivery = origin.Kind is SessionOriginKind.DelegatedTask or SessionOriginKind.DirectAgentMessage || run.Result?.OutcomeKind == AgentRunOutcomeKind.Continued ? null : new(receipt?.Status == CompletionInboxStatus.DeliveryQueued ? "admitted" : receipt?.Status.ToString() ?? (origin.ReportCompletionToOrigin ? "Pending" : "NotRequested"), target, receipt?.SkipReason);
             }
         }
         var result = new TenantBackgroundDetail(await Session(state, agent, session, human, ct).ConfigureAwait(false), initial, origin.InitialTitle, delivery);

@@ -45,7 +45,7 @@ public sealed partial class TenantCredentialAccessTests
             new { tool = ToolCatalog.EmailCreateDraft, arguments = new { accountRef = s.Alias, to = new[] { "friend@example.test" }, cc = new[] { "copy@example.test" }, bcc = new[] { "private-copy@example.test" }, subject, body } },
             new { tool = ToolCatalog.EmailSend, arguments = new { accountRef = s.Alias, draftId = "$draft" } }
         } });
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 3 }))).GetProperty("sessionId").GetGuid();
         var initial = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = command,
             expectedRevision = await Revision(owner, s.Tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
         var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var approvals = factory.Services.GetRequiredService<ITenantApprovalStore>();
@@ -187,22 +187,23 @@ public sealed partial class TenantCredentialAccessTests
     private sealed class AccountActionBackgroundModel(string objective, ILanguageModel? model = null) : ILanguageModel
     {
         private readonly ILanguageModel inner = model ?? new CredentialModel();
+        public Guid TargetInstanceId { get; set; }
         public ModelCapabilities Capabilities => inner.Capabilities;
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             if (request.Context?.Sections.Any(s => s.Id == AgentCore.Application.Context.ContextSectionId.CoreBackground) == true)
             {
                 Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
-                Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.BackgroundStart);
+                Assert.Contains(request.Tools!, t => t.Name == "tasks.delegate");
                 Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.EmailSend or ToolCatalog.DriveRename);
                 await foreach (var item in inner.GenerateAsync(request, ct)) yield return item;
                 yield break;
             }
-            var result = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.BackgroundStart);
+            var result = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool && m.Name == "tasks.delegate");
             if (result is null && request.Messages.Any(m => m.Role == ModelRole.User && m.Text == "Start exact account background test"))
             {
-                Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.BackgroundStart);
-                yield return new ModelToolCallEvent(new("account-background-start", ToolCatalog.BackgroundStart, JsonSerializer.Serialize(new { objective, title = "Exact account action", reportCompletion = false })));
+                Assert.Contains(request.Tools!, t => t.Name == "tasks.delegate");
+                yield return new ModelToolCallEvent(new("account-background-start", "tasks.delegate", JsonSerializer.Serialize(new { objective, title = "Exact account action", reportOnCompletion = false, target = new { instanceId = TargetInstanceId }, requestKey = "native-account-task-once" })));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
             yield return new ModelSemanticResponseReady(new("Background account task admitted.", new(ModelSpeechMode.None, null), []));
@@ -210,7 +211,7 @@ public sealed partial class TenantCredentialAccessTests
         }
     }
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
-    public async Task Model_immediate_background_account_actions_preserve_child_consent_successors_and_exact_effects(bool sqlite, bool drive)
+    public async Task Model_Task_account_actions_preserve_worker_consent_successors_and_exact_effects(bool sqlite, bool drive)
     {
         var steps = drive ? new object[] {
             new { tool = ToolCatalog.DriveGet, arguments = (object)new { accountRef = "exact-account", fileId = "file" } },
@@ -226,10 +227,11 @@ public sealed partial class TenantCredentialAccessTests
         var actor = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
         var access = factory.Services.GetRequiredService<TenantAccessService>();
         var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(s.Tenant, s.Instance))!;
-        var role = await access.SaveRoleAsync(actor, s.Tenant, null, "Exact background account actions", ["sessions.create", "agent-runs.create", "sessions.read", "credentials.read", "credentials.use", "email.draft", "email.send", "drive.read", "drive.write", "agents.read"], await Revision(owner, s.Tenant));
+        var role = await access.SaveRoleAsync(actor, s.Tenant, null, "Exact background account actions", ["tasks.delegate", "tasks.read", "spaces.read", "sessions.create", "agent-runs.create", "sessions.read", "credentials.read", "credentials.use", "email.draft", "email.send", "drive.read", "drive.write", "agents.read"], await Revision(owner, s.Tenant));
         await access.AssignRoleAsync(actor, s.Tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(s.Tenant), await Revision(owner, s.Tenant));
+        await EnableAccountTask(owner, s, model);
         if (drive) await factory.Services.GetRequiredService<ISyntheticDriveStore>().SaveAsync(s.Credential, new("file", "Original.bin", "application/octet-stream", 3, "1", null, ["root"], false), [0, 255, 3], null, default);
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 3 }))).GetProperty("sessionId").GetGuid();
         var initial = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Start exact account background test",
             expectedRevision = await Revision(owner, s.Tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
         var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var sessions = factory.Services.GetRequiredService<ITenantSessionStore>();
@@ -265,6 +267,15 @@ public sealed partial class TenantCredentialAccessTests
             Assert.Equal(EmailSendOutcome.Sent, (await factory.Services.GetRequiredService<IEmailStore>().GetSendAsync(draft))!.Result!.Outcome);
         }
         Assert.Equal(0, factory.Outbound); Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
+    }
+
+    private static async Task EnableAccountTask(HttpClient owner, ConnectedReadSetup setup, AccountActionBackgroundModel model)
+    {
+        model.TargetInstanceId = setup.Instance;
+        var response = await owner.PutAsJsonAsync($"/api/v2/tenants/{setup.Tenant}/agents/{setup.Instance}/cooperation", new {
+            cooperation = new { acceptTasks = true, acceptDirectMessages = false, allowDirectMessageWake = false, maxConcurrentTasks = 2 },
+            expectedRevision = await Revision(owner, setup.Tenant), expectedInstanceRevision = 2 });
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
     }
 
 }

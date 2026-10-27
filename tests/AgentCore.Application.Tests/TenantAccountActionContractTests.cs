@@ -60,7 +60,7 @@ public sealed class TenantAccountActionContractTests
     [Fact]
     public async Task Model_action_schemas_limit_selected_tools_and_never_offer_autonomous_or_report_execution()
     {
-        var definition = await CapabilityProjectionTests.Definition(ToolCatalog.EmailCreateDraft, ToolCatalog.DriveTrash, ToolCatalog.BackgroundStart);
+        var definition = await CapabilityProjectionTests.Definition(ToolCatalog.EmailCreateDraft, ToolCatalog.DriveTrash);
         var instance = Guid.NewGuid(); var session = Guid.NewGuid(); var activation = Guid.NewGuid(); var at = DateTimeOffset.UtcNow;
         var context = CapabilityProjectionTests.Context(definition) with {
             AgentInstanceId = instance, OwnedSessionId = session,

@@ -20,13 +20,13 @@ public sealed partial class TenantRunAdmissionTests
         await spaces.SetMemberAsync(s.Owner.PrincipalId, s.Tenant, space.SpaceId, s.Agent.Instance.InstanceId, "Current responsibility", "Current situational instructions", [], [],
             (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, space.Revision, pin.MembershipRevision);
         var runtime = (ITenantRuntimeStore)f.Iam;
-        var stale = await Assert.ThrowsAsync<SecurityConflictException>(() => runtime.AdmitTenantImmediateAsync(parent.Frame, child.Session, child.Run, f.Ids.NewId()).AsTask());
+        var stale = await Assert.ThrowsAsync<SecurityConflictException>(() => AdmitTaskFixture(f, parent.Frame, child.Session, child.Run, f.Ids.NewId()).AsTask());
         Assert.Equal("space_context_changed", stale.ReasonCode);
         Assert.Null(await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, child.Run.AgentRunId));
         Assert.Null(await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, child.Session.SessionId));
         var refreshed = await BackgroundChild(f, parent);
         Assert.Equal("Current situational instructions", refreshed.Run.Admission.Configuration!.SpaceContext!.MembershipInstructions);
-        Assert.True((await runtime.AdmitTenantImmediateAsync(parent.Frame, refreshed.Session, refreshed.Run, f.Ids.NewId())).Created);
+        Assert.True((await AdmitTaskFixture(f, parent.Frame, refreshed.Session, refreshed.Run, f.Ids.NewId())).Created);
         Assert.Equal(pin, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, parent.Parent.AgentRunId))!.Admission.Configuration!.SpaceContext);
     }
 
@@ -51,14 +51,12 @@ public sealed partial class TenantRunAdmissionTests
         Assert.True(beforePin.SameLocation(child.Run.Admission.Configuration!.SpaceContext));
         Assert.NotEqual(destination.SpaceId, child.Session.ContextSelection!.SpaceId);
         Assert.Null(child.Session.ContextSelection.EffectiveAfterRunId); Assert.Null(child.Session.ContextSelection.TransitionId);
-        Assert.True((await ((ITenantRuntimeStore)f.Iam).AdmitTenantImmediateAsync(parent.Frame, child.Session, child.Run, f.Ids.NewId())).Created);
+        Assert.True((await AdmitTaskFixture(f, parent.Frame, child.Session, child.Run, f.Ids.NewId())).Created);
         // A prepared child cannot borrow the newer desired Session selection.
         var redirected = (await f.RunConfiguration().ResolveInSpaceAsync(s.Tenant, s.Agent.Instance.InstanceId, selection, default)).Configuration;
-        var forged = BackgroundSessionAdmissionFactory.ForImmediate(f.Ids.NewSessionId(), f.Ids.NewId(), f.Ids.NewId(), f.Ids.NewId(), f.Ids.NewId(),
-            snapshot, parent.Parent, "redirected-child", "Do not retarget", "Invalid context", false, f.Clock.GetUtcNow(),
-            ExecutionBudgetResolver.Resolve(redirected.Configuration.Definition, redirected.InstanceBudgets, false), redirected);
-        await Assert.ThrowsAsync<AccessDeniedException>(() => ((ITenantRuntimeStore)f.Iam).AdmitTenantImmediateAsync(parent.Frame, forged.Session, forged.Run, f.Ids.NewId()).AsTask());
-        Assert.Null(await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, forged.Run.AgentRunId));
+        var forged = child with { Session = child.Session with { ContextSelection = selection } };
+        await Assert.ThrowsAsync<AccessDeniedException>(() => AdmitTaskFixture(f, parent.Frame, forged.Session, forged.Run, f.Ids.NewId()).AsTask());
+        Assert.Equal(child.Run.AgentRunId, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, child.Run.AgentRunId))!.AgentRunId);
         Assert.Equal(selection, (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Session))!.Snapshot.ContextSelection);
         Assert.Equal(beforePin, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, parent.Parent.AgentRunId))!.Admission.Configuration!.SpaceContext);
     }

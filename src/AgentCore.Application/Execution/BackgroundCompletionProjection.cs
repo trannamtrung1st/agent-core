@@ -16,6 +16,8 @@ public static class BackgroundCompletionProjection
     {
         using var document = JsonDocument.Parse(evidence);
         var root = document.RootElement;
+        if (root.TryGetProperty("taskId", out _))
+            return $"Task {root.GetProperty("state").GetString()}: {root.GetProperty("summary").GetString()}\n\nTask success is separate from Goal verification. Open Tasks to inspect the saved result.";
         var items = root.TryGetProperty("completions", out var batch) ? batch.EnumerateArray().ToArray() : [root];
         return string.Join("\n\n", items.Select(item =>
         {

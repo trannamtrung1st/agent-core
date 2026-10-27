@@ -26,7 +26,7 @@ public sealed partial class TenantSessionAccessTests
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Requests.Enqueue(request); await Task.Yield(); cancellationToken.ThrowIfCancellationRequested();
-            Assert.DoesNotContain(request.Tools!, t => t.Name == ToolCatalog.BackgroundStart);
+            Assert.DoesNotContain(request.Tools!, t => t.Name == "background.start");
             var tools = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
             var reads = tools.Where(m => m.Name == ToolCatalog.RequestAuthorization).ToArray();
             var waits = tools.Where(m => m.Name == ToolCatalog.ExecutionWait).ToArray();
@@ -39,7 +39,7 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.ExecutionWait);
                 if (reads.Length > 0) Assert.Contains("\"readAuthorized\":true", reads[^1].Text);
                 call = new("independent-wait-" + (waits.Length + 1), ToolCatalog.ExecutionWait, mode == "foreign"
-                    ? JsonSerializer.Serialize(new { mode = "background", backgroundSessionIds = new[] { ForeignSession }, until = "all", timeoutSeconds = 30 })
+                    ? JsonSerializer.Serialize(new { mode = "tasks", taskIds = new[] { ForeignSession }, until = "all", timeoutSeconds = 30 })
                     : """{"mode":"duration","seconds":30}""");
             }
             if (call is not null)

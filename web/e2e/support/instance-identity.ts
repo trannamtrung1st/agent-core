@@ -4,7 +4,7 @@ import type { ExecutionBudgetPolicy } from "../../src/services/adminApi";
 export const INSTANCE_DEFINITIONS = {
   examiner: { id: "examiner", version: 1 },
   customerSupport: { id: "customer-support", version: 3 },
-  generalAssistant: { id: "general-assistant", version: 21 },
+  generalAssistant: { id: "general-assistant", version: 35 },
   approvalHarness: { id: "approval-demo", version: 1 }
 } as const;
 

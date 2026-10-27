@@ -24,7 +24,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_workspace_effects_dispatch_actual_mutations_once_and_keep_exact_body_free_receipts(bool sqlite, bool working)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read", "workspaces.read", "workspaces.write", "workspaces.delete"]);
         var service = WorkspaceEffects(f); var root = working ? "/working" : "/home"; var files = WorkspaceReader(f);
         async Task<TenantWorkspaceMutationResult> Execute(string id, string tool, object arguments)

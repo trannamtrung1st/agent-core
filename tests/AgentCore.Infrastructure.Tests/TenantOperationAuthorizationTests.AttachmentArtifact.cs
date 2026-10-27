@@ -11,7 +11,7 @@ public sealed partial class TenantOperationAuthorizationTests
 {
     private static async Task<(Environment Setup, Guid Id, byte[] Bytes)> AttachmentExportCase(Fixture f)
     {
-        var s = await Setup(f, "general-assistant", 32);
+        var s = await Setup(f, "general-assistant", 35);
         // Finish the setup input before claiming the later file-bearing input.
         await CancelArtifactRun(f, s, await ClaimArtifactRun(f, s));
         var session = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Run.SessionId))!;

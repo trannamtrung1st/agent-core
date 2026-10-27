@@ -93,3 +93,12 @@ Domain/Triggers/AutomationDestination.cs owns validated execution/delivery value
 Application/Ports/Office.cs owns processor records; Application/Office owns closed schemas; Canonical Office reads/mutations use the tenant owning services and protected-operation target. Infrastructure/Office contains package guards and vendor adapters. Application/Drive and Ports/Drive*.cs own authorization, effects, receipts and safe provider contracts. Infrastructure/Drive owns direct REST/OAuth and Synthetic adapters; Infrastructure/Credentials/GoogleOAuthProof.cs shares stateless identity/PKCE primitives with Gmail, without sharing account authorization. Persistence/DriveRecords and DriveStore adapters use the existing DbContext and one additive migration.
 
 web/src/features/filePreview owns the shared dialog, source adapters, limits, renderers and cancellable workers. Chat/Admin source actions consume it. Admin's DriveAccountDialog, DriveConnectionPanel and DriveFiles extend existing Credentials pages; services/drive.ts owns protected requests. App CSS owns preview sizing/overflow; AntD tokens own presentation. web/public/notices and Infrastructure/Notices retain exact dependency notices. No project or second UI kit is added.
+
+
+<a id="initiative-9--adopted-successor-implementation-in-progress"></a>
+
+## Initiative 9 — Task delegation and communication
+
+Keep task/communication value models in Domain, narrow ports/admission/authority/coordination services in Application, atomic implementations and EF records/migration in the existing Infrastructure IAM/persistence owner, thin authenticated endpoints/DTO mapping in Api/Contracts, and Task drawer/Agent communication compositions in existing web features. No additional project, host, broker or engine. The source-audit report records former contract owners and required removal dispositions.
+
+See the [adopted proposal](proposals/initiative-9-task-delegation-communication.md), [removal audit](reports/initiative-9-source-audit-2026-10-27.md) and [local delivery evidence and limits](reports/initiative-9-local-verification-2026-10-27.md). The implementation has focused local verification; the report distinguishes exercised behavior from unrun deployment, provider and device qualification.

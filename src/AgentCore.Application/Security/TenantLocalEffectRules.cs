@@ -28,6 +28,16 @@ public static class TenantLocalEffectRules
     public static void Validate(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant,
         AgentRun run, TenantOperationCommit commit, AgentRun? source = null)
     {
+        if (request.Operation.TaskDelegation is not null)
+        {
+            ValidateApproval(request, decision, grant, run, commit, source);
+            if (commit.Outcome is not (TenantOperationOutcome.Completed or TenantOperationOutcome.Denied)
+                || commit.Outcome == TenantOperationOutcome.Completed && (commit.ReasonCode != "task_created" || commit.TaskDelegationAdmission is null)
+                || commit.Outcome == TenantOperationOutcome.Denied && commit.TaskDelegationAdmission is not null)
+                throw new SecurityConflictException("operation_mismatch");
+            if (commit.TaskDelegationAdmission is { } admission) TenantTaskConsentRules.MatchAdmission(request, admission);
+            return;
+        }
         if (request.Operation.HttpRequest is not null) throw new SecurityConflictException("http_effect_requires_dispatch");
         if (request.Operation.AutomationMutation is not null)
         { ValidateApproval(request, decision, grant, run, commit, source); if (commit.Outcome == TenantOperationOutcome.Completed && commit.ReasonCode != TenantAutomationMutationRules.Completed) throw new SecurityConflictException("operation_mismatch"); return; }
@@ -45,16 +55,13 @@ public static class TenantLocalEffectRules
         { TenantMemoryOperationReview.ValidateEffect(request, decision, grant, run, commit, source); return; }
         if (request.Operation.AccountRead is not null)
         { TenantAccountReadRules.ValidateEffect(request, decision, grant, run, commit, source); return; }
-        if (request.Operation.BackgroundStart is not null)
-        { TenantBackgroundCreationRules.ValidateEffect(request, decision, grant, run, commit, source); return; }
         if (request.Operation.ArtifactPublication is not null)
         { TenantArtifactReviewRules.ValidateEffect(request, decision, grant, run, commit, source); return; }
         if (request.Operation.WorkspaceRead is not null)
         { TenantWorkspaceReadOperationRules.ValidateEffect(request, decision, grant, run, commit, source); return; }
         if (request.Operation.AttachmentRead is not null)
         { TenantAttachmentReadRules.ValidateEffect(request, decision, grant, run, commit, source); return; }
-        if (request.Operation.CompletionRead is not null)
-        { TenantCompletionReadRules.ValidateEffect(request, decision, grant, run, commit, source); return; }
+
         if (request.Operation.ArtifactVerification is not null)
         { TenantArtifactVerificationRules.ValidateEffect(request, decision, grant, run, commit, source); return; }
         if (request.Operation.CredentialRead is not null)
@@ -139,7 +146,8 @@ public static class TenantLocalEffectRules
         return new(current.InstanceId, operation.ExpectedInstanceRevision, SetSettingsOverrides: true,
             SettingsOverrides: InstanceSettingsResolver.Patch(current.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear), AutomationPolicyChanges: []);
     }
-    public static string AuditAction(PreparedTenantOperation operation) => operation.ManagementMutation is not null ? "operations.management.apply" : operation.ManagementRead is not null ? "operations.management.read" : operation.AutomationMutation is not null ? "operations.automations.mutate" : operation.AutomationRead is not null ? "operations.automation.read" : operation.ExperienceOperation is not null ? "operations.experience.apply" : operation.ContinuityRead is not null ? "operations.continuity.read" : operation.MemoryOperation is not null ? "operations.memory.apply" : operation.AccountRead is not null ? TenantAccountReadRules.AuditAction : operation.CompletionRead is not null ? TenantCompletionReadRules.AuditAction : operation.BackgroundStart is not null ? TenantBackgroundCreationRules.AuditAction : operation.AttachmentRead is not null ? TenantAttachmentReadRules.AuditAction : operation.WorkspaceRead is not null ? TenantWorkspaceReadOperationRules.AuditAction : operation.ArtifactVerification is not null ? TenantArtifactVerificationRules.AuditAction : operation.ArtifactPublication is not null ? TenantArtifactOperationRules.AuditAction : operation.CredentialRead is not null ? TenantCredentialReadOperationRules.AuditAction : operation.SandboxRead is not null ? TenantSandboxReadOperationRules.AuditAction : operation.SandboxControl is not null ? TenantSandboxControlOperationRules.AuditAction : operation.Kind == TenantOperationKind.Persona ? "operations.persona.apply" : "operations.preferences.apply";
+    public static string AuditAction(PreparedTenantOperation operation) =>
+        operation.TaskDelegation is not null ? TenantTaskConsentRules.AuditAction : operation.ManagementMutation is not null ? "operations.management.apply" : operation.ManagementRead is not null ? "operations.management.read" : operation.AutomationMutation is not null ? "operations.automations.mutate" : operation.AutomationRead is not null ? "operations.automation.read" : operation.ExperienceOperation is not null ? "operations.experience.apply" : operation.ContinuityRead is not null ? "operations.continuity.read" : operation.MemoryOperation is not null ? "operations.memory.apply" : operation.AccountRead is not null ? TenantAccountReadRules.AuditAction : operation.AttachmentRead is not null ? TenantAttachmentReadRules.AuditAction : operation.WorkspaceRead is not null ? TenantWorkspaceReadOperationRules.AuditAction : operation.ArtifactVerification is not null ? TenantArtifactVerificationRules.AuditAction : operation.ArtifactPublication is not null ? TenantArtifactOperationRules.AuditAction : operation.CredentialRead is not null ? TenantCredentialReadOperationRules.AuditAction : operation.SandboxRead is not null ? TenantSandboxReadOperationRules.AuditAction : operation.SandboxControl is not null ? TenantSandboxControlOperationRules.AuditAction : operation.Kind == TenantOperationKind.Persona ? "operations.persona.apply" : "operations.preferences.apply";
 
     public static void ValidateTransaction(TenantSecurityState next, long expected, TenantApprovalRequest request, AuthorizationAudit audit)
     {

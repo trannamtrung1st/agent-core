@@ -87,7 +87,7 @@ public sealed partial class TenantAgentAccessTests
         using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var prefix = $"/api/v2/tenants/{tenant}";
-        var created = await Json(await owner.PostAsJsonAsync(prefix + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
+        var created = await Json(await owner.PostAsJsonAsync(prefix + "/agents", new { templateId = "general-assistant", version = 35, expectedRevision = await Revision(owner, tenant) }));
         var id = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); var root = prefix + $"/agents/{id}";
         var skills = await Json(await owner.GetAsync(root + "/skills"));
         var skill = skills.GetProperty("items").EnumerateArray().Single(s => s.GetProperty("key").GetString() == "definition:browser.record.lookup");

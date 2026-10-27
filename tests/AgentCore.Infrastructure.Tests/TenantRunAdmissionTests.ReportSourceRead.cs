@@ -13,8 +13,7 @@ public sealed partial class TenantRunAdmissionTests
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true);
         var parent = await BackgroundParent(f);
         if (review) await WaitReadAuthority(f, parent);
-        var child = await BackgroundChild(f, parent); var runtime = (ITenantRuntimeStore)f.Iam;
-        await runtime.AdmitTenantImmediateAsync(parent.Frame, child.Session, child.Run, f.Ids.NewId());
+        var child = await IndependentBackgroundChild(f, parent); var runtime = (ITenantRuntimeStore)f.Iam;
         var claimed = await ClaimBackground(f, child.Run); var outcome = BackgroundOutcome(f, claimed.Run, claimed.Snapshot);
         await runtime.CommitTenantOutcomeAsync(claimed.Frame, outcome.Snapshot, claimed.Snapshot.Revision, outcome.Complete, null, f.Ids.NewId());
         await CompleteBackgroundParent(f, parent);
@@ -34,8 +33,7 @@ public sealed partial class TenantRunAdmissionTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true);
         var parent = await BackgroundParent(f); var read = await WaitReadAuthority(f, parent);
-        var child = await BackgroundChild(f, parent); var runtime = (ITenantRuntimeStore)f.Iam;
-        await runtime.AdmitTenantImmediateAsync(parent.Frame, child.Session, child.Run, f.Ids.NewId());
+        var child = await IndependentBackgroundChild(f, parent); var runtime = (ITenantRuntimeStore)f.Iam;
         var claimed = await ClaimBackground(f, child.Run); var outcome = BackgroundOutcome(f, claimed.Run, claimed.Snapshot);
         await runtime.CommitTenantOutcomeAsync(claimed.Frame, outcome.Snapshot, claimed.Snapshot.Revision, outcome.Complete, null, f.Ids.NewId());
         await CompleteBackgroundParent(f, parent);

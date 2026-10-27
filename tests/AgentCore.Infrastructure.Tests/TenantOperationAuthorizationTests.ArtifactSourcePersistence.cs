@@ -53,7 +53,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using (var db = f.Contexts!.CreateDbContext())
         { await db.GetService<IMigrator>().MigrateAsync("20261019041906_TenantWorkspaceOfficeMutation"); await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); }
         Assert.Equal(prior, await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(s.Tenant, prior.RequestId));
-        var sourceAgent = await f.Agents.CreateAsync(s.Owner.PrincipalId, s.Tenant, "general-assistant", 32, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
+        var sourceAgent = await f.Agents.CreateAsync(s.Owner.PrincipalId, s.Tenant, "general-assistant", 35, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
         var session = await f.Sessions.CreateAsync(s.Tenant, sourceAgent.Instance.InstanceId, s.Owner, SessionMode.Text, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, sourceAgent.Instance.Revision);
         var submission = await f.RunService().SubmitTextAsync(s.Tenant, session.Owner.SessionId, s.Owner, f.Ids.NewId(), "Publish exact source", (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1);
         s = s with { Agent = sourceAgent, Run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, submission.RunId))! }; frame = await ClaimArtifactRun(f, s);

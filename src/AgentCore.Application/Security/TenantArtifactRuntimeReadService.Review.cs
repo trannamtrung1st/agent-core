@@ -72,7 +72,7 @@ public sealed partial class TenantArtifactRuntimeReadService
         await FenceAsync(frame, before, ct, approved: true).ConfigureAwait(false);
         return Serialize(before.Artifact, remainingBytes);
     }
-    private async ValueTask RequireStoredApprovedAsync(AgentRun run, IReadOnlyList<ModelMessage> messages, CancellationToken ct)
+    private async ValueTask RequireStoredApprovedAsync(AgentRun run, IReadOnlyList<ModelMessage> messages, CancellationToken ct, bool live)
     {
         var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, run.Claim?.Generation ?? Guid.Empty);
         foreach (var message in messages.Where(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization))
@@ -87,9 +87,9 @@ public sealed partial class TenantArtifactRuntimeReadService
             var receipt = await effects.FindOperationReceiptAsync(request.TenantId, operationId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("artifact_source_changed");
             var witness = metadata.GetProperty("artifactRead").Deserialize<PreparedArtifactVerification>() ?? throw new AccessDeniedException("artifact_source_changed");
             if (request.Operation.ArtifactVerification != witness) throw new AccessDeniedException("artifact_source_changed");
-            var current = await RequireAsync(frame, witness.ArtifactId, ct, approved: true).ConfigureAwait(false);
+            var current = await RequireAsync(frame, witness.ArtifactId, ct, approved: true, live: live).ConfigureAwait(false);
             await RequireApprovedDataAsync(current, request, receipt, ct).ConfigureAwait(false);
-            await FenceAsync(frame, current, ct, approved: true).ConfigureAwait(false);
+            await FenceAsync(frame, current, ct, approved: true, live: live).ConfigureAwait(false);
         }
     }
 }

@@ -14,7 +14,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_Artifact_source_consent_pending_checkpoint_resumes_one_actual_successor_with_a_durable_result(bool sqlite, bool grant)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s, grant ? ["sessions.read"] : null); await GrantWorkspaceRuntimeReads(f, s);
         byte[] bytes = [0, 255, 128, 3]; await SeedRuntimeWorkspace(f, s, true, "source.bin", bytes);
         await Policies(f).SaveAsync(s.Tenant, s.Owner, "workspaces.read", new(OperationApprovalMode.Always, false), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 0);

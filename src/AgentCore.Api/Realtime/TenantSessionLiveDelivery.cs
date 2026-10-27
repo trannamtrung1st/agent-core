@@ -38,6 +38,9 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
         public Func<Task>? StopVoice;
         public long Sequence;
         public long LastCommand;
+        public Guid? TaskCursor;
+        public Guid? ThreadCursor;
+        public Dictionary<string, long> CoordinationHints { get; } = [];
         public Dictionary<Guid, CommandRecord> Dedupe { get; } = [];
         public Queue<Guid> DedupeOrder { get; } = [];
         public ConcurrentDictionary<Guid, Guid> KnownRuns { get; } = new();

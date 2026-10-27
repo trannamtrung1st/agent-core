@@ -39,22 +39,28 @@ public sealed partial class TenantSessionAccessTests
     {
         public ModelCapabilities Capabilities { get; } = new(true, true, true);
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
+        public Guid DelegationTargetInstanceId { get; set; }
         public ConcurrentQueue<string> Failures { get; } = new();
         public static ExecutionOrigin Origin(ModelRequest request) => request.Context?.Sections.Any(s=>s.Id==ContextSectionId.CoreBackgroundReport)==true
-            ? ExecutionOrigin.CompletionReport : request.Context?.Sections.Any(s=>s.Id==ContextSectionId.CoreBackground)==true
-                ? ExecutionOrigin.ImmediateBackground : ExecutionOrigin.UserMessage;
+            ? ExecutionOrigin.TaskCompletion : request.Context?.Sections.Any(s=>s.Id==ContextSectionId.CoreBackground)==true
+                ? ExecutionOrigin.DelegatedTask : ExecutionOrigin.UserMessage;
         public virtual async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Requests.Enqueue(request); await Task.Yield(); cancellationToken.ThrowIfCancellationRequested();
             var origin = Origin(request);
-            if (origin == ExecutionOrigin.UserMessage && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.BackgroundStart))
+            if (origin == ExecutionOrigin.UserMessage && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == "tasks.delegate"))
             {
-                Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.BackgroundStart);
-                yield return new ModelToolCallEvent(new("tenant-background-source", ToolCatalog.BackgroundStart,
-                    """{"objective":"Perform the owned background check","title":"Owned background check","reportCompletion":true}"""));
+                if (request.Tools?.Any(t => t.Name == "tasks.delegate") != true)
+                {
+                    yield return new ModelSemanticResponseReady(new("Task unavailable.", new(ModelSpeechMode.None, null), []));
+                    yield return new ModelCompleted(ModelStopReason.Completed); yield break;
+                }
+                yield return new ModelToolCallEvent(new("tenant-task-source", "tasks.delegate", JsonSerializer.Serialize(new {
+                    objective = "Perform the owned background check", title = "Owned background check", reportOnCompletion = true,
+                    target = new { instanceId = DelegationTargetInstanceId }, requestKey = "source-assignment-once" })));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
-            if (origin == ExecutionOrigin.ImmediateBackground)
+            if (origin == ExecutionOrigin.DelegatedTask)
             {
                 Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
                 Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.SandboxExec or ToolCatalog.BrowserNavigate or ToolCatalog.ArtifactsCreate);
@@ -64,10 +70,10 @@ public sealed partial class TenantSessionAccessTests
                     """{"outcome":"Response","summary":"Owned background result.","attentionRequired":false}"""));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
-            var result=request.Messages.LastOrDefault(message=>message.Role==ModelRole.Tool && message.Name==ToolCatalog.BackgroundStart);
+            var result=request.Messages.LastOrDefault(message=>message.Role==ModelRole.Tool && message.Name=="tasks.delegate");
             var started=false;
-            if(result is not null){using var value=JsonDocument.Parse(result.Text);started=value.RootElement.TryGetProperty("started",out var flag)&&flag.ValueKind==JsonValueKind.True;}
-            var text = started ? "Background started." : "Background unavailable.";
+            if(result is not null){using var value=JsonDocument.Parse(result.Text);started=value.RootElement.TryGetProperty("task",out var assigned) && assigned.TryGetProperty("taskId",out _);}
+            var text = started ? "Background started." : "Task unavailable.";
             yield return new ModelSemanticResponseReady(new(text, new(ModelSpeechMode.None, null), []));
             yield return new ModelCompleted(ModelStopReason.Completed);
         }
@@ -130,8 +136,8 @@ public sealed partial class TenantSessionAccessTests
             {
                 candidate["voice"]!["enabled"] = false;
             }
-            if (independentTask) candidate["triggerPolicy"] = JsonSerializer.SerializeToNode((await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 32))!.TriggerPolicy, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-            var capabilities = fileCapabilities ?? new[] { ToolCatalog.BackgroundStart, ToolCatalog.AttachmentsRead, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList };
+            if (independentTask) candidate["triggerPolicy"] = JsonSerializer.SerializeToNode((await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 35))!.TriggerPolicy, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            var capabilities = fileCapabilities ?? new[] { "tasks.delegate", ToolCatalog.AttachmentsRead, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList };
             candidate["executionPolicy"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(),
                 capabilities = new { mode = "Selected", resolvedCapabilities = capabilities }, projection = new { alwaysCapabilities = capabilities.Where(c => c != ToolCatalog.AttachmentsRead).ToArray() } });
             var draftId = draft.GetProperty("draftId").GetGuid();
@@ -140,9 +146,15 @@ public sealed partial class TenantSessionAccessTests
             await Json(await owner.PostAsJsonAsync(api + $"/definition-drafts/{draftId}/publish", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = saved.GetProperty("revision").GetInt64() }));
             agent = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = draft.GetProperty("definitionId").GetString(), version = 1, expectedRevision = await Revision(owner, tenant) }));
         }
-        else agent=await Json(await owner.PostAsJsonAsync(api+"/agents",new{templateId="general-assistant",version=32,expectedRevision=await Revision(owner,tenant)}));
+        else agent=await Json(await owner.PostAsJsonAsync(api+"/agents",new{templateId="general-assistant",version=35,expectedRevision=await Revision(owner,tenant)}));
         var instance=agent.GetProperty("instance").GetProperty("instanceId").GetGuid();var executor=agent.GetProperty("principalId").GetGuid();
         var instanceRevision = 1;
+        ((TenantBackgroundModel)factory.Services.GetRequiredService<ILanguageModel>()).DelegationTargetInstanceId = instance;
+        var cooperation = await owner.PutAsJsonAsync(api + $"/agents/{instance}/cooperation", new {
+            cooperation = new { acceptTasks = true, acceptDirectMessages = false, allowDirectMessageWake = false, maxConcurrentTasks = 2 },
+            expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision });
+        Assert.True(cooperation.IsSuccessStatusCode, await cooperation.Content.ReadAsStringAsync()); instanceRevision++;
+
         if (requestIsolated)
         {
             var isolation = api + $"/agents/{instance}/state-isolation";
@@ -152,7 +164,7 @@ public sealed partial class TenantSessionAccessTests
                 draft = preview.GetProperty("plan").GetProperty("draft"), fingerprint = preview.GetProperty("plan").GetProperty("fingerprint").GetString() })).StatusCode);
             instanceRevision++;
         }
-        if(createAuthority){var access=factory.Services.GetRequiredService<TenantAccessService>();var role=await access.SaveRoleAsync(human,tenant,null,"Background executor",["sessions.create","agent-runs.create"],await Revision(owner,tenant));
+        if(createAuthority){var access=factory.Services.GetRequiredService<TenantAccessService>();var role=await access.SaveRoleAsync(human,tenant,null,"Explicit Task fixture execution",["sessions.create","agent-runs.create","tasks.delegate","tasks.read","tasks.cancel","agents.read","agents.chat","sessions.read","agent-messages.read","agent-messages.send"],await Revision(owner,tenant));
         await access.AssignRoleAsync(human,tenant,executor,role.RoleId,AgentCore.Domain.Security.AccessScope.ForTenant(tenant),await Revision(owner,tenant));}
         if(reportReads) { var access=factory.Services.GetRequiredService<TenantAccessService>(); var readRole=await access.SaveRoleAsync(human,tenant,null,"Independent completion source reader",["sessions.read","agent-runs.read"],await Revision(owner,tenant)); await access.AssignRoleAsync(human,tenant,executor,readRole.RoleId,AgentCore.Domain.Security.AccessScope.ForTenant(tenant),await Revision(owner,tenant)); }
         var privateSpace = await Json(await owner.GetAsync(api + $"/agents/{instance}/private-space"));
@@ -176,7 +188,7 @@ public sealed partial class TenantSessionAccessTests
             var childRoot=page.Items.SingleOrDefault(s=>s.Snapshot.Origin.OriginatingAgentRunId==source);
             child=childRoot?.Snapshot.Origin.InitialBackgroundAgentRunId is {} childId?await runs.FindTenantRunAsync(tenant,childId):null;
             foreach(var id in await runs.ListTenantRunIdsAsync(tenant,session))
-            {var item=await runs.FindTenantRunAsync(tenant,id);if(item?.Admission.ExecutionContext?.Origin==ExecutionOrigin.CompletionReport)notification=item;}
+            {var item=await runs.FindTenantRunAsync(tenant,id);if(item?.Admission.ExecutionContext?.Origin==ExecutionOrigin.TaskCompletion)notification=item;}
             if(parent?.IsTerminal==true && parent.Status!=AgentRunStatus.Completed || child?.IsTerminal==true && child.Status!=AgentRunStatus.Completed || notification?.IsTerminal==true && notification.Status!=AgentRunStatus.Completed)break;
             if(parent?.IsTerminal==true && child?.IsTerminal==true && (!report||notification?.IsTerminal==true))break;
             await Task.Delay(25,timeout.Token);
@@ -208,10 +220,10 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(started.Session, Assert.Single(catalog.GetProperty("items").EnumerateArray()).GetProperty("sessionId").GetGuid());
             Assert.Equal(2, (await factory.Services.GetRequiredService<ITenantSessionStore>().ListTenantSessionsAsync(started.Tenant, null, 0, 100)).Total);
             var history=await Json(await owner.GetAsync($"/api/v2/tenants/{started.Tenant}/sessions/{started.Session}/messages?limit=100"));
-            Assert.Contains("Background work: Owned background result.",history.ToString());
-            Assert.Single(model.Requests,r=>TenantBackgroundModel.Origin(r)==ExecutionOrigin.ImmediateBackground);
+            Assert.Contains("Task Succeeded: Owned background result.",history.ToString());
+            Assert.Single(model.Requests,r=>TenantBackgroundModel.Origin(r)==ExecutionOrigin.DelegatedTask);
             var audit=await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(started.Tenant,200);
-            Assert.Single(audit,a=>a.Action=="agent-runs.background.admit");Assert.Single(audit,a=>a.Action=="agent-runs.background.report");
+            Assert.Single(audit,a=>a.Action=="tasks.delegate");Assert.Single(audit,a=>a.Action=="tasks.report");
             Assert.Empty(await factory.Services.GetRequiredService<IAgentRunStore>().ListDeliveryCandidatesAsync(100,DateTimeOffset.UtcNow));
         }finally{SqliteConnection.ClearAllPools();if(Directory.Exists(root))Directory.Delete(root,true);}
     }
@@ -227,9 +239,9 @@ public sealed partial class TenantSessionAccessTests
             do{run=await runs.FindTenantRunAsync(started.Tenant,started.Source);if(run?.IsTerminal==true)break;await Task.Delay(25,timeout.Token);}while(!timeout.IsCancellationRequested);
             Assert.NotNull(run);Assert.Equal(AgentRunStatus.Completed,run.Status);
             Assert.Single((await factory.Services.GetRequiredService<ITenantSessionStore>().ListTenantSessionsAsync(started.Tenant,null,0,100)).Items);
-            Assert.DoesNotContain(model.Requests,r=>TenantBackgroundModel.Origin(r)==ExecutionOrigin.ImmediateBackground);
-            Assert.DoesNotContain(await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(started.Tenant,200),a=>a.Action=="agent-runs.background.admit");
-            Assert.Contains("Background unavailable.",(await Json(await owner.GetAsync($"/api/v2/tenants/{started.Tenant}/sessions/{started.Session}/messages?limit=100"))).ToString());
+            Assert.DoesNotContain(model.Requests,r=>TenantBackgroundModel.Origin(r)==ExecutionOrigin.DelegatedTask);
+            Assert.DoesNotContain(await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(started.Tenant,200),a=>a.Action=="tasks.delegate");
+            Assert.Contains("Task unavailable.",(await Json(await owner.GetAsync($"/api/v2/tenants/{started.Tenant}/sessions/{started.Session}/messages?limit=100"))).ToString());
         }finally{SqliteConnection.ClearAllPools();if(Directory.Exists(root))Directory.Delete(root,true);}
     }
     [Fact(Timeout=90000)]
@@ -242,16 +254,16 @@ public sealed partial class TenantSessionAccessTests
             {
                 using var owner=first.CreateClient(new WebApplicationFactoryClientOptions{BaseAddress=new("https://localhost")});var started=await StartTenantBackground(first,owner,reportReads:true);(tenant,session,source)=started;
                 var result=await WaitTenantBackground(first,tenant,session,source,false);childId=result.Child.AgentRunId;
-                Assert.Single(await first.Services.GetRequiredService<ITenantRuntimeStore>().ListTenantBackgroundCompletionsAsync(100));
-                Assert.DoesNotContain(firstModel.Requests,r=>TenantBackgroundModel.Origin(r)==ExecutionOrigin.CompletionReport);
+                Assert.Single(await first.Services.GetRequiredService<ITenantTaskStore>().ListTaskReconciliationAsync(100));
+                Assert.DoesNotContain(firstModel.Requests,r=>TenantBackgroundModel.Origin(r)==ExecutionOrigin.TaskCompletion);
             }
             var secondModel=new TenantBackgroundModel();
             await using(var second=new TenantBackgroundSqliteFactory(root,secondModel))
             {
                 using var owner=second.CreateClient(new WebApplicationFactoryClientOptions{BaseAddress=new("https://localhost")});await Login(owner,"owner@example.test","explicit-synthetic-test-password");
                 var result=await WaitTenantBackground(second,tenant,session,source,true);Assert.Equal(childId,result.Child.AgentRunId);
-                Assert.DoesNotContain(secondModel.Requests,r=>TenantBackgroundModel.Origin(r) is ExecutionOrigin.ImmediateBackground or ExecutionOrigin.UserMessage);
-                Assert.Empty(secondModel.Requests);
+                Assert.DoesNotContain(secondModel.Requests,r=>TenantBackgroundModel.Origin(r) is ExecutionOrigin.DelegatedTask or ExecutionOrigin.UserMessage);
+                Assert.Empty(secondModel.Requests); // Core renders the admitted report without another provider generation.
                 Assert.Empty(await second.Services.GetRequiredService<ITenantRuntimeStore>().ListTenantBackgroundCompletionsAsync(100));
             }
         }finally{SqliteConnection.ClearAllPools();if(Directory.Exists(root))Directory.Delete(root,true);}

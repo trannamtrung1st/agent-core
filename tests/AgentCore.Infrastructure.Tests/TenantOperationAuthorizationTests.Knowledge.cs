@@ -27,7 +27,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Environment s; string identity; string key; string expected;
         if (inherited)
         {
-            s = await Setup(f, "general-assistant", 32); var source = DefinitionExecutionPolicies.Of(s.Run.Admission.Configuration!.Definition).KnowledgeList.First(); identity = source.Identity;
+            s = await Setup(f, "general-assistant", 35); var source = DefinitionExecutionPolicies.Of(s.Run.Admission.Configuration!.Definition).KnowledgeList.First(); identity = source.Identity;
             var resource = s.Run.Admission.Configuration.Resources.Single(r => r.Key.StartsWith("definition:", StringComparison.Ordinal) && r.LogicalPath == KnowledgeSourcePaths.ResolveBackingPath(source)); key = resource.Key;
             expected = Encoding.UTF8.GetString((await f.RunContent.ReadAsync(resource.ContentSha256))!);
         }

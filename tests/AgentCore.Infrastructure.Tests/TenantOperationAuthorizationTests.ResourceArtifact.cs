@@ -16,7 +16,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Environment s; string path; byte[] bytes;
         if (inherited)
         {
-            s = await Setup(f, "general-assistant", 32); var resource = s.Run.Admission.Configuration!.Resources.First(r => r.Key.StartsWith("definition:", StringComparison.Ordinal));
+            s = await Setup(f, "general-assistant", 35); var resource = s.Run.Admission.Configuration!.Resources.First(r => r.Key.StartsWith("definition:", StringComparison.Ordinal));
             path = resource.VirtualPath; bytes = (await f.RunContent.ReadAsync(resource.ContentSha256))!;
         }
         else { var v = await ResourceSourceCase(f, data: new AgentCore.Infrastructure.Office.OfficeProcessor().CreateDocument(new(null, [new(null, ["Exact resource package"], null)]), default).Bytes, logicalPath: "literal[resource]?.docx", mediaType: OfficeLimits.DocumentMime); s = v.Setup; path = v.Path; bytes = v.Bytes; }
@@ -46,7 +46,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var v = await ResourceSourceCase(f); var s = v.Setup;
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s); await GrantWorkspaceRuntimeReads(f, s, ["sessions.read", "agents.read", "resources.read"]);
         var current = new ResourceExportOnlyBuiltIns(f.BuiltIns);
-        Assert.False(TenantWorkspaceReadContract.Allows((await current.GetAsync("general-assistant", 32))!, ToolCatalog.WorkspaceRead));
+        Assert.False(TenantWorkspaceReadContract.Allows((await current.GetAsync("general-assistant", 35))!, ToolCatalog.WorkspaceRead));
         var result = await SourcePublicationService(f, resourceSources: ResourceSources(f, currentBuiltIns: current))
             .ExecuteWorkspaceAsync(new(s.Tenant, frame.RunId), frame.Generation, "export-only-capability", JsonSerializer.Serialize(new { path = v.Path, displayName = "copy.txt" }));
         Assert.NotNull(result.Receipt);

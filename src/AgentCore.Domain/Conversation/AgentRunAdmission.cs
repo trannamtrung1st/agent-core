@@ -5,7 +5,10 @@ namespace AgentCore.Domain.Conversation;
 /// <summary>Frozen execution identity. Provenance carries no execution permission.</summary>
 public enum AgentRunOutputContract { ConversationResponse, BackgroundOutcome, CompletionReport }
 
-public enum AgentRunTaskSource { Automation, AgentRun }
+public enum AgentRunTaskSource { Automation, AgentRun, DelegatedTask, AgentMessage }
+public sealed record DelegatedTaskWork(Guid TaskId, long TaskRevision, string AssignmentHash);
+public sealed record TaskReportWork(Guid TaskId, long TaskRevision, Guid NotificationId, Guid TerminalRunId);
+public sealed record AgentMessageWork(Guid MessageId, Guid ThreadId, Guid WakeRootActivationId, int WakeHops);
 public sealed record AgentRunTaskIntent(string Text, AgentRunTaskSource Source, string? SourceRevision = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] AgentCore.Domain.Triggers.TriggerSourceKind? EventSourceKind = null);
 public sealed record TenantApprovalResume(Guid SourceRunId, Guid RequestId, Guid OperationId, string ActionHash, IReadOnlyList<Guid> SourceInputEntryIds);
@@ -13,7 +16,7 @@ public sealed record TenantApprovalResume(Guid SourceRunId, Guid RequestId, Guid
 public sealed class AgentRunAdmission
 {
     public AgentRunAdmission(Activation activation, string definitionId, int definitionVersion,
-        AgentIdentity pinnedPersona, Guid? responseId, AgentRunOutputContract outputContract, EffectiveExecutionBudget? executionBudget = null, AgentRunConfiguration? configuration = null, ComposerRunInput? composerInput = null, AgentRunTaskIntent? taskIntent = null, TrustedExecutionContext? executionContext = null, TenantApprovalResume? approvalResume = null, AgentCore.Domain.Goals.GoalWorkContext? goalWork = null)
+        AgentIdentity pinnedPersona, Guid? responseId, AgentRunOutputContract outputContract, EffectiveExecutionBudget? executionBudget = null, AgentRunConfiguration? configuration = null, ComposerRunInput? composerInput = null, AgentRunTaskIntent? taskIntent = null, TrustedExecutionContext? executionContext = null, TenantApprovalResume? approvalResume = null, AgentCore.Domain.Goals.GoalWorkContext? goalWork = null, DelegatedTaskWork? delegatedTask = null, TaskReportWork? taskReport = null, AgentMessageWork? agentMessage = null)
     {
         ArgumentNullException.ThrowIfNull(activation);
         ArgumentNullException.ThrowIfNull(pinnedPersona);
@@ -36,6 +39,23 @@ public sealed class AgentRunAdmission
             || taskIntent.EventSourceKind is not null && (taskIntent.Source != AgentRunTaskSource.Automation
                 || taskIntent.EventSourceKind is not (AgentCore.Domain.Triggers.TriggerSourceKind.CoreEvent or AgentCore.Domain.Triggers.TriggerSourceKind.ApplicationEvent))))
             throw new ArgumentException("Run task intent is invalid.");
+        if (delegatedTask is not null && (delegatedTask.TaskId == Guid.Empty || delegatedTask.TaskRevision < 1
+            || delegatedTask.AssignmentHash.Length != 64 || taskIntent?.Source != AgentRunTaskSource.DelegatedTask
+            || taskIntent.SourceRevision != delegatedTask.TaskId.ToString("D"))) throw new ArgumentException("Task Run requires its exact immutable assignment witness.");
+        if (activation.Kind == ActivationKind.DelegatedTask && delegatedTask is null) throw new ArgumentException("Delegated activation requires a task witness.");
+        DelegatedTask = delegatedTask;
+        if (taskReport is not null && (taskReport.TaskId == Guid.Empty || taskReport.TaskRevision < 1 || taskReport.NotificationId == Guid.Empty
+            || taskReport.TerminalRunId == Guid.Empty || outputContract != AgentRunOutputContract.CompletionReport
+            || activation.Kind is not (ActivationKind.TaskCompletion or ActivationKind.ApprovalContinuation)
+            || delegatedTask is not null)) throw new ArgumentException("Task report requires its exact saved notice and terminal Run.");
+        if (activation.Kind == ActivationKind.TaskCompletion && taskReport is null) throw new ArgumentException("Task completion requires a notice witness.");
+        TaskReport = taskReport;
+        if (agentMessage is not null && (agentMessage.MessageId == Guid.Empty || agentMessage.ThreadId == Guid.Empty || agentMessage.WakeRootActivationId == Guid.Empty
+            || agentMessage.WakeHops is < 1 or > 2 || outputContract != AgentRunOutputContract.BackgroundOutcome || delegatedTask is not null || taskReport is not null
+            || taskIntent?.Source != AgentRunTaskSource.AgentMessage || taskIntent.SourceRevision != agentMessage.MessageId.ToString("D")
+            || activation.Kind is not (ActivationKind.AgentMessage or ActivationKind.ApprovalContinuation))) throw new ArgumentException("Message wake requires its exact bounded message witness.");
+        if (activation.Kind == ActivationKind.AgentMessage && agentMessage is null) throw new ArgumentException("Message wake requires a message witness.");
+        AgentMessage = agentMessage;
         TaskIntent = taskIntent;
         ExecutionContext = executionContext;
         if ((activation.Kind == ActivationKind.ApprovalContinuation) != (approvalResume is not null)
@@ -76,6 +96,9 @@ public sealed class AgentRunAdmission
     public AgentCore.Domain.Goals.GoalWorkContext? GoalWork { get; }
     public AgentRunTaskIntent? TaskIntent { get; }
     public TenantApprovalResume? ApprovalResume { get; }
+    public DelegatedTaskWork? DelegatedTask { get; }
+    public TaskReportWork? TaskReport { get; }
+    public AgentMessageWork? AgentMessage { get; }
     public TrustedExecutionContext? ExecutionContext { get; }
     public ComposerRunInput? ComposerInput { get; }
     public AgentRunConfiguration? Configuration { get; }

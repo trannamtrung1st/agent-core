@@ -33,14 +33,14 @@ public sealed partial class TenantSessionAccessTests
         public ConcurrentQueue<ModelRequest> ChildRequests { get; } = new();
         public override async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
-            if (Origin(request) != ExecutionOrigin.ImmediateBackground && request.Messages.Any(m => m.Role == ModelRole.User && m.Text.Contains("Keep the queued file available", StringComparison.Ordinal)))
+            if (Origin(request) != ExecutionOrigin.DelegatedTask && request.Messages.Any(m => m.Role == ModelRole.User && m.Text.Contains("Keep the queued file available", StringComparison.Ordinal)))
             { yield return new ModelSemanticResponseReady(new("Queued file noted.", new(ModelSpeechMode.None, null), [])); yield return new ModelCompleted(ModelStopReason.Completed); yield break; }
-            if (Origin(request) != ExecutionOrigin.ImmediateBackground)
+            if (Origin(request) != ExecutionOrigin.DelegatedTask)
             { await foreach (var item in base.GenerateAsync(request, ct)) yield return item; yield break; }
             ChildRequests.Enqueue(request); Entered.TrySetResult(); await Release.Task.WaitAsync(ct);
             Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
-            Assert.Equal(new[] { ToolCatalog.BackgroundStart }, request.Tools!
-                .Where(t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.SandboxExec or ToolCatalog.BrowserNavigate).Select(t => t.Name));
+            Assert.Equal(new[] { "tasks.delegate" }, request.Tools!
+                .Where(t => t.Name is "tasks.delegate" or ToolCatalog.SandboxExec or ToolCatalog.BrowserNavigate).Select(t => t.Name));
             var schema = Assert.Single(request.Tools!, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson;
             Assert.DoesNotContain("update_persona", schema); Assert.DoesNotContain(ToolCatalog.BrowserFillCredential, schema);
             var refused = request.Messages.Where(m => m.Role == ModelRole.Tool && m.ToolCallId?.StartsWith("background-file-stage-", StringComparison.Ordinal) == true)
@@ -121,7 +121,7 @@ public sealed partial class TenantSessionAccessTests
             await using WebApplicationFactory<Program> initial = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
             var factory = initial;
             using var firstOwner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") }); var owner = firstOwner;
-            var setup = await StartTenantBackground(factory, owner, submit: false, fileCapabilities: kind == "inline" ? new[] { ToolCatalog.BackgroundStart, ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreate } : null, reportReads: true); var tenant = setup.Tenant; var api = $"/api/v2/tenants/{tenant}";
+            var setup = await StartTenantBackground(factory, owner, submit: false, fileCapabilities: kind == "inline" ? new[] { "tasks.delegate", ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreate } : null, reportReads: true); var tenant = setup.Tenant; var api = $"/api/v2/tenants/{tenant}";
             var sessions = factory.Services.GetRequiredService<ITenantSessionStore>(); var runs = factory.Services.GetRequiredService<ITenantRunStore>();
             var parent = (await sessions.FindTenantSessionAsync(tenant, setup.Session))!;
             var instance = parent.Owner.AgentInstanceId; var executor = parent.Owner.ExecutorPrincipalId;
@@ -145,7 +145,7 @@ public sealed partial class TenantSessionAccessTests
             if (kind == "batch") { path = "/working/owned/result.txt"; model.WriteTool = ToolCatalog.WorkspaceBatch; model.WriteArguments = JsonSerializer.Serialize(new { operations = new object[] { new { op = "mkdir", path = "/working/owned" }, new { op = "copy", source = "/working/source.txt", destination = "/working/owned/copy.txt" }, new { op = "move", source = "/working/owned/copy.txt", destination = path }, new { op = "delete", path = "/working/source.txt" } } }); }
             if (kind == "resource")
             {
-                var saved = await Json(await owner.PostAsJsonAsync(api + $"/agents/{instance}/resources", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
+                var saved = await Json(await owner.PostAsJsonAsync(api + $"/agents/{instance}/resources", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!.Instance.Revision,
                     input = new { logicalPath = "background-source.txt", kind = AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Reference, mediaType = "text/plain", content = Encoding.UTF8.GetBytes(body) } }));
                 path = saved.GetProperty("resource").GetProperty("virtualPath").GetString()!;
             }
@@ -159,7 +159,7 @@ public sealed partial class TenantSessionAccessTests
                 var directory = await access.SaveRoleAsync(human, tenant, null, "Requester directory", ["members.read"], await Revision(owner, tenant));
                 var invite = await access.InviteAsync(human, tenant, account.LoginKey, directory.RoleId, await Revision(owner, tenant));
                 requester = (await access.AcceptInvitationAsync(account.AccountId, tenant, invite.Invitation.InvitationId, invite.Token)).PrincipalId;
-                var intentRole = await access.SaveRoleAsync(human, tenant, null, "Independent creation and primary file operations", ["sessions.create", "agent-runs.create", "workspaces.write", "artifacts.create"], await Revision(owner, tenant));
+                var intentRole = await access.SaveRoleAsync(human, tenant, null, "Independent creation and primary file operations", ["sessions.create", "agent-runs.create", "tasks.delegate", "spaces.read", "workspaces.write", "artifacts.create"], await Revision(owner, tenant));
                 await access.AssignRoleAsync(human, tenant, requester, intentRole.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
                 foreach (var grant in new[] { ("sessions.read", TenantSessionRules.Scope(tenant, setup.Session)), ("agents.chat", AccessScope.ForResource(tenant, "agent", instance.ToString("D"))) })
                 { var scopedRole = await access.SaveRoleAsync(human, tenant, null, grant.Item1, [grant.Item1], await Revision(owner, tenant)); await access.AssignRoleAsync(human, tenant, requester, scopedRole.RoleId, grant.Item2, await Revision(owner, tenant)); }
@@ -169,7 +169,8 @@ public sealed partial class TenantSessionAccessTests
             await model.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
             var child = (await sessions.ListTenantSessionsAsync(tenant, null, 0, 100)).Items.Single(s => s.Snapshot.Origin.OriginatingAgentRunId == source);
             var initialId = child.Snapshot.Origin.InitialBackgroundAgentRunId!.Value;
-            var workspace = api + (kind is "xlsx" or "batch" ? $"/sessions/{child.Owner.SessionId}/workspace" : $"/agents/{instance}/workspace");
+            var workerSpace = (await factory.Services.GetRequiredService<ITenantSpaceStore>().FindPrivateSpaceAsync(tenant, instance))!;
+            var workspace = api + (kind is "xlsx" or "batch" ? $"/sessions/{child.Owner.SessionId}/workspace" : $"/spaces/{workerSpace.SpaceId}/workspace");
             if (kind is "patch" or "batch")
                 Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(workspace + $"/content?path={Uri.EscapeDataString(kind == "patch" ? path : "/working/source.txt")}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent(Encoding.UTF8.GetBytes(kind == "patch" ? "Private original" : body)))).StatusCode);
             if (kind == "attachment")
@@ -182,7 +183,7 @@ public sealed partial class TenantSessionAccessTests
                 model.PublishArguments = JsonSerializer.Serialize(new { path = "/attachments/" + attachment.ToString("D"), displayName = "background-original.txt" });
             }
             if (mode == "home-disabled")
-                Assert.Equal(HttpStatusCode.OK, (await owner.PatchAsJsonAsync(api + $"/agents/{instance}/settings/stateIsolationPolicy", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
+                Assert.Equal(HttpStatusCode.OK, (await owner.PatchAsJsonAsync(api + $"/agents/{instance}/settings/stateIsolationPolicy", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!.Instance.Revision,
                     set = new { homeAccess = "Disabled" }, clear = Array.Empty<string>() })).StatusCode);
             model.Release.TrySetResult();
             if (reviewed) for (var step = 0; step < 2; step++)
@@ -244,7 +245,7 @@ public sealed partial class TenantSessionAccessTests
             if (mode == "unknown") Assert.Equal(1, writes);
             if (mode == "reject-repeat") Assert.Contains(model.ChildRequests.SelectMany(r => r.Messages), m => m.Role == ModelRole.Tool && m.Text.Contains("previously_rejected", StringComparison.Ordinal));
             var audit = await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200);
-            Assert.Single(audit, a => a.Action == "agent-runs.background.report");
+            Assert.Single(audit, a => a.Action == "tasks.report");
             Assert.Equal(reviewed ? mode.StartsWith("reject", StringComparison.Ordinal) ? 1 : 2 : 0, audit.Count(a => a.Action == "approvals.request"));
             Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
         }

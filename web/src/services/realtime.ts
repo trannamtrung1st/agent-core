@@ -860,6 +860,9 @@ function handleEvent(raw: ServerEvent): void {
   if (raw.type === "agent.response.completed" && String(raw.payload.status ?? "completed") === "completed") {
     void maybeAutoDispatchQueueHead();
   }
+  if (chatTenantId && raw.payload.tenantId === chatTenantId && (raw.type === 'task.changed' || raw.type === 'agent-message.changed')) {
+    window.dispatchEvent(new CustomEvent('agentcore:coordination-changed', { detail: { tenant: chatTenantId, session: raw.sessionId } }));
+  }
   if (chatTenantId && raw.type === 'agent.approval.pending') {
     if (raw.responseId === prior.liveResponseId && raw.payload.runId === prior.agentRunId) { clearAwaitingAgentResponseStart(); stopReceipts(); void maybeAutoDispatchQueueHead(); }
     window.dispatchEvent(new Event('agentcore:approval-updated'));

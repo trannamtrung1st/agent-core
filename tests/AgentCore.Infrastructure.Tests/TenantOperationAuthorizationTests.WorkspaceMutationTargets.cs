@@ -16,7 +16,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_workspace_mutation_target_observes_private_current_state_without_borrowing_reads_or_granting_a_write(bool sqlite, bool working)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read"]); await SeedRuntimeWorkspace(f, s, working, "private.txt");
         var root = working ? "/working" : "/home"; var target = MutationTargets(f);
         var call = new ModelToolCall("exact-private-target", ToolCatalog.WorkspaceWrite, JsonSerializer.Serialize(new { path = root + "/private.txt", content = "user supplied replacement" }));
@@ -37,7 +37,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_mutation_target_rechecks_independent_current_parent_authority_after_observation(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         var grant = await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read"]);
         var probe = new MutationObservationProbe(WorkspaceReader(f), async () => await f.Access.RevokeAssignmentAsync(s.Owner.PrincipalId, s.Tenant, grant.AssignmentId, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision));
         var call = new ModelToolCall("private-race", ToolCatalog.WorkspaceWrite, """{"path":"/working/missing.txt","content":"literal"}""");
@@ -49,7 +49,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_mutation_target_cross_root_copy_keeps_source_read_independent_and_rejects_foreign_owner_before_observation(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read"]);
         await GrantWorkspaceRuntimeReads(f, s, ["workspaces.read"], TenantWorkspaceRules.Home(s.Tenant, SpaceId(s)));
         await SeedRuntimeWorkspace(f, s, false, "source.txt");
@@ -68,7 +68,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_mutation_target_mixed_batch_never_uses_a_possible_delete_grant_for_secondary_write(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read"]);
         var probe = new MutationObservationProbe(WorkspaceReader(f), () => Task.CompletedTask); var service = MutationTargets(f, probe);
         var batch = new ModelToolCall("mixed-target", ToolCatalog.WorkspaceBatch, """{"operations":[{"op":"delete","path":"/working/old.txt"},{"op":"mkdir","path":"/working/new"}]}""");
@@ -85,7 +85,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [InlineData(false, true, "ReadOnly")] [InlineData(true, true, "ReadOnly")]
     public async Task Tenant_workspace_mutation_target_current_HomeAccess_narrowing_blocks_before_or_after_private_observation(bool sqlite, bool afterRead, string policy)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read", "workspaces.read", "workspaces.write"]);
         async Task Restrict()
         {
@@ -105,7 +105,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_mutation_target_does_not_disclose_private_native_error_messages(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read"]);
         var probe = new MutationObservationProbe(WorkspaceReader(f), () => throw new IOException("Private native target and content details"));
         var error = await Assert.ThrowsAsync<AccessDeniedException>(() => MutationTargets(f, probe).PrepareAsync(frame,

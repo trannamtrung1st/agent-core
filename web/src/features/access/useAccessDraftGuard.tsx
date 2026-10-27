@@ -28,12 +28,12 @@ export function useAccessDraftGuard(dirty: boolean, busy: boolean, onClose: () =
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
     window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
-  const close = () => {
+  const requestLeave = (leave: () => void) => {
     // Escape is delivered to nested native overlays too. Keep one confirmation owner until its
     // close animation finishes; a single key must never stack discard dialogs behind one another.
     if (busy || pending.current) return;
-    if (!dirty) { onClose(); return; }
-    void ask().then(discard => { if (discard) onClose(); });
+    if (!dirty) { leave(); return; }
+    void ask().then(discard => { if (discard) leave(); });
   };
-  return { close, holder, release: () => { released.current = true; } };
+  return { close: () => requestLeave(onClose), requestLeave, holder, release: () => { released.current = true; } };
 }

@@ -52,7 +52,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.All(markers, Assert.NotNull); Assert.All(markers, m => Assert.Equal(markers[0], m));
             Assert.All(model.Requests, r => Assert.Contains(r.Context!.Sections, s => s.Id == ContextSectionId.Profile && s.Layer == ContextLayer.Evidence
                 && s.Message.Text.Contains("ACTUAL_HUMAN_ROOT_PROFILE", StringComparison.Ordinal)));
-            Assert.Contains(model.Requests, r => TenantBackgroundModel.Origin(r) == ExecutionOrigin.ImmediateBackground);
+            Assert.Contains(model.Requests, r => TenantBackgroundModel.Origin(r) == ExecutionOrigin.DelegatedTask);
             // Completion uses a factual projection of the child, with no second model/Profile read.
             Assert.Null(AgentRunToolCallCheckpoint.ReadExecutionState(report!.Checkpoint).TenantProfileSource);
             Assert.DoesNotContain(model.Requests, r => TenantBackgroundModel.Origin(r) == ExecutionOrigin.CompletionReport);

@@ -178,7 +178,7 @@ for (const width of [1440, 768, 390, 320])
     );
     const created = await page.request.post('/api/v2/admin/agent-instances', {
       headers,
-      data: { definitionId: 'general-assistant', version: 25 },
+      data: { definitionId: 'general-assistant', version: 35 },
     });
     expect(created.ok()).toBe(true);
     const instance = await created.json();

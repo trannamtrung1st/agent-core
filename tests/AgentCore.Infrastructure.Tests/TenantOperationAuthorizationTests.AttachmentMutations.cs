@@ -10,7 +10,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_attachment_Session_scoped_creator_gets_factual_identity_without_child_read_authority(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var creator = await User(f, s, "session-attachment-creator@example.test", ["sessions.read"]);
         var role = await f.Access.SaveRoleAsync(s.Owner.PrincipalId, s.Tenant, null, "Session attachment creator", ["attachments.create"], (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
         await f.Access.AssignRoleAsync(s.Owner.PrincipalId, s.Tenant, creator.PrincipalId, role.RoleId, TenantSessionRules.Scope(s.Tenant, s.Run.SessionId), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
@@ -37,7 +37,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [InlineData(false, "attachments.create")] [InlineData(true, "attachments.create")]
     public async Task Tenant_attachment_upload_needs_independent_parent_and_creation_authority_before_intake(bool sqlite, string missing)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var human = await User(f, s, "attachment-creator@example.test", new[] { "sessions.read", "attachments.create" }.Where(k => k != missing).ToArray());
         var session = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Run.SessionId))!; using var body = new AttachmentIntakeProbe("Private uploaded body"u8.ToArray());
         await Assert.ThrowsAsync<AccessDeniedException>(() => AttachmentService(f).UploadAsync(s.Tenant, s.Run.SessionId, human, f.Ids.NewId(),
@@ -47,7 +47,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_attachment_upload_rechecks_current_login_and_IAM_after_intake_before_commit(bool sqlite, bool logout)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var human = await User(f, s, "attachment-intake-creator@example.test", ["sessions.read", "attachments.create"]); var state = (await f.Iam.ReadTenantAsync(s.Tenant))!;
         var assignment = state.Assignments.Single(a => a.PrincipalId == human.PrincipalId); var session = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Run.SessionId))!;
         using var body = new AttachmentIntakeProbe("Private uploaded body"u8.ToArray(), async () =>
@@ -64,7 +64,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_attachment_archived_Session_keeps_reads_but_refuses_upload_and_abort(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 32); var id = await UploadAttachment(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 35); var id = await UploadAttachment(f, s);
         await f.RunService().CancelAsync(s.Tenant, s.Run.AgentRunId, s.Owner, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, s.Run.AgentRunId))!.Revision);
         var session = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Run.SessionId))!;
         await f.Sessions.ChangeAsync(s.Tenant, s.Owner, new(s.Run.SessionId, session.Snapshot.Revision, TenantSessionAction.Archive), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);

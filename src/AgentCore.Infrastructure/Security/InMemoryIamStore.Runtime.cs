@@ -29,11 +29,11 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate)
         {
-            var result = sessionBacking.AgentRuns.Runs.Values.Where(r => !TenantInputBlocked(r) && (r.ApprovalRequestId is null || _approvals.GetValueOrDefault(r.ApprovalRequestId.Value) is { Status: not TenantApprovalStatus.Pending }) && (r.Admission.Activation.Kind is ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ConfigurationContinuation or ActivationKind.ContextContinuation or ActivationKind.GoalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground or ActivationKind.CoreEvent or ActivationKind.ApplicationEvent)
+            var result = sessionBacking.AgentRuns.Runs.Values.Where(r => !TenantInputBlocked(r) && (r.ApprovalRequestId is null || _approvals.GetValueOrDefault(r.ApprovalRequestId.Value) is { Status: not TenantApprovalStatus.Pending }) && (r.Admission.Activation.Kind is ActivationKind.TaskCompletion or ActivationKind.AgentMessage or ActivationKind.DelegatedTask or ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ConfigurationContinuation or ActivationKind.ContextContinuation or ActivationKind.GoalContinuation or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground or ActivationKind.CoreEvent or ActivationKind.ApplicationEvent)
                 && r.Owner.TenantId is { } tenant && _tenants.GetValueOrDefault(tenant)?.Tenant.Status == IdentityStatus.Active
                 && sessionBacking.OwnsTenantSession(tenant, r.SessionId) && (r.Status == AgentRunStatus.Queued || r.Status == AgentRunStatus.WaitingToRetry && r.NextRetryAtUtc <= at
                     || r.Status == AgentRunStatus.Running && r.Claim!.LeaseExpiresAtUtc <= at
-                    || r.Status == AgentRunStatus.WaitingForSignal && AgentRunWaitExecution.IsReady(r, at, TenantWaitChildren(r, r.Wait!))))
+                    || r.Status == AgentRunStatus.WaitingForSignal && (r.Wait!.Mode == AgentRunWaitMode.Tasks ? AgentRunWaitExecution.TasksReady(r, at, TenantTaskWaitFacts(r, r.Wait)) : AgentRunWaitExecution.IsReady(r, at))))
                 .OrderBy(r => r.CreatedAtUtc.ToUnixTimeMilliseconds()).ThenBy(InputOrdinal)
                 .ThenBy(r => r.AgentRunId).Take(Math.Clamp(limit, 1, 100)).ToArray();
             return ValueTask.FromResult<IReadOnlyList<AgentRun>>(result);
@@ -49,6 +49,16 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
             if (runtimeGeneration is { } generation && run.Claim?.Generation != generation) throw new AccessDeniedException("tenant_runtime_unavailable");
             if (command is AgentRunCommand.Claim)
             {
+                if (run.Admission.DelegatedTask is { } taskWork)
+                {
+                    var task = delegatedTasks.GetValueOrDefault((owner.TenantId!.Value, taskWork.TaskId));
+                    if (task is null || task.DeadlineAt <= TaskNow || task.CancellationRequested || AgentCore.Domain.Tasks.TaskLimits.Terminal(task.State)
+                        || sessionBacking.ReadTenantSession(owner.TenantId.Value, task.Source.SessionId) is null)
+                    {
+                        var stopped = TenantRunCancellationRules.Cancel(run, TaskNow); sessionBacking.SaveRetainedTenantOperationRun(stopped, run.Revision);
+                        return ValueTask.FromResult(stopped);
+                    }
+                }
                 if (run.Admission.GoalWork is { } goalWork)
                 {
                     var saved = sessionBacking.ReadTenantSession(owner.TenantId!.Value, run.SessionId);
@@ -61,7 +71,7 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
                         return ValueTask.FromResult(cancelled);
                     }
                 }
-                if (run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ConfigurationContinuation or ActivationKind.ContextContinuation or ActivationKind.GoalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground or ActivationKind.CoreEvent or ActivationKind.ApplicationEvent)) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
+                if (run.Admission.Activation.Kind is not (ActivationKind.TaskCompletion or ActivationKind.AgentMessage or ActivationKind.DelegatedTask or ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ConfigurationContinuation or ActivationKind.ContextContinuation or ActivationKind.GoalContinuation or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground or ActivationKind.CoreEvent or ActivationKind.ApplicationEvent)) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
                 _ = TenantExecutionLineage.RootAsync(run, this, ct).AsTask().GetAwaiter().GetResult();
                 if (run.ApprovalRequestId is { } approvalId) TenantRunContinuationRules.Require(run, _approvals.GetValueOrDefault(approvalId), run.Admission.ApprovalResume is { } resume ? sessionBacking.ReadTenantRun(owner.TenantId!.Value, resume.SourceRunId) : null);
                 try { RequireRuntimeOwner(owner); } catch (AccessDeniedException) { throw AgentCoreErrors.Conflict("Executor is unavailable."); }
@@ -83,9 +93,6 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
             if (command is AgentRunCommand.Complete { OutcomeEntryId: { } entryId })
             {
                 RequireTenantOutputSources(run, ct);
-                if (sessionBacking.AgentRuns.CompletionReceipts.Values.Select(AgentCore.Infrastructure.Persistence.CompletionInboxMapping.Read)
-                    .Any(i => i.Owner == owner && i.Status == CompletionInboxStatus.Claimed && i.ClaimRunId == runId && i.Acknowledgment is not null))
-                    throw AgentCoreErrors.Conflict("Acknowledgment requires the atomic outcome transaction.");
                 var entry = sessionBacking.FindEntry(run.SessionId, entryId);
                 if (entry is not { Role: ConversationRole.Assistant, Status: EntryStatus.Completed } || entry.ResponseId != run.ResponseId) throw AgentCoreErrors.Conflict("Outcome must reference the saved response.");
             }
@@ -98,10 +105,12 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
                 if (command is AgentRunCommand.SuspendWait suspend)
                 {
                     RequireTenantWait(run, suspend, ct);
-                    next = AgentRunWaitExecution.Apply(run, command, TenantWaitChildren(run, suspend.Wait, true));
+                    next = suspend.Wait.Mode == AgentRunWaitMode.Tasks ? AgentRunWaitExecution.ApplyTasks(run, command, TenantTaskWaitFacts(run, suspend.Wait))
+                        : AgentRunWaitExecution.Apply(run, command);
                 }
                 else if (command is AgentRunCommand.ResumeWait)
-                    next = AgentRunWaitExecution.Apply(run, command, TenantWaitChildren(run, run.Wait ?? throw AgentCoreErrors.Conflict("Run is not waiting.")));
+                    next = run.Wait?.Mode == AgentRunWaitMode.Tasks ? AgentRunWaitExecution.ApplyTasks(run, command, TenantTaskWaitFacts(run, run.Wait))
+                        : AgentRunWaitExecution.Apply(run, command);
                 else next = command.Apply(run, () => diagnosticId);
                 if (command is AgentRunCommand.Fail { Code: "protected-output-unavailable" }) sessionBacking.SettleRefusedTenantOutput(run, next);
                 var coverage = command is AgentRunCommand.Checkpoint coverageCheckpoint && TenantExperienceReferences.Sources(coverageCheckpoint.Value).Count > 0 ? PrepareTenantExperienceCoverage(TenantCoreRoot(run), coverageCheckpoint.Value) : null;

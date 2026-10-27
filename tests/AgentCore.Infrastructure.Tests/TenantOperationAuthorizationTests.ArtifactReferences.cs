@@ -9,7 +9,7 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed partial class TenantOperationAuthorizationTests
 {
     [Theory] [InlineData(false, "customer-support", 3)] [InlineData(true, "customer-support", 3)]
-    [InlineData(false, "general-assistant", 32)] [InlineData(true, "general-assistant", 32)]
+    [InlineData(false, "general-assistant", 35)] [InlineData(true, "general-assistant", 35)]
     public async Task Artifact_reference_preflight_requires_actual_source_current_claim_and_independent_read_not_creation(bool sqlite, string template, int version)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var setup = await Setup(f, template, version);

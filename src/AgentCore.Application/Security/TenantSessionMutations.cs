@@ -16,6 +16,18 @@ public static class TenantSessionMutations
     public static SessionSnapshot ExpireDue(SessionSnapshot current, DateTimeOffset at)
     {
         if (current.DurablyDeletedAt is not null || !SessionRetention.IsDue(current, at)) throw new SecurityConflictException("retention_not_due");
+        return ExpireCore(current, at);
+    }
+    // The owning store must prove the exact retained source deadline in its transaction.
+    // This does not change the derived Session's immutable personal retention policy.
+    public static SessionSnapshot ExpireInheritedSource(SessionSnapshot current, DateTimeOffset at)
+    {
+        if (current.DurablyDeletedAt is not null || current.Origin.Kind is not (SessionOriginKind.DelegatedTask or SessionOriginKind.DirectAgentMessage))
+            throw new SecurityConflictException("retention_not_due");
+        return ExpireCore(current, at);
+    }
+    private static SessionSnapshot ExpireCore(SessionSnapshot current, DateTimeOffset at)
+    {
         var settled = current with { PendingAgentInputIds = [], PendingMode = null,
             Status = SessionLifecycle.IsTerminal(current.LifecycleStatus) ? SessionStatus.Ended : SessionStatus.Created };
         if (!SessionLifecycle.IsTerminal(settled.LifecycleStatus))
@@ -24,6 +36,8 @@ public static class TenantSessionMutations
     }
     public static SessionSnapshot RetireDue(SessionSnapshot current, DateTimeOffset at) =>
         Apply(ExpireDue(current, at), new(current.SessionId, current.Revision, TenantSessionAction.Delete), at);
+    public static SessionSnapshot RetireInheritedSource(SessionSnapshot current, DateTimeOffset at) =>
+        Apply(ExpireInheritedSource(current, at), new(current.SessionId, current.Revision, TenantSessionAction.Delete), at);
     public static ConversationEntry RedactEntry(ConversationEntry entry) => entry with { Text = "", Parts = null, Envelope = null, Attachments = null,
         Failure = null, SourceAdmissionFingerprint = null, FinishReason = null, InterruptReason = null, ModelProvenance = null,
         HeardTextEndExclusive = 0, ReceivedTextEndExclusive = 0, Status = entry.Status == EntryStatus.Streaming ? EntryStatus.Interrupted : entry.Status };

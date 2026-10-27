@@ -1,3 +1,4 @@
+import { trapSessionInspectorFocus } from "./SessionSandboxFrame";
 import { ArrowLeftOutlined, BellOutlined, CheckOutlined, MessageOutlined } from "@ant-design/icons";
 import { Alert, Button, Collapse, Drawer, Empty, Flex, Spin, Typography, theme } from "antd";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
@@ -8,7 +9,7 @@ import { type AgentRun, type BackgroundSession } from "../../services/api";
 import { refreshCatalog } from "../../services/catalog";
 import { openCatalogSession } from "../../services/realtime";
 import { tenantAgentPath } from '../access/accessRoute';
-import { AgentRunDetailDrawer, AgentRunDetails, AgentRunStatus, SessionRunHistory } from "./AgentRunDetails";
+import { AgentRunDetails, AgentRunStatus, SessionRunHistory } from "./AgentRunDetails";
 import { CompletionDeliveryStatus } from "./AutomationDestination";
 import { formatChatTime } from "./chatTime";
 import { DrawerListFooter } from "./DrawerListFooter";
@@ -22,8 +23,6 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
 }) {
   const { token } = theme.useToken();
   const page = useCursorPages(`${source.scope}:${instanceId}`, open && !initialSessionId, (_scope, cursor) => source.listBackground(instanceId, cursor));
-  const [handlingRun, setHandlingRun] = useState<AgentRun | null>(null);
-  const [handlingOpen, setHandlingOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [recoveryId, setRecoveryId] = useState<string | null>(null);
   const [recovering, setRecovering] = useState(false);
@@ -42,7 +41,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
   const moveFocus = useRef(false);
   const { isUnread, markRead } = useWorkReadState(source.readScope);
   useEffect(() => {
-    epoch.current++; setSelected(null); setSelectedId(null); setRecoveryId(null); setHandlingOpen(false); setHandlingRun(null); setBusy(false); setMarkingRead(false); setActionError(null); actionPending.current = false;
+    epoch.current++; setSelected(null); setSelectedId(null); setRecoveryId(null); setBusy(false); setMarkingRead(false); setActionError(null); actionPending.current = false;
     historyOpener.current = null; moveFocus.current = false;
     setReadFeedback(null);
     return () => { epoch.current++; };
@@ -82,11 +81,6 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
   function refreshDetails() {
     if (targetId) setDetailRefresh(value => value + 1);
     else void page.refresh();
-  }
-  async function inspectHandlingRun(runId: string) {
-    const generation = epoch.current; setHandlingRun(null); setHandlingOpen(true);
-    try { const run = await source.getInstanceRun(instanceId, runId); if (generation === epoch.current) setHandlingRun(run); }
-    catch (reason) { if (generation === epoch.current) { setHandlingOpen(false); setActionError(reason instanceof Error ? reason.message : "Unable to load run. Try again."); } }
   }
   function select(item: BackgroundSession, control: "history") {
     historyOpener.current = { sessionId: item.session.sessionId, control }; moveFocus.current = true;
@@ -145,7 +139,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
         const result = await source.listBackground(instanceId, cursor, 100);
         if (generation !== epoch.current) return;
         for (const item of result.items) {
-          if (item.initialRun && item.completionDelivery?.status !== "handled") runs.push(item.initialRun);
+          if (item.initialRun) runs.push(item.initialRun);
         }
         if (!result.hasMore) break;
         if (!result.nextCursor || cursors.has(result.nextCursor)) throw new Error("Unable to load all background results. Try marking all as read again.");
@@ -179,6 +173,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
   const rows = page.error ? [] : page.items;
   return <><Drawer title={active ? active.originalTitle ?? "Background task" : "Background work"} open={open} onClose={onClose}
     onKeyDown={event => {
+      trapSessionInspectorFocus(event);
       if (event.key !== "Escape") return;
       event.stopPropagation();
       onClose();
@@ -190,7 +185,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
         <Button ref={backButton} type="text" icon={<ArrowLeftOutlined aria-hidden />} style={{ alignSelf: "flex-start", paddingInline: token.paddingXS }} onClick={() => { if (initialSessionId) { onClose(); return; } moveFocus.current = true; setSelectedId(null); setSelected(null); setActionError(null); }}>{initialSessionId ? "Back to Activity" : "All background Sessions"}</Button>
         <Flex wrap align="center" gap={token.paddingXS}>
           <Typography.Text type="secondary">{runOriginLabel(active.origin.kind)}</Typography.Text>
-          {active.completionDelivery ? <CompletionDeliveryStatus delivery={active.completionDelivery} onInspect={id => void inspectHandlingRun(id)} /> : null}
+          {active.completionDelivery ? <CompletionDeliveryStatus delivery={active.completionDelivery} /> : null}
         </Flex>
         {onAddReference ? <Button disabled={active.session.archived || active.session.lifecycleStatus === "Deleted"} onClick={() => { onAddReference(active.session.sessionId, active.originalTitle ?? "Background task"); onClose(); }}>Add to chat</Button> : null}
         <Button type="primary" icon={<MessageOutlined aria-hidden />} loading={busy} disabled={busy || recoveryId === active.session.sessionId || !active.canContinueInChat} href={chatHref(active)} onClick={event => followChatLink(event, active)}>{active.surfaces.includes("ChatList") ? "Open chat" : "Continue in chat"}</Button>
@@ -226,10 +221,10 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
                 <Typography.Text type="secondary">{fileCount(item)}{item.initialRun && item.initialRun.attemptCount > 1 ? ` · Attempt ${item.initialRun.attemptCount} of ${item.initialRun.maxAttempts}` : ""}</Typography.Text>
               </Flex>
               {item.initialRun?.outcome?.summary || item.initialRun?.failureSummary ? <Typography.Paragraph style={{ marginBottom: 0 }} ellipsis={{ rows: 2 }}>{item.initialRun.outcome?.summary || item.initialRun.failureSummary}</Typography.Paragraph> : null}
-              {item.completionDelivery ? <CompletionDeliveryStatus delivery={item.completionDelivery} onInspect={id => void inspectHandlingRun(id)} /> : null}
+              {item.completionDelivery ? <CompletionDeliveryStatus delivery={item.completionDelivery} /> : null}
               {item.surfaces.includes("ChatList") ? <Typography.Text type="secondary">Continued in chat</Typography.Text> : null}
               {item.initialRun?.progress ? <Typography.Text className="background-work-progress">{item.initialRun.progress}</Typography.Text> : null}
-              {item.initialRun && item.completionDelivery?.status !== "handled" && isUnread(item.initialRun) ? <Typography.Text><BellOutlined /> Unread · needs attention</Typography.Text> : null}
+              {item.initialRun && isUnread(item.initialRun) ? <Typography.Text><BellOutlined /> Unread · needs attention</Typography.Text> : null}
               <Flex wrap align="center" gap={token.paddingXS}><Button data-background-control="history" onClick={() => select(item, "history")}>View original result</Button>
                 <Button disabled={busy || recoveryId === item.session.sessionId || !item.canContinueInChat} href={chatHref(item)} onClick={event => followChatLink(event, item)}>{item.surfaces.includes("ChatList") ? "Open chat" : "Continue in chat"}</Button>{automationLink(item)}</Flex>
             </Flex>
@@ -240,5 +235,5 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
       </>}
       {actionError ? <Alert type="error" showIcon title={actionError} description={recoveryId ? "Read saved facts before another action. This read does not repeat Continue in chat." : undefined} action={recoveryId ? <Button loading={recovering} onClick={() => void readback()}>Read current background facts</Button> : <Button onClick={refreshDetails}>Refresh</Button>} /> : null}
     </Flex>
-  </Drawer><AgentRunDetailDrawer run={handlingRun} open={handlingOpen} wide={wide} onClose={() => setHandlingOpen(false)} onChange={setHandlingRun} /></>;
+  </Drawer></>;
 }

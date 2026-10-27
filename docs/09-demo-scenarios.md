@@ -214,9 +214,9 @@ P9.5/P9.6 scenarios above are historical evidence at their recorded freeze SHAs.
 
 ## Background Session cutover journey
 
-With the default Synthetic General Assistant v17, submit `[test:background-start]`. Initiative remains disabled. The parent acknowledges the committed independent child and receives its first meaningful terminal outcome exactly once. Open Background Work, inspect its reported status and Continue in chat; the URL retains the child ID. Send `Check B too`: it creates another Run in that child and no second initial-outcome report. A quiet child outcome remains quiet. Authored background Automations report only when explicitly configured.
+Create current General Assistant v35 workers in a disposable Synthetic tenant. In the target's settings, explicitly enable Accept delegated tasks and grant its independent execution permissions. Open a source Chat → Tasks → Delegate task. Choose the exact target and worker Space/optional Environment; assign `synthetic-task-worker synthetic-task-question: inspect the approved local evidence` with inbox-only reporting.
 
-Background Work shows Session rows, readable status/progress and unread attention. History exposes safe run outcomes, exact approval previews, cancellation and bounded artifacts. Quiet NoAction remains inspectable without an assistant bubble. Continue closes the drawer after the same Session connects. Admin Runs uses AgentRun identity and links back to Automation or Experience. Shared Ant Design reading regions, cursor paging, focus return and responsive drawer sizes remain consistent with the current design system.
+Inspect its real worker question, send explicitly attributed Human guidance, read the original saved result and acknowledge its notice separately. Verify that Task success does not verify a Goal. If Task delegation requires Review, preparation opens the exact existing approval inspector without admitting a worker; approve and inspect the eventual admission receipt. The worker owns a distinct Session/Run; the Human command has no source Run. Independent configured Automation destinations remain the separate demo below.
 
 ## Automation destination demo
 
@@ -246,12 +246,12 @@ Optional email delivery uses existing independently connected Email Account, Cor
 
 ## Real local Workbench demo
 
-Use the [trusted-local runner](17-observability-and-operations.md#trusted-local-opensandbox), then in Platform → Sandboxes inspect readiness and explicitly Verify the General Workbench. Create an Instance of General Assistant v28, inspect its approved Execution sandbox selection and start a text Session. Synthetic mode performs real commands for these exact fixture messages:
+Use the [trusted-local runner](17-observability-and-operations.md#trusted-local-opensandbox), then in Platform → Sandboxes inspect readiness and explicitly Verify the General Workbench. Create an Instance of current General Assistant v35, inspect its approved Execution sandbox selection and start a text Session. Synthetic mode performs real commands for these exact fixture messages:
 
 - `synthetic-sandbox:demo`: print Python/Node versions, run an intentionally failing Python test, fix and pass it, run a Node test, generate/validate XLSX and DOCX, then publish both through authenticated Artifacts. Open the shared previews or download the files.
 - `synthetic-sandbox:retain`: verify same-Session Python/Office files after reconnect, Core/server restart or approved sandbox reset/expiry.
 - `synthetic-sandbox:long`: stream `started`, execute for 31 seconds and report completion beyond the ordinary 30-second cap.
 - `synthetic-sandbox:cancel`: inspect running output, use Chat Stop, inspect canceled/uncertain synchronization, explicitly reset and rerun retained-file inspection.
-- `[test:background-start] [test:opensandbox-background]`: run the coding/Office scenario in an independent owned Background Session and inspect its original result/files.
+- For detached coding/Office work, use a canonical Task with a qualified worker and exact native command Review; inspect its original result/files through their own current permissions.
 
 The deterministic model chooses actual tools; it does not fabricate successful command results. Wrong exits/unavailable profiles stop the demo with evidence. Office/Drive previews/save remain the existing optional capability and bound-credential flows; sandbox generation does not grant Drive credentials. Own execd loopback and writable-layer quota limitations stay disclosed. Exact executed evidence belongs to [verification](reports/opensandbox-integration-verification.md).

@@ -19,4 +19,4 @@ public sealed record AgentInstance(
     AgentCore.Domain.Models.ModelPreference? UnattendedModel = null,
     HarnessManagementState? HarnessManagement = null,
     ExecutionBudgetPolicy? ExecutionBudgets = null, InstanceSettingsOverrides? SettingsOverrides = null,
-    [property: System.Text.Json.Serialization.JsonIgnore] AgentBrowserProfileReset? BrowserProfileReset = null);
+    [property: System.Text.Json.Serialization.JsonIgnore] AgentBrowserProfileReset? BrowserProfileReset = null, AgentCore.Domain.Tasks.AgentCooperationPolicy? Cooperation = null);

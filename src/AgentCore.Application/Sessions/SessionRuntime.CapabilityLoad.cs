@@ -32,7 +32,6 @@ public sealed partial class SessionRuntime
             ConfigurationContinuationTarget: ContinuationTarget(_boundAgentRun),
             OutputContract: _boundAgentRun?.Admission.OutputContract ?? AgentRunOutputContract.ConversationResponse,
             AuthoredAutomation: _boundAgentRun?.Admission.Activation.DedupeKey.StartsWith("automation:", StringComparison.Ordinal) == true,
-            HasBackgroundClaim: _boundAgentRun is { Claim: { } claim } bound && await _agentRuns.HasCompletionClaimAsync(bound.Owner, bound.AgentRunId, claim.Generation, _time.GetUtcNow(), ct),
             CredentialMetadataAvailable: _boundAgentRun?.Owner.TenantId is not null && _boundAgentRun.Admission.Configuration?.CredentialBindings.Count > 0,
             Harness: await HarnessContextAsync(_boundAgentRun, ct),
             AgentWorkspaceAvailable: _runtimeOwner is not null,

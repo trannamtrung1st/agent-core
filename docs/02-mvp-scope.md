@@ -114,7 +114,7 @@ Do not spend MVP time on:
 - agent marketplace;
 - visual agent builder;
 - arbitrary workflow automation;
-- multi-agent orchestration;
+- unbounded multi-Agent orchestration, Group Chat and external A2A beyond the explicit Initiative 9 Task contract;
 - complex browser automation;
 - generalized tool ecosystems;
 - plugin marketplaces;
@@ -169,3 +169,12 @@ The included enhancement adds an owner-scoped completion inbox, explicit list/in
 ## Approved P10 local execution scope
 
 The owner-approved local-demo cutover includes one per-Session SDK environment, prebuilt Python/Node/data/Office tooling, revisioned Global profiles, Definition/Instance selection, canonical /working snapshot synchronization, authenticated Artifact delivery, tracked background commands and independent existing Background Sessions. Direct host process/filesystem/daemon authority is not granted to agents. Core startup remains Docker-free when disabled. Public/multi-tenant deployment, writable-layer quota, stronger own-loopback isolation, pools, another execution engine, DinD/extra VM, Kubernetes and new orchestration remain outside this target. P11 remains unopened. [Implementation order](18-implementation-plan.md#p10-opensandbox-cutover-authorized-2026-10-13) and [verification](reports/opensandbox-integration-verification.md) own gates and evidence.
+
+
+<a id="initiative-9--adopted-successor-implementation-in-progress"></a>
+
+## Initiative 9 — Task delegation and communication
+
+Initiative 9 explicitly authorizes post-MVP same-tenant delegation and two-party Agent communication. It does not expand the original MVP acceptance. Tasks coordinate existing Session/Activation/AgentRun execution; Group Chat is Initiative 10 and remains unstarted.
+
+See the [adopted proposal](proposals/initiative-9-task-delegation-communication.md), [removal audit](reports/initiative-9-source-audit-2026-10-27.md) and [local delivery evidence and limits](reports/initiative-9-local-verification-2026-10-27.md). The implementation has focused local verification; the report distinguishes exercised behavior from unrun deployment, provider and device qualification.

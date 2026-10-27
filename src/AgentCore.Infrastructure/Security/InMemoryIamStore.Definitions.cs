@@ -10,7 +10,11 @@ public sealed partial class InMemoryIamStore
     public ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (instances.CredentialGate) lock (definitions.TenantGate)
-            return ValueTask.FromResult(AgentCore.Application.Evaluations.EvaluationStoreRules.TryScope(scope, out _) ? OwnsEvaluation(scope)
+            return ValueTask.FromResult(AgentCore.Application.Tasks.TaskAuthority.TryScope(scope, out var taskScope)
+                ? scope.ResourceType == "task" ? delegatedTasks.GetValueOrDefault((scope.TenantId!.Value, taskScope)) is { } ownedTask
+                    && sessionBacking.ReadTenantSession(scope.TenantId.Value, ownedTask.Source.SessionId) is not null
+                    : agentThreads.ContainsKey((scope.TenantId!.Value, taskScope))
+                : AgentCore.Application.Evaluations.EvaluationStoreRules.TryScope(scope, out _) ? OwnsEvaluation(scope)
                 : AgentCore.Application.Models.TenantModelRules.TryId(scope, out _) ? OwnsModelResource(scope)
                 : TenantSecretService.TryId(scope, out var secret) ? _secrets.GetValueOrDefault((scope.TenantId!.Value, secret)) is { Status: not AgentCore.Domain.Spaces.SecretStatus.Deleted }
                 : TenantSpaceService.TryId(scope, out var space) ? _spaces.GetValueOrDefault((scope.TenantId!.Value, space)) is { DeletedAt: null }

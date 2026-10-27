@@ -28,9 +28,9 @@ public sealed partial class TenantSessionAccessTests
         public ConcurrentQueue<ModelRequest> ChildRequests { get; } = new();
         public override async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            if (Origin(request) != ExecutionOrigin.ImmediateBackground && request.Messages.Any(m => m.Role == ModelRole.User && m.Text.Contains("Keep the queued file available", StringComparison.Ordinal)))
+            if (Origin(request) != ExecutionOrigin.DelegatedTask && request.Messages.Any(m => m.Role == ModelRole.User && m.Text.Contains("Keep the queued file available", StringComparison.Ordinal)))
             { yield return new ModelSemanticResponseReady(new("Queued file noted.", new(ModelSpeechMode.None, null), [])); yield return new ModelCompleted(ModelStopReason.Completed); yield break; }
-            if (Origin(request) != ExecutionOrigin.ImmediateBackground)
+            if (Origin(request) != ExecutionOrigin.DelegatedTask)
             { await foreach (var item in base.GenerateAsync(request, cancellationToken)) yield return item; yield break; }
             ChildRequests.Enqueue(request); Entered.TrySetResult(); await Release.Task.WaitAsync(cancellationToken);
             Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
@@ -104,7 +104,7 @@ public sealed partial class TenantSessionAccessTests
             var path = kind == "working" ? "/working/observation.txt" : "/home/observation.txt";
             if (kind.StartsWith("resource", StringComparison.Ordinal) || kind == "knowledge")
             {
-                var saved = await Json(await owner.PostAsJsonAsync(api + $"/agents/{instance}/resources", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
+                var saved = await Json(await owner.PostAsJsonAsync(api + $"/agents/{instance}/resources", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2,
                     input = new { logicalPath = "observation.txt", kind = kind == "knowledge" ? AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Knowledge : AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Reference, mediaType = "text/plain", content = Encoding.UTF8.GetBytes(body) } }));
                 path = saved.GetProperty("resource").GetProperty("virtualPath").GetString()!;
                 if (kind == "knowledge") { model.Tool = ToolCatalog.KnowledgeRetrieve; model.Arguments = JsonSerializer.Serialize(new { identity = saved.GetProperty("resource").GetProperty("key").GetString() }); }
@@ -121,7 +121,7 @@ public sealed partial class TenantSessionAccessTests
             var sessions = factory.Services.GetRequiredService<ITenantSessionStore>(); var runs = factory.Services.GetRequiredService<ITenantRunStore>();
             var child = (await sessions.ListTenantSessionsAsync(tenant, null, 0, 100)).Items.Single(s => s.Snapshot.Origin.OriginatingAgentRunId == parentRunId);
             var initialId = child.Snapshot.Origin.InitialBackgroundAgentRunId!.Value;
-            var workspace = api + (kind == "working" ? $"/sessions/{child.Owner.SessionId}/workspace" : $"/agents/{instance}/workspace");
+            var workspace = api + (kind == "working" ? $"/sessions/{child.Owner.SessionId}/workspace" : $"/spaces/{session.Snapshot.ContextSelection!.SpaceId}/workspace");
             byte[] bytes = Encoding.UTF8.GetBytes(body);
             if (kind is "docx" or "xlsx")
             {
@@ -238,15 +238,15 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(waiting.Admission.ExecutionContext!.RootActivationId, final.Admission.ExecutionContext!.RootActivationId);
             var report = await WaitBackgroundFileReport(runs, tenant, setup.Session);
             Assert.Equal(final.AgentRunId, report.Admission.ExecutionContext!.ParentRunId);
-            var history = await Json(await owner.GetAsync(api + $"/sessions/{setup.Session}/messages?limit=100")); Assert.Contains("Background work: File observation finished.", history.ToString());
+            var history = await Json(await owner.GetAsync(api + $"/sessions/{setup.Session}/messages?limit=100")); Assert.Contains("Task Succeeded: File observation finished.", history.ToString());
             var activity = await Json(await owner.GetAsync(api + $"/agents/{instance}/activity/sessions/{child.Owner.SessionId}/background"));
             Assert.Equal(initialId, activity.GetProperty("session").GetProperty("initialRunId").GetGuid());
             Assert.Equal(final.AgentRunId, activity.GetProperty("initialRun").GetProperty("runId").GetGuid());
             Assert.Equal("File observation finished.", activity.GetProperty("initialRun").GetProperty("outcomeText").GetString());
-            Assert.Equal("delivered", activity.GetProperty("completionDelivery").GetProperty("status").GetString());
+            Assert.Equal(JsonValueKind.Null, activity.GetProperty("completionDelivery").ValueKind);
             if (sqlite && kind == "home" && decision == "approve" && !restart)
                 await AssertBackgroundSuccessorReadScope(factory, owner, tenant, instance, child.Owner.SessionId, initialId, final.AgentRunId);
-            var audit = await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200); Assert.Single(audit, a => a.Action == "agent-runs.background.report");
+            var audit = await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200); Assert.Single(audit, a => a.Action == "tasks.report");
             if (expectedConsent) Assert.Single(audit, a => a.Action == "approvals.request");
             else Assert.DoesNotContain(audit, a => a.Action == "approvals.request");
             if (model.RepeatRefusal) Assert.Contains(observations, text => text.Contains(decision == "reject" ? "previously_rejected" : "previously_cancelled", StringComparison.Ordinal));

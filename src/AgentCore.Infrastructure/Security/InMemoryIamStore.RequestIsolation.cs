@@ -20,13 +20,22 @@ public sealed partial class InMemoryIamStore : ITenantRequestIsolationStore
         ct.ThrowIfCancellationRequested(); if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
         lock (_gate) return ValueTask.FromResult(sessionBacking.RequestIsolationPage(after, limit));
     }
+    private TenantSessionSettlement? TaskSessionSettlement(TenantSessionRoot owner)
+    {
+        var graph = sessionBacking.SessionSettlement(owner);
+        if (graph is null) return null;
+        return graph with {
+            Tasks = delegatedTasks.Values.Where(t => t.Source.TenantId == owner.TenantId && t.Source.SessionId == owner.SessionId).Take(101).ToArray(),
+            TaskNotifications = taskNotifications.Values.Where(n => n.TenantId == owner.TenantId && n.RecipientSessionId == owner.SessionId).Take(1001).ToArray()
+        };
+    }
     private TenantRequestIsolationState? RequestIsolation(TenantSessionRoot owner)
     {
-        var graph = sessionBacking.SessionSettlement(owner); if (graph is null) return null;
+        var graph = TaskSessionSettlement(owner); if (graph is null) return null;
         var lease = sandboxBacking.TenantLease(owner.TenantId, owner.SessionId);
         if (lease is null && sandboxBacking.HasLease(owner.SessionId)) throw new AccessDeniedException("sandbox_owner_mismatch");
         if (lease is not null && !TenantRequestIsolationRules.LeaseOwner(owner, lease)) throw new AccessDeniedException("sandbox_owner_mismatch");
-        return new(graph.Session, TenantRequestIsolationRules.Ready(graph.Session, graph.Runs, graph.Children, graph.ChildRuns, graph.Receipts), lease);
+        return new(graph.Session, TenantRequestIsolationRules.Ready(graph.Session, graph.Runs, graph.Children, graph.ChildRuns, graph.Receipts, graph.Tasks, graph.TaskNotifications), lease);
     }
     public ValueTask<TenantRequestIsolationState?> ReadTenantRequestIsolationAsync(TenantSessionRoot owner, CancellationToken ct = default)
     {

@@ -29,7 +29,7 @@ public sealed partial class TenantOperationAuthorizationTests
         ResourceCase v;
         if (inherited)
         {
-            var setup = await Setup(f, "general-assistant", 32);
+            var setup = await Setup(f, "general-assistant", 35);
             var inheritedResource = setup.Run.Admission.Configuration!.Resources.First(r => r.Key.StartsWith("definition:", StringComparison.Ordinal) && r.MediaType.StartsWith("text/", StringComparison.Ordinal) && r.ByteLength < 4000);
             v = new(setup, inheritedResource.Key, inheritedResource.VirtualPath, (await f.RunContent.ReadAsync(inheritedResource.ContentSha256))!);
         }

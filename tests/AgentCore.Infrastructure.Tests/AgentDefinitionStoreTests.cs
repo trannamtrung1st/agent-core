@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Sessions;
@@ -8,15 +9,35 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class AgentDefinitionStoreTests
 {
+    private static string RetiredPath(int version) => Path.Combine(FindAgents(), "..", "tests", "fixtures", "retired-builtins", $"general-assistant-v{version}.json");
+    private static AgentDefinition RetiredDefinition(int version) => JsonSerializer.Deserialize<AgentDefinition>(File.ReadAllText(RetiredPath(version)),
+        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase })!;
     [Fact]
-    public async Task General_assistant_v34_preserves_v33_bytes_and_policy_until_explicit_adoption()
+    public void Retired_child_Definition_cannot_be_reinstalled_as_an_executable_catalog_file()
+    {
+        var directory = Directory.CreateTempSubdirectory("agent-core-retired-definition-");
+        try
+        {
+            File.Copy(RetiredPath(34), Path.Combine(directory.FullName, "retired.json"));
+            var error = Assert.Throws<AgentCoreException>(() => new FileAgentDefinitionStore(directory.FullName, SyntheticProviderAliases.Default));
+            Assert.Contains("retired_background_contract", error.Message);
+        }
+        finally { directory.Delete(true); }
+    }
+    [Fact]
+    public async Task General_assistant_v35_adds_canonical_cooperation_without_rewriting_frozen_predecessor_bytes()
     {
         var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
-        var old = (await store.GetAsync("general-assistant", 33))!;
+        var old = RetiredDefinition(33);
         var latest = (await store.GetAsync("general-assistant"))!;
-        Assert.Equal(34, latest.Version);
-        Assert.Equal("634515c2225df4ee021dde76254fd7378aa5355de92eeab720e06f340ba9f0c6", Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(Path.Combine(FindAgents(), "general-assistant-v33.json")))));
-        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(old), System.Text.Json.JsonSerializer.Serialize(latest with { Version = 33, AgentInstructions = old.AgentInstructions }));
+        Assert.Equal(35, latest.Version);
+        Assert.All(await store.ListAsync(), definition => Assert.DoesNotContain(DefinitionExecutionPolicies.Of(definition).ToolList,
+            name => name.StartsWith("background.", StringComparison.Ordinal)));
+        Assert.Equal("634515c2225df4ee021dde76254fd7378aa5355de92eeab720e06f340ba9f0c6", Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(RetiredPath(33)))));
+        var previous = RetiredDefinition(34);
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(old), System.Text.Json.JsonSerializer.Serialize(previous with { Version = 33, AgentInstructions = old.AgentInstructions }));
+        Assert.All(TenantTaskToolContract.Names, name => Assert.Contains(name, latest.ExecutionPolicy!.ToolList));
+        Assert.DoesNotContain(latest.ExecutionPolicy!.ToolList, name => name.StartsWith("background.", StringComparison.Ordinal));
         Assert.Contains("captured Space", latest.AgentInstructions);
         Assert.DoesNotContain("durable Agent Workspace", latest.AgentInstructions);
     }
@@ -31,14 +52,14 @@ public sealed class AgentDefinitionStoreTests
         Assert.Equal("Alex", examiner!.Identity.Name);
         var support = await store.GetAsync("customer-support", 3);
         var compliance = await store.GetAsync("compliance", 2);
-        var general = await store.GetAsync("general-assistant", 21);
+        var general = await store.GetAsync("general-assistant", 35);
         Assert.NotNull(support);
         Assert.NotNull(compliance);
         Assert.NotNull(general);
         Assert.Equal("Riley", general!.Identity.Name);
         var latest = await store.GetAsync("general-assistant");
-        Assert.Equal(34, latest!.Version);
-        Assert.Equal(33, (await store.GetAsync("general-assistant", 33))!.Version);
+        Assert.Equal(35, latest!.Version);
+        for (var version = 21; version <= 34; version++) Assert.Null(await store.GetAsync("general-assistant", version));
         // Retired browser instructions are absent from the executable catalog.
         Assert.Null(await store.GetAsync("general-assistant", 20));
         Assert.Null(await store.GetAsync("secretary", 7));
@@ -70,14 +91,14 @@ public sealed class AgentDefinitionStoreTests
         Assert.Contains(ToolCatalog.BrowserSnapshot, environment.ToolList);
         Assert.Contains(ToolCatalog.BrowserClick, environment.ToolList);
         Assert.Contains(ToolCatalog.BrowserClose, environment.ToolList);
-        var predecessor = DefinitionExecutionPolicies.Of((await store.GetAsync("general-assistant", 32))!);
-        Assert.Equal(predecessor.ToolList.Order(StringComparer.Ordinal), environment.ToolList.Except(TenantContextToolContract.Names, StringComparer.Ordinal).Order(StringComparer.Ordinal));
-        Assert.Equal(TenantContextToolContract.Names.Order(StringComparer.Ordinal), environment.ToolList.Except(predecessor.ToolList, StringComparer.Ordinal).Order(StringComparer.Ordinal));
+        var predecessor = DefinitionExecutionPolicies.Of(RetiredDefinition(32));
+        Assert.Equal(predecessor.ToolList.Where(name => !name.StartsWith("background.", StringComparison.Ordinal)).Order(StringComparer.Ordinal), environment.ToolList.Except(TenantContextToolContract.Names.Concat(TenantTaskToolContract.Names), StringComparer.Ordinal).Order(StringComparer.Ordinal));
+        Assert.Equal(TenantContextToolContract.Names.Concat(TenantTaskToolContract.Names).Order(StringComparer.Ordinal), environment.ToolList.Except(predecessor.ToolList, StringComparer.Ordinal).Order(StringComparer.Ordinal));
         Assert.Contains(ToolCatalog.SandboxProfiles, environment.ToolList);
         Assert.Contains(ToolCatalog.WebDownload, environment.ToolList);
         Assert.Contains(ToolCatalog.OfficeDocumentCreate, environment.ToolList);
         Assert.Contains(ToolCatalog.DriveUpload, environment.ToolList);
-        var frozen = (await store.GetAsync("general-assistant",25))!;
+        var frozen = RetiredDefinition(25);
         Assert.Equal(92, frozen.ExecutionPolicy!.ToolList.Count);
         Assert.DoesNotContain(ToolCatalog.OfficeDocumentCreate, frozen.ExecutionPolicy.ToolList);
         Assert.DoesNotContain(ToolCatalog.DriveUpload, frozen.ExecutionPolicy.ToolList);

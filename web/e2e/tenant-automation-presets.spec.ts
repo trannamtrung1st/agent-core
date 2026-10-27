@@ -20,7 +20,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
     expect((await (await api.get('/health')).json()).profile).toBe('Synthetic'); await call(api, '/api/v2/auth/login', { login, password });
     const nonce = crypto.randomUUID().slice(0, 8); const tenant = (await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Preset ${nonce}`, slug: `preset-${nonce}` })).tenantId;
     const root = `/api/v2/tenants/${tenant}`; const revision = async () => (await call<{ revision: number }>(api, root + '/access/me')).revision;
-    const agent = await call<{ principalId: string; instance: { instanceId: string } }>(api, root + '/agents', { templateId: 'general-assistant', version: 32, expectedRevision: await revision() });
+    const agent = await call<{ principalId: string; instance: { instanceId: string } }>(api, root + '/agents', { templateId: 'general-assistant', version: 35, expectedRevision: await revision() });
     const role = await call<{ roleId: string }>(api, root + '/roles', { name: 'Preset executor', permissions: ['automations.run', 'sessions.create', 'agent-runs.create', 'sessions.read', 'agent-runs.read', 'agents.chat'], expectedRevision: await revision() });
     await call(api, root + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await revision() });
     const resource = root + `/agents/${agent.instance.instanceId}/automations`, route = `/t/${tenant}/admin/agents/${agent.instance.instanceId}/automations`;

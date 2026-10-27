@@ -66,8 +66,6 @@ public sealed partial class InMemoryAgentRunStore
             if (receipt is not null)
             {
                 var item = CompletionInboxMapping.Read(receipt);
-                if (item.Status == CompletionInboxStatus.Handled) return ValueTask.FromResult(new CompletionDeliveryState("handled", item.ParentSessionId, item.HandledByRunId, null));
-                if (item.Status == CompletionInboxStatus.Claimed) return ValueTask.FromResult(new CompletionDeliveryState("claimed", item.ParentSessionId, item.ClaimRunId, null));
                 if (item.Status == CompletionInboxStatus.Pending) return ValueTask.FromResult(new CompletionDeliveryState("pending", item.ParentSessionId, null, null));
             }
             return ValueTask.FromResult(CompletionDeliveryProjection.Build(session, report, receipt is not null, receipt?.SkipReason));

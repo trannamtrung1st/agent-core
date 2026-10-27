@@ -25,7 +25,7 @@ public sealed class SelfManagementAuthorityTests
         {
             await using AgentCoreApiFactory host = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory();
             var services = host.Services;
-            var owner = await NativeInstanceConfigurationSeed.CreateAsync(services, "general-assistant", 22);
+            var owner = await NativeInstanceConfigurationSeed.CreateAsync(services, "general-assistant", 35);
             var history = new HarnessPreparation(Guid.NewGuid(), Guid.NewGuid(), owner.ActiveVersion, "Historical only", 1,
                 HarnessPreparationStatus.AwaitingApproval,
                 [new(Guid.NewGuid(), new string('a', 64), new("instructions.update", 1, Content: "historical-private-instructions"), "Pending")], []);
@@ -54,7 +54,7 @@ public sealed class SelfManagementAuthorityTests
     public async Task Sparse_policy_inherits_per_field_and_freeze_wins_over_new_definition_defaults()
     {
         await using var factory = new AgentCoreApiFactory();
-        var definition = (await factory.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 22))! with { SelfManagement = new(HarnessManagementMode.Managed,
+        var definition = (await factory.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 35))! with { SelfManagement = new(HarnessManagementMode.Managed,
             [HarnessManagementScope.Settings], [], [], ManagedAutoApply: [ManagementAutoApply.ConversationPreferences]) };
         var now = DateTimeOffset.UtcNow;
         var owner = new AgentInstance(Guid.NewGuid(), definition.Id, 1, definition.Identity, AgentInstanceLifecycle.Active, now, now,
@@ -84,7 +84,7 @@ public sealed class SelfManagementAuthorityTests
             {
                 var services = factory.Services;
                 var admin = services;
-                var owner = await NativeInstanceConfigurationSeed.CreateAsync(admin, "general-assistant", 22); id = owner.InstanceId;
+                var owner = await NativeInstanceConfigurationSeed.CreateAsync(admin, "general-assistant", 35); id = owner.InstanceId;
                 var service = services;
                 Assert.Equal(HarnessManagementMode.Disabled, (await NativeInstanceConfigurationSeed.PolicyViewAsync(service, id)).Effective.Mode);
                 var changed = await NativeInstanceConfigurationSeed.PolicyAsync(service, id, owner.Revision, new(new(HarnessManagementMode.Managed),
@@ -124,7 +124,7 @@ public sealed class SelfManagementAuthorityTests
             await using AgentCoreApiFactory factory = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory();
             var services = factory.Services;
             var admin = services;
-            var owner = await NativeInstanceConfigurationSeed.CreateAsync(admin, "general-assistant", 23);
+            var owner = await NativeInstanceConfigurationSeed.CreateAsync(admin, "general-assistant", 35);
             var skills = services;
             var builtin = await NativeInstanceConfigurationSeed.InspectSkillAsync(skills, owner.InstanceId, ManagementBuiltInSkills.ConfigurationKey);
             await NativeInstanceConfigurationSeed.WriteBuiltInChoiceAsync(skills, owner.InstanceId, "set_enabled", builtin.Key, builtin.Revision, enabled: false);
@@ -134,7 +134,7 @@ public sealed class SelfManagementAuthorityTests
             Assert.Null(policy.Overrides.AutoApply);
             Assert.Null(policy.Overrides.HarnessAuthoring);
             Assert.False(policy.Overrides.ConfigurationAssistance!.Value);
-            var published = await NativeInstanceConfigurationSeed.PublicationAsync(services, "general-assistant", 23,
+            var published = await NativeInstanceConfigurationSeed.PublicationAsync(services, "general-assistant", 35,
                 new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []));
             await NativeInstanceConfigurationSeed.AdoptAsync(admin, owner.InstanceId, published.Version, policy.InstanceRevision);
             policy = await NativeInstanceConfigurationSeed.PolicyViewAsync(services, owner.InstanceId);
@@ -160,7 +160,7 @@ public sealed class SelfManagementAuthorityTests
         try
         {
             await using AgentCoreApiFactory host = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory();
-            var published = await NativeInstanceConfigurationSeed.PublicationAsync(host.Services, "general-assistant", 23,
+            var published = await NativeInstanceConfigurationSeed.PublicationAsync(host.Services, "general-assistant", 35,
                 new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []));
             var owner = await NativeInstanceConfigurationSeed.CreateAsync(host.Services, "general-assistant", published.Version);
             var policy = await NativeInstanceConfigurationSeed.FreezeAsync(host.Services, owner.InstanceId, owner.Revision);
@@ -175,7 +175,7 @@ public sealed class SelfManagementAuthorityTests
     public async Task Native_Admin_builtin_catalog_discloses_missing_authority_without_runtime_grant()
     {
         await using var host = new AgentCoreApiFactory();
-        var owner = await NativeInstanceConfigurationSeed.CreateAsync(host.Services, "general-assistant", 21);
+        var owner = await NativeInstanceConfigurationSeed.CreateAsync(host.Services, "general-assistant", 35);
         var skill = await NativeInstanceConfigurationSeed.InspectSkillAsync(host.Services, owner.InstanceId, ManagementBuiltInSkills.ConfigurationKey);
         Assert.False(skill.Enabled);
         Assert.Contains("configuration.inspect", skill.MissingCapabilities);

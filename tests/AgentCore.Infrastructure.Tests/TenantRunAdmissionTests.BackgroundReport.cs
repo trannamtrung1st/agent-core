@@ -22,8 +22,7 @@ public sealed partial class TenantRunAdmissionTests
         backgroundReports: ReportTarget(f), reportRuntime: (ITenantRuntimeStore)f.Iam, reportSourceReads: ReportSourceReads(f));
     private static async Task<(BackgroundSetup Parent, TenantBackgroundCompletion Source, TenantApprovalRequest Request)> CompletedReportCase(Fixture f, bool sharedDestination = false)
     {
-        var parent = await BackgroundParent(f); await WaitReadAuthority(f, parent); var child = await BackgroundChild(f, parent); var runtime = (ITenantRuntimeStore)f.Iam;
-        await runtime.AdmitTenantImmediateAsync(parent.Frame, child.Session, child.Run, f.Ids.NewId());
+        var parent = await BackgroundParent(f); await WaitReadAuthority(f, parent); var child = await IndependentBackgroundChild(f, parent); var runtime = (ITenantRuntimeStore)f.Iam;
         var claimed = await ClaimBackground(f, child.Run); var outcome = BackgroundOutcome(f, claimed.Run, claimed.Snapshot);
         await runtime.CommitTenantOutcomeAsync(claimed.Frame, outcome.Snapshot, claimed.Snapshot.Revision, outcome.Complete, null, f.Ids.NewId());
         await CompleteBackgroundParent(f, parent);
@@ -110,6 +109,9 @@ public sealed partial class TenantRunAdmissionTests
         Assert.Equal(0, (await service.ListAsync(tenant, member, new(PageSize: 1))).Total);
         await Assert.ThrowsAsync<AccessDeniedException>(() => service.ReadViewAsync(tenant, v.Request.RequestId, member).AsTask());
         var sourceRead = await Grant("Exact completed Run reader", ["agent-runs.read"], TenantRunRules.Scope(tenant, v.Source.Child.AgentRunId));
+        Assert.Equal(0, (await service.ListAsync(tenant, member, new(PageSize: 1))).Total);
+        await Assert.ThrowsAsync<AccessDeniedException>(() => service.ReadViewAsync(tenant, v.Request.RequestId, member).AsTask());
+        await Grant("Exact report destination Space", ["spaces.read"], TenantSpaceService.Scope(tenant, v.Request.Operation.BackgroundReport!.DestinationContext.SpaceId));
         Assert.Equal(1, (await service.ListAsync(tenant, member, new(PageSize: 1))).Total);
         Assert.False((await service.ReadViewAsync(tenant, v.Request.RequestId, member)).Review!.CanDecide);
         await Grant("Report reviewer", ["approvals.approve"], AccessScope.ForTenant(tenant));
@@ -138,6 +140,26 @@ public sealed partial class TenantRunAdmissionTests
         var id = v.Request.RequestId;
         await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson=json_set(PayloadJson, '$.Operation.BackgroundReport.ParentRevision', 999) WHERE RequestId={id}"));
         await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261020110000_TenantBackgroundCreationReview"));
+        await db.Database.MigrateAsync(); // Restore safe newer Down steps before using the current EF model.
+        Assert.False(db.Database.HasPendingModelChanges());
         Assert.Equal(v.Request.Operation, (await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(v.Request.TenantId, id))!.Operation);
     }
+    [Theory] [InlineData(0)] [InlineData(1)] [InlineData(2)]
+    public async Task Task_receipt_cutover_refuses_retired_consumption_state_without_changing_source(int retiredStatus)
+    {
+        await using var f = await Fixture.Create(true, builtInAuthority: true);
+        var completed = await CompletedReportCase(f);
+        await using var db = f.Contexts!.CreateDbContext();
+        await db.GetService<IMigrator>().MigrateAsync("20261027040000_SessionGoals");
+        var sourceId = completed.Source.Child.AgentRunId.ToString("D");
+        if (retiredStatus == 0)
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE BackgroundCompletionReceipts SET InboxJson=json_set(InboxJson,'$.claimToken',{Guid.NewGuid().ToString("D")}) WHERE ChildAgentRunId={sourceId}");
+        else
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE BackgroundCompletionReceipts SET Status={retiredStatus},InboxJson=json_set(InboxJson,'$.status',{retiredStatus}) WHERE ChildAgentRunId={sourceId}");
+        var refusal = await Assert.ThrowsAsync<SqliteException>(() => db.Database.MigrateAsync());
+        Assert.Contains("task_cutover_reset_required", refusal.Message);
+        Assert.Equal(retiredStatus, await db.Database.SqlQuery<int>($"SELECT Status AS Value FROM BackgroundCompletionReceipts WHERE ChildAgentRunId={sourceId}").SingleAsync());
+        Assert.Equal("20261027040000_SessionGoals", (await db.Database.GetAppliedMigrationsAsync()).Last());
+    }
+
 }

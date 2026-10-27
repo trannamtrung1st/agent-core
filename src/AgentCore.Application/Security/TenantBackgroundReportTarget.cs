@@ -45,7 +45,7 @@ public sealed class TenantBackgroundReportTarget(ITenantRuntimeStore runtime, IT
         var p = request.Operation.BackgroundReport!; var model = current.Model;
         if (current.Configuration.Configuration.SpaceContext?.MatchesSelection(p.DestinationContext) != true
             || p.Model != new PreparedBackgroundModel(model.OfferingId, model.ConnectionId, model.ExternalModelId, model.ReasoningEffort, model.Binding, model.Decision)
-            || p.ConfigurationHash != TenantBackgroundCreationRules.Hash(current.Configuration)) throw new AccessDeniedException("operation_witness_changed");
+            || p.ConfigurationHash != TenantApprovalRules.ConfigurationHash(current.Configuration)) throw new AccessDeniedException("operation_witness_changed");
         var root = await TenantExecutionLineage.RootAsync(current.Source.Child, runs, ct).ConfigureAwait(false);
         await TenantBackgroundReportRules.ExecutorAsync(current.State, request, root, current.Configuration.Configuration.Definition, iam, ct, current.Source).ConfigureAwait(false);
         return (current.Source, current.State, current.Agent, current.Configuration);

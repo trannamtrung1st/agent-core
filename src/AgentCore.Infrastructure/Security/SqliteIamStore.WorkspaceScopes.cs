@@ -11,7 +11,7 @@ public sealed partial class SqliteIamStore
     {
         if (!TenantWorkspaceRules.TryParse(scope, out var working, out var id)) return false;
         var key = id.ToString("D");
-        return working ? await OwnedSessions(db, scope.TenantId!.Value).AnyAsync(s => s.SessionId == key, ct).ConfigureAwait(false)
+        return working ? await OwnedSessions(db, scope.TenantId!.Value, key).AnyAsync(s => s.SessionId == key, ct).ConfigureAwait(false)
             : await db.Set<SpaceRecord>().AnyAsync(s => s.TenantId == scope.TenantId!.Value && s.SpaceId == id && s.DeletedAt == null, ct).ConfigureAwait(false);
     }
 }

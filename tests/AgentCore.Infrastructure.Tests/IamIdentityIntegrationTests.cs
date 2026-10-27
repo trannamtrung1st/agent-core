@@ -295,7 +295,7 @@ public sealed partial class IamIdentityIntegrationTests
         Assert.Null(await ((ITenantAgentStore)f.Store).FindTenantAgentAsync(b.Tenant.TenantId, first.Instance.InstanceId));
         Assert.Equal(0, (await service.ListAsync(b.Users.Single().PrincipalId, b.Tenant.TenantId)).Total);
         Assert.Equal(0, (await service.ListAsync(first.PrincipalId, a.TenantId)).Total);
-        var second = await service.CreateAsync(a.OwnerPrincipalId, a.TenantId, "general-assistant", 32, state.Tenant.Revision);
+        var second = await service.CreateAsync(a.OwnerPrincipalId, a.TenantId, "general-assistant", 35, state.Tenant.Revision);
         Assert.Equal("browser.record.lookup", Assert.Single((await ((ITenantAgentStore)f.Store).ReadTenantAgentConfigurationAsync(a.TenantId, second.Instance.InstanceId))!.Skills.DefinitionStates).DefinitionSkillId);
         var page0 = await service.ListAsync(a.OwnerPrincipalId, a.TenantId, pageSize: 1);
         var page1 = await service.ListAsync(a.OwnerPrincipalId, a.TenantId, page: 1, pageSize: 1);

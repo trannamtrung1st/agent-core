@@ -10,7 +10,7 @@ test('DOCX hyperlinks stay readable and inert; unsupported preview recovers with
   // Abort any accidental public request while still recording it as a test failure.
   await page.route(/https?:\/\/hyperlink\.example\.test\//, route => route.abort());
   await page.goto('/');
-  const owner = await selectInstanceIdentity(page, { id: 'general-assistant', version: 26 });
+  const owner = await selectInstanceIdentity(page, { id: 'general-assistant', version: 35 });
   const token = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
   const headers = { 'X-AgentCore-Owner-Capability': token! };
   const created = await page.request.post('/api/v2/sessions', { headers, data: { agentInstanceId: owner, mode: 'text' } });

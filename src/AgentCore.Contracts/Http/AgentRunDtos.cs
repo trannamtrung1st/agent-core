@@ -5,7 +5,7 @@ namespace AgentCore.Contracts.Http;
 public sealed record ArtifactPageResponse(IReadOnlyList<ArtifactResponse> Items, string? NextCursor, bool HasMore);
 
 public sealed record AgentRunOutcomeResponse(string Kind, string Summary, string? OutcomeEntryId, bool AttentionRequired);
-public sealed record AgentRunWaitResponse(string Mode, string Until, IReadOnlyList<string> BackgroundSessionIds, string Deadline);
+public sealed record AgentRunWaitResponse(string Mode, string Until, IReadOnlyList<string> TaskIds, string Deadline);
 public sealed record AgentRunResponse(string AgentRunId, string SessionId, string ActivationId, string ActivationKind,
     string Status, long Revision, int AttemptCount, int MaxAttempts, bool CancellationRequested, bool CancellationAvailable,
     string? Progress, string? NextRetryAt, string CreatedAt, string UpdatedAt,

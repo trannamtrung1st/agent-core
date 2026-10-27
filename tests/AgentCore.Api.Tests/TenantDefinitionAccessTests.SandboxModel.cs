@@ -33,18 +33,20 @@ public sealed partial class TenantDefinitionAccessTests
         public Func<ModelRequest, Task>? Seed;
         public bool Inspect;
         public bool BackgroundTask;
+        public Guid TargetInstanceId;
         public Func<Task>? BeforeProcessInspection;
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
+        public ConcurrentQueue<string> Failures { get; } = new();
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Requests.Enqueue(request);
             if (BackgroundTask && request.Context?.Sections.All(s => s.Id != AgentCore.Application.Context.ContextSectionId.CoreBackground) == true)
             {
-                if (!request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.BackgroundStart))
+                if (!request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == "tasks.delegate"))
                 {
-                    Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.BackgroundStart);
-                    yield return new ModelToolCallEvent(new("model-background-start", ToolCatalog.BackgroundStart,
-                        """{"objective":"Perform the exact native Sandbox task","title":"Native Sandbox task","reportCompletion":true}"""));
+                    Assert.Contains(request.Tools!, t => t.Name == "tasks.delegate");
+                    yield return new ModelToolCallEvent(new("model-background-start", "tasks.delegate",
+                        JsonSerializer.Serialize(new { objective = "Perform the exact native Sandbox task", title = "Native Sandbox task", reportOnCompletion = false, target = new { instanceId = TargetInstanceId }, requestKey = "native-sandbox-task-once" })));
                     yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
                 }
                 yield return new ModelSemanticResponseReady(new("Native Sandbox task started.", new(ModelSpeechMode.None, null), []));
@@ -57,7 +59,7 @@ public sealed partial class TenantDefinitionAccessTests
                 if (name is not null)
                 {
                     Assert.Contains(request.Tools ?? [], t => t.Name == name);
-                    if (Seed is { } seed) { Seed = null; await seed(request); }
+                    if (Seed is { } seed) { Seed = null; try { await seed(request); } catch (Exception error) { Failures.Enqueue(error.ToString()); throw; } }
                     yield return new ModelToolCallEvent(new("model-" + name, name, "{}"));
                     yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
                 }
@@ -75,7 +77,7 @@ public sealed partial class TenantDefinitionAccessTests
             if (request.Context?.Sections.All(s => s.Id != AgentCore.Application.Context.ContextSectionId.ApprovalOutcome) == true
                 && request.Tools?.Any(t => t.Name == ToolCatalog.RequestAuthorization && t.ParametersJson.Contains("run_sandbox_command", StringComparison.Ordinal)) == true)
             {
-                if (Seed is { } seed) { Seed = null; await seed(request); }
+                if (Seed is { } seed) { Seed = null; try { await seed(request); } catch (Exception error) { Failures.Enqueue(error.ToString()); throw; } }
                 yield return new ModelToolCallEvent(new("model-sandbox-request", ToolCatalog.RequestAuthorization, Arguments));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
@@ -206,8 +208,8 @@ public sealed partial class TenantDefinitionAccessTests
             var definitions = factory.Services.GetRequiredService<TenantDefinitionService>();
             var draft = await definitions.CreateAsync(actor, tenant, "Model Sandbox command", await Revision(owner, tenant));
             draft = await definitions.UpdateAsync(actor, tenant, draft.DraftId, draft.Candidate with { SandboxPolicy = new(profileId, [profileId]),
-                TriggerPolicy = independentOrigin is null ? draft.Candidate.TriggerPolicy : (await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 32))!.TriggerPolicy,
-                ExecutionPolicy = new(Projection: backgroundTask && independentOrigin is null ? new([ToolCatalog.BackgroundStart]) : null, Capabilities: new("Selected", (backgroundTask && independentOrigin is null ? new[] { ToolCatalog.BackgroundStart } : []).Concat(control ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProcessStop, ToolCatalog.SandboxReset] : choice == "inspect" || readKind is not null ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus] : new[] { ToolCatalog.SandboxExec }).ToArray())) }, await Revision(owner, tenant), draft.Revision);
+                TriggerPolicy = independentOrigin is null ? draft.Candidate.TriggerPolicy : (await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 35))!.TriggerPolicy,
+                ExecutionPolicy = new(Projection: backgroundTask && independentOrigin is null ? new(["tasks.delegate"]) : null, Capabilities: new("Selected", (backgroundTask && independentOrigin is null ? new[] { "tasks.delegate" } : []).Concat(control ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProcessStop, ToolCatalog.SandboxReset] : choice == "inspect" || readKind is not null ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus] : new[] { ToolCatalog.SandboxExec }).ToArray())) }, await Revision(owner, tenant), draft.Revision);
             await definitions.PublishAsync(actor, tenant, draft.DraftId, await Revision(owner, tenant), draft.Revision);
             var created = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = Guid.Parse(draft.DefinitionId), version = 1, expectedRevision = await Revision(owner, tenant) }));
             var instance = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = created.GetProperty("principalId").GetGuid();
@@ -219,9 +221,15 @@ public sealed partial class TenantDefinitionAccessTests
             }
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var parentSession = session;
+            factory.Model.TargetInstanceId = instance;
+            if (backgroundTask && independentOrigin is null)
+                Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + $"/agents/{instance}/cooperation", new {
+                    cooperation = new { acceptTasks = true, acceptDirectMessages = false, allowDirectMessageWake = false, maxConcurrentTasks = 2 },
+                    expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 })).StatusCode);
+
             if (backgroundTask)
             {
-                var backgroundRole = await access.SaveRoleAsync(actor, tenant, null, "Background native execution", (new[] { "sessions.create", "agent-runs.create", "sessions.read", "agent-runs.read" }).Concat(independentOrigin is null ? [] : new[] { "automations.run" }).ToArray(), await Revision(owner, tenant));
+                var backgroundRole = await access.SaveRoleAsync(actor, tenant, null, "Background native execution", (new[] { "workspaces.read", "workspaces.write", "workspaces.delete", "tasks.delegate", "tasks.read", "agents.read", "spaces.read", "sessions.create", "agent-runs.create", "sessions.read", "agent-runs.read" }).Concat(independentOrigin is null ? [] : new[] { "automations.run" }).ToArray(), await Revision(owner, tenant));
                 await access.AssignRoleAsync(actor, tenant, executor, backgroundRole.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
             }
             if (choice == "inspect" || control || readKind is not null)
@@ -258,7 +266,10 @@ public sealed partial class TenantDefinitionAccessTests
                 session = run.SessionId;
                 var pinned = Assert.Single(run.Admission.Configuration!.Definition.ExecutionSandboxProfiles!);
                 var options = factory.Services.GetRequiredService<OpenSandboxOptions>();
-                var mounts = new CanonicalSandboxMountResolver(options).Resolve(instance, session, new(TenantWorkspaceRules.Context(run), run.Admission.Configuration.Definition.StateIsolationPolicy?.HomeAccess ?? AgentCore.Domain.Definitions.HomeAccess.ReadWrite, AgentCore.Domain.Definitions.HomeAccess.Disabled, false), create: true);
+                var workspaceAccess = await TenantSandboxWorkspaceRules.ResolveAsync((await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!, run,
+                    run.Admission.Configuration.Definition.StateIsolationPolicy?.HomeAccess ?? AgentCore.Domain.Definitions.HomeAccess.ReadWrite,
+                    factory.Services.GetRequiredService<IamAuthorizer>(), default);
+                var mounts = new CanonicalSandboxMountResolver(options).Resolve(instance, session, workspaceAccess, create: true);
                 var at = proofClock.GetUtcNow();
                 lease = new(session, instance, Guid.NewGuid(), 1, pinned, SandboxLeaseState.Provisioning, null, at, at.AddMinutes(10), MountAuthority: mounts.Authority,
                     AdmissionRunId: run.AgentRunId, AdmissionToolCallId: "seed-existing", TenantId: tenant, ExecutorPrincipalId: executor,
@@ -332,7 +343,7 @@ public sealed partial class TenantDefinitionAccessTests
                 }
             }
             var waiting = await Await(r => r.Status == AgentRunStatus.WaitingForApproval);
-            Assert.True(waiting.Status == AgentRunStatus.WaitingForApproval, $"{waiting.Status}: {waiting.Failure?.Code}: {waiting.Failure?.Summary}"); Assert.Null(waiting.Claim);
+            Assert.True(waiting.Status == AgentRunStatus.WaitingForApproval, $"{waiting.Status}: {waiting.Failure?.Code}: {waiting.Failure?.Summary}; {string.Join('\n', factory.Model.Failures)}"); Assert.Null(waiting.Claim);
             Assert.Equal(0, commands); Assert.Equal(0, contacts);
             var capacity = factory.Services.GetRequiredService<AgentCore.Api.Realtime.TenantRuntimeCapacity>(); var released = false;
             using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
@@ -433,9 +444,27 @@ public sealed partial class TenantDefinitionAccessTests
             {
                 Assert.NotEqual(parentSession, completed.SessionId); Assert.Equal(session, completed.SessionId);
                 Assert.Equal(AgentRunOutputContract.BackgroundOutcome, completed.Admission.OutputContract);
-                using var reportDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(25)); CompletionInboxItem? completion;
-                do { completion = await runs.FindTenantCompletionAsync(completed.Owner, completed.AgentRunId); if (completion?.Status != CompletionInboxStatus.Delivered) await Task.Delay(25, reportDeadline.Token); } while (completion?.Status != CompletionInboxStatus.Delivered);
-                Assert.NotNull(completion.ReportActivationId);
+                Assert.Null(await runs.FindTenantCompletionAsync(completed.Owner, completed.AgentRunId));
+                await factory.Services.GetRequiredService<AgentCore.Application.Tasks.TenantTaskCoordinationService>().ReconcileAsync(16, CancellationToken.None);
+                var tasks = await Json(await owner.GetAsync(api + $"/sessions/{parentSession}/tasks"));
+                var task = Assert.Single(tasks.GetProperty("items").EnumerateArray());
+                Assert.Equal(completed.AgentRunId, task.GetProperty("terminalRunId").GetGuid());
+                Assert.NotEqual(parentSession, task.GetProperty("workerSessionId").GetGuid());
+                if (choice is "approve" or "reviewProfiles" or "inspect")
+                {
+                    var taskId = task.GetProperty("taskId").GetGuid();
+                    var before = await Json(await owner.GetAsync(api + $"/tasks/{taskId}"));
+                    Assert.Equal("Succeeded", before.GetProperty("state").GetString()); Assert.Equal("Native Sandbox background task finished.", before.GetProperty("result").GetString());
+                    var state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!;
+                    var removedPermission = choice == "approve" ? "sandbox.execute" : "sandbox.read";
+                    var assignments = state.Assignments.Where(a => a.PrincipalId == executor && state.Roles.Any(r => r.RoleId == a.RoleId && r.Permissions.Contains(removedPermission))).ToArray();
+                    Assert.NotEmpty(assignments);
+                    foreach (var assignment in assignments) await access.RevokeAssignmentAsync(actor, tenant, assignment.AssignmentId, await Revision(owner, tenant));
+                    var after = await Json(await owner.GetAsync(api + $"/tasks/{taskId}"));
+                    Assert.Equal("Succeeded", after.GetProperty("state").GetString()); Assert.Equal(JsonValueKind.Null, after.GetProperty("result").ValueKind);
+                    Assert.Equal(completed.AgentRunId, (await factory.Services.GetRequiredService<ITenantTaskStore>().FindTaskAsync(tenant, taskId))!.TerminalRunId);
+                }
+
             }
             await peer.StopAsync();
         }

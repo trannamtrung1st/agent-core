@@ -13,7 +13,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Original_human_requires_current_Space_read_at_admission_and_effect_boundary_without_borrowing_executor_rights(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;
         await GrantWorkspaceRuntimeReads(f, s, ["spaces.read", "sessions.read", "workspaces.read", "workspaces.write"]);
         var requester = await User(f, s, "space-requester@example.test", ["agents.chat", "sessions.read", "workspaces.read", "workspaces.write"]);

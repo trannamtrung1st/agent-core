@@ -4,7 +4,7 @@ import { selectInstanceIdentity } from "./support/instance-identity";
 test("email harness approval modal approves synthetic send", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
-  const owner = await selectInstanceIdentity(page, { id: 'general-assistant', version: 25 });
+  const owner = await selectInstanceIdentity(page, { id: 'general-assistant', version: 35 });
   const token = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
   const headers = { 'X-AgentCore-Owner-Capability': token! };
   const account = await page.request.post('/api/v2/admin/email-accounts', { headers, data: {

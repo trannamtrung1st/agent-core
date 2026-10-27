@@ -74,4 +74,13 @@ Historical [foundation](reports/unified-scripts-evaluation-2026-10-27.md) and [s
 
 ## Initiative 8 — Session Goals closure
 
-Initiative 8 is closed for its verified local scope, including the transition stabilization and final audit-wording clarification. [Delivery and closure evidence](reports/session-goals-delivery-2026-10-27.md#initiative-8-closure) retain the exact local checks and external limits. Initiative 9 — Task Delegation & Communication is next and remains unstarted; it requires its own authorized specification and scope.
+Initiative 8 is closed for its verified local scope, including the transition stabilization and final audit-wording clarification. [Delivery and closure evidence](reports/session-goals-delivery-2026-10-27.md#initiative-8-closure) retain the exact local checks and external limits. Initiative 9 — Task Delegation & Communication is implemented with the [focused local verification and limits](reports/initiative-9-local-verification-2026-10-27.md) recorded separately from the original MVP acceptance.
+
+
+<a id="initiative-9--adopted-successor-implementation-in-progress"></a>
+
+## Initiative 9 — Task delegation and communication
+
+Initiative 9 implements durable Tasks, independent worker identity, two-party communication, default-off cooperation and the canonical child-tool cutover. The [delivery report](reports/initiative-9-local-verification-2026-10-27.md) maps T01–T40 to local evidence and qualification limits. Initiative 8 remains locally closed for its recorded scope. Initiative 10 — Group Chat is unstarted.
+
+See the [adopted proposal](proposals/initiative-9-task-delegation-communication.md), [removal audit](reports/initiative-9-source-audit-2026-10-27.md) and [local delivery evidence and limits](reports/initiative-9-local-verification-2026-10-27.md). The implementation has focused local verification; the report distinguishes exercised behavior from unrun deployment, provider and device qualification.

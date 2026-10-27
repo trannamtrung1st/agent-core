@@ -19,7 +19,7 @@ public sealed partial class TenantSessionAccessTests
             var model = new ApprovalRecordingModel(); await using WebApplicationFactory<Program> factory = sqlite ? new NativeTenantSqliteFactory(root, model) : new NativeTenantMemoryFactory(root, model);
             using var owner = factory.CreateClient(); await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
             var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
-            var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) })); var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
+            var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 35, expectedRevision = await Revision(owner, tenant) })); var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var office = factory.Services.GetRequiredService<IOfficeProcessor>();
             var bytes = workbook ? office.CreateWorkbook(new([new("Dữ liệu", [[new("number", Number: 0), new("text", Text: "Private Office upload")]])]), default).Bytes

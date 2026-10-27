@@ -14,7 +14,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_attachment_storage_upload_read_retry_abort_preserves_exact_actual_owner(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var session = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Run.SessionId))!;
         var files = (ITenantAttachmentStore)f.Attachments; var mutations = (ITenantAttachmentMutationStore)f.Iam;
         var request = f.Ids.NewId(); var bytes = "Exact uploaded attachment: thử nghiệm"u8.ToArray();

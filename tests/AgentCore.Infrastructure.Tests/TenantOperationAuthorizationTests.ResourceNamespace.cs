@@ -163,7 +163,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_resource_namespace_inherited_and_empty_observations_have_exact_parent_and_member_consent(bool sqlite, bool readable)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         await GrantWorkspaceRuntimeReads(f, s, ["sessions.read", "agents.read"]);
         if (readable)
         {

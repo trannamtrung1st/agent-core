@@ -12,7 +12,7 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
   await page.goto('/');
   const owner = await selectInstanceIdentity(page, {
     id: 'general-assistant',
-    version: 30,
+    version: 35,
   });
   const name = `Office Drive ${owner.slice(-8)}`;
   await page.goto('/admin/connections/credentials');

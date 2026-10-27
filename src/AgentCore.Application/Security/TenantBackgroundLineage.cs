@@ -12,7 +12,6 @@ public static class TenantBackgroundLineage
         {
             if (!seen.Add(current.AgentRunId) || current.Admission.OutputContract != AgentRunOutputContract.BackgroundOutcome)
                 throw new AccessDeniedException("tenant_lineage_unavailable");
-            if (current.Admission.ExecutionContext?.Origin == ExecutionOrigin.ImmediateBackground) return current;
             if (current.Admission.ExecutionContext?.Origin == ExecutionOrigin.UserMessage && TenantExperienceReviewRules.Selected(current) is not null) return current;
             if (current.Admission.ExecutionContext is { Origin: ExecutionOrigin.ScheduledOccurrence or ExecutionOrigin.ManualInvocation or ExecutionOrigin.CoreEvent or ExecutionOrigin.ApplicationEvent } independent)
             {

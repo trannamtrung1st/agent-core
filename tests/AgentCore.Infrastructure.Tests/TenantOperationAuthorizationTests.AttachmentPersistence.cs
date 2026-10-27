@@ -34,7 +34,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Fact]
     public async Task Tenant_attachment_SQLite_shape_immutability_scope_and_failed_narrowing_preserve_owned_data()
     {
-        await using var f = await Fixture.Create(true, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 32); var id = await UploadAttachment(f, s);
+        await using var f = await Fixture.Create(true, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 35); var id = await UploadAttachment(f, s);
         var files = (ITenantAttachmentStore)f.Attachments; var original = (await files.FindTenantAsync(s.Tenant, s.Run.SessionId, id))!;
         var other = await f.Sessions.CreateAsync(s.Tenant, s.Agent.Instance.InstanceId, s.Owner, SessionMode.Text, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, s.Agent.Instance.Revision);
         await f.RunService().SubmitTextAsync(s.Tenant, other.Owner.SessionId, s.Owner, f.Ids.NewId(), "Foreign entry", (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1);
@@ -77,7 +77,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Fact]
     public async Task Tenant_attachment_SQLite_metadata_fault_rolls_back_publication_audit_and_security_then_owned_cleanup_removes_private_orphan()
     {
-        await using var f = await Fixture.Create(true, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(true, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 35);
         string connection; await using (var db = f.Contexts!.CreateDbContext()) connection = db.Database.GetDbConnection().ConnectionString;
         var contexts = new AttachmentFaultContexts(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite(connection).AddInterceptors(new AttachmentCommitFault()).Options);
         var faulty = new SqliteIamStore(contexts, builtIns: f.BuiltIns, clock: f.Clock, attachmentBacking: (SqliteAttachmentStore)f.Attachments);
@@ -99,7 +99,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Fact]
     public async Task Tenant_attachment_native_reads_verify_digest_and_refuse_links_while_cleanup_never_follows_an_outside_target()
     {
-        await using var f = await Fixture.Create(true, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 32); var id = await UploadAttachment(f, s);
+        await using var f = await Fixture.Create(true, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 35); var id = await UploadAttachment(f, s);
         var files = (ITenantAttachmentStore)f.Attachments; var row = (await files.FindTenantAsync(s.Tenant, s.Run.SessionId, id))!;
         var physical = Path.Combine(f.Root, "attachments", "tenants", s.Tenant.ToString("N"), s.Run.SessionId.ToString("N"), id.ToString("N"));
         await File.WriteAllTextAsync(physical, "Changed bytes"); await Assert.ThrowsAsync<AccessDeniedException>(() => AttachmentService(f).ReadContentAsync(s.Tenant, s.Run.SessionId, id, s.Owner).AsTask());
@@ -113,7 +113,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Fact]
     public async Task Tenant_attachment_native_quota_counts_private_orphans_before_publication()
     {
-        await using var f = await Fixture.Create(true, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 32); await UploadAttachment(f, s);
+        await using var f = await Fixture.Create(true, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 35); await UploadAttachment(f, s);
         var physical = Path.Combine(f.Root, "attachments", "tenants", s.Tenant.ToString("N"), s.Run.SessionId.ToString("N"));
         using (var sparse = new FileStream(Path.Combine(physical, f.Ids.NewId().ToString("N")), FileMode.CreateNew)) sparse.SetLength(AttachmentLimits.MaxBytesSession);
         var revision = (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;

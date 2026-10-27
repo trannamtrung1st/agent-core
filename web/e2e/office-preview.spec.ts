@@ -7,7 +7,7 @@ test('XLSX shortening is disclosed and smaller windows preserve original downloa
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
-  await selectInstanceIdentity(page, { id: 'general-assistant', version: 30 });
+  await selectInstanceIdentity(page, { id: 'general-assistant', version: 35 });
   await page.getByLabel('Message').fill('synthetic-office: q3-sales');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   const opener = page.getByRole('button', { name: 'Preview q3-sales.xlsx', exact: true });
@@ -74,7 +74,7 @@ test('agent creates real Office files, previews sheets/formulas and isolated Wor
       external.push(request.url());
   });
   await page.goto('/');
-  await selectInstanceIdentity(page, { id: 'general-assistant', version: 26 });
+  await selectInstanceIdentity(page, { id: 'general-assistant', version: 35 });
   await page.getByLabel('Message').fill('synthetic-office: q3-sales');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   const sheetOpen = page.getByRole('button', { name: 'Preview q3-sales.xlsx' });
@@ -152,7 +152,7 @@ test('shared spreadsheet blocks edits, clipboard HTML, context-menu mutation and
   page.on('pageerror', error => errors.push(error.message));
   page.on('request', request => { if (!/^(http:\/\/127\.0\.0\.1|blob:|data:)/.test(request.url())) external.push(request.url()); });
   await page.goto('/');
-  await selectInstanceIdentity(page, { id: 'general-assistant', version: 26 });
+  await selectInstanceIdentity(page, { id: 'general-assistant', version: 35 });
   await page.getByLabel('Message').fill('synthetic-office: q3-sales');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   const opener = page.getByRole('button', { name: 'Preview q3-sales.xlsx', exact: true });

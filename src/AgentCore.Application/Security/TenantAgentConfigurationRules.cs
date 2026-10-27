@@ -11,7 +11,7 @@ public static class TenantAgentConfigurationRules
         if (current.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Validation("Archived Instances are read-only.");
         var operations = (change.Persona is null ? 0 : 1) + (change.ActiveVersion is null ? 0 : 1)
             + (change.SetSettingsOverrides ? 1 : 0) + (change.SetExecutionBudgets ? 1 : 0)
-            + (change.SetUnattendedModel ? 1 : 0) + (change.HarnessManagement is null ? 0 : 1)
+            + (change.Cooperation is null ? 0 : 1) + (change.SetUnattendedModel ? 1 : 0) + (change.HarnessManagement is null ? 0 : 1)
             + (change.Skill is null ? 0 : 1) + (change.Resource is null ? 0 : 1) + (change.Binding is null ? 0 : 1);
         if (current.InstanceId != change.InstanceId || change.ExpectedInstanceRevision < 1 || operations != 1
             || change.Persona is not null && change.ExpectedPersonaRevision is null
@@ -43,6 +43,7 @@ public static class TenantAgentConfigurationRules
         if (change.Persona is { } persona) AgentDefinitionValidator.ValidateIdentity(persona);
         if (change.SetExecutionBudgets) change.ExecutionBudgets?.Validate();
         change.UnattendedModel?.Validate();
+        change.Cooperation?.Validate();
         if (change.HarnessAssessment is { } assessmentState)
         {
             var assessment = assessmentState.InstanceChanges?.LastOrDefault();
@@ -68,6 +69,7 @@ public static class TenantAgentConfigurationRules
             PersonaRevision = current.PersonaRevision + (change.Persona is not null && change.Persona != current.Persona ? 1 : 0),
             Revision = checked(current.Revision + 1), UpdatedAt = at,
             SettingsOverrides = change.SetSettingsOverrides ? change.SettingsOverrides?.Copy() : current.SettingsOverrides,
+            Cooperation = change.Cooperation ?? current.Cooperation,
             ExecutionBudgets = change.SetExecutionBudgets ? change.ExecutionBudgets : current.ExecutionBudgets,
             UnattendedModel = change.SetUnattendedModel ? change.UnattendedModel : current.UnattendedModel,
             HarnessManagement = change.HarnessAssessment ?? change.HarnessManagement ?? current.HarnessManagement };

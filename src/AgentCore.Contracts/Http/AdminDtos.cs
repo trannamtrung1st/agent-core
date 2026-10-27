@@ -46,6 +46,8 @@ public sealed record AdminEffectiveConfigurationResponse(
     AdminBrowserConfigurationResponse? Browser = null,
     System.Text.Json.JsonElement? ExecutionBudgets = null);
 
+public sealed record AgentCooperationResponse(bool AcceptTasks, bool AcceptDirectMessages, bool AllowDirectMessageWake, int MaxConcurrentTasks);
+
 public sealed record AdminPersonaResponse(string Name, string Role, string Description, string Tone);
 
 public sealed record AdminProviderPreferencesResponse(
@@ -299,7 +301,8 @@ public sealed record AdminAgentInstanceResponse(
     AdminPersonaResponse Persona,
     ModelPreferenceDto? UnattendedModel = null,
     AdminBrowserConfigurationResponse? Browser = null,
-    System.Text.Json.JsonElement? ExecutionBudgets = null);
+    System.Text.Json.JsonElement? ExecutionBudgets = null, AgentCooperationResponse? Cooperation = null);
+
 
 public sealed record AdminSetUnattendedModelRequest(
     long ExpectedRevision,

@@ -55,7 +55,7 @@ public sealed partial class TenantSessionAccessTests
             }
             if(scenario=="definition_limit")
             {
-                var draft=await Json(await owner.PostAsJsonAsync(api+"/agent-definitions/from-template",new { templateId="general-assistant",version=32,expectedRevision=await Revision(owner,tenant) }));
+                var draft=await Json(await owner.PostAsJsonAsync(api+"/agent-definitions/from-template",new { templateId="general-assistant",version=35,expectedRevision=await Revision(owner,tenant) }));
                 var draftId=draft.GetProperty("draftId").GetGuid();var definition=draft.GetProperty("definitionId").GetGuid();var candidate=JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
                 candidate["executionPolicy"]!["capabilities"]=JsonSerializer.SerializeToNode(new { mode="Selected",resolvedCapabilities=new[] { "configuration.inspect","settings.patch" } });
                 candidate["executionPolicy"]!["projection"]=JsonSerializer.SerializeToNode(new { alwaysCapabilities=Array.Empty<string>() });

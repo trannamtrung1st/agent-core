@@ -12,7 +12,8 @@ public sealed partial class InMemoryIamStore
     private AgentRun TenantCoreRoot(AgentRun run) => TenantExecutionLineage.RootAsync(run,
         (id, _) => ValueTask.FromResult(sessionBacking.ReadRetainedTenantOperationRun(run.Owner.TenantId!.Value, id)),
         (id, _) => ValueTask.FromResult(automationBacking.ReadTenantOccurrence(run.Owner.TenantId!.Value, id)),
-        CancellationToken.None).AsTask().GetAwaiter().GetResult();
+        CancellationToken.None, (id, _) => ValueTask.FromResult(delegatedTasks.GetValueOrDefault((run.Owner.TenantId!.Value, id))),
+        (id, token) => FindAgentMessageSourceAsync(run.Owner.TenantId!.Value, id, token)).AsTask().GetAwaiter().GetResult();
 
     // All callers hold the IAM transaction gate, so the source and this snapshot
     // become visible together. No later subscription can attach to this fact.

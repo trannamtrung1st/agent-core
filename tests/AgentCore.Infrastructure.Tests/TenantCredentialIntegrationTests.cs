@@ -84,7 +84,7 @@ public sealed partial class TenantCredentialIntegrationTests
         foreach (var secret in secrets) Assert.DoesNotContain(secret, json);
         foreach (var field in new[] { "ProtectedPayload", "ProtectionVersion", "SecretRevision", "ProtectedValue" }) Assert.DoesNotContain(field, json, StringComparison.OrdinalIgnoreCase);
     }
-    internal sealed class Fixture(TimeProvider? clock = null) : IAsyncDisposable
+    internal sealed partial class Fixture(TimeProvider? clock = null) : IAsyncDisposable
     {
         public TimeProvider Clock { get; } = clock ?? TimeProvider.System;
         public string Root { get; } = Path.Combine(Path.GetTempPath(), "tenant-credentials-" + Guid.NewGuid().ToString("N"));
@@ -147,7 +147,7 @@ public sealed partial class TenantCredentialIntegrationTests
             {
                 if (sqlite)
                 {
-                    f.Contexts = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f.Root}/store.db;Foreign Keys=True;Default Timeout=10").Options);
+                    f.Contexts = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f.Root}/store.db;Foreign Keys=True;Default Timeout=10").AddInterceptors(new TaskDatabaseFailureCapture(f.DatabaseErrors)).Options);
                     await using (var db = f.Contexts.CreateDbContext()) { await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); }
                     if (attachmentAuthority) f.Attachments = new SqliteAttachmentStore(f.Contexts, f.Clock, Path.Combine(f.Root, "attachments"));
                     if (artifactAuthority) f.Artifacts = new SqliteArtifactStore(f.Contexts, f.Clock, Path.Combine(f.Root, "artifacts"));

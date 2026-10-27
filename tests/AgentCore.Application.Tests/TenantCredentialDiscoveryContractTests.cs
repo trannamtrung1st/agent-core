@@ -33,7 +33,7 @@ public sealed class TenantCredentialDiscoveryContractTests
     [Theory] [InlineData("email.accounts")] [InlineData("drive.accounts")]
     public async Task Family_offering_requires_binding_selected_capability_and_supported_human_task(string tool)
     {
-        var definition = await CapabilityProjectionTests.Definition(tool, ToolCatalog.BackgroundStart);
+        var definition = await CapabilityProjectionTests.Definition(tool);
         var session = Guid.NewGuid(); var activation = Guid.NewGuid(); var instance = Guid.NewGuid(); var at = DateTimeOffset.UtcNow;
         var execution = new TrustedExecutionContext(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, ExecutionOrigin.UserMessage);
         var context = CapabilityProjectionTests.Context(definition) with { ModelSupportsTools = true, AgentInstanceId = instance, OwnedSessionId = session,

@@ -154,9 +154,9 @@ export function AgentRunDetails({ run, onChange, showContextProvenance = false, 
       </Flex>)}
     </section> : null}
     {run.wait ? <Flex vertical gap={token.paddingXS} role="status" aria-label="Execution wait">
-      <Typography.Text>{run.wait.mode === "Duration" ? "Waiting for the requested duration." : `Waiting for ${run.wait.until === "All" ? "all" : "any"} background results.`}</Typography.Text>
+      <Typography.Text>{run.wait.mode === "Duration" ? "Waiting for the requested duration." : `Waiting for ${run.wait.until === "All" ? "all" : "any"} task signals.`}</Typography.Text>
       <Typography.Text type="secondary">{run.wait.mode === "Duration" ? "Resumes" : "Timeout"} {new Date(run.wait.deadline).toLocaleString()}</Typography.Text>
-      {run.wait.backgroundSessionIds.map(id => <ConversationDestination key={id} sessionId={id} />)}
+      {run.wait.mode === "Tasks" ? <Typography.Text type="secondary">{run.wait.taskIds.length} selected {run.wait.taskIds.length === 1 ? "task" : "tasks"}</Typography.Text> : null}
     </Flex> : null}
     {run.nextRetryAt ? <Typography.Text type="secondary">Retry scheduled for {new Date(run.nextRetryAt).toLocaleString()}</Typography.Text> : null}
     {run.outcome ? <ReadingRegion label={runOutcomeLabel(run.outcome.kind)} text={run.outcome.summary || "No action was needed."} /> : null}

@@ -24,7 +24,7 @@ public sealed partial class TenantRunAdmissionTests
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-20T04:00:00Z"));
         await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true); var parent = await BackgroundParent(f); var child = await BackgroundChild(f, parent);
         var runtime = (ITenantRuntimeStore)f.Iam; var sessions = (ITenantSessionStore)f.Iam;
-        await runtime.AdmitTenantImmediateAsync(parent.Frame, child.Session, child.Run, f.Ids.NewId());
+        await AdmitTaskFixture(f, parent.Frame, child.Session, child.Run, f.Ids.NewId());
         await Foreground(f).ContinueAsync(parent.Setup.Tenant, child.Session.SessionId, parent.Setup.Owner, (await f.Iam.ReadTenantAsync(parent.Setup.Tenant))!.Tenant.Revision, child.Session.Revision);
         var claimed = await ClaimBackground(f, child.Run); var result = BackgroundOutcome(f, claimed.Run, claimed.Snapshot);
         await runtime.CommitTenantOutcomeAsync(claimed.Frame, result.Snapshot, claimed.Snapshot.Revision, result.Complete, null, f.Ids.NewId());
@@ -55,7 +55,7 @@ public sealed partial class TenantRunAdmissionTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var parent = await BackgroundParent(f); var child = await BackgroundChild(f, parent);
         var runtime = (ITenantRuntimeStore)f.Iam; var sessions = (ITenantSessionStore)f.Iam;
-        await runtime.AdmitTenantImmediateAsync(parent.Frame, child.Session, child.Run, f.Ids.NewId());
+        await AdmitTaskFixture(f, parent.Frame, child.Session, child.Run, f.Ids.NewId());
         var request = await Foreground(f).PrepareAsync(parent.Setup.Tenant, child.Session.SessionId, parent.Setup.Owner, (await f.Iam.ReadTenantAsync(parent.Setup.Tenant))!.Tenant.Revision, child.Session.Revision);
         if (boundary == "generation")
         {
@@ -85,7 +85,7 @@ public sealed partial class TenantRunAdmissionTests
     {
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-20T06:00:00Z"));
         await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true); var parent = await BackgroundParent(f); var child = await BackgroundChild(f, parent);
-        await ((ITenantRuntimeStore)f.Iam).AdmitTenantImmediateAsync(parent.Frame, child.Session, child.Run, f.Ids.NewId());
+        await AdmitTaskFixture(f, parent.Frame, child.Session, child.Run, f.Ids.NewId());
         var claimed = await ClaimBackground(f, child.Run); var outcome = BackgroundOutcome(f, claimed.Run, claimed.Snapshot);
         await ((ITenantRuntimeStore)f.Iam).CommitTenantOutcomeAsync(claimed.Frame, outcome.Snapshot, claimed.Snapshot.Revision, outcome.Complete, null, f.Ids.NewId());
         clock.Advance(TimeSpan.FromSeconds(1));
@@ -142,7 +142,7 @@ public sealed partial class TenantRunAdmissionTests
     public async Task Tenant_foreground_rechecks_independently_scoped_human_management_after_preparation(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var parent = await BackgroundParent(f); var child = await BackgroundChild(f, parent);
-        await ((ITenantRuntimeStore)f.Iam).AdmitTenantImmediateAsync(parent.Frame, child.Session, child.Run, f.Ids.NewId());
+        await AdmitTaskFixture(f, parent.Frame, child.Session, child.Run, f.Ids.NewId());
         var member = await Member(f, parent.Setup.Tenant, parent.Setup.Owner.PrincipalId);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(parent.Setup.Tenant))!.Tenant.Revision;
         var role = await f.Access.SaveRoleAsync(parent.Setup.Owner.PrincipalId, parent.Setup.Tenant, null, "Manage exactly this child", ["sessions.read", "sessions.manage"], await Revision());

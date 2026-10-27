@@ -1,3 +1,4 @@
+import { InstanceCooperationSettings } from '../admin/InstanceCooperationSettings';
 import { InstanceEvaluationBindings } from './InstanceEvaluationBindings';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, App, Button, Flex, Typography } from 'antd';
@@ -56,7 +57,8 @@ function TenantAgentProfile({ context, id }: { context: TenantContext; id: strin
 }
 function TenantAgentSettings({ context, id }: { context: TenantContext; id: string }) {
   const tenant = context.tenant.tenantId; const [view, setView] = useState<TenantAgentEditor>(); const [dirty, setDirty] = useState(false); const [busy, setBusy] = useState(false);
-  const guard = useAccessDraftGuard(dirty, busy, () => {});
+  const [cooperationDirty, setCooperationDirty] = useState(false); const [cooperationBusy, setCooperationBusy] = useState(false); const [settingsEpoch, setSettingsEpoch] = useState(0);
+  const guard = useAccessDraftGuard(dirty || cooperationDirty, busy || cooperationBusy, () => {});
   const transport = useMemo<InstanceSettingsTransport>(() => ({
     list: async (_, signal) => { signal?.throwIfAborted(); setView(undefined); const current = await readTenantAgentEditor(tenant, id, signal); if (!signal?.aborted) setView(current); return current.settings.map(section => ({ ...section, securityRevision: current.securityRevision })); },
     patch: (_, section, set, clear, signal) => patchTenantAgentSettings(tenant, id, section, set, clear, signal),
@@ -67,7 +69,8 @@ function TenantAgentSettings({ context, id }: { context: TenantContext; id: stri
     {view && <TenantAgentHeading view={view} />}
     <Typography.Paragraph type="secondary">Settings define behavior and capability eligibility. The agent’s own roles and approval policy still control execution.</Typography.Paragraph>
     <Typography.Link href={tenantAgentPath(tenant, id, 'state-isolation')} onClick={followAppLink}>State, Memory and Voice enablement share the coordinated State & Isolation editor</Typography.Link>
-    <InstanceSettingsSection confirmationContext={view ? `Agent: ${view.agent.instance.persona.name}. Organization: ${context.tenant.name}.` : undefined} instanceId={id} archived={!view?.canUpdate || view.agent.instance.lifecycle !== 'Active'} transport={transport} onUpdated={() => {}} onDirtyChange={setDirty} onBusyChange={setBusy} />
+    <InstanceSettingsSection confirmationContext={view ? `Agent: ${view.agent.instance.persona.name}. Organization: ${context.tenant.name}.` : undefined} refreshKey={settingsEpoch} saveBlocked={cooperationDirty} externalBusy={cooperationBusy} instanceId={id} archived={!view?.canUpdate || view.agent.instance.lifecycle !== 'Active'} transport={transport} onUpdated={() => {}} onDirtyChange={setDirty} onBusyChange={setBusy} />
+    {view && <InstanceCooperationSettings key={`${tenant}:${id}`} tenant={tenant} instance={id} view={view} disabled={dirty || busy} onDirtyChange={setCooperationDirty} onBusyChange={setCooperationBusy} onSaved={() => setSettingsEpoch(value => value + 1)} />}
     <InstanceEvaluationBindings key={view?.agent.instance.revision ?? 'loading'} tenant={tenant} instance={id} />
     {view?.unavailableSettings.includes('sandboxPolicy') && <Alert type="info" showIcon title="Sandbox has a separate settings page" description={<Typography.Link href={tenantAgentPath(tenant, id, 'sandbox')} onClick={followAppLink}>Open Sandbox configuration and saved setup verification. Independent Sandbox and profile access is required.</Typography.Link>} />}
   </Flex>;

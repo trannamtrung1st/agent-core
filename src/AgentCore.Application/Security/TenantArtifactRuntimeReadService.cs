@@ -43,7 +43,7 @@ public sealed partial class TenantArtifactRuntimeReadService(TenantOperationAuth
     private async ValueTask<Read> RequireAsync(TenantRuntimeFrame frame, Guid artifact, CancellationToken ct, bool audit = false, bool approved = false, bool live = true)
     {
         var tenant = frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
-        var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct).ConfigureAwait(false);
+        var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct, retained: !live).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(tenant, frame.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
         if (run.Owner != frame.Owner || run.SessionId != frame.SessionId || session.Owner.AgentInstanceId != run.AgentInstanceId
@@ -69,9 +69,9 @@ public sealed partial class TenantArtifactRuntimeReadService(TenantOperationAuth
             }
         return read;
     }
-    private async ValueTask FenceAsync(TenantRuntimeFrame frame, Read before, CancellationToken ct, bool approved = false)
+    private async ValueTask FenceAsync(TenantRuntimeFrame frame, Read before, CancellationToken ct, bool approved = false, bool live = true)
     {
-        var after = await RequireAsync(frame, before.Artifact.ArtifactId, ct, approved: approved).ConfigureAwait(false);
+        var after = await RequireAsync(frame, before.Artifact.ArtifactId, ct, approved: approved, live: live).ConfigureAwait(false);
         if (after.Run.Revision != before.Run.Revision || after.State.Tenant.Revision != before.State.Tenant.Revision
             || after.Session.Owner != before.Session.Owner || after.Session.Snapshot.Revision != before.Session.Snapshot.Revision
             || after.Agent.Instance.Revision != before.Agent.Instance.Revision || after.Artifact != before.Artifact)
@@ -79,10 +79,10 @@ public sealed partial class TenantArtifactRuntimeReadService(TenantOperationAuth
         if ((await security.ReadTenantAsync(after.State.Tenant.TenantId, ct).ConfigureAwait(false))?.Tenant.Revision != after.State.Tenant.Revision)
             throw new SecurityConflictException("artifact_source_changed");
         var final = await runs.FindTenantRunAsync(after.State.Tenant.TenantId, frame.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
-        TenantRuntimeRules.Require(frame, after.Session.Owner, final, time.GetUtcNow());
+        if (live) TenantRuntimeRules.Require(frame, after.Session.Owner, final, time.GetUtcNow());
         if (final.Revision != after.Run.Revision) throw new SecurityConflictException("artifact_source_changed");
     }
-    public async ValueTask RequireStoredAsync(AgentRun run, CancellationToken ct = default)
+    public async ValueTask RequireStoredAsync(AgentRun run, CancellationToken ct = default, bool live = true)
     {
         if (run.Checkpoint is null || !AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var messages)) return;
         var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, run.Claim?.Generation ?? Guid.Empty);
@@ -91,11 +91,11 @@ public sealed partial class TenantArtifactRuntimeReadService(TenantOperationAuth
             using var doc = JsonDocument.Parse(message.Text); var root = doc.RootElement;
             if (!root.TryGetProperty("tenantArtifactRead", out var marker) || marker.ValueKind != JsonValueKind.True) continue;
             var witness = root.GetProperty("artifactRead").Deserialize<PreparedArtifactVerification>() ?? throw new AccessDeniedException("artifact_source_changed");
-            var read = await RequireAsync(frame, witness.ArtifactId, ct).ConfigureAwait(false);
+            var read = await RequireAsync(frame, witness.ArtifactId, ct, live: live).ConfigureAwait(false);
             if (Witness(read.Artifact) != witness) throw new AccessDeniedException("artifact_source_changed");
-            await FenceAsync(frame, read, ct).ConfigureAwait(false);
+            await FenceAsync(frame, read, ct, live: live).ConfigureAwait(false);
         }
-        await RequireStoredApprovedAsync(run, messages!, ct).ConfigureAwait(false);
+        await RequireStoredApprovedAsync(run, messages!, ct, live).ConfigureAwait(false);
     }
     private static string Serialize(ArtifactRecord item, int remainingBytes)
     {

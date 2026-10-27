@@ -30,10 +30,11 @@ public sealed class TenantApprovalRecord
     public long CreatedAt { get; set; }
     public long ExpiresAt { get; set; }
     public string PayloadJson { get; set; } = "";
+    public long? ContentRetiredAt { get; set; }
 
     internal static TenantApprovalRecord From(TenantApprovalRequest r) => new()
     {
-        RequestId = r.RequestId, TenantId = r.TenantId, RunId = r.Operation.AutomationAdmission is null ? r.RunId.ToString("D") : null, SessionId = r.Operation.AutomationAdmission is null ? r.SessionId.ToString("D") : null, AutomationId = r.Operation.AutomationAdmission?.Current.AutomationId.ToString("D"), InstanceId = r.Operation.InstanceId.ToString("D"),
+        RequestId = r.RequestId, TenantId = r.TenantId, RunId = r.Operation.AutomationAdmission is null && !AgentCore.Application.Security.TenantTaskConsentRules.IsHuman(r) ? r.RunId.ToString("D") : null, SessionId = r.Operation.AutomationAdmission is null && !AgentCore.Application.Security.TenantTaskConsentRules.IsHuman(r) ? r.SessionId.ToString("D") : null, AutomationId = r.Operation.AutomationAdmission?.Current.AutomationId.ToString("D"), InstanceId = r.Operation.InstanceId.ToString("D"),
         RootActivationId = r.RootActivationId.ToString("D"), ExecutorPrincipalId = r.ExecutorPrincipalId, OriginalInitiatorPrincipalId = r.OriginalInitiatorPrincipalId,
         // This legacy column is the exact grant/receipt FK witness, not semantic root correlation.
         OperationId = r.Operation.OperationId, Fingerprint = r.Operation.ActionHash, Permission = r.Permission,
@@ -67,6 +68,7 @@ public sealed class TenantApprovalRecord
         run.HasAlternateKey(r => new { r.AgentRunId, r.SessionId });
         run.HasAlternateKey(r => new { r.AgentRunId, r.RootActivationId });
         var e = model.Entity<TenantApprovalRecord>();
+        e.HasQueryFilter(r => r.ContentRetiredAt == null);
         e.ToTable("TenantApprovalRequests", t => t.HasCheckConstraint("CK_TenantApprovalRequest_Values",
             ModelSpaceApprovalPersistence.ValuesConstraint));
         e.HasKey(r => r.RequestId); e.HasAlternateKey(r => new { r.TenantId, r.RequestId });

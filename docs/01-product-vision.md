@@ -134,8 +134,17 @@ Automation is one owner-authored future behavior: a concise Name, bounded Instru
 
 ## Using a background result during a conversation
 
-A conversation can use a requested, owned background task’s result while its current Run is still open. Explicit short waits retain that Run and release its worker. Successful answers account for results they acknowledge; remaining requested results return after the conversation is available. This extends same-Agent background work without introducing delegation or a workflow engine.
+A conversation can delegate bounded work to its own Agent or another eligible Agent through a durable Task. Explicit waits release the worker while retaining the source Run. Correspondence, original results, acknowledgment and optional parent reporting are separate saved facts under independent current permissions. Task success remains separate from Goal verification; no general workflow engine is introduced.
 
 ## Approved trusted-local coding and Office work
 
 The scoped P10 successor permits bounded coding/data/Office work in a persistent Session-owned OpenSandbox Workbench. Core keeps canonical Workspace, Artifacts and existing Office/Drive previews; exact Definition/Instance authority and non-replayable Run receipts govern execution. This is trusted single-user local development/demo, not an autonomous platform or public/multi-tenant deployment. Only the trusted server uses the existing Docker daemon. Own execd loopback and writable-layer quota limits remain disclosed; production hardening is separate. Current acceptance is recorded in the [verification ledger](reports/opensandbox-integration-verification.md), superseding the historical Docker sandbox above.
+
+
+<a id="initiative-9--adopted-successor-implementation-in-progress"></a>
+
+## Initiative 9 — Task delegation and communication
+
+Separate accountable Agents may cooperate through durable tasks and private two-Agent correspondence. This authorized post-MVP successor preserves conversational presence; group rooms, federation, pooled teams and workflow engines remain excluded.
+
+See the [adopted proposal](proposals/initiative-9-task-delegation-communication.md), [removal audit](reports/initiative-9-source-audit-2026-10-27.md) and [local delivery evidence and limits](reports/initiative-9-local-verification-2026-10-27.md). The implementation has focused local verification; the report distinguishes exercised behavior from unrun deployment, provider and device qualification.

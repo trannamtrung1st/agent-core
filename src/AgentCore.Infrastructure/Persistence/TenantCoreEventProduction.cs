@@ -24,7 +24,17 @@ internal static class TenantCoreEventProduction
         }, async (id, token) => {
             var row = await db.TriggerOccurrences.IgnoreQueryFilters().SingleOrDefaultAsync(o => o.TenantId == run.Owner.TenantId && o.OccurrenceId == id.ToString("D"), token).ConfigureAwait(false);
             return row is null ? null : TriggerStoreMapping.ToOccurrence(row);
-        }, ct).ConfigureAwait(false);
+        }, ct, async (id, token) => {
+            var row = db.Set<DelegatedTaskRow>().Local.SingleOrDefault(t => t.TenantId == run.Owner.TenantId && t.TaskId == id)
+                ?? await db.Set<DelegatedTaskRow>().SingleOrDefaultAsync(t => t.TenantId == run.Owner.TenantId && t.TaskId == id, token).ConfigureAwait(false);
+            return row is null ? null : TaskPersistence.Value(row);
+        }, async (id, token) => {
+            var row = await db.Set<AgentMessageRow>().AsNoTracking().SingleOrDefaultAsync(m => m.TenantId == run.Owner.TenantId && m.MessageId == id, token);
+            if (row is null) return null;
+            var thread = await db.Set<AgentThreadRow>().AsNoTracking().SingleAsync(t => t.TenantId == row.TenantId && t.ThreadId == row.ThreadId, token);
+            return new AgentCore.Application.Ports.AgentMessageResult(TaskPersistence.Value<AgentCore.Domain.Tasks.AgentThread>(thread.Json),
+                TaskPersistence.Value<AgentCore.Domain.Tasks.AgentMessage>(row.Json), TaskPersistence.Value<AgentCore.Domain.Tasks.AgentMessageReceipt>(row.ReceiptJson), 0);
+        }).ConfigureAwait(false);
 
     internal static async Task StageAsync(AgentCoreDbContext db, CoreEventOccurrence? fact, CancellationToken ct)
     {

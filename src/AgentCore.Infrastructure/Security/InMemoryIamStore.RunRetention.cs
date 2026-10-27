@@ -12,9 +12,10 @@ public sealed partial class InMemoryIamStore
         foreach (var run in sessionBacking.AgentRuns.Runs.Values.Where(r => r.Owner.TenantId == tenant && r.SessionId == session).ToArray())
         {
             var reportPending = sessionBacking.AgentRuns.CompletionReceipts.TryGetValue(run.AgentRunId, out var row)
-                && CompletionInboxMapping.Read(row).Status is not (CompletionInboxStatus.Handled or CompletionInboxStatus.Delivered or CompletionInboxStatus.Skipped);
+                && CompletionInboxMapping.Read(row).Status is not (CompletionInboxStatus.Delivered or CompletionInboxStatus.Skipped);
             var minimized = run.RetireConversationContent(at, reportPending);
             if (!ReferenceEquals(run, minimized)) sessionBacking.SaveRetainedTenantOperationRun(minimized, run.Revision);
         }
+        RetireTaskContent(tenant, at);
     }
 }

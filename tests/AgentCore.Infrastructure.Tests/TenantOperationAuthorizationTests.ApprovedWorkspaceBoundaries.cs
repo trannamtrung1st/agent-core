@@ -15,7 +15,7 @@ public sealed partial class TenantOperationAuthorizationTests
 {
     private static async Task<(Environment Setup, TenantRuntimeFrame Frame, TenantApprovalRequest Request)> ApprovedWorkspaceSuccessor(Fixture f, string tool, object arguments, bool exceptional = false, Func<Environment, Task>? seed = null)
     {
-        var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, true);
+        var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, true);
         if (seed is not null) await seed(s);
         await GrantWorkspaceRuntimeReads(f, s, exceptional ? ["agents.read", "sessions.read", "workspaces.read", "workspaces.write"]
             : ["agents.read", "sessions.read", "workspaces.read", "workspaces.write", "workspaces.delete"]);

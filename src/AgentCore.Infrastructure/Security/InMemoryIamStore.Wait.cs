@@ -8,18 +8,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore
 {
-    private IReadOnlyList<BackgroundCompletionCandidate> TenantWaitChildren(AgentRun run, AgentRunWait wait, bool requireAll = false)
-    {
-        var state = _tenants[run.Owner.TenantId!.Value]; var result = new List<BackgroundCompletionCandidate>();
-        foreach (var id in wait.BackgroundSessionIds)
-        {
-            var child = TenantWaitRules.ChildAsync(run, sessionBacking.ReadTenantSession(state.Tenant.TenantId, id),
-                (runId, _) => ValueTask.FromResult(sessionBacking.ReadRetainedTenantOperationRun(state.Tenant.TenantId, runId)), CancellationToken.None).AsTask().GetAwaiter().GetResult();
-            if (child is not null && AuthorizeCompletionSource(run, child, CancellationToken.None) is { } allowed) result.Add(allowed);
-        }
-        if (requireAll && result.Count != wait.BackgroundSessionIds.Count) throw AgentCore.Application.Sessions.AgentCoreErrors.NotFound("Owned readable initial background child was not found.");
-        return result;
-    }
+
 
     private void RequireTenantWait(AgentRun run, AgentRunCommand.SuspendWait suspend, CancellationToken ct)
     {

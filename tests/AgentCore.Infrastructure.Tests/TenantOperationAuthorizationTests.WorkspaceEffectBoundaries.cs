@@ -21,7 +21,7 @@ public sealed partial class TenantOperationAuthorizationTests
 {
     private static async Task<(Environment Setup, TenantRuntimeFrame Frame, ModelToolCall Call, RoleAssignment Grant)> WorkspaceEffectCase(Fixture f)
     {
-        var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         var grant = await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read", "workspaces.read", "workspaces.write", "workspaces.delete"]);
         var call = new ModelToolCall("owned-workspace-effect", ToolCatalog.WorkspaceWrite, """{"path":"/working/saved.txt","content":"Exact mutation body"}""");
         await WorkspaceEffectCheckpoint(f, frame, call); return (s, frame, call, grant);

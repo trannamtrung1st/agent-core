@@ -14,7 +14,7 @@ public sealed partial class SqliteIamStore
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         if (session is null && instanceId is null) throw new ArgumentException("An exact Session or Agent is required.");
         if (session is { } id && !await OwnedSessions(db, tenant).AnyAsync(s => s.SessionId == id.ToString("D"), ct).ConfigureAwait(false)) throw new AccessDeniedException("resource_unavailable");
-        var query = OwnedRuns(db, tenant).AsNoTracking();
+        var query = OwnedRuns(db, tenant).AsNoTracking().Where(r => OwnedSessions(db, tenant).Any(s => s.SessionId == r.SessionId));
         if (session is { } sessionId) query = query.Where(r => r.SessionId == sessionId.ToString("D"));
         if (instanceId is { } instance) query = query.Where(r => r.AgentInstanceId == instance.ToString("D"));
         if (allowedSessions is not null) { var ids = allowedSessions.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => ids.Contains(r.SessionId)); }

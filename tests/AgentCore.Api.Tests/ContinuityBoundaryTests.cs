@@ -34,7 +34,7 @@ public sealed class ContinuityBoundaryTests
         store = sqlite ? host.Services.GetRequiredService<IExperienceStore>() : new InMemoryExperienceStore();
         var id = Guid.NewGuid(); var recordId = Guid.NewGuid();
         var record = new AgentExperience(recordId, id, LocalUserProfile.Id, ExperienceSourceKind.Session, Guid.NewGuid(), 2,
-            DateTimeOffset.UtcNow, "general-assistant", 21, recordId, new("synthetic-default", "synthetic", "synthetic", null), DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow, "general-assistant", 35, recordId, new("synthetic-default", "synthetic", "synthetic", null), DateTimeOffset.UtcNow);
         await store.AdmitAsync(record); await store.ResetAsync(id);
         await store.CompleteAsync(id, recordId, new("Late output", [], [], [], [], [], [], []));
         var retained = (await store.GetAsync(id, recordId))!;

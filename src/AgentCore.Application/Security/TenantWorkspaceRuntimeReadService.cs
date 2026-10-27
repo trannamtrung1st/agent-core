@@ -33,7 +33,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
             return new(source.Run, source.Security, source.Session, source.Agent, TenantWorkspaceRules.ForRun(source.Run, "/home"), source.Observation);
         }
         var tenant = frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
-        var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct).ConfigureAwait(false);
+        var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct, retained: !live).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(tenant, frame.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
         if (run.Owner != frame.Owner || run.SessionId != frame.SessionId || session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId)
@@ -196,7 +196,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
             return ToolJsonResults.FitToBudget(remainingBytes, """{"error":"workspace_read_unavailable","message":"The current path cannot be read. Check the exact path and current file state before another read."}""");
         }
     }
-    public async ValueTask RequireStoredAsync(AgentRun run, CancellationToken ct = default)
+    public async ValueTask RequireStoredAsync(AgentRun run, CancellationToken ct = default, bool live = true)
     {
         if (run.Checkpoint is null || !AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var messages)) return;
         var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, run.Claim?.Generation ?? Guid.Empty);
@@ -217,14 +217,14 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
             if (args.Path == "/attachments" || message.Name == ToolCatalog.KnowledgeRetrieve || TenantWorkspaceReadContract.IsResourcePath(args.Path))
             {
                 using var doc = JsonDocument.Parse(message.Text); var witness = doc.RootElement.GetProperty("workspaceRead");
-                var observed = await InspectCore(frame, new("resource-revalidate", message.Name!, TenantWorkspaceReadContract.Canonical(message.Name!, args)), ToolLimits.MaxOutputBytes, ct).ConfigureAwait(false);
+                var observed = await InspectCore(frame, new("resource-revalidate", message.Name!, TenantWorkspaceReadContract.Canonical(message.Name!, args)), ToolLimits.MaxOutputBytes, ct, live: live).ConfigureAwait(false);
                 if (witness.GetProperty("observationHash").GetString() != observed.Hash
                     || observed.Before.Collection is null && observed.Before.Attachments is null && witness.GetProperty("resource").Deserialize<TenantResourceSourceObservation>() != observed.Before.Resource) throw new AccessDeniedException("resource_source_changed");
                 continue;
             }
-            var before = await Require(frame, message.Name!, args, ct).ConfigureAwait(false);
-            await Fence(frame, message.Name!, args, before, ct).ConfigureAwait(false);
+            var before = await Require(frame, message.Name!, args, ct, live: live).ConfigureAwait(false);
+            await Fence(frame, message.Name!, args, before, ct, live: live).ConfigureAwait(false);
         }
-        await RequireStoredApprovedAsync(run, messages!, ct).ConfigureAwait(false);
+        await RequireStoredApprovedAsync(run, messages!, ct, live).ConfigureAwait(false);
     }
 }

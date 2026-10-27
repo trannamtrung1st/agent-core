@@ -21,7 +21,7 @@ public sealed partial class TenantCredentialAccessTests
         using var owner = ConnectedClient(factory); await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();
         var api = $"/api/v2/tenants/{tenant}"; var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
-        var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
+        var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 35, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
         var route = api + $"/agents/{instance}/automations";
         var ids = new List<Guid>();
         foreach (var name in new[] { "Exact readable schedule", "Private schedule" })
@@ -32,7 +32,7 @@ public sealed partial class TenantCredentialAccessTests
         if (mode == "archived") Assert.True((await owner.PutAsJsonAsync(api + $"/agents/{instance}/lifecycle", new { lifecycle = 1, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 })).IsSuccessStatusCode);
         if (mode == "foreign")
         {
-            var other = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
+            var other = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 35, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
             Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync(api + $"/agents/{other}/automations/{ids[0]}/editor")).StatusCode); return;
         }
         HttpClient reader = owner; HttpClient? memberClient = null; Guid? assignment = null; var access = factory.Services.GetRequiredService<TenantAccessService>();

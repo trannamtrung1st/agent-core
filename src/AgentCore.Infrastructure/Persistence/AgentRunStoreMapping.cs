@@ -31,12 +31,16 @@ internal static class AgentRunStoreMapping
         if (command is AgentRunCommand.ResumeWait)
         {
             RuntimeTelemetry.RecordAgentRun("wait-wake");
-            if (before.Wait is { Mode: AgentRunWaitMode.Background } wait && AgentRunToolCallCheckpoint.TryRead(after.Checkpoint!, out var messages) && messages!.LastOrDefault(m => m.ToolCallId == wait.ToolCallId && m.Role == AgentCore.Application.Ports.ModelRole.Tool)?.Text.Contains("\"reason\":\"timeout\"", StringComparison.Ordinal) == true) RuntimeTelemetry.RecordAgentRun("wait-timeout");
+            if (before.Wait is { Mode: AgentRunWaitMode.Tasks } wait && AgentRunToolCallCheckpoint.TryRead(after.Checkpoint!, out var messages) && messages!.LastOrDefault(m => m.ToolCallId == wait.ToolCallId && m.Role == AgentCore.Application.Ports.ModelRole.Tool)?.Text.Contains("\"reason\":\"timeout\"", StringComparison.Ordinal) == true) RuntimeTelemetry.RecordAgentRun("wait-timeout");
         }
         if (before.Status == AgentRunStatus.WaitingForSignal && after.Status == AgentRunStatus.Cancelled) RuntimeTelemetry.RecordAgentRun("wait-cancelled");
         if (command is AgentRunCommand.Recover) RuntimeTelemetry.RecordAgentRun("recovered");
         if (command is AgentRunCommand.Claim)
-        { RuntimeTelemetry.RecordAgentRun("claimed"); RuntimeTelemetry.RecordAgentRun("attempt"); }
+        {
+            RuntimeTelemetry.RecordAgentRun("claimed"); RuntimeTelemetry.RecordAgentRun("attempt");
+            if (before.AttemptCount == 0 && after.Status == AgentRunStatus.Running && after.Admission.DelegatedTask is not null)
+                TaskTelemetry.DeliveryLag("worker", after.CreatedAtUtc, after.UpdatedAtUtc);
+        }
         if (before.Status != after.Status)
         {
             var outcome = after.Status switch {
@@ -54,7 +58,7 @@ internal static class AgentRunStoreMapping
 
     public static void ValidateGenericAdmission(AgentRun run)
     {
-        if (run.Admission.Activation.Kind is ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ApprovalContinuation)
+        if (run.Admission.Activation.Kind is ActivationKind.BackgroundCompleted or ActivationKind.ApprovalContinuation or ActivationKind.DelegatedTask or ActivationKind.TaskCompletion or ActivationKind.AgentMessage)
             throw AgentCoreErrors.Validation("This Activation requires its atomic, fenced admission method.");
     }
 
@@ -83,12 +87,6 @@ internal static class AgentRunStoreMapping
             || run.Admission.Configuration?.InstanceRevision != task.InstanceRevision
             || ConfigurationPendingTask.ReadTarget(run.Admission.Activation.EvidenceJson) != task.Target)
             throw AgentCoreErrors.Conflict("Configuration continuation requires its completed, safe owned task receipt.");
-    }
-
-    public static void ValidateImmediateAdmission(AgentRun run, Guid expectedParentGeneration)
-    {
-        if (run.Admission.Activation.Kind != ActivationKind.ImmediateBackground || expectedParentGeneration == Guid.Empty)
-            throw AgentCoreErrors.Validation("Immediate background admission requires its parent claim generation.");
     }
 
     // Indexed relational identity is authoritative; payload holds the immutable pins and bounded state.
@@ -199,7 +197,6 @@ internal static class AgentRunStoreMapping
         return snapshot.Origin.Kind switch
         {
             SessionOriginKind.AutomationOccurrence => $"occurrence:{snapshot.Origin.TriggerOccurrenceId:D}",
-            SessionOriginKind.ImmediateBackground => $"immediate:{snapshot.Origin.OriginatingSessionId:D}:{snapshot.Origin.OriginatingAgentRunId:D}:{run.Admission.Activation.DedupeKey}",
             SessionOriginKind.ManualBackground => $"manual:{run.Admission.Activation.DedupeKey}",
             _ => null
         };
@@ -263,9 +260,6 @@ internal static class AgentRunStoreMapping
             var a = run.Admission.Activation;
             var matches = snapshot.Origin.Kind switch
             {
-                SessionOriginKind.ImmediateBackground => a.Kind == ActivationKind.ImmediateBackground
-                    && a.SourceSessionId == snapshot.Origin.OriginatingSessionId
-                    && a.SourceAgentRunId == snapshot.Origin.OriginatingAgentRunId,
                 SessionOriginKind.AutomationOccurrence or SessionOriginKind.SourceOccurrence => a.Kind is ActivationKind.ScheduledWork or ActivationKind.ApplicationEvent or ActivationKind.CoreEvent or ActivationKind.ManualBackground
                     && a.TriggerOccurrenceId == snapshot.Origin.TriggerOccurrenceId,
                 SessionOriginKind.ManualBackground => a.Kind == ActivationKind.ManualBackground,
@@ -293,24 +287,8 @@ internal static class AgentRunStoreMapping
     public static void ValidateBackgroundBudget(AgentRun child, IEnumerable<AgentRun> runs)
     {
         var owned = runs.Where(run => run.Owner == child.Owner).ToArray();
-        if (owned.Count(run => run.Admission.Activation.Kind == ActivationKind.ImmediateBackground
-            && (child.Owner.TenantId is not null ? run.Admission.Activation.RootActivationId == child.Admission.Activation.RootActivationId
-                : run.Admission.Activation.SourceAgentRunId == child.Admission.Activation.SourceAgentRunId)) >= AgentRunLimits.MaxImmediateChildren
-            || owned.Count(run => !run.IsTerminal && run.Admission.Activation.Kind is ActivationKind.ImmediateBackground
-                or ActivationKind.ManualBackground or ActivationKind.ScheduledWork or ActivationKind.ApplicationEvent or ActivationKind.CoreEvent) >= AgentRunLimits.MaxActiveBackgroundRuns)
+        if (owned.Count(run => !run.IsTerminal && run.Admission.Activation.Kind is ActivationKind.ManualBackground or ActivationKind.ScheduledWork or ActivationKind.ApplicationEvent or ActivationKind.CoreEvent) >= AgentRunLimits.MaxActiveBackgroundRuns)
             throw AgentCoreErrors.Conflict("Background work capacity reached.");
-    }
-
-    public static void ValidateImmediateSource(AgentRun child, AgentRun? source, bool sourceSessionEligible)
-    {
-        if (child.Admission.Activation.Kind != ActivationKind.ImmediateBackground) return;
-        if (!sourceSessionEligible || source is null || source.Owner != child.Owner
-            || source.SessionId != child.Admission.Activation.SourceSessionId
-            || source.Status != AgentRunStatus.Running || source.CancellationRequested
-            || source.Claim!.LeaseExpiresAtUtc <= child.CreatedAtUtc
-            || source.Admission.Activation.Kind != ActivationKind.UserTurn
-            || source.DefinitionId != child.DefinitionId)
-            throw AgentCoreErrors.Validation("Immediate background admission requires an active owned user-turn source.");
     }
 
     public static void ValidateOccurrenceAdmission(SessionSnapshot snapshot, AgentRun run,

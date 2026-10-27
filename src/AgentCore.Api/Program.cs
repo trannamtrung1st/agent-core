@@ -192,6 +192,7 @@ TenantWebhookEndpoints.Map(app);
 TenantWebhookIngressEndpoints.Map(app);
 TenantSessionEndpoints.Map(app);
 TenantSessionGoalEndpoints.Map(app);
+TenantTaskEndpoints.Map(app);
 TenantSessionContextEndpoints.Map(app);
 TenantActivityEndpoints.Map(app);
 TenantOperationPolicyEndpoints.Map(app);

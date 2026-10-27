@@ -16,7 +16,7 @@ public sealed record TenantAgentConfigurationChange(Guid InstanceId, long Expect
     bool SetUnattendedModel = false, AgentCore.Domain.Models.ModelPreference? UnattendedModel = null,
     HarnessManagementState? HarnessManagement = null, SkillMutation? Skill = null, InstanceResourceMutation? Resource = null,
     HumanSessionReference? Initiator = null, TenantIsolationMutation? Isolation = null, HarnessManagementState? HarnessAssessment = null,
-    PreparedManagementBinding? Binding = null);
+    PreparedManagementBinding? Binding = null, AgentCore.Domain.Tasks.AgentCooperationPolicy? Cooperation = null);
 
 public sealed record TenantIsolationMetadata(long ExperienceRevision, bool ExperienceEnabled, long MaintenanceRevision, bool AllowMaintenance);
 public sealed record IsolationOwnerRevisions(long Instance, long Experience, long Maintenance);

@@ -9,7 +9,7 @@ test("immediate child reports once, then continues as the same Session with a ne
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("agent-core.owner-capability"))).not.toBeNull();
-  await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 35 });
   await expect(page.getByTestId("connection")).toHaveText("Ready");
   await page.getByLabel("Message", { exact: true }).fill("[test:background-start] [test:background-files] Check the progress in the background.");
   await page.getByRole("button", { name: "Send", exact: true }).click();
@@ -102,7 +102,7 @@ test("missing background completion reports a durable failure once with visible 
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/");
-  await selectInstanceIdentity(page, { id: "general-assistant", version: 24 });
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 35 });
   await expect(page.getByTestId("connection")).toHaveText("Ready");
   await page.getByLabel("Message", { exact: true }).fill("[test:background-start] [test:background-prose] Check progress in the background and report it.");
   await page.getByRole("button", { name: "Send", exact: true }).click();
@@ -141,7 +141,7 @@ for (const scenario of ["correct", "invalid"] as const) {
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.goto("/");
-    await selectInstanceIdentity(page, { id: "general-assistant", version: 24 });
+    await selectInstanceIdentity(page, { id: "general-assistant", version: 35 });
     await expect(page.getByTestId("connection")).toHaveText("Ready");
     await page.getByLabel("Message", { exact: true }).fill(`[test:background-start] [test:background-completion-${scenario}] Collect a digest in the background and report it.`);
     await page.getByRole("button", { name: "Send", exact: true }).click();
@@ -177,7 +177,7 @@ for (const exhausted of [false, true]) {
   test(`background semantic response ${exhausted ? "exhausts one correction" : "recovers through completion only"}`, async ({ page }) => {
     const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
     await page.goto("/");
-    await selectInstanceIdentity(page, { id: "general-assistant", version: 24 });
+    await selectInstanceIdentity(page, { id: "general-assistant", version: 35 });
     await expect(page.getByTestId("connection")).toHaveText("Ready");
     await page.getByLabel("Message", { exact: true }).fill(`[test:background-start] [test:background-semantic-${exhausted ? "exhausted" : "recovery"}] Verify the bounded background outcome.`);
     await page.getByRole("button", { name: "Send", exact: true }).click();
@@ -207,7 +207,7 @@ for (const exhausted of [false, true]) {
 test("unrelated provider failure keeps Run diagnostics without a Response recovery panel", async ({ page }) => {
   const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
   await page.goto("/");
-  await selectInstanceIdentity(page, { id: "general-assistant", version: 24 });
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 35 });
   await expect(page.getByTestId("connection")).toHaveText("Ready");
   await page.getByLabel("Message", { exact: true }).fill("[test:background-start] Check progress in the background.");
   await page.getByRole("button", { name: "Send", exact: true }).click();

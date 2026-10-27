@@ -40,7 +40,7 @@ public sealed partial class TenantOperationAuthorizationTests
     private async Task CapturedSpaceEffectWorkflow(bool sqlite, bool privateAlias, bool reviewed, bool publicationRetention = false)
     {
         var retentionClock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
-        await using var f = await Fixture.Create(sqlite, retentionClock, builtInAuthority: true, artifactAuthority: publicationRetention); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, retentionClock, builtInAuthority: true, artifactAuthority: publicationRetention); var s = await Setup(f, "general-assistant", 35);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;
         await GrantWorkspaceRuntimeReads(f, s, ["spaces.read", "sessions.read", "workspaces.read", "workspaces.write"]);
         var spaceStore = (ITenantSpaceStore)f.Iam; var sessions = (ITenantSessionStore)f.Iam; var runs = (ITenantRunStore)f.Iam;

@@ -14,7 +14,7 @@ public sealed partial class TenantOperationAuthorizationTests
         TenantApprovalRequest Request, string Arguments, byte[] Bytes, bool Working, RoleAssignment RawReads, TenantSessionInitiator Reviewer);
     private static async Task<SourceConsentCase> SourceConsent(Fixture f, bool working = false, bool grant = false, string policy = "workspaces.read", bool independent = false, bool resource = false)
     {
-        var s = await Setup(f, "general-assistant", 32); byte[] bytes = resource ? "Exact resource source body"u8.ToArray() : [0, 255, 128, 3];
+        var s = await Setup(f, "general-assistant", 35); byte[] bytes = resource ? "Exact resource source body"u8.ToArray() : [0, 255, 128, 3];
         var bound = resource ? await ResourceSourceCase(f, s, bytes) : null;
         if (bound is not null) { s = bound.Setup; working = false; if (policy == "workspaces.read") policy = "resources.read"; }
         else await SeedRuntimeWorkspace(f, s, working, "source.bin", bytes);
@@ -71,7 +71,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [InlineData(false, "workspaces.read")] [InlineData(true, "workspaces.read")]
     public async Task Tenant_Artifact_source_consent_never_substitutes_a_creation_exception_for_missing_raw_source_reads(bool sqlite, string permission)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         await GrantWorkspaceRuntimeReads(f, s, new[] { "sessions.read", "agents.read", "workspaces.read" }.Where(k => k != permission).ToArray());
         await SeedRuntimeWorkspace(f, s, false, "source.bin", [0, 255, 128, 3]);
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;

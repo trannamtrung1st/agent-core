@@ -59,7 +59,7 @@ public sealed class ActivationAdmissionTests
         Assert.Throws<ArgumentException>(() => UserActivation(sessionId,
             Enumerable.Range(0, Activation.MaxSourceEntries + 1).Select(_ => Guid.NewGuid()).ToArray()));
         Assert.Throws<ArgumentException>(() => Activation.Start(Guid.NewGuid(), sessionId,
-            ActivationKind.ImmediateBackground, [], null, null, sessionId, Guid.NewGuid(), "start", Now));
+            ActivationKind.DelegatedTask, [], null, null, sessionId, Guid.NewGuid(), "start", Now));
         Assert.Throws<ArgumentException>(() => Activation.Start(Guid.NewGuid(), sessionId,
             ActivationKind.ScheduledWork, [], null, null, null, null, "scheduled", Now));
     }
@@ -68,19 +68,19 @@ public sealed class ActivationAdmissionTests
     public void Background_origin_remains_immutable_when_chat_visibility_is_added()
     {
         var initialRun = Guid.NewGuid();
-        var origin = new SessionOrigin(SessionOriginKind.ImmediateBackground,
+        var origin = new SessionOrigin(SessionOriginKind.DelegatedTask,
             Guid.NewGuid(), Guid.NewGuid(), initialRun, reportCompletionToOrigin: true);
         Assert.Equal(SessionSurface.BackgroundWork, origin.InitialSurface);
         var foregrounded = SessionOrigin.ContinueInChat(origin.InitialSurface);
         Assert.Equal(SessionSurface.ChatList | SessionSurface.BackgroundWork, foregrounded);
         Assert.Equal(foregrounded, SessionOrigin.ContinueInChat(foregrounded));
-        Assert.Equal(SessionOriginKind.ImmediateBackground, origin.Kind);
+        Assert.Equal(SessionOriginKind.DelegatedTask, origin.Kind);
         Assert.True(origin.MayReportCompletion(initialRun));
         Assert.False(origin.MayReportCompletion(Guid.NewGuid()));
         Assert.Throws<ArgumentException>(() => new SessionOrigin(SessionOriginKind.AutomationOccurrence,
             initialBackgroundAgentRunId: initialRun, automationId: Guid.NewGuid(), triggerOccurrenceId: Guid.NewGuid(),
             reportCompletionToOrigin: true));
-        Assert.Throws<ArgumentException>(() => new SessionOrigin(SessionOriginKind.ImmediateBackground,
+        Assert.Throws<ArgumentException>(() => new SessionOrigin(SessionOriginKind.DelegatedTask,
             Guid.NewGuid(), Guid.NewGuid(), initialRun, automationId: Guid.NewGuid()));
     }
 

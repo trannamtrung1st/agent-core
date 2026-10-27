@@ -142,7 +142,7 @@ public sealed partial class TenantRunAdmissionTests
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-20T14:00:00Z"));
         await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true); var parent = await BackgroundParent(f); await WaitReadAuthority(f, parent); var child = await BackgroundChild(f, parent);
         var runtime = (ITenantRuntimeStore)f.Iam;
-        await runtime.AdmitTenantImmediateAsync(parent.Frame, child.Session, child.Run, f.Ids.NewId());
+        await AdmitTaskFixture(f, parent.Frame, child.Session, child.Run, f.Ids.NewId());
         var childLive = await ClaimBackground(f, child.Run); var outcome = BackgroundOutcome(f, childLive.Run, childLive.Snapshot);
         await runtime.CommitTenantOutcomeAsync(childLive.Frame, outcome.Snapshot, childLive.Snapshot.Revision, outcome.Complete, null, f.Ids.NewId());
         await CompleteBackgroundParent(f, parent);

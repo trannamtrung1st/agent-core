@@ -6,7 +6,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed record TenantOperationReceiptRecord(Guid OperationId, Guid? RequestId, Guid TenantId, string RunId, string SessionId,
     string RootActivationId, Guid ExecutorPrincipalId, string InstanceId, string ActionHash, int Outcome, string ReasonCode,
-    long InstanceRevision, long PersonaRevision, long RecordedAt, string? SourceCallId = null, string? ParametersHash = null, string? BrowserArtifactsJson = null, string? AutomationMutationJson = null, string? ManagementSkillJson = null, string? ManagementResourceJson = null, string? PublicDownloadJson = null, string? HttpJson = null)
+    long InstanceRevision, long PersonaRevision, long RecordedAt, string? SourceCallId = null, string? ParametersHash = null, string? BrowserArtifactsJson = null, string? AutomationMutationJson = null, string? ManagementSkillJson = null, string? ManagementResourceJson = null, string? PublicDownloadJson = null, string? HttpJson = null, string? TaskAdmissionJson = null)
 {
     internal TenantOperationReceipt Domain()
     {
@@ -15,13 +15,19 @@ public sealed record TenantOperationReceiptRecord(Guid OperationId, Guid? Reques
         if (ManagementResourceJson is not null) _ = AgentCore.Application.Security.TenantManagementResourceRules.ReadEvidence(ManagementResourceJson);
         if (PublicDownloadJson is not null) _ = AgentCore.Application.Security.TenantPublicDownloadRules.Read(PublicDownloadJson);
         if(HttpJson is not null)AgentCore.Application.Security.TenantHttpEffectRules.Validate(System.Text.Json.JsonSerializer.Deserialize<TenantHttpReceipt>(HttpJson) ?? throw new ArgumentException("Invalid HTTP receipt."));
+        if (TaskAdmissionJson is not null)
+        {
+            if (TaskAdmissionJson.Length > 1024 || Outcome != (int)TenantOperationOutcome.Completed || ReasonCode != "task_created")
+                throw new ArgumentException("Invalid Task admission receipt.");
+            (System.Text.Json.JsonSerializer.Deserialize<TenantTaskAdmissionReceipt>(TaskAdmissionJson) ?? throw new ArgumentException("Invalid Task admission receipt.")).Validate();
+        }
         if (BrowserArtifactsJson is not null) _ = AgentCore.Application.Security.TenantBrowserArtifactRules.Read(BrowserArtifactsJson);
         return new(OperationId, RequestId, TenantId, Guid.Parse(RunId), Guid.Parse(SessionId), Guid.Parse(RootActivationId),
-        ExecutorPrincipalId, Guid.Parse(InstanceId), ActionHash, (TenantOperationOutcome)Outcome, ReasonCode, InstanceRevision, PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(RecordedAt), SourceCallId, ParametersHash, BrowserArtifactsJson, AutomationMutationJson is null ? null : System.Text.Json.JsonSerializer.Deserialize<TenantAutomationMutationReceipt>(AutomationMutationJson), ManagementSkillJson is null ? null : AgentCore.Application.Security.TenantManagementSkillRules.ReadEvidence(ManagementSkillJson), ManagementResourceJson is null ? null : AgentCore.Application.Security.TenantManagementResourceRules.ReadEvidence(ManagementResourceJson), PublicDownloadJson is null ? null : AgentCore.Application.Security.TenantPublicDownloadRules.Read(PublicDownloadJson), HttpJson is null ? null : System.Text.Json.JsonSerializer.Deserialize<TenantHttpReceipt>(HttpJson));
+        ExecutorPrincipalId, Guid.Parse(InstanceId), ActionHash, (TenantOperationOutcome)Outcome, ReasonCode, InstanceRevision, PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(RecordedAt), SourceCallId, ParametersHash, BrowserArtifactsJson, AutomationMutationJson is null ? null : System.Text.Json.JsonSerializer.Deserialize<TenantAutomationMutationReceipt>(AutomationMutationJson), ManagementSkillJson is null ? null : AgentCore.Application.Security.TenantManagementSkillRules.ReadEvidence(ManagementSkillJson), ManagementResourceJson is null ? null : AgentCore.Application.Security.TenantManagementResourceRules.ReadEvidence(ManagementResourceJson), PublicDownloadJson is null ? null : AgentCore.Application.Security.TenantPublicDownloadRules.Read(PublicDownloadJson), HttpJson is null ? null : System.Text.Json.JsonSerializer.Deserialize<TenantHttpReceipt>(HttpJson), TaskAdmissionJson is null ? null : System.Text.Json.JsonSerializer.Deserialize<TenantTaskAdmissionReceipt>(TaskAdmissionJson));
     }
     internal static TenantOperationReceiptRecord From(TenantOperationReceipt r) => new(r.OperationId, r.RequestId, r.TenantId, r.RunId.ToString("D"),
         r.SessionId.ToString("D"), r.RootActivationId.ToString("D"), r.ExecutorPrincipalId, r.InstanceId.ToString("D"), r.ActionHash, (int)r.Outcome,
-        r.ReasonCode, r.InstanceRevision, r.PersonaRevision, r.RecordedAt.ToUnixTimeMilliseconds(), r.SourceCallId, r.ParametersHash, r.BrowserArtifactsJson, r.AutomationMutation is null ? null : System.Text.Json.JsonSerializer.Serialize(r.AutomationMutation), r.ManagementSkill is null ? null : System.Text.Json.JsonSerializer.Serialize(r.ManagementSkill), r.ManagementResource is null ? null : System.Text.Json.JsonSerializer.Serialize(r.ManagementResource), r.PublicDownload is null ? null : System.Text.Json.JsonSerializer.Serialize(r.PublicDownload),r.Http is null ? null : System.Text.Json.JsonSerializer.Serialize(r.Http));
+        r.ReasonCode, r.InstanceRevision, r.PersonaRevision, r.RecordedAt.ToUnixTimeMilliseconds(), r.SourceCallId, r.ParametersHash, r.BrowserArtifactsJson, r.AutomationMutation is null ? null : System.Text.Json.JsonSerializer.Serialize(r.AutomationMutation), r.ManagementSkill is null ? null : System.Text.Json.JsonSerializer.Serialize(r.ManagementSkill), r.ManagementResource is null ? null : System.Text.Json.JsonSerializer.Serialize(r.ManagementResource), r.PublicDownload is null ? null : System.Text.Json.JsonSerializer.Serialize(r.PublicDownload),r.Http is null ? null : System.Text.Json.JsonSerializer.Serialize(r.Http), r.TaskAdmission is null ? null : System.Text.Json.JsonSerializer.Serialize(r.TaskAdmission));
     internal static void Configure(ModelBuilder model)
     {
         var request = model.Entity<TenantApprovalRecord>();

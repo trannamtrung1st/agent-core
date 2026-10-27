@@ -144,11 +144,11 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                 var text = JsonSerializer.Serialize(new { approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()), outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()),
                     reasonCode = reason, operationId = outcome.OperationId, applied = request.Operation.Kind == TenantOperationKind.SandboxCommand && outcome.Outcome != TenantOperationOutcome.Denied ? null : outcome.Outcome switch {
                         TenantOperationOutcome.Completed => (bool?)true, TenantOperationOutcome.Denied => false, _ => null } });
-                if (request.Operation.BackgroundStart is { } background)
-                    text = JsonSerializer.Serialize(new { approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()), outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()),
-                        reasonCode = reason, applied = outcome.Outcome == TenantOperationOutcome.Completed, started = outcome.Outcome == TenantOperationOutcome.Completed,
-                        backgroundSessionId = outcome.Outcome == TenantOperationOutcome.Completed ? (Guid?)background.ChildSessionId : null,
-                        agentRunId = outcome.Outcome == TenantOperationOutcome.Completed ? (Guid?)background.RunId : null });
+                if (request.Operation.TaskDelegation is not null)
+                    text = JsonSerializer.Serialize(new { approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()),
+                        outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()), reasonCode = reason,
+                        applied = outcome.Outcome == TenantOperationOutcome.Completed,
+                        task = receipt?.TaskAdmission is { } admitted ? new { taskId = admitted.TaskId, revision = admitted.Revision } : null });
                 if (request.Operation.SandboxControl is not null)
                     text = JsonSerializer.Serialize(new { approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()),
                         outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()), reasonCode = reason, operationId = outcome.OperationId,
@@ -173,7 +173,6 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                     : request.Operation.MemoryOperation is not null ? TenantMemoryContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.WorkspaceRead is not null ? TenantWorkspaceReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.AttachmentRead is not null ? TenantAttachmentReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
-                    : request.Operation.CompletionRead is not null ? TenantCompletionReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.ArtifactVerification is not null ? TenantArtifactVerificationContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.AccountRead is not null ? TenantAccountReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.CredentialRead is not null ? TenantCredentialReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)

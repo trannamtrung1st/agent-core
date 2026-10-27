@@ -23,6 +23,7 @@ public sealed partial class TenantApprovalService
     private async ValueTask<TenantApprovalReview> ReviewAsync(TenantApprovalView view, TenantSecurityState state,
         TenantSessionInitiator human, CancellationToken ct)
     {
+        if (TenantTaskConsentRules.IsHuman(view.Request)) return await ReviewHumanTaskAsync(view, state, human, ct);
         if (view.Request.Operation.SandboxCommand?.Evaluation is not null) return await ReviewEvaluationSandboxAsync(view, state, human, ct);
         if (view.Request.Operation.AutomationAdmission is not null) return await ReviewAutomationAdmissionAsync(view, state, human, ct).ConfigureAwait(false);
         var r = view.Request; var op = r.Operation; var at = time.GetUtcNow();
@@ -78,16 +79,16 @@ public sealed partial class TenantApprovalService
                 TenantApprovalRules.Validate(r, run, target!);
                 if (op.ReportSourceRead is not null)
                 {
-                    independent = await TenantCompletionReadRules.IndependentAsync(state, TenantReportSourceReadRules.Targets(op.ReportSourceRead), r.OriginalInitiatorPrincipalId, authorizer, ct).ConfigureAwait(false);
+                    independent = await TenantIndependentReportSourceAuthority.IndependentAsync(state, op.ReportSourceRead, r.OriginalInitiatorPrincipalId, authorizer, ct).ConfigureAwait(false);
                     await TenantReportSourceReadRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
                 }
                 else if (op.BackgroundReport is not null)
                     await TenantBackgroundReportRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
-                else if (op.BackgroundStart is not null)
+                else if (op.TaskDelegation is not null)
                 {
-                    independent = await TenantBackgroundCreationRules.IndependentAsync(state, r, authorizer, ct).ConfigureAwait(false);
-                    await (backgroundCreations ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(r, run, state, ct).ConfigureAwait(false);
-                    await TenantBackgroundCreationRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+                    independent = await TenantTaskConsentRules.IndependentAsync(state, r, authorizer, ct);
+                    await (taskTargets ?? throw new AccessDeniedException("approval_unavailable")).RequireAsync(r, run, state, ct);
+                    await TenantTaskConsentRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct);
                 }
                 else if (op.ArtifactPublication is not null)
                 {
@@ -155,13 +156,7 @@ public sealed partial class TenantApprovalService
                     await reads.RequireInspectionAsync(r, run, ct).ConfigureAwait(false);
                     await reads.RequireInspectionReviewerAsync(r, state, human.PrincipalId, ct).ConfigureAwait(false);
                 }
-                else if (op.CompletionRead is not null)
-                {
-                    var reads = completionReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
-                    independent = await reads.InspectionIndependentAsync(r, state, ct).ConfigureAwait(false);
-                    await reads.RequireInspectionAsync(r, run, ct).ConfigureAwait(false);
-                    await reads.RequireInspectionReviewerAsync(r, state, human.PrincipalId, ct).ConfigureAwait(false);
-                }
+
                 else if (op.ArtifactVerification is not null)
                 {
                     var reads = artifactReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
@@ -236,7 +231,7 @@ public sealed partial class TenantApprovalService
         }
         var execution = view.OperationResult is not null ? "recorded" : r.Status == TenantApprovalStatus.Pending ? "waitingDecision"
             : r.Status != TenantApprovalStatus.Approved ? "notAuthorized" : "unrecorded";
-        var changes = Changes(op, snapshot);
+        var changes = await PresentedChangesAsync(op, snapshot, ct);
         if (op.ManagementMutation is not null)
         {
             var observed = await (managementTargets ?? throw new AccessDeniedException("approval_unavailable")).InspectionAsync(r, human.PrincipalId, ct, view.OperationResult).ConfigureAwait(false);
@@ -288,6 +283,21 @@ public sealed partial class TenantApprovalService
             independent, at, execution);
     }
 
+    private async ValueTask<IReadOnlyList<TenantApprovalFieldChange>> PresentedChangesAsync(PreparedTenantOperation op, TenantApprovalSnapshot? snapshot, CancellationToken ct)
+    {
+        var changes = Changes(op, snapshot);
+        if (op.TaskDelegation is not { } binding) return changes;
+        // RequireRead already qualified these exact typed scopes. Names are presentation,
+        // while the immutable prepared action retains the actual IDs and witnesses.
+        var task = binding.Task;
+        var space = security is ITenantSpaceStore spaceStore ? await spaceStore.FindSpaceAsync(task.Source.TenantId, task.Assignment.SpaceId, ct) : null;
+        var environment = task.Assignment.EnvironmentId is { } id && security is ITenantEnvironmentStore environmentStore
+            ? await environmentStore.FindEnvironmentAsync(task.Source.TenantId, task.Assignment.SpaceId, id, ct) : null;
+        return changes.Select(change => change.Field switch {
+            "Assigned Space" => change with { After = space is { DeletedAt: null } ? space.Name : "Unavailable Space" },
+            "Environment" => change with { After = task.Assignment.EnvironmentId is null ? "None" : environment is { DeletedAt: null } ? environment.Name : "Unavailable Environment" },
+            _ => change }).ToArray();
+    }
     private static IReadOnlyList<TenantApprovalFieldChange> Changes(PreparedTenantOperation op, TenantApprovalSnapshot? snapshot)
     {
         if (op.BackgroundReport is { } report)
@@ -296,8 +306,18 @@ public sealed partial class TenantApprovalService
             return [new("reportDestination", null, $"Exact saved conversation {report.ParentSessionId:D}", false),
                 new("reportContent", null, AgentCore.Application.Execution.BackgroundCompletionProjection.ReportText(evidence.Text!), false), new("reportModel", null, CapturedModelLabel(report.Model.OfferingId, report.Model.ReasoningEffort, report.Model.Binding), false)];
         }
-        if (op.BackgroundStart is { } task) return [new("backgroundObjective", null, task.Objective, false), new("backgroundTitle", null, task.Title, false),
-            new("backgroundReportCompletion", null, task.ReportCompletion, false), new("backgroundModel", null, CapturedModelLabel(task.Model.OfferingId, task.Model.ReasoningEffort, task.Model.Binding), false), new("backgroundPrimaryPermission", null, task.Permission, false)];
+        if (op.TaskDelegation is { } delegation)
+        {
+            var assigned = delegation.Task; var budget = assigned.Assignment.Budget!;
+            return [new("Objective", null, assigned.Request.Objective, false), new("Task title", null, assigned.Request.Title, false),
+                new("Assigned Agent", null, assigned.Assignment.DisplayName, false), new("Assigned Space", null, assigned.Assignment.SpaceId.ToString("D"), false),
+                new("Environment", null, assigned.Assignment.EnvironmentId?.ToString("D") ?? "None", false),
+                new("Worker model", null, CapturedModelLabel(assigned.Assignment.Model!.OfferingId, assigned.Assignment.Model.ReasoningEffort, assigned.Assignment.Model.Binding), false),
+                new("Worker limits", null, $"{budget.MaxSteps} steps · {budget.DurationSeconds} seconds active time", false),
+                new("Deadline", null, assigned.DeadlineAt, false), new("Completion report", null,
+                    assigned.Request.ReportOnCompletion ? $"Requested · reserves {budget.ReportMaxSteps} steps and {budget.ReportDurationSeconds} seconds" : "Inbox only", false),
+                new("Dependencies", null, assigned.Request.DependsOnTaskIds.Count, false)];
+        }
         if (op.WorkspaceMutation is { } mutation)
             return [new("workspaceMutationTool", null, mutation.ToolName, false), new("workspaceMutationArguments", null, mutation.ArgumentsJson, false),
                 new("workspaceMutationDisclosure", null, "Authorize only these exact saved workspace changes once. Current source changes require fresh review. No role, file read, recipient download or later mutation authority is granted.", false),
@@ -376,12 +396,6 @@ public sealed partial class TenantApprovalService
                 new("reportSourceHash", null, reportSource.ObservationHash, false),
                 new("readDisclosure", null, "Read only this exact saved terminal result for the requested report in the original conversation. No file metadata or file bytes are included.", false),
                 new("readLimit", null, "This read consent creates no report Run and confirms no delivery. Report creation requires separate authority; source and reviewer access are checked again before use.", false)];
-        if (op.CompletionRead is { } completion)
-            return [new("completionInitialRunId", null, completion.InitialRunId, false), new("completionSourceRunId", null, completion.SourceRunId, false),
-                new("completionSessionId", null, completion.ChildSessionId, false), new("completionObjective", null, completion.Objective, false),
-                new("completionObservation", null, completion.ObservationJson, false), new("completionObservationHash", null, completion.ObservationHash, false), new("completionMetadata", null, completion.ArtifactsJson, false),
-                new("readDisclosure", null, "Return this exact terminal child result and the saved metadata links. No file bytes, new discovery or mutation authority.", false),
-                new("readLimit", null, "The unchanged observation may be consumed only in this same task while current raw read and reviewer authority remain valid.", false)];
         if (op.ArtifactVerification is { } verification)
             return [new("artifactDisplayName", null, verification.DisplayName, false), new("artifactContentType", null, verification.ContentType, false),
                 new("artifactStoredByteSize", null, verification.ByteSize, false), new("artifactChecksum", null, verification.Sha256Hex, false),

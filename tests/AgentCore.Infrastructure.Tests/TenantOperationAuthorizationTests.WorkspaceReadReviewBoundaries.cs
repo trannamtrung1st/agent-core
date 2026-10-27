@@ -15,7 +15,7 @@ public sealed partial class TenantOperationAuthorizationTests
     private static async Task<(Environment Setup, TenantRuntimeFrame Frame, TenantWorkspaceRuntimeReadService Reads,
         TenantApprovalService Approvals, TenantApprovalRequest Request, TenantSessionInitiator? Peer)> WorkspaceReviewFixture(Fixture f, bool working = false, bool list = false, string permission = "workspaces.read", bool independent = false, bool search = false)
     {
-        var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, working); await GrantWorkspaceRuntimeReads(f, s);
+        var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, working); await GrantWorkspaceRuntimeReads(f, s);
         if (search) await SeedRuntimeWorkspace(f, s, working, "nonmatch.txt", System.Text.Encoding.UTF8.GetBytes("No matching information."));
         var peer = independent ? await User(f, s, "independent-workspace-reviewer@example.test", ["approvals.read", "approvals.approve", "agents.read", "sessions.read", "workspaces.read"]) : null;
         await Policies(f).SaveAsync(s.Tenant, s.Owner, permission, new(OperationApprovalMode.Always, independent), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 0);

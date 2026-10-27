@@ -11,9 +11,7 @@ public sealed partial class InMemoryIamStore
     {
         ct.ThrowIfCancellationRequested(); lock (_gate)
         {
-            var retained = sessionBacking.ReadRetainedTenantBackgroundSession(tenant, session);
-            return ValueTask.FromResult(retained is not null && SessionRetention.IsDue(retained.Snapshot, (clock ?? TimeProvider.System).GetUtcNow())
-                ? new TenantSessionRetentionTarget(retained.Owner, retained.Snapshot.Revision, retained.Snapshot.RetentionDueAtUtc!.Value) : null);
+            return ValueTask.FromResult(sessionBacking.FindDueTenantSession(tenant, session));
         }
     }
     public ValueTask<IReadOnlyList<TenantSessionRetentionTarget>> ListDueSessionsAsync(TenantSessionRetentionTarget? after, int limit, CancellationToken ct = default)

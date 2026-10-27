@@ -12,7 +12,7 @@ test('owned home images, inert code/Markdown, native media and unsupported files
   await page.goto('/');
   const owner = await selectInstanceIdentity(page, {
     id: 'general-assistant',
-    version: 26,
+    version: 35,
   });
   const token = await page.evaluate(() =>
     localStorage.getItem('agent-core.owner-capability'),
@@ -211,7 +211,7 @@ test('large CSV windows source rows and preserves exact Text copy and download',
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
-  const owner = await selectInstanceIdentity(page, { id: 'general-assistant', version: 26 });
+  const owner = await selectInstanceIdentity(page, { id: 'general-assistant', version: 35 });
   const token = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
   const headers = { 'X-AgentCore-Owner-Capability': token! };
   const session = await page.request.post('/api/v2/sessions', { headers, data: { agentInstanceId: owner, mode: 'text' } });

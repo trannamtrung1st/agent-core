@@ -66,10 +66,10 @@ public sealed partial class TenantSandboxRuntimeReadService
             }
         return read;
     }
-    private async ValueTask<ModelRead> ReadContext(TenantRunReference reference, string tool, CancellationToken ct)
+    private async ValueTask<ModelRead> ReadContext(TenantRunReference reference, string tool, CancellationToken ct, bool retained = false)
     {
         if (operations is null || runConfiguration is null) throw new AccessDeniedException("tenant_context_required");
-        var (run, state) = await operations.ResolveAsync(reference, ct).ConfigureAwait(false);
+        var (run, state) = await operations.ResolveAsync(reference, ct, retained: retained).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(reference.TenantId, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         var (agent, baseline) = await runConfiguration.BaselineAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
         var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);

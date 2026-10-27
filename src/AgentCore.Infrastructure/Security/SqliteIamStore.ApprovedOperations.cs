@@ -96,12 +96,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             await TenantAttachmentReadRules.ReviewerAsync(before, request.Operation.AttachmentRead, request.OriginalInitiatorPrincipalId,
                 decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
         }
-        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.CompletionRead is not null)
-        {
-            await RequireCompletionReadOperation(db, request, run, target, ct).ConfigureAwait(false);
-            await TenantCompletionReadRules.ReviewerAsync(before, request.Operation.CompletionRead, request.OriginalInitiatorPrincipalId,
-                decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
-        }
+
         if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ArtifactVerification is not null)
         {
             await RequireArtifactVerificationOperation(db, request, run, target, ct).ConfigureAwait(false);
@@ -217,13 +212,19 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             at = (clock ?? TimeProvider.System).GetUtcNow(); commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
             audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
         }
-        TenantSessionRoot? childRoot = null;
-        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.BackgroundStart is not null)
+        TenantAgent? taskWorker = null;
+        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.TaskDelegation is not null)
         {
-            var parent = await RequireBackgroundCreationOperation(db, request, run, target, ct).ConfigureAwait(false);
-            await TenantBackgroundCreationRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
-            childRoot = TenantBackgroundCreationRules.Admission(request, run, parent, target, commit.BackgroundAdmission!, at);
+            try
+            {
+                await TenantTaskConsentRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new(this), ct);
+                taskWorker = await ValidateApprovedTask(db, request, commit.TaskDelegationAdmission!, run, target, ct);
+            }
+            catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode, TaskDelegationAdmission = null }; }
+            catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode, TaskDelegationAdmission = null }; }
+            audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
         }
+
         audit = TenantOperationAuditRules.WithEffectResult(audit, before, run, request, grant?.GrantId);
         var complete = commit.Outcome == TenantOperationOutcome.Completed;
         var configure = complete && (request.Operation.IsLocalConfiguration || request.Operation.ManagementMutation is not null);
@@ -277,11 +278,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             }
         }
         if (complete && artifactRow is not null) db.Artifacts.Add(artifactRow);
-        if (complete && childRoot is not null)
-        {
-            var child = commit.BackgroundAdmission!;
-            await StageTenantBackgroundGraph(db, childRoot, child.Session, child.Run, ct).ConfigureAwait(false);
-        }
+        if (complete && taskWorker is not null) StageApprovedTask(db, commit.TaskDelegationAdmission!, taskWorker);
         AgentRunStoreMapping.Apply(row, savedRun);
         if (grant is not null) db.Entry(grant).CurrentValues.SetValues(grant with { Status = complete ? OperationGrantStatus.Consumed : OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) });
         if (complete && automationMutation is not null) {
@@ -290,7 +287,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         }
         try
         {
-            if (complete && (automationMutation is not null || managementChange is not null))
+            if (complete && (automationMutation is not null || managementChange is not null || taskWorker is not null))
             {
                 if (commit.AutomationInvocationAdmission is { } admitted) { await StageTenantAutomationGraph(db, admitted, ct).ConfigureAwait(false); db.TriggerOccurrences.Add(TriggerStoreMapping.ToRecord(admitted.Occurrence)); }
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -300,7 +297,8 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
                 updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()),
                 ManagementResource: complete && request.Operation.ManagementMutation is { Resource: not null } resourceEvidence ? TenantManagementResourceRules.Evidence(resourceEvidence, target.Instance.Revision) : null,
                 ManagementSkill: complete && request.Operation.ManagementMutation is { Skill: not null } skillEvidence ? TenantManagementSkillRules.Evidence(skillEvidence, target.Instance.Revision) : null,
-                AutomationMutation: complete && request.Operation.AutomationMutation is { } mutationEvidence ? TenantAutomationMutationCommitRules.Evidence(mutationEvidence) : null);
+                AutomationMutation: complete && request.Operation.AutomationMutation is { } mutationEvidence ? TenantAutomationMutationCommitRules.Evidence(mutationEvidence) : null,
+            TaskAdmission: complete && commit.TaskDelegationAdmission is { } admittedTask ? new(admittedTask.Task.TaskId, 1, admittedTask.Task.WorkerSessionId, admittedTask.Task.InitialWorkerRunId) : null);
             if (commit.Outcome == TenantOperationOutcome.Completed)
                 foreach (var value in experienceValues)
                 {

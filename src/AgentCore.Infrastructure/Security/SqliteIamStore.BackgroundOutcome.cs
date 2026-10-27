@@ -13,7 +13,7 @@ public sealed partial class SqliteIamStore
     private static async Task SettleTenantCompletion(AgentCoreDbContext db, AgentRun next, Guid? generation, CancellationToken ct)
     {
         var runId = next.AgentRunId.ToString("D");
-        if (next.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome && next.IsTerminal && next.Result?.OutcomeKind != AgentRunOutcomeKind.Continued && !await db.BackgroundCompletionReceipts.AnyAsync(r => r.ChildAgentRunId == runId, ct).ConfigureAwait(false))
+        if (next.Admission.DelegatedTask is null && next.Admission.AgentMessage is null && next.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome && next.IsTerminal && next.Result?.OutcomeKind != AgentRunOutcomeKind.Continued && !await db.BackgroundCompletionReceipts.AnyAsync(r => r.ChildAgentRunId == runId, ct).ConfigureAwait(false))
         {
             var row = await db.Sessions.AsNoTracking().Include(s => s.Snapshot).SingleOrDefaultAsync(s => s.SessionId == next.SessionId.ToString("D") && s.DurablyDeletedAtUtc == null, ct).ConfigureAwait(false);
             var initial = row is not null && SqliteMemoryStore.ToSnapshot(row, []).Origin.ReportCompletionToOrigin ? await TenantBackgroundLineage.InitialAsync(next, async (id, token) => {
@@ -24,11 +24,11 @@ public sealed partial class SqliteIamStore
                 db.BackgroundCompletionReceipts.Add(CompletionInboxMapping.Create(next, SqliteMemoryStore.ToSnapshot(row, [])));
         }
         var rows = await db.BackgroundCompletionReceipts.Where(r => r.AgentInstanceId == next.AgentInstanceId.ToString("D") && r.ProfileId == null
-            && (r.ClaimRunId == runId || r.ParentActivationId == next.ActivationId.ToString("D"))).ToArrayAsync(ct).ConfigureAwait(false);
+            && r.ParentActivationId == next.ActivationId.ToString("D")).ToArrayAsync(ct).ConfigureAwait(false);
         foreach (var row in rows)
         {
             var item = CompletionInboxMapping.Read(row);
-            if (item.Owner == next.Owner) CompletionInboxMapping.Write(row, TenantBackgroundCompletionRules.Settle(item, next, generation));
+            if (item.Owner == next.Owner) CompletionInboxMapping.Write(row, TenantBackgroundCompletionRules.Settle(item, next));
         }
     }
     public async ValueTask<AgentRun> CommitTenantOutcomeAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision,

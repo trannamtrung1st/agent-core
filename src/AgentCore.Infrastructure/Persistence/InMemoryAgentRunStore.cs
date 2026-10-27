@@ -41,13 +41,6 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
     }
 
 
-    public ValueTask<AgentRunAdmissionResult> AdmitImmediateAsync(SessionSnapshot snapshot, AgentRun run,
-        Guid expectedParentGeneration, CancellationToken cancellationToken = default)
-    {
-        AgentRunStoreMapping.ValidateImmediateAdmission(run, expectedParentGeneration);
-        return ValueTask.FromResult(AdmitCore(snapshot, 0, run, cancellationToken, expectedParentGeneration: expectedParentGeneration));
-    }
-
     public ValueTask<AgentRun> CommitOutcomeAsync(SessionSnapshot snapshot, long expectedSessionRevision,
         AgentRunOwner owner, Guid agentRunId, AgentRunCommand.Complete completion, Guid? draftEntryId,
         CancellationToken cancellationToken = default)
@@ -138,7 +131,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
     }
 
     private AgentRunAdmissionResult AdmitCore(SessionSnapshot snapshot, long expectedSessionRevision,
-        AgentRun run, CancellationToken cancellationToken, bool occurrenceValidated = false, Guid? expectedParentGeneration = null, Guid? completionSourceRunId = null, bool preserveSession = false, IReadOnlyList<Guid>? additionalCompletionSources = null)
+        AgentRun run, CancellationToken cancellationToken, bool occurrenceValidated = false, Guid? completionSourceRunId = null, bool preserveSession = false, IReadOnlyList<Guid>? additionalCompletionSources = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (sessions.RequiresTenantContext(snapshot.SessionId, snapshot.AgentInstanceId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
@@ -170,22 +163,9 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
                 throw AgentCoreErrors.Conflict("AgentRun or Activation identity already exists.");
             TryGetLegacyRun(run.Admission.Activation.SourceAgentRunId ?? Guid.Empty, out var source);
             AgentRunStoreMapping.ValidateConfigurationContinuation(run, source, source is null ? null : emails?.GetSelectionAsync(source.AgentRunId, cancellationToken).GetAwaiter().GetResult());
-            var sourceSession = source is null ? null : sessions.LoadMetadataAsync(source.SessionId, cancellationToken).GetAwaiter().GetResult();
-            AgentRunStoreMapping.ValidateImmediateSource(run, source, sourceSession is not null
-                && sourceSession.DurablyDeletedAt is null && sourceSession.ArchivedAt is null
-                && sourceSession.Status is not (SessionStatus.Ended or SessionStatus.Ending)
-                && !SessionLifecycle.IsTerminal(sourceSession.LifecycleStatus)
-                && sourceSession.AgentInstanceId == run.AgentInstanceId && sourceSession.ProfileId == run.ProfileId);
             AgentRunStoreMapping.ValidateLineage(run, source);
             if (run.Admission.Activation.SourceEntryIds.Any(id => State.BySourceEntry.ContainsKey((run.SessionId, id))))
                 throw AgentCoreErrors.Conflict("Accepted input is already owned by another Activation.");
-            // This synchronous store shares the gate. Validation completes before either graph is committed.
-            if (run.Admission.Activation.Kind == ActivationKind.ImmediateBackground)
-            {
-                if (expectedParentGeneration is { } parentGeneration && source?.Claim?.Generation != parentGeneration)
-                    throw AgentCoreErrors.Conflict("Background admission generation is stale.");
-                AgentRunStoreMapping.ValidateBackgroundBudget(run, State.Runs.Values.Where(r => r.Owner.TenantId is null));
-            }
             if (completionSourceRunId is { } completionSource)
             {
                 foreach (var sourceId in new[] { completionSource }.Concat(additionalCompletionSources ?? []))
@@ -310,7 +290,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
             throw AgentCoreErrors.Validation("Runnable query requires UTC time and a bounded limit.");
         lock (sessions.AdmissionGate)
             return ValueTask.FromResult<IReadOnlyList<AgentRun>>(State.Runs.Values.Where(r => r.Owner.TenantId is null).Where(run =>
-                run.Status == AgentRunStatus.WaitingForSignal && AgentRunWaitExecution.IsReady(run, asOfUtc, WaitChildren(run.Wait!.BackgroundSessionIds)) || run.Status == AgentRunStatus.Queued || run.Status == AgentRunStatus.WaitingToRetry && run.NextRetryAtUtc <= asOfUtc
+                run.Status == AgentRunStatus.WaitingForSignal && AgentRunWaitExecution.IsReady(run, asOfUtc) || run.Status == AgentRunStatus.Queued || run.Status == AgentRunStatus.WaitingToRetry && run.NextRetryAtUtc <= asOfUtc
                 || run.Status == AgentRunStatus.Running && run.Claim!.LeaseExpiresAtUtc <= asOfUtc)
                 .Where(run => run.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForApproval or AgentRunStatus.WaitingForSignal
                     || !State.Runs.Values.Where(r => r.Owner.TenantId is null).Any(other => other.SessionId == run.SessionId && other.AgentRunId != run.AgentRunId
@@ -345,7 +325,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
             try
             {
                 var updated = command is AgentRunCommand.SuspendWait or AgentRunCommand.ResumeWait
-                    ? AgentRunWaitExecution.Apply(run, command, WaitChildren(command is AgentRunCommand.SuspendWait suspend ? suspend.Wait.BackgroundSessionIds : run.Wait?.BackgroundSessionIds ?? [])) : command.Apply(run, diagnostics.NewId);
+                    ? AgentRunWaitExecution.Apply(run, command) : command.Apply(run, diagnostics.NewId);
                 State.Runs[agentRunId] = updated;
             sessions.CoreEvents.Append(CoreEventPersistence.Run(run, updated));
             SettleInbox(updated, run.Claim?.Generation);

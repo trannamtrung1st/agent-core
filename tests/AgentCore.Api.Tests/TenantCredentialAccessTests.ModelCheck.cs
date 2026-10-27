@@ -87,7 +87,7 @@ public sealed partial class TenantCredentialAccessTests
         using var consent = Client(factory); consent.DefaultRequestHeaders.Add("Cookie", Assert.Single(start.Headers.GetValues("Set-Cookie")).Split(';')[0]);
         Assert.Equal(HttpStatusCode.SeeOther, (await consent.PostAsync("/api/v2/integrations/tenant-google/oauth/synthetic",
             new FormUrlEncodedContent(new Dictionary<string, string> { ["state"] = Uri.UnescapeDataString(url.Split("?state=")[1]), ["decision"] = "authorize" }))).StatusCode);
-        var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) })))
+        var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 35, expectedRevision = await Revision(owner, tenant) })))
             .GetProperty("instance").GetProperty("instanceId").GetGuid();
         Assert.Equal(HttpStatusCode.Created, (await owner.PostAsJsonAsync(api + $"/agents/{instance}/credential-bindings",
             new TenantBindCredentialRequest(credential, "work-drive", await Revision(owner, tenant), 1, 2))).StatusCode);

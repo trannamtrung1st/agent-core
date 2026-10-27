@@ -6,7 +6,9 @@ public sealed record TenantApprovalDto(Guid RequestId, Guid TenantId, Guid? RunI
     long SecurityRevision, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, string Summary, string Permission,
     TenantApprovalTargetDto TargetResource, TenantPreparedActionDto PreparedAction, TenantApprovalDecisionDto? Decision,
     TenantApprovalOperationResultDto? OperationResult, TenantApprovalReviewDto? Review,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid? DestinationSessionId = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid? DestinationSessionId = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] TenantHumanTaskApprovalOutcomeDto? TaskAdmissionOutcome = null);
+public sealed record TenantHumanTaskApprovalOutcomeDto(bool Admitted, string ReasonCode, DateTimeOffset RecordedAt, TenantTaskAdmissionReceiptDto? TaskAdmission);
 public sealed record TenantApprovalTargetDto(string Type, string Id);
 public sealed record TenantPreparedActionDto(Guid OperationId, string Operation, TenantPreparedPersonaDto? Persona,
     TenantPreparedPreferencesDto? Preferences, long ExpectedInstanceRevision, long ExpectedPersonaRevision, string ActionHash,
@@ -23,7 +25,9 @@ public sealed record TenantApprovalOperationResultDto(Guid OperationId, string O
     long InstanceRevision, long PersonaRevision, DateTimeOffset RecordedAt,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] TenantBrowserArtifactPublicationDto? BrowserArtifacts = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] TenantAccountActionResultDto? AccountAction = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] TenantHttpReceiptDto? Http = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] TenantHttpReceiptDto? Http = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] TenantTaskAdmissionReceiptDto? TaskAdmission = null);
+public sealed record TenantTaskAdmissionReceiptDto(Guid TaskId, long Revision);
 public sealed record TenantHttpReceiptDto(int StatusCode,string FinalUrl,string? ContentType,long ProjectedBodyBytes,string BodySha256,bool Truncated);
 public sealed record TenantAccountActionResultDto(string Status, string? DraftId, string? FileId, string? Path, long? ByteSize, string? Sha256, IReadOnlyList<TenantAccountActionItemResultDto>? Items);
 public sealed record TenantAccountActionItemResultDto(string FileId, string Status);

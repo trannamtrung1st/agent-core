@@ -569,3 +569,12 @@ Membership removal explains dependent work or mounted-sandbox conflicts and keep
 ## Agent Self-Management completion
 
 The existing tenant Agent Self-management destination is the only policy editor. Saved mode and Frozen are independent, and retained choices/source stay legible outside Managed mode. Definition defaults, next-Run adoption, immediate revocation and exact human unfreeze remain distinct from IAM. Reload/readback never retries uncertain commands; definitive access denial removes protected fields. Broader user-configured administrative helpers need explicit supported tools as well as IAM. The [frontend owner](13-frontend-implementation-spec.md) and [current delivery](reports/agent-self-management-delivery-2026-10-26.md) record responsive, keyboard and approval verification.
+
+
+<a id="initiative-9--adopted-successor-implementation-in-progress"></a>
+
+## Initiative 9 — Task delegation and communication
+
+New closed permissions: tasks.read (ReadOnly), tasks.delegate/tasks.cancel (Mutation), agent-messages.read (ReadOnly), agent-messages.send (Mutation). They do not implicitly appear in existing Agent roles. Human Owner administration is explicit. Target cooperation is current agents.update policy, default off; it grants no executor authority. Model actions require a valid current source claim plus pinned/current capability; worker sessions.create/agent-runs.create and target Space remain independent. Human guidance is attributed to the authenticated human; direct Agent posts cannot impersonate a selected speaker. Review authorizes only an exact saved action, never downstream work, source publication or recipient reads.
+
+See the [adopted proposal](proposals/initiative-9-task-delegation-communication.md), [removal audit](reports/initiative-9-source-audit-2026-10-27.md) and [local delivery evidence and limits](reports/initiative-9-local-verification-2026-10-27.md). The implementation has focused local verification; the report distinguishes exercised behavior from unrun deployment, provider and device qualification.

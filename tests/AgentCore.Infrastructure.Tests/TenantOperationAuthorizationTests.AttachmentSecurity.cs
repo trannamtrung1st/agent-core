@@ -22,7 +22,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_attachment_human_reads_filter_scoped_children_before_paging_and_reject_same_Account_cross_tenant(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var first = await UploadAttachment(f, s, "first.txt"); var hidden = await UploadAttachment(f, s, "hidden.txt"); var third = await UploadAttachment(f, s, "third.txt");
         var reader = await User(f, s, "attachment-reader@example.test", ["sessions.read"]); var service = AttachmentService(f);
         var empty = await service.ListAsync(s.Tenant, s.Run.SessionId, reader, limit: 1); Assert.Empty(empty.Items); Assert.False(empty.HasMore); Assert.Null(empty.NextCursor);
@@ -53,7 +53,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [InlineData(false, "expire")] [InlineData(true, "expire")]
     public async Task Tenant_attachment_read_withholds_bytes_after_revoke_logout_or_pending_expiry(bool sqlite, string boundary)
     {
-        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow.AddSeconds(1)); await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 32); var id = await UploadAttachment(f, s);
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow.AddSeconds(1)); await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 35); var id = await UploadAttachment(f, s);
         var reader = await User(f, s, "attachment-data-reader@example.test", ["sessions.read", "attachments.read"]);
         var assignment = (await f.Iam.ReadTenantAsync(s.Tenant))!.Assignments.Single(a => a.PrincipalId == reader.PrincipalId);
         var probe = new AttachmentReadProbe((ITenantAttachmentStore)f.Attachments, async () =>
@@ -69,7 +69,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_attachment_expiry_and_Session_deletion_cleanup_are_owned_durable_and_retire_child_grants(bool sqlite)
     {
-        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow.AddSeconds(1)); await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow.AddSeconds(1)); await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true, attachmentAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var expired = await UploadAttachment(f, s); var files = (ITenantAttachmentStore)f.Attachments; var cleanup = (ITenantAttachmentCleanupStore)f.Attachments;
         clock.Advance(TimeSpan.FromMinutes(61)); var targets = await cleanup.ListAttachmentCleanupAsync(null, 100); Assert.Contains(targets.Items, t => t.AttachmentId == expired);
         var revision = (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;

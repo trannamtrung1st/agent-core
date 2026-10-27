@@ -51,7 +51,7 @@ public sealed partial class TenantSessionAccessTests
                 if (historicalApproved)
                 {
                     // Retained full-policy choices are configuration, not an alternate executor.
-                    var baseline = (await host.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 32))!;
+                    var baseline = (await host.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 35))!;
                     state["policy"] = JsonSerializer.SerializeToNode(ManagementPolicyResolver.Resolve(baseline, agent.Instance), new JsonSerializerOptions(JsonSerializerDefaults.Web));
                     // Sparse choices stay canonical; retained preparation alone is historical.
                 }
@@ -110,7 +110,7 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Equal(decision == "approve" ? "CURRENT-EXACT-HARNESS-INSTRUCTIONS" : original.SettingsOverrides?.AgentInstructions?.Value, retained.SettingsOverrides?.AgentInstructions?.Value);
             else
                 Assert.Equal(decision == "approve" ? HarnessManagementMode.Assisted : HarnessManagementMode.Managed,
-                    ManagementPolicyResolver.Resolve((await host.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 32))!, retained).Mode);
+                    ManagementPolicyResolver.Resolve((await host.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 35))!, retained).Mode);
             var savedRequest = (await requests.FindApprovalAsync(tenant, request.RequestId))!;
             Assert.Equal(request.Operation.ActionHash, savedRequest.Operation.ActionHash);
             Assert.Equal(decision == "approve" ? TenantApprovalStatus.Approved : TenantApprovalStatus.Rejected, savedRequest.Status);

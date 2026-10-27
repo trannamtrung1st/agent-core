@@ -3,7 +3,7 @@ import { navigateAdmin } from './support/admin-navigation';
 async function fixture(page: Page) {
   await page.goto('/'); await page.waitForFunction(() => localStorage.getItem('agent-core.owner-capability'));
   const headers = { 'X-AgentCore-Owner-Capability': (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))! };
-  const created = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'general-assistant', version: 24 } });
+  const created = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'general-assistant', version: 35 } });
   expect(created.ok()).toBe(true); const { instanceId } = await created.json(); await page.goto(`/admin/instances/${instanceId}/profile`);
   return { instanceId, headers, api: `/api/v2/admin/agent-instances/${instanceId}` };
 }

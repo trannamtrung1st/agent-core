@@ -539,36 +539,6 @@ it('inspects published files deliberately with independent current access, recov
   expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
 });
 
-const backgroundRequest = (): TenantApproval => ({ ...request, summary: 'Start exact background work', preparedAction: { ...request.preparedAction, operation: 'start_background_work' },
-  review: { ...request.review, changes: Object.entries({ backgroundObjective: '<script>literal task only</script>\nExact Unicode task: thử nghiệm.', backgroundTitle: 'Reviewed task',
-    backgroundReportCompletion: false, backgroundModel: 'synthetic', backgroundPrimaryPermission: 'agent-runs.create' }).map(([field, after]) => ({ field, after, before: null, beforeAvailable: false, afterAvailable: true, restoresDefault: false })) } });
-it.each(['review', 'exceptionalGrant'] as const)('reviews one exact background task and %s consequences through the shared inspector', async kind => {
-  view({ ...backgroundRequest(), kind });
-  const dialog = await screen.findByRole('dialog');
-  const saved = await within(dialog).findByRole('region', { name: 'Exact saved background task' });
-  expect(within(saved).getByText(/Exact Unicode task: thử nghiệm/)).toBeVisible();
-  expect(within(saved).getByText('No')).toBeVisible(); expect(within(saved).getByText('agent-runs.create')).toBeVisible();
-  expect(within(saved).queryByText('Before')).not.toBeInTheDocument(); expect(saved.querySelector('script')).toBeNull();
-  fireEvent.click(within(dialog).getByRole('button', { name: kind === 'review' ? 'Approve' : 'Authorize once' }));
-  const confirm = (await screen.findAllByText(kind === 'review' ? 'Approve?' : 'Authorize once?'))[0].closest('[role="dialog"]') as HTMLElement;
-  await waitFor(() => expect(within(confirm).getByText(/one child Session and Run/)).toBeVisible());
-  expect(within(confirm).getByText(/No role, child read access or later-task authority/)).toBeVisible();
-  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' }));
-  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
-});
-it('withholds background decisions when the exact completion preference is missing while preserving cancellation', async () => {
-  const item = backgroundRequest(); item.review.changes = item.review.changes.filter(change => change.field !== 'backgroundReportCompletion'); view(item);
-  const dialog = await screen.findByRole('dialog');
-  expect(await within(dialog).findByRole('button', { name: 'Authorize once' })).toBeDisabled();
-  expect(within(dialog).getByRole('button', { name: 'Reject' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
-});
-it('distinguishes created background work from task completion', async () => {
-  view({ ...backgroundRequest(), status: 'approved', operationResult: { outcome: 'completed', reasonCode: 'background_created', recordedAt: request.createdAt } });
-  const dialog = await screen.findByRole('dialog'); const result = await within(dialog).findByRole('region', { name: 'Operation result' });
-  expect(within(result).getByText('Background work created')).toBeVisible(); expect(within(result).getByText(/Execution status and results remain in Background work/)).toBeVisible();
-  expect(within(result).queryByText('Task completed')).not.toBeInTheDocument();
-});
-
 const completionReportRequest = (): TenantApproval => ({ ...request, destinationSessionId: '12345678-1234-1234-1234-123456789abc', summary: 'Deliver exact background completion', preparedAction: { ...request.preparedAction, operation: 'deliver_background_completion' },
   review: { ...request.review, changes: Object.entries({ reportDestination: 'Original conversation', reportContent: 'Background work: <script>literal completion</script>\nKết quả cần xem xét.', reportModel: 'synthetic' })
     .map(([field, after]) => ({ field, after, before: null, beforeAvailable: false, afterAvailable: true, restoresDefault: false })) } });
@@ -592,49 +562,6 @@ it('separates report Run creation from completion delivery', async () => {
   view({ ...completionReportRequest(), status: 'approved', operationResult: { outcome: 'completed', reasonCode: 'completion_report_created', recordedAt: request.review.serverNow } });
   const result = await screen.findByRole('region', { name: 'Operation result' }); expect(within(result).getByText('Report Run created')).toBeVisible();
   expect(within(result).getByText(/Delivery and recipient access remain separately checked/)).toBeVisible(); expect(within(result).queryByText('Report delivered')).not.toBeInTheDocument();
-});
-
-const completionReadRequest = (): TenantApproval => {
-  const parent = '12345678-1234-1234-1234-123456789abc'; const child = '22345678-1234-1234-1234-123456789abc';
-  const initial = '32345678-1234-1234-1234-123456789abc'; const source = '42345678-1234-1234-1234-123456789abc';
-  const after: Record<string, string> = { completionInitialRunId: initial, completionSourceRunId: source, completionSessionId: child,
-    completionObjective: 'Use the exact owned result', completionObservationHash: 'b'.repeat(64), completionMetadata: '[]',
-    readDisclosure: 'Return this exact result without file bytes.', readLimit: 'Use only this unchanged observation in the same task.',
-    completionObservation: JSON.stringify({ untrusted: true, tenantCompletionRead: true, backgroundSessionId: child, parentSessionId: parent, agentRunId: initial,
-      sourceAgentRunId: source, status: 'Completed', outcome: 'Response', summary: '<script>saved result only</script>\nExact UTF-8: thử nghiệm',
-      progress: null, updatedAtUtc: request.createdAt, attentionRequired: false, failureCode: null, artifacts: [], artifactsHasMore: false }) };
-  return { ...request, sessionId: parent, kind: 'review', summary: 'Read exact background result', preparedAction: { ...request.preparedAction, operation: 'inspect_background_completion' },
-    review: { ...request.review, changes: Object.entries(after).map(([field, value]) => ({ field, before: null, after: value, beforeAvailable: false, afterAvailable: true, restoresDefault: false })) } };
-};
-it('reviews literal completed-child evidence with distinct initial/result Runs and separate read/handled truth', async () => {
-  view(completionReadRequest()); const dialog = await screen.findByRole('dialog');
-  const saved = await within(dialog).findByRole('region', { name: 'Exact saved background result' });
-  expect(within(saved).getByText('<script>saved result only</script> Exact UTF-8: thử nghiệm')).toBeVisible();
-  expect(within(saved).getByText('Result Run')).toBeVisible(); expect(saved.querySelector('script')).toBeNull();
-  expect(within(saved).getByText(/Taking or acknowledging the result does not mark it handled/)).toBeVisible();
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
-  const confirm = (await screen.findAllByText('Approve?'))[0].closest('[role="dialog"]') as HTMLElement;
-  await waitFor(() => expect(within(confirm).getByText(/raw read permissions and reviewer authority are checked again/)).toBeVisible());
-  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' }));
-  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
-});
-it.each(['missing', 'duplicate', 'source', 'metadata', 'hash'] as const)('blocks decisions but retains cancellation for %s completion evidence', async invalid => {
-  const item = completionReadRequest(); const change = (field: string) => item.review.changes.find(c => c.field === field)!;
-  if (invalid === 'missing') item.review.changes.pop();
-  else if (invalid === 'duplicate') item.review.changes[1] = { ...item.review.changes[0] };
-  else if (invalid === 'source') change('completionSourceRunId').after = '52345678-1234-1234-1234-123456789abc';
-  else if (invalid === 'metadata') change('completionMetadata').after = '[{"ArtifactId":"not-an-exact-file"}]';
-  else change('completionObservationHash').after = 'untrusted-checksum';
-  view(item); const dialog = await screen.findByRole('dialog');
-  expect(await within(dialog).findByText('Saved completion read unavailable')).toBeVisible();
-  expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Reject' })).toBeDisabled();
-  expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
-});
-it('labels a completion-read receipt as read authorization while consumption stays separate', async () => {
-  view({ ...completionReadRequest(), status: 'approved', operationResult: { outcome: 'completed', reasonCode: 'completion_read_authorized', recordedAt: request.review.serverNow } });
-  const dialog = await screen.findByRole('dialog'); expect(await within(dialog).findByText('Read authorized')).toBeVisible();
-  expect(within(dialog).getByText(/Completion accounting remains separate/)).toBeVisible();
-  expect(within(dialog).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
 });
 
 function accountReadRequest(): TenantApproval {
@@ -692,7 +619,7 @@ it.each(['source', 'destination', 'missing'] as const)('withholds report source 
   if (invalid === 'source') item.review.changes.find(c => c.field === 'reportSourceRunId')!.after = '52345678-1234-1234-1234-123456789abc';
   else if (invalid === 'destination') delete item.destinationSessionId;
   else item.review.changes.pop();
-  view(item); const dialog = await screen.findByRole('dialog'); expect(await within(dialog).findByText('Saved completion read unavailable')).toBeVisible();
+  view(item); const dialog = await screen.findByRole('dialog'); expect(await within(dialog).findByText('Saved report source unavailable')).toBeVisible();
   expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Reject' })).toBeDisabled();
   expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
 });
@@ -893,7 +820,8 @@ it.each(['inspect_experience_source', 'record_experience', 'consolidate_experien
     review: { ...request.review, changes: [{ field: 'Exact source provenance', before: null, after: 'Owned <script>literal</script> source and exact cursor 8', beforeAvailable: false, afterAvailable: true, restoresDefault: false }] } });
   const dialog = await screen.findByRole('dialog'); expect(await within(dialog).findByText('Exact source provenance')).toBeVisible();
   expect(within(dialog).getByText('Owned <script>literal</script> source and exact cursor 8')).toBeVisible(); expect(dialog.querySelector('script')).toBeNull();
-  expect(within(dialog).queryByText('Saved field')).not.toBeInTheDocument(); fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
+  expect(within(dialog).queryByText('Saved field')).not.toBeInTheDocument();
+ fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
   const confirm = (await screen.findAllByText('Approve?'))[0].closest('[role="dialog"]') as HTMLElement;
   await waitFor(() => expect(within(confirm).getByText(operation === 'inspect_experience_source' ? /Current raw source reads and reviewer access remain required/ : /exact saved Experience content and source lineage/)).toBeVisible());
   fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' })); expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
@@ -979,4 +907,42 @@ it.each(['file:///etc/passwd', 'https://user:secret@example.test/a', 'javascript
   view(mutationRequest('web.download', { url }));
   expect(await screen.findByText('Saved workspace changes unavailable')).toBeVisible();
   expect(screen.getByRole('button', { name: 'Authorize once' })).toBeDisabled();
+});
+
+it('distinguishes exact Task admission from worker completion', async () => {
+  view({ ...request, summary: 'Delegate exact task', status: 'approved', preparedAction: { ...request.preparedAction, operation: 'delegate_task' },
+    operationResult: { outcome: 'completed', reasonCode: 'task_created', recordedAt: request.createdAt, taskAdmission: { taskId: 'task-admitted-once', revision: 1 } } });
+  const result = await screen.findByRole('region', { name: 'Operation result' });
+  expect(within(result).getByText('Task admitted')).toBeInTheDocument();
+  expect(within(result).getByText(/Execution and completion remain separate facts in Tasks/)).toBeInTheDocument();
+  expect(screen.getByText('task-admitted-once')).toBeInTheDocument();
+});
+
+it.each([true, false])('shows the human Task admission fact without an invented source Run: %s', async admitted => {
+  view({ ...request, runId: null, summary: 'Delegate exact task', status: 'approved', preparedAction: { ...request.preparedAction, operation: 'delegate_task' },
+    operationResult: null, taskAdmissionOutcome: { admitted, reasonCode: admitted ? 'task_created' : 'task_source_unavailable', recordedAt: request.createdAt,
+      taskAdmission: admitted ? { taskId: 'human-task-admitted', revision: 1 } : null } });
+  const result = await screen.findByRole('region', { name: 'Operation result' });
+  expect(within(result).getByText(admitted ? 'Task admitted' : 'Task not admitted')).toBeInTheDocument();
+  if (admitted) expect(screen.getByText('human-task-admitted')).toBeInTheDocument();
+  else expect(screen.queryByText('Task admission receipt')).not.toBeInTheDocument();
+});
+
+it('labels the exact human Task assignment and attributes the request to its human command', async () => {
+  view({ ...request, kind: 'review', runId: null, summary: 'Delegate exact task', preparedAction: { ...request.preparedAction, operation: 'delegate_task' },
+    review: { ...request.review, changes: [
+      { field: 'Source actor', before: null, after: 'Human supervisor', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'Objective', before: null, after: 'Review approved facts', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'Assigned Agent', before: null, after: 'Migration reviewer', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'Worker limits', before: null, after: '48 steps · 240 seconds active time', beforeAvailable: false, afterAvailable: true, restoresDefault: false }
+    ] } });
+  const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByText('Source actor')).toBeVisible();
+  expect(within(dialog).getByText('Objective')).toBeVisible();
+  expect(within(dialog).getByText('Assigned Agent')).toBeVisible();
+  expect(within(dialog).getByText('Worker limits')).toBeVisible();
+  expect(within(dialog).queryByText('Saved field')).not.toBeInTheDocument();
+  expect(within(dialog).getByRole('region', { name: 'Exact saved assignment' })).not.toHaveTextContent('Before');
+  expect(within(dialog).getByRole('region', { name: 'Exact saved assignment' })).not.toHaveTextContent('Not recorded');
+  expect(within(dialog).getByText(/This human assignment requires review/)).toBeVisible();
 });

@@ -25,7 +25,7 @@ public sealed class DrivePersistenceTests
             var factory = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={root}/drive.db").Options); IAgentInstanceStore owners; ICredentialStore credentials; IAgentCredentialBindingStore bindings; IDriveOperationStore operations; ISyntheticDriveStore files;
             if (sqlite) { await using var db = factory.CreateDbContext(); await db.Database.MigrateAsync(); owners = new SqliteAgentInstanceStore(factory, new SystemIdGenerator(TimeProvider.System)); var c = new SqliteCredentialStore(factory); credentials = c; bindings = c; var d = new SqliteDriveStore(factory); operations = d; files = d; }
             else { var i = new InMemoryAgentInstanceStore(); owners = i; var c = new InMemoryCredentialStore(i); credentials = c; bindings = c; var d = new InMemoryDriveStore(); operations = d; files = d; }
-            var owner = new AgentInstance(Guid.NewGuid(), "general-assistant", 27, new("Test", "Assistant", "Help", "Calm"), AgentInstanceLifecycle.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow); await owners.InsertAsync(owner);
+            var owner = new AgentInstance(Guid.NewGuid(), "general-assistant", 35, new("Test", "Assistant", "Help", "Calm"), AgentInstanceLifecycle.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow); await owners.InsertAsync(owner);
             var protector = new LocalCredentialProtector(root + "/keys"); var account = await SeedNativeAccount(credentials, bindings, owner.InstanceId);
             await SeedConnection(credentials, protector, account.CredentialId);
             var op = new DriveOperation(Guid.NewGuid(), owner.InstanceId, account.CredentialId, "effect-hash", 1, "drive.upload", "file-known", "{}", "Planned", 1, DateTimeOffset.UtcNow); await operations.ClaimAsync(op, default);
@@ -81,7 +81,7 @@ public sealed class DrivePersistenceTests
             var dbOptions = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={root}/store.db").Options;
             var factory = new Factory(dbOptions); await using (var db = factory.CreateDbContext()) await db.Database.MigrateAsync();
             var ids = new SystemIdGenerator(TimeProvider.System); var owners = new SqliteAgentInstanceStore(factory, ids); var credentials = new SqliteCredentialStore(factory); var files = new SqliteDriveStore(factory);
-            var owner = new AgentInstance(Guid.NewGuid(), "general-assistant", 28, new("UAT", "Assistant", "Help", "Calm"), AgentInstanceLifecycle.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow); await owners.InsertAsync(owner);
+            var owner = new AgentInstance(Guid.NewGuid(), "general-assistant", 35, new("UAT", "Assistant", "Help", "Calm"), AgentInstanceLifecycle.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow); await owners.InsertAsync(owner);
             var protector = new LocalCredentialProtector(root + "/keys"); var account = await SeedNativeAccount(credentials, credentials, owner.InstanceId);
             await SeedConnection(credentials, protector, account.CredentialId);
             var targets = new List<AgentCore.Application.Drive.DriveTrashTarget>();

@@ -9,19 +9,19 @@ export function runOutcomeLabel(value: string | null | undefined) {
   return ({ NoAction: "No action", Response: "Response", Result: "Result", NeedsAttention: "Needs attention" } as Record<string, string>)[value ?? ""] ?? value ?? "Not yet";
 }
 export function runOriginLabel(origin: string) {
-  return ({ ImmediateBackground: "Immediate task", AutomationOccurrence: "Automation", SourceOccurrence: "Application event", ManualBackground: "Manual task", UserChat: "Chat" } as Record<string, string>)[origin] ?? origin;
+  return ({ DelegatedTask: "Delegated task", DirectAgentMessage: "Agent message", ImmediateBackground: "Immediate task", AutomationOccurrence: "Automation", SourceOccurrence: "Application event", ManualBackground: "Manual task", UserChat: "Chat" } as Record<string, string>)[origin] ?? origin;
 }
 
 export function runActivationLabel(kind: string) {
   return ({ UserTurn: "Chat turn", Initiative: "Initiative", ScheduledWork: "Scheduled task", ApplicationEvent: "Application event", CoreEvent: "Core Event",
-    ImmediateBackground: "Immediate task", ManualBackground: "Manual task", BackgroundCompleted: "Completion report", GoalContinuation: "Goal continuation", ContextContinuation: "Context continuation", ConfigurationContinuation: "Configuration continuation" } as Record<string, string>)[kind] ?? kind;
+    DelegatedTask: "Delegated task", TaskCompletion: "Task completion report", AgentMessage: "Agent message", ImmediateBackground: "Immediate task", ManualBackground: "Manual task", BackgroundCompleted: "Completion report", GoalContinuation: "Goal continuation", ContextContinuation: "Context continuation", ConfigurationContinuation: "Configuration continuation" } as Record<string, string>)[kind] ?? kind;
 }
 
 export function runBudgetLabel(value: string) {
   return ({ Standard: "Standard", InteractiveBrowser: "Interactive Browser", UnattendedBoundBrowser: "Unattended Bound Browser",
     system: "System default", definition: "Definition default", instance: "Instance override",
     work: "Work", cleanup: "Cleanup", finalization: "Finalization", stepLimit: "Step limit reached",
-    protocolRepair: "Response format recovery", completionRequired: "Completion recovery", runDeadline: "Execution time limit reached", checkpointCapacity: "Checkpoint capacity reached", outputLimit: "Output limit reached",
+    protocolRepair: "Response format recovery", completionRequired: "Completion recovery", runDeadline: "Execution time limit reached", taskRootBudget: "Shared task allowance reached", checkpointCapacity: "Checkpoint capacity reached", outputLimit: "Output limit reached",
     cleanupBlocked: "Cleanup blocked", notRequested: "Not requested", blocked: "Blocked", completed: "Completed", partial: "Partially completed", unverified: "Unverified"
   } as Record<string, string>)[value] ?? value;
 }

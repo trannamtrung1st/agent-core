@@ -30,6 +30,7 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
     }
     private readonly object _gate = new();
     private readonly Dictionary<Guid, Live> _live = [];
+    private readonly HashSet<Live> _releasing = [];
     private sealed class PendingDispatch(Guid session)
     {
         public Guid Session { get; } = session;
@@ -41,6 +42,7 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
     // Deterministic fixture barrier around the existing claim/snapshot registration race.
     internal Func<Guid, Task>? BeforeDispatchRegistration { get; set; }
     internal Func<AgentRun, Task>? BeforeRuntimeRelease { get; set; }
+    internal Func<AgentRun, Task>? AfterRuntimeUnregistered { get; set; }
     internal Action<AgentRun, AgentRun>? RuntimeCollisionObserved { get; set; }
 
     // Deterministic fixture barrier: a durable wait is visible before its supervised
@@ -256,13 +258,22 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
                 lock (_gate)
                 {
                     if (_live.GetValueOrDefault(sessionId) == live) _live.Remove(sessionId);
+                    _releasing.Add(live);
                     if (live.OwnsCapacity && _voices.GetValueOrDefault(sessionId) is { Lease.Retiring: false } voice)
                     { voice.OwnsCapacity = true; live.OwnsCapacity = false; }
                     release = live.OwnsCapacity; live.OwnsCapacity = false;
                 }
                 if (release) capacity.ReleaseTenantRuntime(); live.OperationStop.Dispose(); live.Lifetime.Dispose();
-                await SettleReleasedRequestAsync(live).ConfigureAwait(false);
-                live.Stopped.TrySetResult();
+                try
+                {
+                    if (AfterRuntimeUnregistered is { } afterRelease) await afterRelease(live.Run).ConfigureAwait(false);
+                    await SettleReleasedRequestAsync(live).ConfigureAwait(false);
+                }
+                finally
+                {
+                    live.Stopped.TrySetResult();
+                    lock (_gate) _releasing.Remove(live);
+                }
             }
         }
     }
@@ -273,7 +284,7 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
         lock (_gate)
         {
             _stopping = true; capacity.StopAdmissions();
-            shutdown ??= DrainAsync(_live.Values.ToArray(), _voices.Values.Select(v => v.Lease).ToArray());
+            shutdown ??= DrainAsync(_live.Values.Concat(_releasing).Distinct().ToArray(), _voices.Values.Select(v => v.Lease).ToArray());
             pending = shutdown;
         }
         return pending.WaitAsync(ct);

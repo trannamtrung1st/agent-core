@@ -73,7 +73,7 @@ public sealed partial class TenantDefinitionAccessTests
         Assert.Equal(HttpStatusCode.Forbidden, (await editor.GetAsync($"{path}/skills")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await editor.DeleteAsync($"{path}/resources/{Uri.EscapeDataString(fileKey)}?expectedRevision={await Revision(owner, tenant)}&expectedInstanceRevision={await Ir(id)}&expectedResourceRevision=2")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await editor.GetAsync($"{path}/resources")).StatusCode);
-        var builtin = await Agent("general-assistant", 32);
+        var builtin = await Agent("general-assistant", 35);
         await Json(await owner.PostAsJsonAsync($"{prefix}/role-assignments", new { principalId = principal, roleId = reader, resourceType = "agent", resourceId = builtin, expectedRevision = await Revision(owner, tenant) }));
         await Json(await Grant(owner, "skill", builtin.ToString("D") + ":definition:browser.record.lookup"));
         var builtinSkills = await Json(await editor.GetAsync($"{prefix}/agents/{builtin}/skills"));

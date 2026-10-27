@@ -1098,9 +1098,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case CompletionToolReceived completionTool:
                     await HandleCompletionToolAsync(completionTool, cancellationToken).ConfigureAwait(false);
                     break;
-                case BackgroundStartReceived backgroundStart:
-                    await HandleBackgroundStartAsync(backgroundStart, cancellationToken).ConfigureAwait(false);
-                    break;
                 case CapabilityLoadRequested capabilityLoad:
                     await HandleCapabilityLoadAsync(capabilityLoad, cancellationToken).ConfigureAwait(false);
                     break;
@@ -1252,9 +1249,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case CompletionToolReceived completionTool:
                 completionTool.Completed.TrySetResult(new(SkillLoadAdmission.Error("stale", "Execution no longer owns this request.")));
-                break;
-            case BackgroundStartReceived backgroundStart:
-                backgroundStart.Completed.TrySetResult(SkillLoadAdmission.Error("stale", "Session mailbox is unavailable."));
                 break;
             case AgentRunOutcomeReceived outcome:
                 outcome.Accepted.TrySetResult(false);
@@ -2725,6 +2719,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
             while (!generateToken.IsCancellationRequested)
             {
+                if (_runAuthority is ITaskRunBudgetAuthority taskBudgets && executionRun is not null
+                    && await taskBudgets.TaskAllowanceAsync(executionRun, generateToken).ConfigureAwait(false) is { } allowance)
+                {
+                    var pin = executionRun.Admission.ExecutionBudget!.Profile;
+                    budget = budget with { MaxSteps = Math.Min(pin.MaxSteps, allowance.MaxSteps) };
+                    var available = TimeSpan.FromMilliseconds(Math.Max(0, allowance.DurationSeconds * 1000 - ActiveExecutionMs()));
+                    var narrowed = _time.GetUtcNow() + available;
+                    if (overallDeadline is null || narrowed < overallDeadline) overallDeadline = narrowed;
+                    var due = overallDeadline.Value - _time.GetUtcNow();
+                    overallTimer?.Change(due > TimeSpan.Zero ? due : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+                    if (finalizationReason is null && (steps >= budget.MaxSteps - 1 || due <= finalizationReserve + budget.PerTool))
+                        await BeginFinalizationAsync("taskRootBudget").ConfigureAwait(false);
+                }
                 await BeginCleanupAsync().ConfigureAwait(false);
                 if (finalizationReason is null && cleanupTimer is not null && cleanupCts.IsCancellationRequested)
                     await BeginFinalizationAsync("runDeadline").ConfigureAwait(false);
@@ -3331,9 +3338,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     if (_boundAgentRun is { SideEffect.Disposition: AgentRunSideEffectDisposition.Succeeded } completedEffect
                         && completedEffect.SideEffect.ToolCallId == call.Id)
                     {
-                        var recovered = call.Name == ToolCatalog.BackgroundStart
-                            ? await RequestBackgroundStartAsync(cause, request.ResponseId, call, generateToken).ConfigureAwait(false)
-                            : "{\"completed\":true,\"recovered\":true,\"message\":\"The action completed before recovery; it was not repeated.\"}";
+                        var recovered = "{\"completed\":true,\"recovered\":true,\"message\":\"The action completed before recovery; it was not repeated.\"}";
                         messages.Add(new ModelMessage(ModelRole.Tool, recovered, ToolCallId: call.Id, Name: call.Name));
                         outputBytes = checked(outputBytes + Encoding.UTF8.GetByteCount(recovered));
                         await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
@@ -3508,11 +3513,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 var completion = await RequestCompletionToolAsync(cause, request.ResponseId, call, overallCts.Token).ConfigureAwait(false);
                                 if (completion.Suspended) return;
                                 executionResult = ToolExecutionResult.FromText(completion.Json);
-                            }
-                            else if (string.Equals(call.Name, ToolCatalog.BackgroundStart, StringComparison.Ordinal))
-                            {
-                                executionResult = ToolExecutionResult.FromText(await RequestBackgroundStartAsync(cause,
-                                    request.ResponseId, call, overallCts.Token).ConfigureAwait(false));
                             }
                             else if (string.Equals(call.Name, ToolCatalog.WorkComplete, StringComparison.Ordinal) && IsInitialBackgroundRun)
                             {
@@ -6598,7 +6598,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         else if (job.UserConversationTerminal && tenantTerminalRun is { Status: AgentRunStatus.Running, Claim: { } terminalClaim } terminalRun
             && !terminalRun.CancellationRequested
-            && (SessionCompletionIntent.Reason(terminalRun) is not null || AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(terminalRun) || terminalRun.Admission.OutputContract == AgentRunOutputContract.CompletionReport || AgentCore.Application.Security.TenantCredentialReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountActionReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantSpaceResourceReadRules.Read(terminalRun).Count > 0 || TenantContextToolContract.HasObservationOrTransition(terminalRun) || AgentCore.Application.Security.TenantConfigurationContinuationRules.HasRemedyAttempt(terminalRun) || job.LearningPlan is not null || await _agentRuns.HasCompletionAcknowledgmentAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false))
+            && (SessionCompletionIntent.Reason(terminalRun) is not null || AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(terminalRun) || terminalRun.Admission.OutputContract == AgentRunOutputContract.CompletionReport || AgentCore.Application.Security.TenantCredentialReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountActionReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantSpaceResourceReadRules.Read(terminalRun).Count > 0 || TenantContextToolContract.HasObservationOrTransition(terminalRun) || AgentCore.Application.Security.TenantConfigurationContinuationRules.HasRemedyAttempt(terminalRun) || job.LearningPlan is not null)
             && toSave.Entries.LastOrDefault(e => e.Role == ConversationRole.Assistant && e.ResponseId == terminalRun.ResponseId) is { Status: EntryStatus.Completed } finalEntry)
         {
             var current = await _agentRuns.GetAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false)

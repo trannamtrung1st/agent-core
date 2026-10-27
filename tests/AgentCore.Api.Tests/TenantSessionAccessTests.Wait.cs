@@ -22,7 +22,7 @@ public sealed partial class TenantSessionAccessTests
         public override async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Requests.Enqueue(request); await Task.Yield(); cancellationToken.ThrowIfCancellationRequested();
-            var child = Origin(request) == ExecutionOrigin.ImmediateBackground;
+            var child = Origin(request) == ExecutionOrigin.DelegatedTask;
             var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
             var wait = results.LastOrDefault(m => m.Name == ToolCatalog.ExecutionWait);
             ModelToolCall? call = null;
@@ -46,16 +46,17 @@ public sealed partial class TenantSessionAccessTests
             else if (wait is null)
             {
                 Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.ExecutionWait);
-                if (mode is "background" or "timeout" or "handoff")
+                if (mode is "tasks" or "timeout" or "handoff")
                 {
-                    var started = results.LastOrDefault(m => m.Name == ToolCatalog.BackgroundStart);
-                    if (started is null) call = new("parent-start", ToolCatalog.BackgroundStart,
-                        """{"objective":"Complete the owned task after a bounded wait","reportCompletion":false}""");
+                    var started = results.LastOrDefault(m => m.Name == "tasks.delegate");
+                    if (started is null) call = new("parent-start", "tasks.delegate", JsonSerializer.Serialize(new {
+                        objective = "Complete the owned task after a bounded wait", target = new { instanceId = DelegationTargetInstanceId },
+                        reportOnCompletion = false, requestKey = "wait-child" }));
                     else
                     {
                         using var json = JsonDocument.Parse(started.Text);
-                        call = new("parent-wait", ToolCatalog.ExecutionWait, JsonSerializer.Serialize(new { mode = "background",
-                            backgroundSessionIds = new[] { json.RootElement.GetProperty("backgroundSessionId").GetGuid() }, until = "all", timeoutSeconds = mode == "timeout" ? .1 : 20 }));
+                        call = new("parent-wait", ToolCatalog.ExecutionWait, JsonSerializer.Serialize(new { mode = "tasks",
+                            taskIds = new[] { json.RootElement.GetProperty("task").GetProperty("taskId").GetGuid() }, until = "all", timeoutSeconds = mode == "timeout" ? .1 : 20 }));
                     }
                 }
                 else call = new("parent-wait", ToolCatalog.ExecutionWait, JsonSerializer.Serialize(new { mode = "duration", seconds = mode is "cancel" or "restart" or "queued" ? 5 : 1 }));
@@ -84,7 +85,7 @@ public sealed partial class TenantSessionAccessTests
     }
 
     [Theory(Timeout = 120000)] [InlineData(false, "duration")] [InlineData(true, "duration")]
-    [InlineData(false, "background")] [InlineData(true, "background")]
+    [InlineData(false, "tasks")] [InlineData(true, "tasks")]
     [InlineData(false, "timeout")] [InlineData(true, "timeout")]
     [InlineData(false, "cancel")] [InlineData(true, "cancel")]
     [InlineData(false, "handoff")] [InlineData(true, "handoff")]
@@ -107,7 +108,8 @@ public sealed partial class TenantSessionAccessTests
             await access.AssignRoleAsync(human, tenant, session.Owner.ExecutorPrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
             if (mode == "handoff")
             {
-                Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(api + $"/agents/{session.Owner.AgentInstanceId}/workspace/content?path=%2Fhome%2Fwait-source.txt&expectedRevision={await Revision(owner, tenant)}",
+                var home = (await factory.Services.GetRequiredService<ITenantSpaceStore>().FindPrivateSpaceAsync(tenant, session.Owner.AgentInstanceId))!;
+                Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(api + $"/spaces/{home.SpaceId}/workspace/content?path=%2Fhome%2Fwait-source.txt&expectedRevision={await Revision(owner, tenant)}",
                     new ByteArrayContent("Exact child evidence"u8.ToArray()))).StatusCode);
                 Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/workspaces.read", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
             }
@@ -117,11 +119,13 @@ public sealed partial class TenantSessionAccessTests
             Assert.NotNull(waiting.Wait!.SuspendedGeneration);
             if (mode == "handoff")
             {
-                var target = Assert.Single(waiting.Wait.BackgroundSessionIds); var childSession = (await sessions.FindTenantSessionAsync(tenant, target))!;
+                var target = Assert.Single(waiting.Wait.Tasks!).TaskId;
+                var task = (await factory.Services.GetRequiredService<ITenantTaskStore>().FindTaskAsync(tenant, target))!;
+                var childSession = (await sessions.FindTenantSessionAsync(tenant, task.WorkerSessionId!.Value))!;
                 AgentRun childWaiting; using var consentTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
                 while (true)
                 {
-                    childWaiting = (await runs.FindTenantRunAsync(tenant, childSession.Snapshot.Origin.InitialBackgroundAgentRunId!.Value))!;
+                    childWaiting = (await runs.FindTenantRunAsync(tenant, task.InitialWorkerRunId!.Value))!;
                     if (childWaiting.Status == AgentRunStatus.WaitingForApproval) break;
                     Assert.False(childWaiting.IsTerminal, $"Child ended before review: {childWaiting.Status} {childWaiting.Failure?.Code} {childWaiting.Result?.Text}; "
                         + string.Join(" | ", model.Requests.SelectMany(r => r.Messages).Where(m => m.Role == ModelRole.Tool).Select(m => m.Name + ":" + m.Text).Distinct().TakeLast(8)) + " Logs: " + string.Join(" | ", model.Failures));
@@ -170,7 +174,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(1, done.AttemptCount); Assert.Equal(1, done.WaitCount); Assert.Null(done.Wait);
             if (mode != "cancel")
             {
-                var expected = mode is "background" or "handoff" ? "condition_met" : mode == "timeout" ? "timeout" : "elapsed";
+                var expected = mode is "tasks" or "handoff" ? "condition_met" : mode == "timeout" ? "timeout" : "elapsed";
                 Assert.Contains(expected, done.Result!.Text); Assert.Equal(waiting.ResponseId, done.ResponseId); Assert.Equal(waiting.ActivationId, done.ActivationId);
                 Assert.True(AgentCore.Application.Execution.AgentRunToolCallCheckpoint.TryRead(done.Checkpoint, out var messages));
                 var result = Assert.Single(messages!, m => m.Role == ModelRole.Tool && m.ToolCallId == "parent-wait");

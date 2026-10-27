@@ -117,17 +117,22 @@ public sealed partial class ScriptedLanguageModel : ILanguageModel
             yield return new ModelCompleted(ModelStopReason.Completed);
             yield break;
         }
+        if ((AgentCooperationScript.Generate(request) ?? AgentCooperationScript.Receive(request)) is { } cooperationEvents)
+        {
+            foreach (var item in cooperationEvents) yield return item;
+            yield break;
+        }
+        if (TaskDelegationScript.Generate(request) is { } taskEvents)
+        {
+            foreach (var item in taskEvents) yield return item;
+            yield break;
+        }
         if (BackgroundSessionScript.Generate(request) is { } backgroundEvents)
         {
             foreach (var item in backgroundEvents) yield return item;
             yield break;
         }
-        if (CompletionReadScript.Generate(request) is { } completionReadEvents)
-        {
-            foreach (var item in completionReadEvents) yield return item;
-            yield break;
-        }
-        if (CompletionHandoffScript.Generate(request) is { } handoffEvents)
+        if (DurationWaitScript.Generate(request) is { } handoffEvents)
         {
             foreach (var item in handoffEvents) yield return item;
             yield break;

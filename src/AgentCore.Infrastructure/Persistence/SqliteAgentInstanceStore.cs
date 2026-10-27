@@ -547,6 +547,7 @@ public sealed partial class SqliteAgentInstanceStore(
 
         if (update.SetSettingsOverrides)
             row.SettingsOverridesJson = update.SettingsOverrides is null ? null : JsonSerializer.Serialize(update.SettingsOverrides, Json);
+        if (update.Cooperation is not null) { update.Cooperation.Validate(); row.CooperationJson = JsonSerializer.Serialize(update.Cooperation, Json); }
         if (update.SetExecutionBudgets)
             row.ExecutionBudgetsJson = update.ExecutionBudgets is null ? null : JsonSerializer.Serialize(update.ExecutionBudgets, Json);
         if (update.SetUnattendedModel)
@@ -619,7 +620,8 @@ public sealed partial class SqliteAgentInstanceStore(
             row.HarnessManagementJson is null ? null : JsonSerializer.Deserialize<HarnessManagementState>(row.HarnessManagementJson, Json),
             row.ExecutionBudgetsJson is null ? null : JsonSerializer.Deserialize<ExecutionBudgetPolicy>(row.ExecutionBudgetsJson, Json),
             row.SettingsOverridesJson is null ? null : JsonSerializer.Deserialize<InstanceSettingsOverrides>(row.SettingsOverridesJson, Json),
-            row.BrowserProfileResetJson is null ? null : JsonSerializer.Deserialize<AgentBrowserProfileReset>(row.BrowserProfileResetJson, Json));
+            row.BrowserProfileResetJson is null ? null : JsonSerializer.Deserialize<AgentBrowserProfileReset>(row.BrowserProfileResetJson, Json),
+            row.CooperationJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Tasks.AgentCooperationPolicy>(row.CooperationJson, Json));
 
     internal static AgentInstanceRecord Map(AgentInstance instance) =>
         new()
@@ -637,6 +639,7 @@ public sealed partial class SqliteAgentInstanceStore(
             SettingsOverridesJson = instance.SettingsOverrides is null ? null : JsonSerializer.Serialize(instance.SettingsOverrides, Json),
             ExecutionBudgetsJson = instance.ExecutionBudgets is null ? null : JsonSerializer.Serialize(instance.ExecutionBudgets, Json),
             BrowserProfileResetJson = instance.BrowserProfileReset is null ? null : JsonSerializer.Serialize(instance.BrowserProfileReset, Json),
+            CooperationJson = instance.Cooperation is null ? null : JsonSerializer.Serialize(instance.Cooperation, Json),
             HarnessManagementJson = instance.HarnessManagement is null ? null : JsonSerializer.Serialize(instance.HarnessManagement, Json)
         };
 }

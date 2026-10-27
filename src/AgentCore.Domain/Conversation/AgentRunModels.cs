@@ -17,7 +17,6 @@ public static class AgentRunLimits
     public const int MaxFailureSummaryCharacters = 500;
     public const int MaxFailureCodeCharacters = 64;
     public const int MaxResultCharacters = 16_000;
-    public const int MaxImmediateChildren = 2;
     public const int MaxActiveBackgroundRuns = 8;
     public const int MaxBackgroundObjectiveCharacters = 4000;
     public const int MaxCheckpointBytes = 262_144;

@@ -32,7 +32,7 @@ test('consecutive binding changes refresh the Instance revision without navigati
   );
   const instance = await owner(page, 'agent-instances', 'POST', {
     definitionId: 'general-assistant',
-    version: 23,
+    version: 35,
   });
   const name = `Binding revision ${Date.now()}`;
   const credential = await owner(page, 'credentials', 'POST', {

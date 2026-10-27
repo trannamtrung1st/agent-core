@@ -9,26 +9,68 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore
 {
+    private sealed class RetentionDeadline
+    {
+        public string SessionId { get; set; } = "";
+        public long DueAtUtc { get; set; }
+    }
+    private IQueryable<RetentionDeadline> DueSessionDeadlines(AgentCoreDbContext db, Guid? tenant = null, Guid? session = null)
+    {
+        var at = (clock ?? TimeProvider.System).GetUtcNow().ToUnixTimeMilliseconds(); var id = session?.ToString("D");
+        // Metadata only. Inherited privacy expiry uses the incumbent quiescence,
+        // effect-reconciliation and content-retirement owner, without a new runner.
+        return db.Database.SqlQuery<RetentionDeadline>($"""
+            WITH RECURSIVE lifetime(RootId,TenantId,SessionId,ParentId,Depth,DueAtUtc,FallbackAtUtc) AS (
+                SELECT s.SessionId,o.TenantId,s.SessionId,
+                    CASE WHEN json_extract(s.OriginJson,'$.kind') IN (5,6) THEN json_extract(s.OriginJson,'$.originatingSessionId') END,
+                    0, CASE WHEN json_extract(s.OriginJson,'$.kind') IN (5,6)
+                        AND json_extract(s.OriginJson,'$.originatingSessionId') IS NULL THEN s.CreatedAtUtc ELSE s.RetentionDueAtUtc END,
+                    s.CreatedAtUtc
+                FROM Sessions s JOIN TenantSessions o ON o.SessionId=s.SessionId
+                WHERE s.DurablyDeletedAtUtc IS NULL AND ({tenant} IS NULL OR o.TenantId={tenant}) AND ({id} IS NULL OR s.SessionId={id})
+                    AND (s.RetentionDueAtUtc<={at} OR json_extract(s.OriginJson,'$.kind') IN (5,6))
+                UNION ALL
+                SELECT a.RootId,a.TenantId,p.SessionId,
+                    CASE WHEN po.SessionId IS NOT NULL AND json_extract(p.OriginJson,'$.kind') IN (5,6)
+                        THEN json_extract(p.OriginJson,'$.originatingSessionId') END,
+                    a.Depth+1,
+                    CASE WHEN po.SessionId IS NULL OR a.Depth=63 AND json_extract(p.OriginJson,'$.kind') IN (5,6)
+                            OR json_extract(p.OriginJson,'$.kind') IN (5,6) AND json_extract(p.OriginJson,'$.originatingSessionId') IS NULL
+                        THEN a.FallbackAtUtc
+                        WHEN p.DurablyDeletedAtUtc IS NULL THEN p.RetentionDueAtUtc
+                        WHEN p.RetentionDueAtUtc IS NULL THEN p.DurablyDeletedAtUtc
+                        ELSE min(p.RetentionDueAtUtc,p.DurablyDeletedAtUtc) END,
+                    a.FallbackAtUtc
+                FROM lifetime a LEFT JOIN Sessions p ON p.SessionId=a.ParentId
+                    LEFT JOIN TenantSessions po ON po.SessionId=p.SessionId AND po.TenantId=a.TenantId
+                WHERE a.ParentId IS NOT NULL AND a.Depth<64
+            )
+            SELECT RootId AS SessionId,min(DueAtUtc) AS DueAtUtc FROM lifetime GROUP BY RootId HAVING min(DueAtUtc)<={at}
+            """);
+    }
     public async ValueTask<TenantSessionRetentionTarget?> FindExpiredSessionAsync(Guid tenant, Guid session, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-        var now = (clock ?? TimeProvider.System).GetUtcNow().ToUnixTimeMilliseconds(); var id = session.ToString("D");
-        var row = await (from owner in db.Set<TenantSessionRecord>().AsNoTracking() join saved in db.Sessions.AsNoTracking() on owner.SessionId equals saved.SessionId
-            where owner.TenantId == tenant && owner.SessionId == id && saved.RetentionDueAtUtc <= now
-            select new { Owner = owner, saved.Revision, saved.RetentionDueAtUtc }).SingleOrDefaultAsync(ct).ConfigureAwait(false);
-        return row is null ? null : new(row.Owner.Domain(), row.Revision, DateTimeOffset.FromUnixTimeMilliseconds(row.RetentionDueAtUtc!.Value));
+        var due = await DueSessionDeadlines(db, tenant, session).SingleOrDefaultAsync(ct).ConfigureAwait(false);
+        if (due is null) return null;
+        var owner = await db.Set<TenantSessionRecord>().AsNoTracking().SingleAsync(s => s.TenantId == tenant && s.SessionId == due.SessionId, ct).ConfigureAwait(false);
+        var revision = await db.Sessions.Where(s => s.SessionId == due.SessionId).Select(s => s.Revision).SingleAsync(ct).ConfigureAwait(false);
+        return new(owner.Domain(), revision, DateTimeOffset.FromUnixTimeMilliseconds(due.DueAtUtc));
     }
     public async ValueTask<IReadOnlyList<TenantSessionRetentionTarget>> ListDueSessionsAsync(TenantSessionRetentionTarget? after, int limit, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-        var now = (clock ?? TimeProvider.System).GetUtcNow().ToUnixTimeMilliseconds();
         var due = after?.DueAtUtc.ToUnixTimeMilliseconds(); var key = after?.Owner.SessionId.ToString("D");
-        var rows = await (from session in db.Sessions.AsNoTracking() join owner in db.Set<TenantSessionRecord>().AsNoTracking() on session.SessionId equals owner.SessionId
-            where session.DurablyDeletedAtUtc == null && session.RetentionDueAtUtc <= now
-                && (due == null || session.RetentionDueAtUtc > due || session.RetentionDueAtUtc == due && string.Compare(session.SessionId, key) > 0)
-            orderby session.RetentionDueAtUtc, session.SessionId
-            select new { Owner = owner, session.Revision, session.RetentionDueAtUtc }).Take(Math.Clamp(limit, 1, 100)).ToArrayAsync(ct).ConfigureAwait(false);
-        return rows.Select(row => new TenantSessionRetentionTarget(row.Owner.Domain(), row.Revision, DateTimeOffset.FromUnixTimeMilliseconds(row.RetentionDueAtUtc!.Value))).ToArray();
+        var deadlines = await DueSessionDeadlines(db).Where(s => due == null || s.DueAtUtc > due || s.DueAtUtc == due && string.Compare(s.SessionId, key) > 0)
+            .OrderBy(s => s.DueAtUtc).ThenBy(s => s.SessionId).Take(Math.Clamp(limit, 1, 100)).ToArrayAsync(ct).ConfigureAwait(false);
+        var result = new List<TenantSessionRetentionTarget>();
+        foreach (var deadline in deadlines)
+        {
+            var owner = await db.Set<TenantSessionRecord>().AsNoTracking().SingleAsync(s => s.SessionId == deadline.SessionId, ct).ConfigureAwait(false);
+            var revision = await db.Sessions.Where(s => s.SessionId == deadline.SessionId).Select(s => s.Revision).SingleAsync(ct).ConfigureAwait(false);
+            result.Add(new(owner.Domain(), revision, DateTimeOffset.FromUnixTimeMilliseconds(deadline.DueAtUtc)));
+        }
+        return result;
     }
 
     public async ValueTask<bool> RetireDueSessionAsync(TenantSessionRetentionTarget target, Guid auditId, CancellationToken ct = default)
@@ -40,7 +82,8 @@ public sealed partial class SqliteIamStore
         if (owner?.Domain() != target.Owner) return false;
         var row = await db.Sessions.Include(s => s.Snapshot).SingleAsync(s => s.SessionId == owner.SessionId, ct).ConfigureAwait(false);
         var current = SqliteMemoryStore.ToSnapshot(row, []); var now = (clock ?? TimeProvider.System).GetUtcNow();
-        if (current.Revision != target.Revision || current.RetentionDueAtUtc != target.DueAtUtc || current.DurablyDeletedAt is not null || !SessionRetention.IsDue(current, now)) return false;
+        var deadline = await DueSessionDeadlines(db, owner.TenantId, target.Owner.SessionId).SingleOrDefaultAsync(ct).ConfigureAwait(false);
+        if (current.Revision != target.Revision || deadline?.DueAtUtc != target.DueAtUtc.ToUnixTimeMilliseconds() || current.DurablyDeletedAt is not null) return false;
         var runRows = await db.AgentRuns.Where(r => r.TenantId == owner.TenantId && r.SessionId == owner.SessionId).ToArrayAsync(ct).ConfigureAwait(false);
         var allRuns = runRows.Select(AgentRunStoreMapping.ToDomain).ToArray();
         var approvalRows = await db.Set<TenantApprovalRecord>().Where(a => a.TenantId == owner.TenantId && a.SessionId == owner.SessionId).ToArrayAsync(ct).ConfigureAwait(false);
@@ -65,7 +108,7 @@ public sealed partial class SqliteIamStore
             }
             if (!SessionLifecycle.IsTerminal(current.LifecycleStatus))
             {
-                var expired = TenantSessionMutations.ExpireDue(current, now) with { Revision = checked(current.Revision + 1) };
+                var expired = (SessionRetention.IsDue(current, now) ? TenantSessionMutations.ExpireDue(current, now) : TenantSessionMutations.ExpireInheritedSource(current, now)) with { Revision = checked(current.Revision + 1) };
                 SqliteMemoryStore.ApplySession(row, expired);
                 await TenantCoreEventProduction.StageSessionAsync(db, current, expired, owner.Domain(), null, ct).ConfigureAwait(false);
                 db.Add(new AuthorizationAudit(auditId, owner.TenantId, Guid.Empty, "sessions.retention.expire", owner.SessionId, "allowed", "system_due_effect_reconciliation_pending", now));
@@ -81,7 +124,7 @@ public sealed partial class SqliteIamStore
             await TenantCoreEventProduction.StageRunAsync(db, run, cancelled, ct).ConfigureAwait(false);
             await SettleTenantCompletion(db, cancelled, run.Claim?.Generation, ct).ConfigureAwait(false);
         }
-        var next = TenantSessionMutations.RetireDue(current, now);
+        var next = SessionRetention.IsDue(current, now) ? TenantSessionMutations.RetireDue(current, now) : TenantSessionMutations.RetireInheritedSource(current, now);
         SqliteMemoryStore.ApplySession(row, next);
         await RetireRunContent(db, owner.TenantId, owner.SessionId, now, ct).ConfigureAwait(false);
         await TenantCoreEventProduction.StageSessionAsync(db, current, next, owner.Domain(), null, ct).ConfigureAwait(false);

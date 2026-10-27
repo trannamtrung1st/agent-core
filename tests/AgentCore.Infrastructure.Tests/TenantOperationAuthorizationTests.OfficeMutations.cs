@@ -26,7 +26,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [MemberData(nameof(OfficeMutationBoundaries))]
     public async Task Tenant_Office_mutation_commit_boundaries_preserve_sources_and_never_replay_uncertain_processing(bool sqlite, bool workbook, string change)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         var processor = new OfficeProcessor(); var create = change == "occupied";
         var tool = "office." + (workbook ? "spreadsheet" : "document") + (create ? ".create" : ".edit"); var name = workbook ? "exact.xlsx" : "exact.docx"; var path = "/working/" + name;
         byte[] Package(string text) => workbook ? processor.CreateWorkbook(new([new("Sheet", [[new("text", Text: text)]])]), default).Bytes : processor.CreateDocument(new(null, [new(null, [text], null)]), default).Bytes;
@@ -95,7 +95,7 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Tenant_Office_abandoned_dispatch_discovery_recovers_all_four_tools_without_processing_or_native_replay(bool sqlite, string tool)
     {
         var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.Parse("2026-10-19T04:00:00Z"));
-        await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         var assignment = await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read", "workspaces.read", "workspaces.write"]);
         var workbook = tool.StartsWith("office.spreadsheet."); var create = tool.EndsWith(".create"); var path = "/working/retained." + (workbook ? "xlsx" : "docx");
         object arguments = create ? workbook ? new { path, sheets = new[] { new { name = "Sheet", rows = Array.Empty<object[]>() } } } : new { path, sections = new[] { new { paragraphs = new[] { "Exact text" } } } }

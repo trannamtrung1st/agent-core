@@ -6,7 +6,9 @@ public sealed record PermissionDefinition(string Key, string ResourceType, bool 
     bool Delegatable = true, bool SystemOnly = false, PermissionApprovalClass ApprovalClass = PermissionApprovalClass.Mutation)
 {
     public IReadOnlyList<string> ResourceTypes => Key is "sandbox.read" or "sandbox.manage"
-        ? [ResourceType, "sandbox-profile"] : Key is "artifacts.create" or "attachments.create" ? [ResourceType, "session"] : [ResourceType];
+        ? [ResourceType, "sandbox-profile"] : Key is "artifacts.create" or "attachments.create" ? [ResourceType, "session"]
+        : Key.StartsWith("tasks.", StringComparison.Ordinal) ? [ResourceType, "session", "agent"]
+        : Key.StartsWith("agent-messages.", StringComparison.Ordinal) ? [ResourceType, "task", "session", "agent"] : [ResourceType];
     // Access inspection/assignment and exact-action decisions govern the target resource itself.
     // Ordinary operation permissions apply only to their catalog-owned resource family.
     public bool AppliesToResource(string? resourceType) => !SystemOnly && (resourceType is not null && ResourceTypes.Contains(resourceType, StringComparer.Ordinal)
@@ -60,6 +62,10 @@ public static class PermissionCatalog
         Add("agent-definitions", "definition", "delete", PermissionApprovalClass.Sensitive);
         Add("agent-runs", "agent-run", "read", PermissionApprovalClass.ReadOnly);
         Add("agent-runs", "agent-run", "create cancel", PermissionApprovalClass.Mutation);
+        Add("tasks", "task", "read", PermissionApprovalClass.ReadOnly);
+        Add("tasks", "task", "delegate cancel", PermissionApprovalClass.Mutation);
+        Add("agent-messages", "agent-thread", "read", PermissionApprovalClass.ReadOnly);
+        Add("agent-messages", "agent-thread", "send", PermissionApprovalClass.Mutation);
         Add("goals", "session", "read", PermissionApprovalClass.ReadOnly);
         Add("goals", "session", "manage", PermissionApprovalClass.Mutation);
         Add("goals", "session", "accept", PermissionApprovalClass.Mutation, true);
@@ -133,15 +139,18 @@ public static class BuiltinAccessRoles
     public static IReadOnlyList<AccessRole> ForTenant(Guid tenantId, Func<Guid> id)
     {
         var tenant = PermissionCatalog.All.Where(p => !p.SystemOnly).ToArray();
+        // New cooperation rights require explicit assignment to ordinary Agent roles.
+        var ordinary = tenant.Where(p => !p.Key.StartsWith("tasks.", StringComparison.Ordinal)
+            && !p.Key.StartsWith("agent-messages.", StringComparison.Ordinal)).ToArray();
         AccessRole Role(string key, string name, bool human, IEnumerable<PermissionDefinition> permissions) =>
             new(id(), tenantId, key, name, true, human, permissions.Select(p => p.Key).ToArray());
         return [
             Role(Owner, "Owner", true, tenant),
             Role("access-administrator", "Access Administrator", true, tenant.Where(p => p.Key.StartsWith("members.", StringComparison.Ordinal) || p.Key.StartsWith("iam.roles.", StringComparison.Ordinal) || p.Key == "security.audit.read")),
-            Role("contributor", "Contributor", false, tenant.Where(p => !p.HumanOnly && !p.Key.StartsWith("secrets.", StringComparison.Ordinal) && p.Key != "http.request" && p.Key != "evaluations.run" && p.Key != "scripts.execute" && !p.Key.StartsWith("approvals.", StringComparison.Ordinal) && !p.Key.StartsWith("tenant.governance.", StringComparison.Ordinal))),
-            Role("reader", "Reader", false, tenant.Where(p => !p.HumanOnly && p.Key.EndsWith(".read", StringComparison.Ordinal))),
-            Role("agent-operator", "Agent Operator", false, tenant.Where(p => p.Key is "agents.read" or "agents.chat" or "agent-runs.read" or "agent-runs.cancel" or "sessions.read" or "sessions.create" or "sessions.manage")),
-            Role("agent-administrator", "Agent Administrator", false, tenant.Where(p => !p.HumanOnly && (p.Key.StartsWith("agents.", StringComparison.Ordinal) || p.Key.StartsWith("agent-definitions.", StringComparison.Ordinal) || p.Key.StartsWith("skills.", StringComparison.Ordinal)))),
+            Role("contributor", "Contributor", false, ordinary.Where(p => !p.HumanOnly && !p.Key.StartsWith("secrets.", StringComparison.Ordinal) && p.Key != "http.request" && p.Key != "evaluations.run" && p.Key != "scripts.execute" && !p.Key.StartsWith("approvals.", StringComparison.Ordinal) && !p.Key.StartsWith("tenant.governance.", StringComparison.Ordinal))),
+            Role("reader", "Reader", false, ordinary.Where(p => !p.HumanOnly && p.Key.EndsWith(".read", StringComparison.Ordinal))),
+            Role("agent-operator", "Agent Operator", false, ordinary.Where(p => p.Key is "agents.read" or "agents.chat" or "agent-runs.read" or "agent-runs.cancel" or "sessions.read" or "sessions.create" or "sessions.manage")),
+            Role("agent-administrator", "Agent Administrator", false, ordinary.Where(p => !p.HumanOnly && (p.Key.StartsWith("agents.", StringComparison.Ordinal) || p.Key.StartsWith("agent-definitions.", StringComparison.Ordinal) || p.Key.StartsWith("skills.", StringComparison.Ordinal)))),
             Role("approver", "Approver", true, tenant.Where(p => p.Key is "approvals.read" or "approvals.approve"))
         ];
     }

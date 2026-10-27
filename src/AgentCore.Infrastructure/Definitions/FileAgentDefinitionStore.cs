@@ -49,6 +49,9 @@ public sealed class FileAgentDefinitionStore : IBuiltInAgentDefinitionStore
             try
             {
                 AgentDefinitionValidator.Validate(definition);
+                if (DefinitionExecutionPolicies.Of(definition).ToolList.Any(tool => tool is "background.start" or "background.list"
+                    or "background.inspect" or "background.take" or "background.acknowledge"))
+                    throw new ArgumentException("retired_background_contract: install a current Definition with canonical Task capabilities.");
                 ValidateAliases(definition, aliases);
             }
             catch (ArgumentException ex)

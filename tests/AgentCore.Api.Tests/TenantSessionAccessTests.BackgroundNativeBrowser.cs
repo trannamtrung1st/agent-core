@@ -29,7 +29,7 @@ public sealed partial class TenantSessionAccessTests
         public Func<Task>? VerifyTransfer { get; set; }
         public override async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
-            if (!Independent && Origin(request) != ExecutionOrigin.ImmediateBackground)
+            if (!Independent && Origin(request) != ExecutionOrigin.DelegatedTask)
             { await foreach (var e in base.GenerateAsync(request, ct)) yield return e; yield break; }
             Requests.Enqueue(request);
             Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
@@ -94,7 +94,7 @@ public sealed partial class TenantSessionAccessTests
             }
             await using WebApplicationFactory<Program> initial = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
             var factory = initial; using var firstOwner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") }); var owner = firstOwner;
-            var setup = await StartTenantBackground(factory, owner, submit: false, fileCapabilities: [ToolCatalog.BackgroundStart, ToolCatalog.BrowserNavigate, ToolCatalog.BrowserSnapshot, ToolCatalog.BrowserScreenshot, ToolCatalog.BrowserUpload, ToolCatalog.BrowserDrop], reportReads: true);
+            var setup = await StartTenantBackground(factory, owner, submit: false, fileCapabilities: ["tasks.delegate", ToolCatalog.BrowserNavigate, ToolCatalog.BrowserSnapshot, ToolCatalog.BrowserScreenshot, ToolCatalog.BrowserUpload, ToolCatalog.BrowserDrop], reportReads: true);
             var tenant = setup.Tenant; var api = $"/api/v2/tenants/{tenant}";
             var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var sessions = factory.Services.GetRequiredService<ITenantSessionStore>();
             var parent = (await sessions.FindTenantSessionAsync(tenant, setup.Session))!;
@@ -169,11 +169,11 @@ public sealed partial class TenantSessionAccessTests
                 var draft = await definitions.ForkAsync(human, tenant, Guid.Parse(agent.Instance.DefinitionId), 1, await Revision(owner, tenant));
                 var environment = draft.Candidate.ExecutionPolicy!;
                 draft = await definitions.UpdateAsync(human, tenant, draft.DraftId, draft.Candidate with { ExecutionPolicy = environment with {
-                    Capabilities = environment.Capabilities! with { ResolvedCapabilities = environment.Capabilities.ResolvedCapabilities.Where(t => t != ToolCatalog.BackgroundStart).ToArray() },
-                    Projection = new(environment.Projection!.AlwaysCapabilities.Where(t => t != ToolCatalog.BackgroundStart).ToArray()) } }, await Revision(owner, tenant), draft.Revision);
+                    Capabilities = environment.Capabilities! with { ResolvedCapabilities = environment.Capabilities.ResolvedCapabilities.Where(t => t != ToolCatalog.BrowserNavigate).ToArray() },
+                    Projection = new(environment.Projection!.AlwaysCapabilities.Where(t => t != ToolCatalog.BrowserNavigate).ToArray()) } }, await Revision(owner, tenant), draft.Revision);
                 var publication = await definitions.PublishAsync(human, tenant, draft.DraftId, await Revision(owner, tenant), draft.Revision);
                 Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + $"/agents/{agent.Instance.InstanceId}/active-version", new {
-                    version = publication.Version, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 })).StatusCode);
+                    version = publication.Version, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, parent.Owner.AgentInstanceId))!.Instance.Revision })).StatusCode);
                 var denied = await Assert.ThrowsAsync<AccessDeniedException>(() => factory.Services.GetRequiredService<TenantBrowserOperationTarget>()
                     .PrepareAsync(waiting, ToolCatalog.BrowserNavigate, JsonSerializer.Serialize(new { url = model.Url }), default, registerCold: true).AsTask());
                 Assert.Equal("browser_policy_changed", denied.ReasonCode);
@@ -183,7 +183,7 @@ public sealed partial class TenantSessionAccessTests
             {
                 if (mode == "revoked") await access.RevokeAssignmentAsync(human, tenant, browserAssignment.AssignmentId, await Revision(owner, tenant));
                 else Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + $"/agents/{parent.Owner.AgentInstanceId}/persona", new {
-                    expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
+                    expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, parent.Owner.AgentInstanceId))!.Instance.Revision,
                     persona = new { name = "Changed native task", role = "Assistant", description = "Changed exact witness", tone = "Clear" }, expectedPersonaRevision = 1 })).StatusCode);
                 var stale = await Json(await owner.GetAsync(api + $"/approvals/{first.RequestId}"));
                 Assert.False(stale.GetProperty("review").GetProperty("canDecide").GetBoolean()); Assert.True(stale.GetProperty("review").GetProperty("canCancel").GetBoolean());
@@ -206,12 +206,25 @@ public sealed partial class TenantSessionAccessTests
                 Assert.True(waiting.IsTerminal); Assert.NotEqual(AgentRunStatus.Running, waiting.Status);
                 Assert.Equal(0, (await native.ObserveTenantSessionAsync(scope)).LiveContexts);
                 Assert.Null(await factory.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant, first.Operation.OperationId));
-                using var refusedDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(25)); CompletionInboxItem? refused;
-                do { refused = await runs.FindTenantCompletionAsync(waiting.Owner, waiting.AgentRunId); if (refused?.Status != CompletionInboxStatus.Skipped) await Task.Delay(25, refusedDeadline.Token); } while (refused?.Status != CompletionInboxStatus.Skipped);
-                Assert.Null(refused.ReportActivationId); return;
+                using var refusedDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(25)); JsonElement refused;
+                do {
+                    refused = Assert.Single((await Json(await owner.GetAsync(api + $"/sessions/{setup.Session}/tasks"))).GetProperty("items").EnumerateArray());
+                    if (refused.GetProperty("state").GetString() is "Blocked" or "Failed" or "Cancelled" or "NeedsAttention") break;
+                    await Task.Delay(25, refusedDeadline.Token);
+                } while (true);
+                return;
             }
             Assert.Equal(AgentRunStatus.Completed, waiting.Status); Assert.NotEqual(childId, waiting.AgentRunId);
-            Assert.Equal(waiting.AgentRunId, (await runs.FindTenantCompletionAsync(waiting.Owner, waiting.AgentRunId))!.ChildAgentRunId);
+            using var settlementDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+            while (true)
+            {
+                var response = await owner.GetAsync(api + $"/sessions/{setup.Session}/tasks");
+                if (response.StatusCode == HttpStatusCode.Conflict) { await Task.Delay(25, settlementDeadline.Token); continue; }
+                var projection = await Json(response); Assert.True(projection.TryGetProperty("items", out var items), projection.GetRawText());
+                var task = Assert.Single(items.EnumerateArray());
+                if (task.GetProperty("terminalRunId").ValueKind == JsonValueKind.String) { Assert.Equal(waiting.AgentRunId, task.GetProperty("terminalRunId").GetGuid()); break; }
+                await Task.Delay(25, settlementDeadline.Token);
+            }
             Assert.True(AgentRunToolCallCheckpoint.TryRead(waiting.Checkpoint, out var messages));
             var navigation = Assert.Single(messages!, m => m.ToolCallId == "child-native-navigate");
             using var result = JsonDocument.Parse(navigation.Text); Assert.Equal(mode is not ("reject" or "cancel"), result.RootElement.GetProperty("commandCompleted").GetBoolean());
@@ -223,9 +236,9 @@ public sealed partial class TenantSessionAccessTests
             }
             Assert.Equal(mode is "reject" or "cancel" ? 1 : model.ReadReview || model.Capture || model.Transfer is not null ? 2 : 1, decided.Count);
             Assert.Equal(0, (await native.ObserveTenantSessionAsync(new(tenant, parent.Owner.AgentInstanceId, parent.Owner.ExecutorPrincipalId, setup.Session))).LiveContexts);
-            using var reportTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(35)); CompletionInboxItem? item;
-            do { item = await runs.FindTenantCompletionAsync(waiting.Owner, waiting.AgentRunId); if (item?.Status != CompletionInboxStatus.Delivered) await Task.Delay(25, reportTimeout.Token); } while (item?.Status != CompletionInboxStatus.Delivered);
-            var history = await Json(await owner.GetAsync(api + $"/sessions/{setup.Session}/messages?limit=100")); Assert.Contains("Background work: Native background Browser", history.ToString());
+            var report = await WaitBackgroundFileReport(runs, tenant, setup.Session);
+            Assert.Equal(waiting.AgentRunId, report.Admission.TaskReport!.TerminalRunId);
+            var history = await Json(await owner.GetAsync(api + $"/sessions/{setup.Session}/messages?limit=100")); Assert.Contains("Native background Browser", history.ToString());
             var files = await factory.Services.GetRequiredService<ITenantArtifactStore>().ListTenantAsync(tenant, waiting.SessionId, null, null, 100);
             Assert.Equal(model.Capture || model.Transfer is not null ? 1 : 0, files.Items.Count);
             Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);

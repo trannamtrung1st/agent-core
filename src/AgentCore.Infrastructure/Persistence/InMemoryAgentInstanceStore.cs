@@ -257,6 +257,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
                 {
                     ActiveVersion = activeVersion,
                     HarnessManagement = update.HarnessManagement ?? instance.HarnessManagement,
+                Cooperation = update.Cooperation ?? instance.Cooperation,
                 ExecutionBudgets = update.SetExecutionBudgets ? update.ExecutionBudgets : instance.ExecutionBudgets,
                 SettingsOverrides = (update.SetSettingsOverrides ? update.SettingsOverrides : instance.SettingsOverrides)?.Copy(),
                     UpdatedAt = updatedAt,
@@ -623,6 +624,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
                 Revision = instance.Revision + 1,
                 PersonaRevision = personaRevision,
                 HarnessManagement = CopyManagement(update.HarnessManagement ?? instance.HarnessManagement),
+                Cooperation = update.Cooperation ?? instance.Cooperation,
                 ExecutionBudgets = update.SetExecutionBudgets ? update.ExecutionBudgets : instance.ExecutionBudgets,
                 SettingsOverrides = (update.SetSettingsOverrides ? update.SettingsOverrides : instance.SettingsOverrides)?.Copy(),
                 UnattendedModel = update.SetUnattendedModel ? update.UnattendedModel : instance.UnattendedModel

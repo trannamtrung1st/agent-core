@@ -78,7 +78,7 @@ test("Skill and event-source action buttons stay together across table widths", 
   await page.waitForFunction(() => localStorage.getItem("agent-core.owner-capability"));
   const owner = (await page.evaluate(() => localStorage.getItem("agent-core.owner-capability")))!;
   const headers = { "X-AgentCore-Owner-Capability": owner };
-  const created = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 21 } });
+  const created = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 35 } });
   expect(created.ok()).toBe(true);
   const instanceId = (await created.json()).instanceId;
   await page.goto(`/admin/instances/${instanceId}/skills`);

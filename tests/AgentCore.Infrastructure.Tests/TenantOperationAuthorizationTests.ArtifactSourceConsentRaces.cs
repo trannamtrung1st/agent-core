@@ -42,7 +42,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_Artifact_source_consent_preparation_rechecks_raw_reads_after_source_IO(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         await GrantPublication(f, s); var raw = await GrantWorkspaceRuntimeReads(f, s); await SeedRuntimeWorkspace(f, s, false, "source.bin", [0, 255, 128, 3]);
         var probe = new ArtifactSourceProbe(WorkspaceReader(f), afterCapture: async () => await f.Access.RevokeAssignmentAsync(s.Owner.PrincipalId, s.Tenant, raw.AssignmentId,
             (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision));
@@ -66,7 +66,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_Artifact_source_consent_uses_original_requester_for_source_policy_even_when_creation_is_Allowed(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var requester = await User(f, s, "requester-source-policy@example.test", ["agents.read", "agents.chat", "sessions.create", "sessions.read", "artifacts.create"]);
         var session = await f.Sessions.CreateAsync(s.Tenant, s.Agent.Instance.InstanceId, requester, SessionMode.Text, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, s.Agent.Instance.Revision);
         var submitted = await f.RunService().SubmitTextAsync(s.Tenant, session.Owner.SessionId, requester, f.Ids.NewId(), "Publish the protected source", (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1);

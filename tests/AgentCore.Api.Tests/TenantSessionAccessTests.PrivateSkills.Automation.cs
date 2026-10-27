@@ -117,7 +117,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(origin == "core" ? 3 : 2, run.Admission.Configuration!.InstanceRevision);
             Assert.Equal(activated, model.Requests.Any(r => r.Context!.Text(ContextSectionId.InstanceSkills).Contains(PrivateSkillProcedure, StringComparison.Ordinal)));
             if (mode is "direct" or "no_read") Assert.Empty((await Json(await owner.GetAsync(api + "/approvals"))).GetProperty("items").EnumerateArray());
-            Assert.DoesNotContain(model.Requests.SelectMany(r => r.Tools ?? []), t => t.Name.StartsWith("management.") || t.Name.StartsWith("harness.") || t.Name == ToolCatalog.BackgroundStart);
+            Assert.DoesNotContain(model.Requests.SelectMany(r => r.Tools ?? []), t => t.Name.StartsWith("management.") || t.Name.StartsWith("harness.") || t.Name == "background.start");
         }
         finally { recreatedOwner?.Dispose(); if (recreated is not null) await recreated.DisposeAsync(); SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }

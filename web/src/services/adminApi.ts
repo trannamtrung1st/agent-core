@@ -224,6 +224,7 @@ export type AdminResourceContentStored = {
 };
 
 export type AdminAgentInstance = {
+  cooperation?: import("./tenantTasks").AgentCooperation;
   instanceId: string;
   definitionId: string;
   activeVersion: number;

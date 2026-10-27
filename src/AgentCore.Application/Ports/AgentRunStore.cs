@@ -5,7 +5,7 @@ namespace AgentCore.Application.Ports;
 
 public sealed record AgentRunPage(IReadOnlyList<AgentRun> Items, Guid? NextCursor, bool HasMore);
 
-public sealed record BackgroundCompletionCandidate(AgentRun Run, SessionSnapshot Session, AgentRun? CurrentTaskRun = null, Guid? CompletionReadRequestId = null, IReadOnlyList<ArtifactRecord>? ReviewedArtifacts = null);
+public sealed record BackgroundCompletionCandidate(AgentRun Run, SessionSnapshot Session, AgentRun? CurrentTaskRun = null);
 
 public sealed record AgentRunAdmissionResult(bool Created, AgentRun Run);
 
@@ -14,20 +14,10 @@ public interface IAgentRunStore
 {
     ValueTask<DurableRunState> ReadStateAsync(AgentRunOwner owner, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<DurableRunState> ReadSessionStateAsync(AgentRunOwner owner, Guid sessionId, CancellationToken ct = default) => throw new NotSupportedException();
-    ValueTask<CompletionInboxItem?> GetCompletionInboxAsync(AgentRunOwner owner, Guid parentSessionId, Guid childRunId, DateTimeOffset now, CancellationToken ct = default) => ValueTask.FromResult<CompletionInboxItem?>(null);
-    ValueTask<bool> HasCompletionClaimAsync(AgentRunOwner owner, Guid parentRunId, Guid generation, DateTimeOffset now, CancellationToken ct = default) => ValueTask.FromResult(false);
-    ValueTask<IReadOnlyList<BackgroundCompletionCandidate>> ListBackgroundPageAsync(AgentRunOwner owner, Guid parentSessionId, Guid? cursor, bool pendingOnly, int limit, CancellationToken ct = default) => ListBackgroundChildrenAsync(owner, parentSessionId, limit, ct);
-    ValueTask<bool> HasCompletionAcknowledgmentAsync(AgentRunOwner owner, Guid parentRunId, CancellationToken ct = default) => ValueTask.FromResult(false);
     ValueTask<IReadOnlyList<BackgroundCompletionCandidate>> ListBackgroundChildrenAsync(AgentRunOwner owner, Guid parentSessionId, int limit, CancellationToken ct = default) => throw new NotSupportedException();
-    ValueTask<IReadOnlyList<CompletionInboxItem>> ListCompletionInboxAsync(AgentRunOwner owner, Guid parentSessionId, int limit, DateTimeOffset now, CancellationToken ct = default) => throw new NotSupportedException();
-    ValueTask<CompletionInboxItem> TakeCompletionAsync(AgentRunOwner owner, Guid parentRunId, Guid generation, Guid childRunId, long expectedRevision, string toolCallId, Guid token, DateTimeOffset now, CancellationToken ct = default) => throw new NotSupportedException();
-    ValueTask<CompletionInboxItem> AcknowledgeCompletionAsync(AgentRunOwner owner, Guid parentRunId, Guid generation, Guid childRunId, long expectedRevision, Guid token, string usage, DateTimeOffset now, CancellationToken ct = default) => throw new NotSupportedException();
 
     ValueTask<AgentRunAdmissionResult> AdmitAsync(SessionSnapshot snapshot, long expectedSessionRevision,
         AgentRun run, CancellationToken cancellationToken = default);
-
-    ValueTask<AgentRunAdmissionResult> AdmitImmediateAsync(SessionSnapshot snapshot, AgentRun run,
-        Guid expectedParentGeneration, CancellationToken cancellationToken = default);
 
     ValueTask<IReadOnlyList<BackgroundCompletionCandidate>> ListDeliveryCandidatesAsync(int limit, DateTimeOffset now, CancellationToken ct = default) => ListUnreportedCompletionsAsync(limit, ct);
     ValueTask<IReadOnlyList<BackgroundCompletionCandidate>> ListUnreportedCompletionsAsync(int limit, CancellationToken cancellationToken = default);

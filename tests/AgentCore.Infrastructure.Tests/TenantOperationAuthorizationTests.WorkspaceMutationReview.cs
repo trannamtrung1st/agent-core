@@ -12,7 +12,7 @@ public sealed partial class TenantOperationAuthorizationTests
 {
     private static async Task<(Environment Setup, TenantRuntimeFrame Frame, TenantApprovalService Approvals, TenantApprovalRequest Request)> MutationReviewFixture(Fixture f, bool working, bool exceptional)
     {
-        var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, working);
+        var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, working);
         await GrantWorkspaceRuntimeReads(f, s, exceptional ? ["agents.read", "sessions.read"] : ["agents.read", "sessions.read", "workspaces.write"]);
         if (!exceptional) await Policies(f).SaveAsync(s.Tenant, s.Owner, "workspaces.write", new(OperationApprovalMode.Always, false), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 0);
         var args = JsonSerializer.Serialize(new { path = (working ? "/working/" : "/home/") + "private.txt", content = "Exact reviewed literal replacement" });

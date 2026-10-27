@@ -24,7 +24,7 @@ public sealed class SandboxApiTests
     public async Task Retired_Sandbox_candidate_requires_explicit_repair_without_rewriting_immutable_source()
     {
         await using var factory = new SandboxFactory();
-        var source = (await factory.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!;
+        var source = (await factory.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 35))!;
         Assert.Contains("sandbox.run", DefinitionExecutionPolicies.Of(source).ToolList);
         var candidate = AgentDefinitionCandidate.FromDefinition(source);
         var aliases = factory.Services.GetRequiredService<ProviderAliasSet>();

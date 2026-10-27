@@ -15,7 +15,7 @@ public sealed partial class InMemoryIamStore : ITenantWorkingCleanupStore
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate) lock (sandboxBacking.TenantGate)
         {
-            var graph = sessionBacking.SessionSettlement(owner); if (graph is null) return ValueTask.FromResult<TenantWorkingCleanupTarget?>(null);
+            var graph = TaskSessionSettlement(owner); if (graph is null) return ValueTask.FromResult<TenantWorkingCleanupTarget?>(null);
             var lease = sandboxBacking.TenantLease(owner.TenantId, owner.SessionId);
             if (lease is null && sandboxBacking.HasLease(owner.SessionId)) return ValueTask.FromResult<TenantWorkingCleanupTarget?>(null);
             return ValueTask.FromResult(TenantWorkingCleanupRules.Target(graph, lease));

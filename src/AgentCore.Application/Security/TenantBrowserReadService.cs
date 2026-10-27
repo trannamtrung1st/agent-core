@@ -69,12 +69,13 @@ public sealed class TenantBrowserReadService(ITenantRunStore runs, ITenantSessio
         var text = data.ToJsonString();
         return ToolJsonResults.FitToBudget(remainingBytes, text);
     }
-    private async ValueTask<Read> RequireAsync(TenantRuntimeFrame frame, ModelToolCall call, CancellationToken ct, bool audit = false)
+    private async ValueTask<Read> RequireAsync(TenantRuntimeFrame frame, ModelToolCall call, CancellationToken ct, bool audit = false, bool live = true)
     {
         var command = TenantBrowserInspectionContract.Parse(frame.SessionId, call);
-        var (run, state) = await operations.ResolveAsync(new(frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required"), frame.RunId), ct).ConfigureAwait(false);
+        var (run, state) = await operations.ResolveAsync(new(frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required"), frame.RunId), ct, retained: !live).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(state.Tenant.TenantId, frame.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
+        if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
+        if (run.Owner != frame.Owner || run.SessionId != frame.SessionId) throw new AccessDeniedException("resource_unavailable");
         if (run.SideEffect.ExternalEffect is not null && run.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
             throw new AccessDeniedException("browser_effect_in_progress");
         var (agent, baseline) = await configuration.BaselineAsync(state.Tenant.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
@@ -90,19 +91,19 @@ public sealed class TenantBrowserReadService(ITenantRunStore runs, ITenantSessio
         }
         return new(run, session, agent, state, command);
     }
-    private async ValueTask FenceAsync(TenantRuntimeFrame frame, ModelToolCall call, Read before, CancellationToken ct)
+    private async ValueTask FenceAsync(TenantRuntimeFrame frame, ModelToolCall call, Read before, CancellationToken ct, bool live = true)
     {
-        var after = await RequireAsync(frame, call, ct).ConfigureAwait(false);
+        var after = await RequireAsync(frame, call, ct, live: live).ConfigureAwait(false);
         if (after.Run.Revision != before.Run.Revision || after.State.Tenant.Revision != before.State.Tenant.Revision || after.Session.Owner != before.Session.Owner
             || after.Session.Snapshot.Revision != before.Session.Snapshot.Revision || after.Agent.Instance.Revision != before.Agent.Instance.Revision)
             throw new SecurityConflictException("browser_source_changed");
         if ((await security.ReadTenantAsync(before.State.Tenant.TenantId, ct).ConfigureAwait(false))?.Tenant.Revision != before.State.Tenant.Revision)
             throw new SecurityConflictException("browser_source_changed");
         var final = await runs.FindTenantRunAsync(before.State.Tenant.TenantId, frame.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
-        TenantRuntimeRules.Require(frame, after.Session.Owner, final, time.GetUtcNow());
+        if (live) TenantRuntimeRules.Require(frame, after.Session.Owner, final, time.GetUtcNow());
         if (final.Revision != after.Run.Revision) throw new SecurityConflictException("browser_source_changed");
     }
-    public async ValueTask RequireStoredObservationsAsync(AgentRun run, CancellationToken ct = default)
+    public async ValueTask RequireStoredObservationsAsync(AgentRun run, CancellationToken ct = default, bool live = true)
     {
         if (run.Checkpoint is null || !AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var messages)) return;
         IReadOnlyList<ModelToolCall> batch = []; var reads = new Dictionary<string, ModelToolCall>(StringComparer.Ordinal);
@@ -119,8 +120,8 @@ public sealed class TenantBrowserReadService(ITenantRunStore runs, ITenantSessio
         }
         foreach (var call in reads.Values)
         {
-            var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation);
-            var read = await RequireAsync(frame, call, ct).ConfigureAwait(false); await FenceAsync(frame, call, read, ct).ConfigureAwait(false);
+            var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, run.Claim?.Generation ?? Guid.Empty);
+            var read = await RequireAsync(frame, call, ct, live: live).ConfigureAwait(false); await FenceAsync(frame, call, read, ct, live: live).ConfigureAwait(false);
         }
     }
     private static readonly HashSet<string> Codes = new(StringComparer.Ordinal) { "permission_denied", "browser_read_review_required", "browser_source_changed", "browser_effect_in_progress",

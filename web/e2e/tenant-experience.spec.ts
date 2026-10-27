@@ -26,7 +26,7 @@ for (const viewport of [{ width: 1400, height: 950 }, { width: 390, height: 844 
     expect((await (await api.get('/health')).json()).profile).toBe('Synthetic'); await call(api, '/api/v2/auth/login', { login, password });
     const nonce = crypto.randomUUID().slice(0, 8); const tenant = (await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Experience ${nonce}`, slug: `experience-${nonce}` })).tenantId;
     const prefix = `/api/v2/tenants/${tenant}`; const revision = async () => (await call<{ revision: number }>(api, prefix + '/access/me')).revision;
-    const agent = await call<{ instance: { instanceId: string }; principalId: string }>(api, prefix + '/agents', { templateId: 'general-assistant', version: 32, expectedRevision: await revision() });
+    const agent = await call<{ instance: { instanceId: string }; principalId: string }>(api, prefix + '/agents', { templateId: 'general-assistant', version: 35, expectedRevision: await revision() });
     const role = await call<{ roleId: string }>(api, prefix + '/roles', { name: 'Continuity executor', permissions: ['agents.chat', 'agents.read', 'sessions.read', 'agent-runs.read', 'memory.read', 'memory.manage'], expectedRevision: await revision() });
     await call(api, prefix + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await revision() });
     const isolation = prefix + '/agents/' + agent.instance.instanceId + '/state-isolation';

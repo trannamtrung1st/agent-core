@@ -72,11 +72,12 @@ public sealed partial class SqliteIamStore
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         var row = await OwnedRuns(db, tenantId).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == runId.ToString("D"), ct).ConfigureAwait(false);
-        return row is null ? null : AgentRunStoreMapping.ToDomain(row);
+        return row is null || !await OwnedSessions(db, tenantId, row.SessionId).AnyAsync(s => s.SessionId == row.SessionId, ct) ? null : AgentRunStoreMapping.ToDomain(row);
     }
     public async ValueTask<IReadOnlyList<Guid>> ListTenantRunIdsAsync(Guid tenantId, Guid sessionId, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        if (!await OwnedSessions(db, tenantId, sessionId.ToString("D")).AnyAsync(s => s.SessionId == sessionId.ToString("D"), ct)) return [];
         var ids = await OwnedRuns(db, tenantId).Where(r => r.SessionId == sessionId.ToString("D")).Select(r => r.AgentRunId).ToArrayAsync(ct).ConfigureAwait(false);
         return ids.Select(Guid.Parse).ToArray();
     }

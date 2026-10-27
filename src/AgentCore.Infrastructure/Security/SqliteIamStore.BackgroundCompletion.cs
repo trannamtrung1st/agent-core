@@ -21,6 +21,7 @@ public sealed partial class SqliteIamStore
         var row = await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == owner.TenantId && r.AgentRunId == childRunId.ToString("D")
             && r.AgentInstanceId == owner.AgentInstanceId.ToString("D") && r.ExecutorPrincipalId == owner.ExecutorPrincipalId, ct).ConfigureAwait(false);
         if (row is null) return null; var run = AgentRunStoreMapping.ToDomain(row);
+        if (run.Admission.DelegatedTask is not null || run.Admission.AgentMessage is not null) return null;
         var root = await db.Set<TenantSessionRecord>().AsNoTracking().SingleOrDefaultAsync(s => s.TenantId == owner.TenantId && s.SessionId == row.SessionId
             && s.ExecutorPrincipalId == owner.ExecutorPrincipalId && s.AgentInstanceId == row.AgentInstanceId, ct).ConfigureAwait(false);
         if (root is null) return null;
@@ -101,7 +102,7 @@ public sealed partial class SqliteIamStore
             ? (await FindDefinitionPublicationAsync(tenant, definition, agent.Instance.ActiveVersion, ct).ConfigureAwait(false))?.Payload
             : builtIns is null ? null : await builtIns.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).ConfigureAwait(false);
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
-        await TenantBackgroundAdmissionRules.AuthorizeReportAsync(state, root, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), new IamAuthorizer(this), this, ct, source).ConfigureAwait(false);
+        await TenantIndependentReportAdmissionRules.AuthorizeReportAsync(state, root, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), new IamAuthorizer(this), this, ct, source).ConfigureAwait(false);
         if (source.Parent!.Snapshot.PendingAgentInputIds.Count > 0 || await db.AgentRuns.AnyAsync(r => r.SessionId == report.SessionId.ToString("D") && r.Status != (int)AgentRunStatus.Completed && r.Status != (int)AgentRunStatus.Cancelled && r.Status != (int)AgentRunStatus.Failed, ct).ConfigureAwait(false))
             throw new SecurityConflictException("parent_busy");
         db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(source.Parent.Snapshot, report)); db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(report));

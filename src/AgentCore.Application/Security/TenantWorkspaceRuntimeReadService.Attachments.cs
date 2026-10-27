@@ -17,7 +17,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService
     {
         if (args.Path != "/attachments" || tool is not (ToolCatalog.WorkspaceList or ToolCatalog.WorkspaceSearch)) throw new ArgumentException("Use an exact Attachment namespace observation.");
         var tenant = frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
-        var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct).ConfigureAwait(false);
+        var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct, retained: !live).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(tenant, frame.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
         var current = await configurations.CurrentPolicyAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);

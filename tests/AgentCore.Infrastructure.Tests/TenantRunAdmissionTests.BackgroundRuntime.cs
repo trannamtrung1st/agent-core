@@ -45,7 +45,7 @@ public sealed partial class TenantRunAdmissionTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true);
         var parent = await BackgroundParent(f); var child = await BackgroundChild(f, parent);
-        await ((ITenantRuntimeStore)f.Iam).AdmitTenantImmediateAsync(parent.Frame, child.Session, child.Run, f.Ids.NewId());
+        await AdmitTaskFixture(f, parent.Frame, child.Session, child.Run, f.Ids.NewId());
         var sessions = (ITenantSessionStore)f.Iam;
         Assert.Equal(2, (await sessions.ListTenantSessionsAsync(parent.Setup.Tenant, null, 0, 100)).Total);
         var chats = await sessions.ListTenantSessionsAsync(parent.Setup.Tenant, null, 0, 1, surface: SessionSurface.ChatList);
@@ -68,9 +68,8 @@ public sealed partial class TenantRunAdmissionTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_background_runtime_commits_outcome_and_one_root_bound_report_with_no_legacy_delivery(bool sqlite)
     {
-        await using var f=await Fixture.Create(sqlite,builtInAuthority:true);var parent=await BackgroundParent(f);await WaitReadAuthority(f,parent);var child=await BackgroundChild(f,parent);var store=(ITenantRuntimeStore)f.Iam;
+        await using var f=await Fixture.Create(sqlite,builtInAuthority:true);var parent=await BackgroundParent(f);await WaitReadAuthority(f,parent);var child=await IndependentBackgroundChild(f,parent);var store=(ITenantRuntimeStore)f.Iam;
         var bound=new TenantAgentRunStore(store,(ITenantRunStore)f.Iam,f.Ids,parent.Frame);
-        Assert.True((await bound.AdmitImmediateAsync(child.Session,child.Run,parent.Frame.Generation)).Created);
         Assert.Contains(await store.ListRunnableTenantRunsAsync(f.Clock.GetUtcNow(),100),r=>r.AgentRunId==child.Run.AgentRunId);
         var claimed=await ClaimBackground(f,child.Run);var result=BackgroundOutcome(f,claimed.Run,claimed.Snapshot);
         var saved=await new TenantAgentRunStore(store,(ITenantRunStore)f.Iam,f.Ids,claimed.Frame).CommitOutcomeAsync(result.Snapshot,claimed.Snapshot.Revision,claimed.Run.Owner,claimed.Run.AgentRunId,result.Complete,null);
@@ -83,15 +82,14 @@ public sealed partial class TenantRunAdmissionTests
         var admitted=await store.AdmitTenantBackgroundCompletionAsync(report,source.Parent!.Snapshot.Revision,f.Ids.NewId());Assert.True(admitted.Created);
         var retry=await PrepareBackgroundReport(f,source);Assert.False((await store.AdmitTenantBackgroundCompletionAsync(retry,source.Parent.Snapshot.Revision,f.Ids.NewId())).Created);
         var reporting=await ClaimBackground(f,report);Assert.Equal(source.Parent.Snapshot.DurableLastEntrySequence,TenantBackgroundCompletionFactory.InputBoundary(report));
-        Assert.Equal(parent.Parent.Admission.ExecutionContext!.RootActivationId,report.Admission.ExecutionContext!.RootActivationId);
-        Assert.Equal(parent.Parent.AgentRunId,(await TenantExecutionLineage.RootAsync(report,(ITenantRunStore)f.Iam,default)).AgentRunId);
+        Assert.Equal(child.Run.Admission.ExecutionContext!.RootActivationId,report.Admission.ExecutionContext!.RootActivationId);
+        Assert.Equal(child.Run.AgentRunId,(await TenantExecutionLineage.RootAsync(report,(ITenantRunStore)f.Iam,default)).AgentRunId);
         var notification=BackgroundOutcome(f,reporting.Run,reporting.Snapshot);await store.CommitTenantOutcomeAsync(reporting.Frame,notification.Snapshot,reporting.Snapshot.Revision,notification.Complete,null,f.Ids.NewId());
         Assert.Empty(await store.ListTenantBackgroundCompletionsAsync(100));
         Assert.Single(await f.Iam.ReadAuditAsync(parent.Setup.Tenant,200),a=>a.Action=="agent-runs.background.report");
         IAgentRunStore legacy=sqlite?new SqliteAgentRunStore(f.Contexts!,(SqliteMemoryStore)f.Memory,new Diagnostics()):new InMemoryAgentRunStore((InMemoryMemoryStore)f.Memory,new Diagnostics());
         Assert.Empty(await legacy.ListDeliveryCandidatesAsync(100,f.Clock.GetUtcNow()));
         Assert.Empty(await legacy.ListUnreportedCompletionsAsync(100));
-        await Assert.ThrowsAsync<AccessDeniedException>(()=>legacy.GetCompletionInboxAsync(child.Run.Owner,parent.Setup.Session,child.Run.AgentRunId,f.Clock.GetUtcNow()).AsTask());
         if(sqlite)
         {
             await using var db=f.Contexts!.CreateDbContext();var receipt=await db.BackgroundCompletionReceipts.SingleAsync(r=>r.ChildAgentRunId==child.Run.AgentRunId.ToString("D"));
@@ -106,7 +104,7 @@ public sealed partial class TenantRunAdmissionTests
     public async Task Tenant_background_quiet_outcome_is_saved_without_pending_report_or_old_generation_writes(bool sqlite)
     {
         var clock=new FakeTimeProvider(DateTimeOffset.Parse("2026-10-20T02:00:00Z"));await using var f=await Fixture.Create(sqlite,clock,builtInAuthority:true);
-        var parent=await BackgroundParent(f);var child=await BackgroundChild(f,parent);var store=(ITenantRuntimeStore)f.Iam;await store.AdmitTenantImmediateAsync(parent.Frame,child.Session,child.Run,f.Ids.NewId());
+        var parent=await BackgroundParent(f);var child=await BackgroundChild(f,parent);var store=(ITenantRuntimeStore)f.Iam;await AdmitTaskFixture(f, parent.Frame,child.Session,child.Run,f.Ids.NewId());
         var claimed=await ClaimBackground(f,child.Run);var result=BackgroundOutcome(f,claimed.Run,claimed.Snapshot,true);
         await Assert.ThrowsAsync<AccessDeniedException>(()=>store.CommitTenantOutcomeAsync(claimed.Frame with{Generation=f.Ids.NewId()},result.Snapshot,claimed.Snapshot.Revision,result.Complete,null,f.Ids.NewId()).AsTask());
         Assert.Equal(AgentRunStatus.Running,(await ((ITenantRunStore)f.Iam).FindTenantRunAsync(parent.Setup.Tenant,child.Run.AgentRunId))!.Status);
@@ -118,7 +116,7 @@ public sealed partial class TenantRunAdmissionTests
     public async Task Tenant_background_claim_recovery_fences_the_old_writer_and_reuses_one_child_identity(bool sqlite)
     {
         var clock=new FakeTimeProvider(DateTimeOffset.Parse("2026-10-20T02:00:00Z"));await using var f=await Fixture.Create(sqlite,clock,builtInAuthority:true);
-        var parent=await BackgroundParent(f);var child=await BackgroundChild(f,parent);var store=(ITenantRuntimeStore)f.Iam;await store.AdmitTenantImmediateAsync(parent.Frame,child.Session,child.Run,f.Ids.NewId());
+        var parent=await BackgroundParent(f);var child=await BackgroundChild(f,parent);var store=(ITenantRuntimeStore)f.Iam;await AdmitTaskFixture(f, parent.Frame,child.Session,child.Run,f.Ids.NewId());
         var first=await ClaimBackground(f,child.Run);clock.Advance(TimeSpan.FromMinutes(6));
         var recovered=await store.ApplyTenantRuntimeCommandAsync(first.Run.Owner,first.Run.AgentRunId,new AgentRunCommand.Recover(first.Run.Revision,clock.GetUtcNow()),f.Ids.NewId());
         var current=await ClaimBackground(f,recovered);var old=BackgroundOutcome(f,first.Run,first.Snapshot);
@@ -128,7 +126,9 @@ public sealed partial class TenantRunAdmissionTests
         await store.ApplyTenantRuntimeCommandAsync(rootRun.Owner,rootRun.AgentRunId,new AgentRunCommand.Recover(rootRun.Revision,clock.GetUtcNow()),f.Ids.NewId());
         var waiting=(await ((ITenantRunStore)f.Iam).FindTenantRunAsync(parent.Setup.Tenant,rootRun.AgentRunId))!;
         await store.ApplyTenantRuntimeCommandAsync(waiting.Owner,waiting.AgentRunId,new AgentRunCommand.RequestCancellation(waiting.Revision,clock.GetUtcNow(),"test"),f.Ids.NewId());
-        Assert.Equal(child.Run.AgentRunId,Assert.Single(await store.ListTenantBackgroundCompletionsAsync(100)).Child.AgentRunId);
+        Assert.Empty(await store.ListTenantBackgroundCompletionsAsync(100));
+        Assert.True(await ((ITenantTaskStore)f.Iam).ReconcileTaskAsync(parent.Setup.Tenant,child.Admission.Task.TaskId,child.Admission.Task.Revision,f.Ids.NewId()));
+        Assert.Equal(AgentCore.Domain.Tasks.DelegatedTaskState.Succeeded,(await ((ITenantTaskStore)f.Iam).FindTaskAsync(parent.Setup.Tenant,child.Admission.Task.TaskId))!.State);
     }
     [Fact]
     public async Task Tenant_background_nullable_receipt_migration_has_empty_down_up_parity()
@@ -156,7 +156,7 @@ public sealed partial class TenantRunAdmissionTests
         var message=await f.RunService().SubmitTextAsync(original.Setup.Tenant,original.Setup.Session,member,f.Ids.NewId(),"Scoped background request",await Revision(),metadata.Snapshot.Revision);
         var source=(await ((ITenantRunStore)f.Iam).FindTenantRunAsync(original.Setup.Tenant,message.RunId))!;var claimedSource=await ClaimBackground(f,source);
         var parent=original with{Parent=claimedSource.Run,Frame=claimedSource.Frame,Snapshot=claimedSource.Snapshot};
-        var child=await BackgroundChild(f,parent);var store=(ITenantRuntimeStore)f.Iam;await store.AdmitTenantImmediateAsync(parent.Frame,child.Session,child.Run,f.Ids.NewId());
+        var child=await BackgroundChild(f,parent);var store=(ITenantRuntimeStore)f.Iam;await AdmitTaskFixture(f, parent.Frame,child.Session,child.Run,f.Ids.NewId());
         await f.Identity.SignOutAsync(member.AuthenticationSessionId);var claimed=await ClaimBackground(f,child.Run);
         Assert.False((await f.Authorizer.CheckAsync(member.PrincipalId,"sessions.read",TenantSessionRules.Scope(parent.Setup.Tenant,child.Session.SessionId))).Allowed);
         var authority=RequesterAuthority(f);Assert.NotNull(await authority.CurrentDefinitionAsync(claimed.Run));
@@ -167,8 +167,8 @@ public sealed partial class TenantRunAdmissionTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_background_queued_report_yields_to_later_user_input_and_keeps_its_admitted_history_boundary(bool sqlite)
     {
-        await using var f=await Fixture.Create(sqlite,builtInAuthority:true);var parent=await BackgroundParent(f);await WaitReadAuthority(f,parent);var child=await BackgroundChild(f,parent);var store=(ITenantRuntimeStore)f.Iam;
-        await store.AdmitTenantImmediateAsync(parent.Frame,child.Session,child.Run,f.Ids.NewId());var claimed=await ClaimBackground(f,child.Run);var outcome=BackgroundOutcome(f,claimed.Run,claimed.Snapshot);
+        await using var f=await Fixture.Create(sqlite,builtInAuthority:true);var parent=await BackgroundParent(f);await WaitReadAuthority(f,parent);var child=await IndependentBackgroundChild(f,parent);var store=(ITenantRuntimeStore)f.Iam;
+        var claimed=await ClaimBackground(f,child.Run);var outcome=BackgroundOutcome(f,claimed.Run,claimed.Snapshot);
         await store.CommitTenantOutcomeAsync(claimed.Frame,outcome.Snapshot,claimed.Snapshot.Revision,outcome.Complete,null,f.Ids.NewId());await CompleteBackgroundParent(f,parent);
         var source=Assert.Single(await store.ListTenantBackgroundCompletionsAsync(100));var report=await PrepareBackgroundReport(f,source);await store.AdmitTenantBackgroundCompletionAsync(report,source.Parent!.Snapshot.Revision,f.Ids.NewId());
         var state=(await f.Iam.ReadTenantAsync(parent.Setup.Tenant))!;var session=(await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(parent.Setup.Tenant,parent.Setup.Session))!;
@@ -184,8 +184,8 @@ public sealed partial class TenantRunAdmissionTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_background_human_cancellation_creates_one_factual_completion_and_failed_report_is_not_replayed(bool sqlite)
     {
-        await using var f=await Fixture.Create(sqlite,builtInAuthority:true);var parent=await BackgroundParent(f);await WaitReadAuthority(f,parent);var child=await BackgroundChild(f,parent);var store=(ITenantRuntimeStore)f.Iam;
-        await store.AdmitTenantImmediateAsync(parent.Frame,child.Session,child.Run,f.Ids.NewId());await CompleteBackgroundParent(f,parent);
+        await using var f=await Fixture.Create(sqlite,builtInAuthority:true);var parent=await BackgroundParent(f);await WaitReadAuthority(f,parent);var child=await IndependentBackgroundChild(f,parent);var store=(ITenantRuntimeStore)f.Iam;
+        await CompleteBackgroundParent(f,parent);
         var revision=(await f.Iam.ReadTenantAsync(parent.Setup.Tenant))!.Tenant.Revision;
         var cancelled=await f.RunService().CancelAsync(parent.Setup.Tenant,child.Run.AgentRunId,parent.Setup.Owner,revision,child.Run.Revision);Assert.Equal(AgentRunStatus.Cancelled,cancelled.Status);
         var source=Assert.Single(await store.ListTenantBackgroundCompletionsAsync(100));var report=await PrepareBackgroundReport(f,source);await store.AdmitTenantBackgroundCompletionAsync(report,source.Parent!.Snapshot.Revision,f.Ids.NewId());

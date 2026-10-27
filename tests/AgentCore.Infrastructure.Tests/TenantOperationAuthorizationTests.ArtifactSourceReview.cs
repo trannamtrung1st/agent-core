@@ -23,7 +23,7 @@ public sealed partial class TenantOperationAuthorizationTests
 
     private async Task RunSourcePublicationConsentCase(bool sqlite, bool grant, bool resource)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var bytes = new OfficeProcessor().CreateDocument(new("Exact report", [new(null, ["Private saved package body"], null)]), default).Bytes;
         ResourceCase? bound = resource ? await ResourceSourceCase(f, s, bytes, "source.docx", OfficeLimits.DocumentMime) : null;
         if (bound is not null) s = bound.Setup; else await SeedRuntimeWorkspace(f, s, true, "source.docx", bytes, OfficeLimits.MaxPackageBytes);

@@ -20,7 +20,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_Office_reads_withhold_processed_data_after_authority_loss_during_source_IO(bool sqlite, bool workbook)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); var processor = new OfficeProcessor();
         var bytes = workbook ? processor.CreateWorkbook(new([new("Private", [[new("text", Text: "Protected Office body")]])]), default).Bytes
             : processor.CreateDocument(new(null, [new(null, ["Protected Office body"], null)]), default).Bytes;
@@ -35,7 +35,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_Office_reads_do_not_slice_cells_or_elements_to_fit_an_unusable_output_budget(bool sqlite, bool workbook)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); var processor = new OfficeProcessor();
         var text = "Protected complete Office value " + new string('X', 2048);
         var bytes = workbook ? processor.CreateWorkbook(new([new("Private", [[new("text", Text: text)]])]), default).Bytes

@@ -20,9 +20,20 @@ try{
  const source=await call(`/api/v2/tenants/${tenant}/agent-runs/${receipt.result.runId}`);const metadata=await call(`/api/v2/tenants/${tenant}/agent-runs/${started.payload.agentRunId}`);
  assert.equal(metadata.context.rootActivationId,source.context.rootActivationId);assert.equal(metadata.context.originalInitiatorPrincipalId,source.context.originalInitiatorPrincipalId);assert.notEqual(metadata.context.parentRunId,source.context.runId);
  const entry=await until(async()=>{const page=await call(`/api/v2/tenants/${tenant}/sessions/${session}/messages`);return page.items.find(e=>e.responseId===report.responseId);});
- assert.equal(entry.text,'Background work: Owned background result.');assert.equal(entry.receivedTextEndExclusive,0);
+ assert.match(entry.text,/^Task Succeeded: Owned background result\./);assert.match(entry.text,/Task success is separate from Goal verification/);assert.equal(entry.receivedTextEndExclusive,0);
  const ack=await hub.invoke('ResponseReceived',{protocolVersion:1,sessionId:session,eventId:crypto.randomUUID(),sequence:2,attachmentId:ready.attachmentId,responseId:report.responseId,type:'response.received',payload:{textEndExclusive:entry.text.length}});assert.equal(ack.accepted,true);
  await until(async()=>{const page=await call(`/api/v2/tenants/${tenant}/sessions/${session}/messages`);return page.items.find(e=>e.responseId===report.responseId)?.receivedTextEndExclusive===entry.text.length;});
  assert.equal(events.filter(e=>e.type==='agent.response.completed'&&e.responseId===report.responseId).length,1);
+ const hint=await until(()=>events.find(e=>e.type==='task.changed'));
+ assert.equal(hint.payload.tenantId,tenant);assert.ok(hint.payload.taskId);assert.ok(hint.payload.revision>=1);
+ assert.ok(Object.keys(hint.payload).every(key=>['tenantId','taskId','revision','notificationId','notificationRevision','attention','securityRevision'].includes(key)));
+ const task=await call(`/api/v2/tenants/${tenant}/tasks/${hint.payload.taskId}`);assert.equal(task.sourceSessionId,session);
+ for(let index=1;index<events.length;index++)assert.ok(events[index].sequence>events[index-1].sequence,'Session hints retain the attachment control sequence');
+ const firstAttachment=ready.attachmentId;
+ await hub.stop();await hub.start();
+ const reattach=await hub.invoke('AttachTenant',{protocolVersion:1,sessionId:session,eventId:crypto.randomUUID(),sequence:0,timestamp:new Date().toISOString(),type:'session.attach',payload:{tenantId:tenant}});assert.equal(reattach.accepted,true);
+ const restored=await until(()=>events.find(e=>e.type==='session.ready'&&e.attachmentId!==firstAttachment));
+ await until(()=>events.find(e=>e.type==='task.changed'&&e.attachmentId===restored.attachmentId&&e.payload.taskId===task.taskId));
+
  console.log('Tenant background wire passed');
 }finally{await hub.stop();}

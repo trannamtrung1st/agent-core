@@ -87,7 +87,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService
         await Fence(frame, value.ToolName, TenantWorkspaceReadContract.Parse(value.ToolName, value.ArgumentsJson), observed.Before, ct, approved: true).ConfigureAwait(false);
         return observed.Output;
     }
-    private async ValueTask RequireStoredApprovedAsync(AgentRun run, IReadOnlyList<ModelMessage> messages, CancellationToken ct)
+    private async ValueTask RequireStoredApprovedAsync(AgentRun run, IReadOnlyList<ModelMessage> messages, CancellationToken ct, bool live)
     {
         var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, run.Claim?.Generation ?? Guid.Empty);
         foreach (var message in messages.Where(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization))
@@ -102,10 +102,10 @@ public sealed partial class TenantWorkspaceRuntimeReadService
             var witness = data.GetProperty("workspaceRead");
             if (witness.GetProperty("tool").GetString() != value.ToolName || witness.GetProperty("arguments").Deserialize<TenantWorkspaceReadArguments>() != TenantWorkspaceReadContract.Parse(value.ToolName, value.ArgumentsJson))
                 throw new AccessDeniedException("workspace_source_changed");
-            var observed = await ObserveExact(frame, Call(value), ct).ConfigureAwait(false);
+            var observed = await ObserveExact(frame, Call(value), ct, live: live).ConfigureAwait(false);
             if (Witness(run.SessionId, Call(value), observed.Hash, observed.Before.Resource?.Resource.Key, observed.Before.Resource?.ResourceRevision, observed.Before.Collection?.MembersJson, observed.Before.Knowledge, observed.Before.Attachments?.MembersJson) != value) throw new AccessDeniedException("workspace_source_changed");
             await RequireApprovedData(observed.Before, request, receipt, ct).ConfigureAwait(false);
-            await Fence(frame, value.ToolName, TenantWorkspaceReadContract.Parse(value.ToolName, value.ArgumentsJson), observed.Before, ct, approved: true).ConfigureAwait(false);
+            await Fence(frame, value.ToolName, TenantWorkspaceReadContract.Parse(value.ToolName, value.ArgumentsJson), observed.Before, ct, approved: true, live: live).ConfigureAwait(false);
         }
     }
 }

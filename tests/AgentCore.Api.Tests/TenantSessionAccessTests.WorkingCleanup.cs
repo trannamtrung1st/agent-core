@@ -22,7 +22,7 @@ public sealed partial class TenantSessionAccessTests
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         try
         {
-            var (tenant, session, source) = await StartTenantBackground(factory, client, independentTask: true, fileCapabilities: [ToolCatalog.BackgroundStart], reportReads: report, requestIsolated: true);
+            var (tenant, session, source) = await StartTenantBackground(factory, client, independentTask: true, fileCapabilities: ["tasks.delegate"], reportReads: report, requestIsolated: true);
             await model.ChildEntered.Task.WaitAsync(TimeSpan.FromSeconds(20));
             var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var sessions = factory.Services.GetRequiredService<ITenantSessionStore>();
             for (var i = 0; i < 400 && ((await runs.FindTenantRunAsync(tenant, source))?.IsTerminal != true || (await sessions.FindTenantSessionAsync(tenant, session))!.Snapshot.Status is SessionStatus.Attached or SessionStatus.Ending); i++) await Task.Delay(25);
@@ -40,7 +40,7 @@ public sealed partial class TenantSessionAccessTests
             var completed = (await runs.FindTenantRunAsync(tenant, child.Snapshot.Origin.InitialBackgroundAgentRunId!.Value))!; Assert.Equal(AgentRunStatus.Failed, completed.Status);
             Assert.Equal(AgentRunSideEffectDisposition.None, completed.SideEffect.Disposition);
             Assert.Equal(generatedBeforeRetirement + 1, model.Requests.Count); // The already-entered held call records itself on release; no subsequent generation is authorized.
-            Assert.Single(model.Requests, r => TenantBackgroundModel.Origin(r) == ExecutionOrigin.ImmediateBackground);
+            Assert.Single(model.Requests, r => TenantBackgroundModel.Origin(r) == ExecutionOrigin.DelegatedTask);
             if (report)
             {
                 for (var i = 0; i < 200 && await runs.FindTenantCompletionAsync(completed.Owner, completed.AgentRunId) is null; i++) await Task.Delay(25);

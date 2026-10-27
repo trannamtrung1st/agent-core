@@ -35,8 +35,7 @@ public static class TenantCompletionDestinationRules
     }
 
     public static bool Allows(TenantBackgroundCompletion source, AgentRun root, AgentDefinition current) =>
-        TenantTaskExecutionContract.Allows(root, current) && (Configured(source)
-            || RolePermissions.AllowsTool(root.Admission.Configuration!.Definition, ToolCatalog.BackgroundStart) && RolePermissions.AllowsTool(current, ToolCatalog.BackgroundStart));
+        Configured(source) && TenantTaskExecutionContract.Allows(root, current);
 
     public static IEnumerable<(string Key, AccessScope Scope)> Communication(Guid tenant, Guid instance, Guid destination) =>
         new[] { ("sessions.read", TenantSessionRules.Scope(tenant, destination)), ("agents.chat", AccessScope.ForResource(tenant, "agent", instance.ToString("D"))) };

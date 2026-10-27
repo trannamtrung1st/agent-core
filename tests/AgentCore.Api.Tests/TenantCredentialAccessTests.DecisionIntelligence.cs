@@ -29,7 +29,7 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Equal(HttpStatusCode.OK, systemStatus.StatusCode);
         Assert.DoesNotContain("endpoint", await systemStatus.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("apiKey", await systemStatus.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
-        var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
+        var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 35, expectedRevision = await Revision(owner, tenant) }));
         var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
         var instanceRevision = agent.GetProperty("instance").GetProperty("revision").GetInt64();
         var actor = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();

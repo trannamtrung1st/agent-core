@@ -20,7 +20,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [InlineData(false, "workspaces.read", true)] [InlineData(true, "workspaces.read", true)]
     public async Task Tenant_workspace_Artifact_commit_independently_requires_each_raw_source_read_and_its_policy(bool sqlite, string permission, bool policy)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s, ["artifacts.create"]);
         await GrantWorkspaceRuntimeReads(f, s, new[] { "sessions.read", "agents.read", "workspaces.read" }.Where(p => policy || p != permission).ToArray());
         await SeedRuntimeWorkspace(f, s, false, "source.bin", [0, 255, 128, 3]);
@@ -44,7 +44,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false, "Disabled")] [InlineData(true, "Disabled")] [InlineData(false, "ReadOnly")] [InlineData(true, "ReadOnly")]
     public async Task Tenant_workspace_Artifact_commit_applies_current_HomeAccess_after_private_capture(bool sqlite, string policy)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s); await GrantWorkspaceRuntimeReads(f, s);
         byte[] bytes = [0, 255, 128, 3]; await SeedRuntimeWorkspace(f, s, false, "source.bin", bytes);
         var source = await WorkspaceReader(f).CaptureArtifactSourceTenantAsync(WorkspaceOwner(s), "/home/source.bin");
@@ -77,7 +77,7 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Tenant_workspace_Artifact_publication_repeats_claim_and_cancellation_after_source_materialization(bool sqlite, bool cancel)
     {
         var time = new FakeTimeProvider(DateTimeOffset.UtcNow.AddSeconds(1));
-        await using var f = await Fixture.Create(sqlite, time, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, time, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s); await GrantWorkspaceRuntimeReads(f, s);
         await SeedRuntimeWorkspace(f, s, true, "source.bin", [0, 255, 128, 3]); using var cancellation = new CancellationTokenSource();
         var probe = new ArtifactSourceProbe(WorkspaceReader(f), beforeCurrent: call => { if (call == 2) { if (cancel) cancellation.Cancel(); else time.Advance(TimeSpan.FromMinutes(6)); } return ValueTask.CompletedTask; });
@@ -91,7 +91,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_Artifact_publication_checks_frozen_copy_integrity_inside_the_store(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s); await GrantWorkspaceRuntimeReads(f, s);
         await SeedRuntimeWorkspace(f, s, true, "source.bin", [0, 255, 128, 3]);
         var probe = new ArtifactSourceProbe(WorkspaceReader(f), copy: bytes => { bytes[^1] = 4; return bytes; });
@@ -103,7 +103,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Fact]
     public async Task Tenant_workspace_Artifact_SQLite_revalidates_source_after_private_byte_staging_before_metadata_commit()
     {
-        await using var f = await Fixture.Create(true, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(true, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s); await GrantWorkspaceRuntimeReads(f, s);
         await SeedRuntimeWorkspace(f, s, true, "source.bin", [0, 255, 128, 3]);
         var physical = Path.Combine(AgentCore.Infrastructure.Workspaces.AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), s.Agent.Instance.InstanceId, frame.SessionId), "source.bin");
@@ -118,7 +118,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_Artifact_source_capture_withholds_publication_after_read_authority_loss_during_IO(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s); var grant = await GrantWorkspaceRuntimeReads(f, s);
         await SeedRuntimeWorkspace(f, s, true, "source.bin", [0, 255, 128, 3]);
         var probe = new ArtifactSourceProbe(WorkspaceReader(f), afterCapture: async () => await f.Access.RevokeAssignmentAsync(s.Owner.PrincipalId, s.Tenant,
@@ -131,7 +131,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_Artifact_publication_copies_opaque_bytes_above_the_Office_processing_limit(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s); await GrantWorkspaceRuntimeReads(f, s);
         await SeedRuntimeWorkspace(f, s, true, "source.bin", [0]);
         var physical = Path.Combine(AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), s.Agent.Instance.InstanceId, frame.SessionId), "source.bin");
@@ -148,7 +148,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_Artifact_model_route_publishes_exact_owned_binary_bytes(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s); await GrantWorkspaceRuntimeReads(f, s);
         var executor = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, Operations(f), f.Clock, artifactPublications: SourcePublicationService(f)));
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: s.Agent.Instance.InstanceId, OwnedSessionId: frame.SessionId,
@@ -165,7 +165,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_workspace_Artifact_commit_rejects_another_Sessions_source_capsule_or_a_substituted_witness(bool sqlite, bool otherSession)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s); await GrantWorkspaceRuntimeReads(f, s);
         var session = frame.SessionId;
         if (otherSession) session = (await f.Sessions.CreateAsync(s.Tenant, s.Agent.Instance.InstanceId, s.Owner, SessionMode.Text,

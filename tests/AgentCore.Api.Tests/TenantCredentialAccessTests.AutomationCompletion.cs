@@ -46,7 +46,7 @@ public sealed partial class TenantCredentialAccessTests
             else
             {
                 Assert.Contains(request.Tools ?? [], t => t.Name == ToolCatalog.WorkComplete);
-                Assert.DoesNotContain(request.Tools ?? [], t => t.Name == ToolCatalog.BackgroundStart);
+                Assert.DoesNotContain(request.Tools ?? [], t => t.Name == "background.start");
                 yield return new ModelToolCallEvent(new("finish-configured-work", ToolCatalog.WorkComplete,
                     JsonSerializer.Serialize(new { outcome = Quiet ? "NoAction" : "Response", summary = "Configured work completed independently.", attentionRequired = false })));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls);
@@ -91,7 +91,7 @@ public sealed partial class TenantCredentialAccessTests
         // Independent configured reporting must also work without background.start in the Definition.
         var draft = await Json(await owner.PostAsJsonAsync(api + "/agent-definitions", new { name = "Independent configured reporter", expectedRevision = await Revision(owner, tenant) }));
         var candidate = JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
-        var baseline = (await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 32))!;
+        var baseline = (await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 35))!;
         candidate["triggerPolicy"] = JsonSerializer.SerializeToNode(baseline.TriggerPolicy, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         var draftId = draft.GetProperty("draftId").GetGuid();
         var definition = await Json(await owner.PutAsJsonAsync(api + $"/definition-drafts/{draftId}", new { candidate, expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 1 }));
@@ -99,7 +99,7 @@ public sealed partial class TenantCredentialAccessTests
         var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = draft.GetProperty("definitionId").GetString(), version = 1, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
         var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
         var access = factory.Services.GetRequiredService<TenantAccessService>();
-        string[] permissions = ["automations.run", "sessions.create", "agent-runs.create", "sessions.read", "agent-runs.read", "agents.chat"];
+        string[] permissions = ["automations.run", "sessions.create", "agent-runs.create", "sessions.read", "agent-runs.read", "agents.chat", "spaces.read"];
         var role = await access.SaveRoleAsync(human, tenant, null, "Configured completion executor", permissions, await Revision(owner, tenant));
         var assignment = await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
         async Task<Guid> Conversation(Guid targetInstance) => (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = targetInstance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
@@ -111,7 +111,7 @@ public sealed partial class TenantCredentialAccessTests
             reportToSessionId = target, expectedRevision = Revision(owner, tenant).GetAwaiter().GetResult(), expectedInstanceRevision = 1, expectedAutomationRevision = revision, requiresTools = true };
         if (mode == "foreign-destination")
         {
-            var foreign = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
+            var foreign = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 35, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
             var foreignSession = await Conversation(foreign);
             Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync(route, Body(foreignSession))).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync(route, Body(Guid.NewGuid()))).StatusCode);

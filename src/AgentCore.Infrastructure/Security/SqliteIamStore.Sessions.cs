@@ -70,12 +70,41 @@ public sealed partial class SqliteIamStore
         entry.HeardTextEndExclusive = 0; entry.ReceivedTextEndExclusive = 0;
         if (entry.Status == nameof(EntryStatus.Streaming)) entry.Status = nameof(EntryStatus.Interrupted);
     }
-    private IQueryable<TenantSessionRecord> OwnedSessions(AgentCoreDbContext db, Guid tenant) => db.Set<TenantSessionRecord>().Where(s => s.TenantId == tenant
-        && db.Sessions.Any(row => row.SessionId == s.SessionId && row.DurablyDeletedAtUtc == null && (row.RetentionDueAtUtc == null || row.RetentionDueAtUtc > (clock ?? TimeProvider.System).GetUtcNow().ToUnixTimeMilliseconds())));
+    private IQueryable<TenantSessionRecord> OwnedSessions(AgentCoreDbContext db, Guid tenant, string? rootSession = null)
+    {
+        var at = (clock ?? TimeProvider.System).GetUtcNow().ToUnixTimeMilliseconds();
+        // Filter inherited privacy lifetimes before any page/count or source projection.
+        // Only metadata is traversed; this grants no source Session read authority.
+        return db.Set<TenantSessionRecord>().FromSqlInterpolated($"""
+            WITH RECURSIVE lifetime(RootSessionId,SessionId,ParentId,Depth,Available) AS (
+                SELECT o.SessionId,s.SessionId,
+                    CASE WHEN json_extract(s.OriginJson,'$.kind') IN (5,6) THEN json_extract(s.OriginJson,'$.originatingSessionId') END,
+                    0, CASE WHEN s.DurablyDeletedAtUtc IS NULL AND (s.RetentionDueAtUtc IS NULL OR s.RetentionDueAtUtc>{at})
+                        AND (json_extract(s.OriginJson,'$.kind') NOT IN (5,6) OR json_extract(s.OriginJson,'$.originatingSessionId') IS NOT NULL)
+                        THEN 1 ELSE 0 END
+                FROM TenantSessions o JOIN Sessions s ON s.SessionId=o.SessionId WHERE o.TenantId={tenant}
+                    AND ({rootSession} IS NULL OR o.SessionId={rootSession})
+                UNION ALL
+                SELECT a.RootSessionId,p.SessionId,
+                    CASE WHEN json_extract(p.OriginJson,'$.kind') IN (5,6) THEN json_extract(p.OriginJson,'$.originatingSessionId') END,
+                    a.Depth+1, CASE WHEN po.SessionId IS NOT NULL AND p.DurablyDeletedAtUtc IS NULL
+                        AND (p.RetentionDueAtUtc IS NULL OR p.RetentionDueAtUtc>{at})
+                        AND (json_extract(p.OriginJson,'$.kind') NOT IN (5,6) OR json_extract(p.OriginJson,'$.originatingSessionId') IS NOT NULL)
+                        THEN 1 ELSE 0 END
+                FROM lifetime a LEFT JOIN Sessions p ON p.SessionId=a.ParentId
+                    LEFT JOIN TenantSessions po ON po.SessionId=p.SessionId AND po.TenantId={tenant}
+                WHERE a.Available=1 AND a.ParentId IS NOT NULL AND a.Depth<64
+            )
+            SELECT o.* FROM TenantSessions o WHERE o.TenantId={tenant}
+                AND EXISTS (SELECT 1 FROM lifetime a WHERE a.RootSessionId=o.SessionId AND a.Depth=0)
+                AND NOT EXISTS (SELECT 1 FROM lifetime a WHERE a.RootSessionId=o.SessionId
+                    AND (a.Available=0 OR a.Depth=64 AND a.ParentId IS NOT NULL))
+            """);
+    }
     public async ValueTask<TenantSession?> FindTenantSessionAsync(Guid tenantId, Guid sessionId, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-        var root = await OwnedSessions(db, tenantId).AsNoTracking().SingleOrDefaultAsync(s => s.SessionId == sessionId.ToString("D"), ct).ConfigureAwait(false);
+        var root = await OwnedSessions(db, tenantId, sessionId.ToString("D")).AsNoTracking().SingleOrDefaultAsync(s => s.SessionId == sessionId.ToString("D"), ct).ConfigureAwait(false);
         return root is null ? null : await SessionView(db, root, ct).ConfigureAwait(false);
     }
     public async ValueTask<TenantSessionPage> ListTenantSessionsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default, bool includeArchived = true, SessionSurface? surface = null, Guid? instanceId = null, bool recentFirst = false)

@@ -11,7 +11,7 @@ test('Skill summaries are bounded and row actions remain reachable while scrolli
   const token = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
   const headers = { 'X-AgentCore-Owner-Capability': token! };
   const created = await page.request.post('/api/v2/admin/agent-instances', {
-    headers, data: { definitionId: 'general-assistant', version: 22,
+    headers, data: { definitionId: 'general-assistant', version: 35,
       persona: { name: 'Skills layout fixture', role: 'Inspector', description: 'Synthetic layout check', tone: 'Clear' } }
   });
   expect(created.ok()).toBeTruthy();

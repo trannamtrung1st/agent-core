@@ -79,7 +79,7 @@ public static class TenantConfigurationContinuationRules
             }
             else if (approved.Operation.Kind is not (TenantOperationKind.ManagementRead or TenantOperationKind.WorkspaceRead or TenantOperationKind.AttachmentRead
                 or TenantOperationKind.CredentialRead or TenantOperationKind.ArtifactVerification or TenantOperationKind.SandboxRead or TenantOperationKind.AutomationRead
-                or TenantOperationKind.ContinuityRead or TenantOperationKind.CompletionRead or TenantOperationKind.ReportSourceRead)
+                or TenantOperationKind.ContinuityRead or TenantOperationKind.ReportSourceRead)
                 && approved.Operation.BrowserCommand?.ReadOnly != true) return null;
         }
         return candidate;

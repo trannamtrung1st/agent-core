@@ -377,7 +377,7 @@ test('configured native offering flows through unattended and Automation selecto
     });
     await call(f.api, f.root + '/models/default', { offeringId: offering.offeringId, reasoningEffort: 'medium', expectedRevision: await f.revision(), expectedSettingsRevision: 0 }, 'PUT');
     const agent = await call<{ principalId: string; instance: { instanceId: string } }>(f.api, f.root + '/agents', {
-      templateId: 'general-assistant', version: 32, expectedRevision: await f.revision()
+      templateId: 'general-assistant', version: 35, expectedRevision: await f.revision()
     });
     // Incumbent independent-work permissions only. Approval mode Always requires Review; it never auto-allows work.
     const role = await call<{ roleId: string }>(f.api, f.root + '/roles', { name: 'Gated model executor',

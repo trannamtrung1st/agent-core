@@ -88,7 +88,7 @@ test('Disabled Core Event drafts save before policy enablement and retain author
   await expect.poll(() => page.evaluate(() => localStorage.getItem('agent-core.owner-capability'))).not.toBeNull();
   const token = (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))!;
   const headers = { 'X-AgentCore-Owner-Capability': token };
-  const created = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'general-assistant', version: 21 } });
+  const created = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'general-assistant', version: 35 } });
   expect(created.ok(), await created.text()).toBe(true);
   const instanceId = (await created.json()).instanceId as string;
   await page.goto(`/admin/instances/${instanceId}/automation/automations`);

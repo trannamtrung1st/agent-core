@@ -111,11 +111,11 @@ describe("Background Sessions", () => {
     await act(async () => { finish(fixtureBackground); });
     expect(screen.getByRole("dialog", { name: "Next original task" })).toBeVisible();
   });
-  it("marks attention results across unloaded pages without acknowledging quiet or handled results", async () => {
+  it("marks attention results across unloaded pages without acknowledging quiet results", async () => {
     const attention = { ...fixtureRun, outcome: { ...fixtureRun.outcome!, attentionRequired: true } };
     const next = { ...fixtureBackground, session: { ...fixtureBackground.session, sessionId: "second" }, initialRun: { ...attention, agentRunId: "second-run" } };
     vi.mocked(listBackgroundSessions).mockImplementation(async (_owner, cursor) => {
-      if (cursor) return { items: [next, { ...fixtureBackground, initialRun: { ...attention, agentRunId: "handled" }, completionDelivery: { status: "handled", targetSessionId: "parent", parentAgentRunId: "handling-run", reason: null } }, fixtureBackground], hasMore: false, nextCursor: null };
+      if (cursor) return { items: [next, { ...fixtureBackground, initialRun: { ...attention, agentRunId: "reported" }, completionDelivery: { status: "delivered", targetSessionId: "parent", parentAgentRunId: "report-run", reason: null } }, fixtureBackground], hasMore: false, nextCursor: null };
       return { items: [{ ...fixtureBackground, initialRun: attention }], hasMore: true, nextCursor: "opaque-next" };
     });
     show();
@@ -123,7 +123,7 @@ describe("Background Sessions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mark all as read" }));
     await waitFor(() => expect(screen.queryByText("Unread · needs attention")).not.toBeInTheDocument());
     expect(listBackgroundSessions).toHaveBeenCalledWith("instance-1", "opaque-next", 100);
-    expect(Object.keys(JSON.parse(localStorage.getItem(`${WORK_READ_STORAGE_KEY}:${source.readScope}`)!)).sort()).toEqual(["run-1", "second-run"]);
+    expect(Object.keys(JSON.parse(localStorage.getItem(`${WORK_READ_STORAGE_KEY}:${source.readScope}`)!)).sort()).toEqual(["reported", "run-1", "second-run"]);
     expect(continueInChat).not.toHaveBeenCalled();
     expect(screen.getByRole("status")).toHaveTextContent("Read status saved in this browser.");
   });
@@ -333,25 +333,14 @@ describe("Background Sessions", () => {
 describe("Completion accounting and wait presentation", () => {
   it("shows a typed wait separately from retry and keeps cancellation available", () => {
     render(<App><AgentRunDetails actions={source.actions} run={{ ...fixtureRun, status: "waitingForSignal", cancellationAvailable: true,
-      wait: { mode: "Background", until: "All", backgroundSessionIds: ["child-session"], deadline: "2026-10-08T14:00:00Z" } }} onChange={vi.fn()} /></App>);
-    expect(screen.getByLabelText("Execution wait")).toHaveTextContent("Waiting for all background results");
+      wait: { mode: "Tasks", until: "All", taskIds: ["selected-task"], deadline: "2026-10-08T14:00:00Z" } }} onChange={vi.fn()} /></App>);
+    expect(screen.getByLabelText("Execution wait")).toHaveTextContent("Waiting for all task signals");
     expect(screen.getByRole("button", { name: "Cancel run" })).toBeEnabled();
     expect(screen.queryByText(/Retry scheduled/)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Conversation child-se/ })).toHaveAttribute("href", "/account/organizations");
+    expect(screen.getByLabelText("Execution wait")).toHaveTextContent("1 selected task");
+    expect(screen.queryByRole("link", { name: /Conversation selected/ })).not.toBeInTheDocument();
   });
-  it("opens the exact durable handling Run without rendering a completion bubble", async () => {
-    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground,
-      completionDelivery: { status: "handled", targetSessionId: "parent-session", parentAgentRunId: "handling-run", reason: null } }], hasMore: false, nextCursor: null });
-    vi.mocked(getInstanceAgentRun).mockResolvedValue({ ...fixtureRun, agentRunId: "handling-run" });
-    render(<App><BackgroundWorkDrawer source={source} instanceId="instance" open wide onClose={vi.fn()} /></App>);
-    await screen.findByText(/Handled in conversation/);
-    expect(screen.queryByText(/Unread · needs attention/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "View handling run" }));
-    await waitFor(() => expect(getInstanceAgentRun).toHaveBeenCalledWith("instance", "handling-run"));
-    // rc-util deliberately uses the same generated ID in NODE_ENV=test; scope by the actual drawer heading.
-    await waitFor(() => expect(screen.getAllByRole("dialog").some(dialog => within(dialog).queryByText("Run details", { exact: true }) !== null)).toBe(true));
-    expect(screen.queryByText("Background work result")).not.toBeInTheDocument();
-  });
+
 });
 
 it("explains the precise response failure, bounded correction and preserved receipts", () => {

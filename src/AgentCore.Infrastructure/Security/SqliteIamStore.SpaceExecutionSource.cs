@@ -24,6 +24,6 @@ public sealed partial class SqliteIamStore
             || pin.EnvironmentId is { } selected && !await db.Set<SpaceEnvironmentRecord>().AnyAsync(e => e.TenantId == tenant && e.SpaceId == pin.SpaceId
                 && e.EnvironmentId == selected && e.Revision == pin.EnvironmentRevision && e.DeletedAt == null, ct).ConfigureAwait(false)))
             throw new SecurityConflictException("space_context_changed");
-        await TenantSpaceContextResolver.RequireCurrentPermissionsAsync(state, run.Owner.ExecutorPrincipalId!.Value, pin.SpaceId, pin.EnvironmentId is not null, iam, ct, run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId).ConfigureAwait(false);
+        await TenantSpaceContextResolver.RequireCurrentPermissionsAsync(state, run.Owner.ExecutorPrincipalId!.Value, pin.SpaceId, pin.EnvironmentId is not null, iam, ct, run.Admission.DelegatedTask is null && run.Admission.AgentMessage is null ? run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId : null).ConfigureAwait(false);
     }
 }

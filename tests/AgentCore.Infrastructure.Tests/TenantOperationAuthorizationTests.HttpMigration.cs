@@ -12,7 +12,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Fact]
     public async Task Tenant_http_forward_upgrade_adds_only_human_Owner_permission_and_preserves_all_existing_guards()
     {
-        await using var f=await Fixture.Create(true,builtInAuthority:true);var s=await Setup(f,"general-assistant",32);
+        await using var f=await Fixture.Create(true,builtInAuthority:true);var s=await Setup(f,"general-assistant",35);
         await using var db=f.Contexts!.CreateDbContext();var migrator=db.GetService<IMigrator>();var before=(await f.Iam.ReadTenantAsync(s.Tenant))!;
         async Task<string> Guards()
         {

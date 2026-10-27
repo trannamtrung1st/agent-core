@@ -22,7 +22,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_Artifact_publication_commits_exact_Office_bytes_and_one_durable_receipt(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s); await GrantWorkspaceRuntimeReads(f, s);
         var bytes = new OfficeProcessor().CreateDocument(new("Exact report", [new(null, ["Private source text: thử nghiệm"], null)]), default).Bytes;
         await SeedRuntimeWorkspace(f, s, true, "source.docx", bytes, OfficeLimits.MaxPackageBytes);
@@ -56,7 +56,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_Artifact_publication_rechecks_native_source_at_the_atomic_commit_owner(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s); await GrantWorkspaceRuntimeReads(f, s);
         await SeedRuntimeWorkspace(f, s, true, "source.bin", [0, 255, 128, 3]);
         var gate = new ArtifactCommitGate((ITenantArtifactOperationStore)f.Iam);
@@ -76,7 +76,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Fact]
     public async Task Tenant_workspace_Artifact_SQLite_receipt_save_failure_rolls_back_metadata_Run_security_and_audit()
     {
-        await using var f = await Fixture.Create(true, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(true, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s); await GrantWorkspaceRuntimeReads(f, s);
         byte[] bytes = [0, 255, 128, 3]; await SeedRuntimeWorkspace(f, s, true, "source.bin", bytes);
         string connection; await using (var db = f.Contexts!.CreateDbContext()) connection = db.Database.GetDbConnection().ConnectionString;

@@ -23,7 +23,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService
             if (!Within(cursor, args.Path) || cursor != args.Path && cursor[(args.Path.Length + 1)..].Contains('/')) throw new ArgumentException("Use an exact resource child cursor.");
         }
         var tenant = frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
-        var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct).ConfigureAwait(false);
+        var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct, retained: !live).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(tenant, frame.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
         if (run.Owner != frame.Owner || run.SessionId != frame.SessionId || session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId

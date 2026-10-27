@@ -253,6 +253,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         WorkspaceEffectPersistence.Configure(modelBuilder);
         EvaluationPersistence.Configure(modelBuilder);
         GoalPersistence.Configure(modelBuilder);
+        TaskPersistence.Configure(modelBuilder);
+        HumanTaskApprovalPersistence.Configure(modelBuilder);
         EvaluationSandboxPersistence.Configure(modelBuilder);
         ModelManagementPersistence.Configure(modelBuilder);
         modelBuilder.Entity<SandboxInstanceVerificationRow>(e => { e.ToTable("SandboxInstanceVerifications"); e.HasKey(r => new { r.InstanceId, r.InstanceRevision }); });

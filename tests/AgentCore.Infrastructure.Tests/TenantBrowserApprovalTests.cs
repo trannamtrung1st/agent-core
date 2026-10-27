@@ -44,7 +44,7 @@ public sealed partial class TenantBrowserApprovalTests
         var login = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;
         var human = new TenantSessionInitiator(owner.AccountId, login.SessionId, owner.OwnerPrincipalId);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision;
-        var agent = await f.Agents.CreateAsync(human.PrincipalId, owner.TenantId, "general-assistant", 32, await Revision());
+        var agent = await f.Agents.CreateAsync(human.PrincipalId, owner.TenantId, "general-assistant", 35, await Revision());
         var privateSpace = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(owner.TenantId, agent.Instance.InstanceId))!;
         var contextRole = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Read exact Browser context", ["spaces.read"], await Revision());
         await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, contextRole.RoleId, TenantSpaceService.Scope(owner.TenantId, privateSpace.SpaceId), await Revision());

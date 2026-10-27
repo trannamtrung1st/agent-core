@@ -7,7 +7,7 @@ public static class AgentDefinitionValidator
 {
 
     private static readonly Regex IdPattern = new("^[a-z0-9-]{1,64}$", RegexOptions.Compiled);
-    private static readonly Regex ToolPattern = new("^[a-z][a-z0-9._]{0,63}$", RegexOptions.Compiled);
+    private static readonly Regex ToolPattern = new("^[a-z][a-z0-9._-]{0,63}$", RegexOptions.Compiled);
     private static readonly HashSet<string> InterruptionStyles =
         ["acknowledgeThenContinue", "answerNewTurn"];
     private static readonly HashSet<string> ResponseLengths = ["concise", "balanced"];
@@ -315,7 +315,7 @@ public static class AgentDefinitionValidator
         if (tools.Count != tools.Distinct(StringComparer.Ordinal).Count())
             findings.Add(new("duplicate_tool", "Tool allowlist contains duplicate tools."));
         if (tools.Any(tool => tool is null || !ToolPattern.IsMatch(tool)))
-            findings.Add(new("invalid_tool_name", "Tool names must match [a-z][a-z0-9._] and contain at most 64 characters."));
+            findings.Add(new("invalid_tool_name", "Tool names must match [a-z][a-z0-9._-] and contain at most 64 characters."));
         return findings;
     }
 

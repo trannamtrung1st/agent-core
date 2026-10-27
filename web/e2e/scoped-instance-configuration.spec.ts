@@ -7,7 +7,7 @@ test('settings disclose restrictions before editing and keep override provenance
   await expect(page.getByRole('heading', {name:'Definitions',level:2})).toBeVisible();
   await expect.poll(() => page.evaluate(() => localStorage.getItem('agent-core.owner-capability'))).toEqual(expect.any(String));
   const headers = {'X-AgentCore-Owner-Capability': (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))!};
-  const created = await page.request.post('/api/v2/admin/agent-instances', {headers, data:{definitionId:'general-assistant',version:21}});
+  const created = await page.request.post('/api/v2/admin/agent-instances', {headers, data:{definitionId:'general-assistant',version:35}});
   expect(created.ok()).toBe(true);
   const owner = await created.json();
   await page.goto(`/admin/instances/${owner.instanceId}/identity/settings`);
@@ -46,7 +46,7 @@ test('saving settings refreshes dependent values and recovers a failed refresh w
   await expect(page.getByRole('heading',{name:'Definitions',level:2})).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>localStorage.getItem('agent-core.owner-capability'))).toEqual(expect.any(String));
   const headers={'X-AgentCore-Owner-Capability':(await page.evaluate(()=>localStorage.getItem('agent-core.owner-capability')))!};
-  const created=await page.request.post('/api/v2/admin/agent-instances',{headers,data:{definitionId:'general-assistant',version:21}});
+  const created=await page.request.post('/api/v2/admin/agent-instances',{headers,data:{definitionId:'general-assistant',version:35}});
   expect(created.ok()).toBe(true);const owner=await created.json();
   const root=`/api/v2/admin/agent-instances/${owner.instanceId}`;
   await page.goto(`/admin/instances/${owner.instanceId}/identity/settings`);
@@ -105,7 +105,7 @@ test('scoped settings save/reset, conflict recovery and resource inspection pres
   await expect.poll(()=>page.evaluate(()=>localStorage.getItem('agent-core.owner-capability'))).toEqual(expect.any(String));
   const token=await page.evaluate(()=>localStorage.getItem('agent-core.owner-capability'));
   const headers={'X-AgentCore-Owner-Capability':token!};
-  const created=await page.request.post('/api/v2/admin/agent-instances',{headers,data:{definitionId:'general-assistant',version:21}});
+  const created=await page.request.post('/api/v2/admin/agent-instances',{headers,data:{definitionId:'general-assistant',version:35}});
   expect(created.ok()).toBe(true);const owner=await created.json();
   const root=`/api/v2/admin/agent-instances/${owner.instanceId}`;
   await page.goto(`/admin/instances/${owner.instanceId}/identity/settings`);

@@ -102,9 +102,9 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
             foreach (var row in rows)
             {
                 var run = AgentRunStoreMapping.ToDomain(row);
-                if (run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ConfigurationContinuation or ActivationKind.ContextContinuation or ActivationKind.GoalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground or ActivationKind.CoreEvent or ActivationKind.ApplicationEvent)) continue;
-                if (run.Status != AgentRunStatus.WaitingForSignal || AgentRunWaitExecution.IsReady(run, at,
-                    await TenantWaitChildren(db, run, run.Wait!, false, ct).ConfigureAwait(false))) ready.Add(run);
+                if (run.Admission.Activation.Kind is not (ActivationKind.TaskCompletion or ActivationKind.AgentMessage or ActivationKind.DelegatedTask or ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ConfigurationContinuation or ActivationKind.ContextContinuation or ActivationKind.GoalContinuation or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground or ActivationKind.CoreEvent or ActivationKind.ApplicationEvent)) continue;
+                if (run.Status != AgentRunStatus.WaitingForSignal || (run.Wait!.Mode == AgentRunWaitMode.Tasks ? AgentRunWaitExecution.TasksReady(run, at, await TenantTaskWaitFacts(db, run, run.Wait, ct).ConfigureAwait(false))
+                    : AgentRunWaitExecution.IsReady(run, at))) ready.Add(run);
                 if (ready.Count == Math.Clamp(limit, 1, 100)) break;
             }
             if (rows.Length < 32) break;
@@ -120,6 +120,17 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         if (runtimeGeneration is { } generation && run.Claim?.Generation != generation) throw new AccessDeniedException("tenant_runtime_unavailable");
         if (command is AgentRunCommand.Claim)
         {
+            if (run.Admission.DelegatedTask is { } taskWork)
+            {
+                var taskRow = await db.Set<DelegatedTaskRow>().AsNoTracking().SingleOrDefaultAsync(t => t.TenantId == owner.TenantId && t.TaskId == taskWork.TaskId, ct);
+                var task = taskRow is null ? null : TaskPersistence.Value(taskRow);
+                if (task is null || task.DeadlineAt <= TaskNow || task.CancellationRequested || AgentCore.Domain.Tasks.TaskLimits.Terminal(task.State)
+                    || await ReadSandboxSession(db, owner.TenantId!.Value, task.Source.SessionId, ct) is null)
+                {
+                    var stopped = TenantRunCancellationRules.Cancel(run, TaskNow); AgentRunStoreMapping.Apply(row, stopped);
+                    await SaveTaskChanges(db, ct); await tx.CommitAsync(ct); return stopped;
+                }
+            }
             if (run.Admission.GoalWork is { } goalWork)
             {
                 var goalRow = await db.Set<SessionGoalRow>().AsNoTracking().Include(g => g.Checkpoints).SingleOrDefaultAsync(g => g.TenantId == owner.TenantId && g.GoalId == goalWork.GoalId, ct);
@@ -133,7 +144,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
                     await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return cancelled;
                 }
             }
-            if (run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ConfigurationContinuation or ActivationKind.ContextContinuation or ActivationKind.GoalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground or ActivationKind.CoreEvent or ActivationKind.ApplicationEvent)) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
+            if (run.Admission.Activation.Kind is not (ActivationKind.TaskCompletion or ActivationKind.AgentMessage or ActivationKind.DelegatedTask or ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ConfigurationContinuation or ActivationKind.ContextContinuation or ActivationKind.GoalContinuation or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground or ActivationKind.CoreEvent or ActivationKind.ApplicationEvent)) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
             _ = await TenantExecutionLineage.RootAsync(run, this, ct).ConfigureAwait(false);
             if (run.ApprovalRequestId is { } approvalId)
             {
@@ -161,9 +172,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         if (command is AgentRunCommand.Complete { OutcomeEntryId: not null })
         {
             await RequireTenantOutputSources(db, run, ct).ConfigureAwait(false);
-            var inboxRows = await db.BackgroundCompletionReceipts.AsNoTracking().Where(i => i.ClaimRunId == row.AgentRunId && i.Status == (int)CompletionInboxStatus.Claimed).ToArrayAsync(ct).ConfigureAwait(false);
-            if (inboxRows.Select(CompletionInboxMapping.Read).Any(i => i.Owner == owner && i.Acknowledgment is not null))
-                throw AgentCoreErrors.Conflict("Acknowledgment requires the atomic outcome transaction.");
+
         }
         if (command is AgentRunCommand.Complete { OutcomeEntryId: { } entryId }
             && !await db.Entries.AnyAsync(e => e.SessionId == row.SessionId && e.EntryId == entryId.ToString("D") && e.Role == nameof(ConversationRole.Assistant)
@@ -177,10 +186,12 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
             if (command is AgentRunCommand.SuspendWait suspend)
             {
                 await RequireTenantWait(db, run, suspend, ct).ConfigureAwait(false);
-                next = AgentRunWaitExecution.Apply(run, command, await TenantWaitChildren(db, run, suspend.Wait, true, ct).ConfigureAwait(false));
+                next = suspend.Wait.Mode == AgentRunWaitMode.Tasks ? AgentRunWaitExecution.ApplyTasks(run, command, await TenantTaskWaitFacts(db, run, suspend.Wait, ct).ConfigureAwait(false))
+                    : AgentRunWaitExecution.Apply(run, command);
             }
             else if (command is AgentRunCommand.ResumeWait)
-                next = AgentRunWaitExecution.Apply(run, command, await TenantWaitChildren(db, run, run.Wait ?? throw AgentCoreErrors.Conflict("Run is not waiting."), false, ct).ConfigureAwait(false));
+                next = run.Wait?.Mode == AgentRunWaitMode.Tasks ? AgentRunWaitExecution.ApplyTasks(run, command, await TenantTaskWaitFacts(db, run, run.Wait, ct).ConfigureAwait(false))
+                    : AgentRunWaitExecution.Apply(run, command);
             else next = command.Apply(run, () => diagnosticId);
         }
         catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }

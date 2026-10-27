@@ -16,7 +16,6 @@ public sealed partial class TenantCredentialIntegrationTests
     {
         await using var f = await Fixture.Create(true);
         await using var db = await f.Contexts!.CreateDbContextAsync();
-        await db.GetService<IMigrator>().MigrateAsync("20261027010000_UnifiedEvaluations");
         var setup = await RuntimeCredential(f, true); var service = RuntimeApprovals(f);
         var legacy = (await service.PreparePersonaAsync(new(setup.Tenant, setup.Run.AgentRunId), setup.Agent.Instance.Persona with { Name = "Preserved exact review" },
             setup.Run.Revision, setup.Run.Claim!.Generation)).Request!;
@@ -35,9 +34,12 @@ public sealed partial class TenantCredentialIntegrationTests
             while (await reader.ReadAsync()) result.Add(reader.GetString(0), reader.GetString(1));
             return result;
         }
+        // Seed through the current store before selecting the historical schema. No
+        // current-model INSERT is valid against a predecessor with fewer columns.
+        await db.GetService<IMigrator>().MigrateAsync("20261027010000_UnifiedEvaluations");
         var before = await Guards(); var approval = await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(setup.Tenant, legacy.RequestId);
         var historical = await catalog.FindScriptAsync(setup.Tenant, script.ScriptId, 1);
-        await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
+        await db.GetService<IMigrator>().MigrateAsync("20261027020000_EvaluationSandboxExecutions");
         var after = await Guards();
         var changed = new HashSet<string> { "TR_TenantApprovals_IndependentTask_Insert", "TR_TenantApprovals_IndependentTask_Update", "TR_TenantApprovals_Space_INSERT", "TR_TenantApprovals_Space_Workspace_INSERT" };
         foreach (var pair in before)
@@ -46,6 +48,9 @@ public sealed partial class TenantCredentialIntegrationTests
             if (!changed.Contains(pair.Key)) Assert.Equal(pair.Value, after[pair.Key]);
             else Assert.Contains("SandboxCommand.Evaluation", after[pair.Key]);
         }
+        // Later migrations intentionally extend Task/Core guards. Verify the native
+        // extension alone above, then preserve the same ordinary records through HEAD.
+        await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
         Assert.Equal(approval, await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(setup.Tenant, legacy.RequestId));
         Assert.Equal(System.Text.Json.JsonSerializer.Serialize(historical), System.Text.Json.JsonSerializer.Serialize(await catalog.FindScriptAsync(setup.Tenant, script.ScriptId, 1)));
         await using (var command = db.Database.GetDbConnection().CreateCommand())

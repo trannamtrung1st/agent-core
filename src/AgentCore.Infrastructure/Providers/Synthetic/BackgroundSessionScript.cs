@@ -5,7 +5,7 @@ using AgentCore.Application.Tools;
 
 namespace AgentCore.Infrastructure.Providers.Synthetic;
 
-/// <summary>Credential-free fixture journeys use the real background.start and report paths.</summary>
+/// <summary>Credential-free fixtures for independent work completion and existing-conversation reports.</summary>
 internal static class BackgroundSessionScript
 {
     private const string ReportPrefix = "Report the following bounded background completion to this Session's user.";
@@ -64,46 +64,7 @@ internal static class BackgroundSessionScript
                 ? Call(ToolCatalog.ArtifactsCreateFromWorkspace, new { path = "/working/followup.md", displayName = "followup.md" })
                 : Call(ToolCatalog.WorkspaceWrite, new { path = "/working/followup.md", content = prompt });
         }
-        var authorization = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization
-            && request.Messages.SelectMany(previous => previous.ToolCalls ?? []).Any(call => call.Id == m.ToolCallId && call.Name == m.Name
-                && TenantApprovalToolContract.Parse(call).BackgroundArguments is not null));
-        if (authorization is not null)
-        {
-            using var accepted = JsonDocument.Parse(authorization.Text);
-            if (!accepted.RootElement.TryGetProperty("decision", out var policy) || policy.GetString() != "allowed")
-                return [new ModelTextDelta(accepted.RootElement.TryGetProperty("started", out var started) && started.ValueKind == JsonValueKind.True
-                ? "The exact reviewed background task was created. Its execution is tracked in Background work." : "Background creation was not authorized."), new ModelCompleted(ModelStopReason.Completed)];
-        }
-
-        if (!prompt.Contains("[test:background-start]", StringComparison.Ordinal)) return null;
-        if (prompt.Contains("[test:background-creation-review]", StringComparison.Ordinal))
-        {
-            if (authorization is null && request.Tools?.Any(t => t.Name == ToolCatalog.RequestAuthorization) == true)
-                return Call(ToolCatalog.RequestAuthorization, new { operation = "start_background_work", task = new {
-                    objective = "synthetic-automation-attention: review the requested progress and report the outcome", title = "Reviewed background progress check", reportCompletion = true } });
-        }
-        var result = request.Messages.LastOrDefault(message => message.Role == ModelRole.Tool && message.Name == ToolCatalog.BackgroundStart);
-        if (result is not null)
-        {
-            using var data = JsonDocument.Parse(result.Text);
-            var accepted = data.RootElement.TryGetProperty("started", out var started) && started.ValueKind == JsonValueKind.True;
-            return [new ModelTextDelta(accepted ? "Started the background check. You can keep chatting while it runs." : "Background work could not be started with the current permissions or capacity."), new ModelCompleted(ModelStopReason.Completed)];
-        }
-        if (request.Tools?.Any(tool => tool.Name == ToolCatalog.BackgroundStart) != true)
-        {
-            if (request.Tools?.Any(tool => tool.Name == ToolCatalog.CapabilitiesLoad) == true && !request.Messages.Any(message => message.Role == ModelRole.Tool && message.Name == ToolCatalog.CapabilitiesLoad))
-                return Call(ToolCatalog.CapabilitiesLoad, new { query = "start an immediate background task", limit = 1 });
-            return [new ModelTextDelta("This Agent is not authorized to start background tasks."), new ModelCompleted(ModelStopReason.Completed)];
-        }
-        var objective = prompt.Contains("[test:background-semantic-recovery]", StringComparison.Ordinal) ? "synthetic-background-semantic-recovery: verify completion-only recovery"
-            : prompt.Contains("[test:background-semantic-exhausted]", StringComparison.Ordinal) ? "synthetic-background-semantic-exhausted: verify bounded failure"
-            : prompt.Contains("[test:background-completion-correct]", StringComparison.Ordinal) ? "synthetic-background-completion-correct: verify bounded summary correction"
-            : prompt.Contains("[test:background-completion-invalid]", StringComparison.Ordinal) ? "synthetic-background-completion-invalid: verify truthful validation failure"
-            : prompt.Contains("[test:opensandbox-background]", StringComparison.Ordinal) ? "synthetic-sandbox:demo"
-            : prompt.Contains("[test:background-prose]", StringComparison.Ordinal) ? "synthetic-background-prose: verify bounded failure reporting"
-            : prompt.Contains("[test:background-files]", StringComparison.Ordinal) ? "synthetic-background-files: create the original task report"
-            : "synthetic-automation-attention: check the requested progress and report the outcome";
-        return Call(ToolCatalog.BackgroundStart, new { objective, title = "Background progress check", reportCompletion = true });
+        return null;
     }
     private static IReadOnlyList<ModelGenerationEvent> Call(string name, object arguments) =>
         [new ModelToolCallEvent(new("background-fixture-" + name, name, JsonSerializer.Serialize(arguments))), new ModelCompleted(ModelStopReason.ToolCalls)];

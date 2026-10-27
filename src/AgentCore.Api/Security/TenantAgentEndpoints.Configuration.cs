@@ -8,12 +8,20 @@ namespace AgentCore.Api.Security;
 public static partial class TenantAgentEndpoints
 {
     public sealed record PersonaRequest(AgentIdentity Persona, long ExpectedRevision, long ExpectedInstanceRevision, long ExpectedPersonaRevision);
+    [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
+    public sealed record CooperationRequest(AgentCore.Domain.Tasks.AgentCooperationPolicy Cooperation, long ExpectedRevision, long ExpectedInstanceRevision);
     public sealed record VersionRequest(int Version, long ExpectedRevision, long ExpectedInstanceRevision);
     private static object Safe(AgentCore.Application.Ports.TenantAgent agent, long securityRevision) => new
         { agent.TenantId, agent.SystemIdentityId, agent.PrincipalId, instance = AdminHttpMapping.ToAgentInstance(agent.Instance), securityRevision };
     private static void MapConfiguration(RouteGroupBuilder group)
     {
         MapSettings(group);
+        group.MapPut("/agents/{instanceId:guid}/cooperation", (Guid instanceId, CooperationRequest body, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var a = IdentityHttp.TenantContext(http);
+            return Results.Json(Safe(await service.UpdateCooperationAsync(a.PrincipalId, a.TenantId, instanceId, body.Cooperation,
+                body.ExpectedRevision, body.ExpectedInstanceRevision, ct, Human(http)).ConfigureAwait(false)));
+        }));
         MapChildren(group);
         group.MapGet("/agents/{instanceId:guid}/versions", (Guid instanceId, int? page, int? pageSize, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

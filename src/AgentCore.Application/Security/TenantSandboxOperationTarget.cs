@@ -55,4 +55,26 @@ public sealed class TenantSandboxOperationTarget(ITenantSessionStore sessions, I
         if (request.Snapshot != TenantSandboxOperationRules.Snapshot(target.Agent, TenantSandboxOperationRules.Profile(run, value.ProfileId), target.Lease, reserved?.InitializesGeneration))
             throw new SecurityConflictException("sandbox_operation_witness_changed");
     }
+    internal async ValueTask RequireRetainedCommandAsync(TenantApprovalRequest request, AgentRun run, Guid reviewer, CancellationToken ct)
+    {
+        var command = request.Operation.SandboxCommand ?? throw new AccessDeniedException("sandbox_source_unavailable");
+        var target = await ResolveAsync(run, command.ProfileId, ct, storedResult: true);
+        var state = await security.ReadTenantAsync(request.TenantId, ct) ?? throw new AccessDeniedException("tenant_unavailable");
+        await TenantSandboxWorkspaceRules.RequireCurrentAsync(state, run, target.Agent, target.Baseline,
+            command.WorkspaceAccess ?? throw new AccessDeniedException("sandbox_workspace_context_required"), authorizer, ct);
+        await RequireStoredReviewerAsync(request, reviewer, ct);
+    }
+    internal async ValueTask RequireStoredReviewerAsync(TenantApprovalRequest request, Guid reviewer, CancellationToken ct)
+    {
+        var state = await security.ReadTenantAsync(request.TenantId, ct) ?? throw new AccessDeniedException("tenant_unavailable");
+        var scope = AccessScope.ForResource(request.TenantId, request.ResourceType, request.ResourceId);
+        var policy = TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(request.Permission));
+        if (!state.Users.Any(u => u.PrincipalId == reviewer && u.Status == IdentityStatus.Active)
+            || policy.IndependentReview && request.OriginalInitiatorPrincipalId == reviewer)
+            throw new AccessDeniedException("approver_unqualified");
+        foreach (var key in new[] { request.Permission, "approvals.approve" })
+            if (!(await authorizer.CheckOwnedTenantAsync(state, reviewer, PermissionCatalog.Get(key), scope, ct)).Allowed)
+                throw new AccessDeniedException("approver_unqualified");
+    }
+
 }

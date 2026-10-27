@@ -37,13 +37,13 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         CaptureCore(frame, ToolCatalog.ArtifactsCreateFromWorkspace, path, approved, live, false, ct, publication: true);
     internal async ValueTask<TenantResourceSource> CaptureKnowledgeAsync(TenantRuntimeFrame frame, string identity, bool approved, bool live, CancellationToken ct)
     {
-        var (run, _) = await operations.ResolveAsync(new(frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required"), frame.RunId), ct).ConfigureAwait(false);
+        var (run, _) = await operations.ResolveAsync(new(frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required"), frame.RunId), ct, retained: !live).ConfigureAwait(false);
         var selected = TenantKnowledgeReadContract.Resolve(run.Admission.Configuration!.Definition, run.Admission.Configuration.Resources, identity);
         return await CaptureCore(frame, ToolCatalog.KnowledgeRetrieve, selected.Resource.VirtualPath, approved, live, false, ct, identity).ConfigureAwait(false);
     }
     internal async ValueTask<Source> RequireKnowledgeMetadataAsync(TenantRuntimeFrame frame, string identity, CancellationToken ct, bool approved, bool live, bool audit)
     {
-        var (run, _) = await operations.ResolveAsync(new(frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required"), frame.RunId), ct).ConfigureAwait(false);
+        var (run, _) = await operations.ResolveAsync(new(frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required"), frame.RunId), ct, retained: !live).ConfigureAwait(false);
         var selected = TenantKnowledgeReadContract.Resolve(run.Admission.Configuration!.Definition, run.Admission.Configuration.Resources, identity);
         return await RequireMetadataAsync(frame, ToolCatalog.KnowledgeRetrieve, selected.Resource.VirtualPath, ct, approved, live, audit, knowledgeIdentity: identity).ConfigureAwait(false);
     }
@@ -73,7 +73,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
             || before.Agent.Instance.Revision != after.Agent.Instance.Revision || before.Session.Owner != after.Session.Owner
             || before.Observation != after.Observation)
             throw new SecurityConflictException("resource_source_changed");
-        var final = await operations.ResolveAsync(new(after.Observation.TenantId, frame.RunId), ct).ConfigureAwait(false);
+        var final = await operations.ResolveAsync(new(after.Observation.TenantId, frame.RunId), ct, retained: !live).ConfigureAwait(false);
         if (live) TenantRuntimeRules.Require(frame, after.Session.Owner, final.Run, time.GetUtcNow());
         if (final.Run.Revision != after.Run.Revision || final.State.Tenant.Revision != after.Security.Tenant.Revision)
             throw new SecurityConflictException("resource_source_changed");
@@ -84,7 +84,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
     {
         ValidatePath(path);
         var tenant = frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
-        var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct).ConfigureAwait(false);
+        var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct, retained: !live).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(tenant, frame.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
         if (run.Owner != frame.Owner || run.SessionId != frame.SessionId || session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId)

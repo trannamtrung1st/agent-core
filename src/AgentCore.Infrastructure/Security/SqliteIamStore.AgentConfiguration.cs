@@ -87,6 +87,7 @@ public sealed partial class SqliteIamStore
         row.PersonaRevision = updated.PersonaRevision; row.ActiveVersion = updated.ActiveVersion;
         var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         row.SettingsOverridesJson = updated.SettingsOverrides is null ? null : JsonSerializer.Serialize(updated.SettingsOverrides, json);
+        row.CooperationJson = updated.Cooperation is null ? null : JsonSerializer.Serialize(updated.Cooperation, json);
         row.ExecutionBudgetsJson = updated.ExecutionBudgets is null ? null : JsonSerializer.Serialize(updated.ExecutionBudgets, json);
         row.HarnessManagementJson = updated.HarnessManagement is null ? null : JsonSerializer.Serialize(updated.HarnessManagement, json);
         row.UnattendedModelJson = System.Text.Json.JsonSerializer.Serialize(updated.UnattendedModel, json);

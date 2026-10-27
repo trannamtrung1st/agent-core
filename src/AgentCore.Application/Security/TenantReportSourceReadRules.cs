@@ -19,12 +19,11 @@ public static class TenantReportSourceReadRules
         var objective = source.Child.Admission.TaskIntent?.Text ?? source.ChildSession.Snapshot.Title;
         var json = BackgroundCompletionProjection.Build(source.Child, objective, []);
         return new(source.Parent!.Owner.SessionId, source.Child.SessionId, initial.AgentRunId, source.Child.AgentRunId,
-            source.Child.Revision, ToolJsonResults.ClipUtf8Prefix(objective, 4000), json, TenantCompletionReadRules.Hash(json));
+            source.Child.Revision, ToolJsonResults.ClipUtf8Prefix(objective, 4000), json, TenantIndependentReportSourceAuthority.Hash(json));
     }
     public static PreparedTenantOperation Lookup(TenantBackgroundCompletion source) => new(source.Child.AgentRunId,
-        source.Child.AgentInstanceId, null, 1, 1, "", "", ReportSourceRead: Witness(source));
-    public static PreparedCompletionRead Targets(PreparedReportSourceRead p) => new(p.ParentSessionId, p.ChildSessionId,
-        p.InitialRunId, p.SourceRunId, p.SourceRevision, p.Objective, p.ObservationJson, p.ObservationHash, "[]");
+        source.Child.AgentInstanceId, null, 1, 1, "", "", ReportSourceRead: Witness(source),
+        SpaceContext: source.Child.Admission.Configuration?.SpaceContext?.Witness() ?? throw new AccessDeniedException("space_context_required"));
     public static void Source(TenantApprovalRequest request, AgentRun source)
     {
         var p = request.Operation.ReportSourceRead ?? throw new SecurityConflictException("operation_mismatch");
@@ -41,7 +40,7 @@ public static class TenantReportSourceReadRules
     }
     public static async ValueTask ReadAsync(TenantSecurityState state, TenantApprovalRequest request, Guid human, IamAuthorizer iam, CancellationToken ct)
     {
-        await TenantCompletionReadRules.PermissionsAsync(state, Targets(request.Operation.ReportSourceRead!), human, iam, ct).ConfigureAwait(false);
+        await TenantIndependentReportSourceAuthority.PermissionsAsync(state, request.Operation.ReportSourceRead!, human, iam, ct).ConfigureAwait(false);
         if (!(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get("sessions.read"),
             TenantSessionRules.Scope(request.TenantId, request.Operation.ReportSourceRead!.ParentSessionId), ct).ConfigureAwait(false)).Allowed)
             throw new AccessDeniedException("approval_unavailable");
@@ -49,7 +48,7 @@ public static class TenantReportSourceReadRules
     public static async ValueTask ReviewerAsync(TenantSecurityState state, TenantApprovalRequest request, Guid human, IamAuthorizer iam, CancellationToken ct)
     {
         await ReadAsync(state, request, human, iam, ct).ConfigureAwait(false);
-        await TenantCompletionReadRules.ReviewerAsync(state, Targets(request.Operation.ReportSourceRead!), request.OriginalInitiatorPrincipalId, human, iam, ct).ConfigureAwait(false);
+        await TenantIndependentReportSourceAuthority.ReviewerAsync(state, request.Operation.ReportSourceRead!, request.OriginalInitiatorPrincipalId, human, iam, ct).ConfigureAwait(false);
     }
     public static void Receipt(TenantApprovalRequest request, TenantOperationReceipt receipt, TenantApprovalDecision decision, TenantOperationGrant? grant)
     {
@@ -70,7 +69,7 @@ public static partial class TenantApprovalRules
         if (id == Guid.Empty || instance == Guid.Empty || revision < 1 || persona < 1 || p.ParentSessionId == Guid.Empty || p.ChildSessionId == Guid.Empty
             || p.ParentSessionId == p.ChildSessionId || p.InitialRunId == Guid.Empty || p.SourceRunId == Guid.Empty || p.SourceRevision < 1
             || string.IsNullOrWhiteSpace(p.Objective) || p.Objective.Length > 4000 || p.ObservationJson.Length is < 2 or > AgentRunLimits.MaxEvidenceBytes
-            || p.ObservationHash != TenantCompletionReadRules.Hash(p.ObservationJson)) throw new ArgumentException("Invalid exact report source read.");
+            || p.ObservationHash != TenantIndependentReportSourceAuthority.Hash(p.ObservationJson)) throw new ArgumentException("Invalid exact report source read.");
         var evidence = JsonSerializer.Deserialize<AgentRunAdmissionFactory.SignalInput>(p.ObservationJson);
         if (evidence?.TriggerKind != TriggerKind.BackgroundCompleted || evidence.InputBoundarySequence is not null || evidence.Text is null) throw new ArgumentException("Invalid report source evidence.");
         using var json = JsonDocument.Parse(evidence.Text);
@@ -78,6 +77,6 @@ public static partial class TenantApprovalRules
             || json.RootElement.GetProperty("status").GetString() is not ("Completed" or "Failed" or "Cancelled")
             || json.RootElement.GetProperty("artifacts").GetArrayLength() != 0) throw new ArgumentException("Invalid report source identity.");
         var action = JsonSerializer.Serialize(new { operation = "background.report.source.read", source = p, expectedInstanceRevision = revision, expectedPersonaRevision = persona });
-        return new(id, instance, null, revision, persona, action, TenantCompletionReadRules.Hash(action), ReportSourceRead: p);
+        return new(id, instance, null, revision, persona, action, TenantIndependentReportSourceAuthority.Hash(action), ReportSourceRead: p);
     }
 }

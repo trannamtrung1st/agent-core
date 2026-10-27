@@ -15,6 +15,15 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         return (await db.Set<TenantApprovalRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == tenantId && r.RequestId == requestId, ct).ConfigureAwait(false))?.Domain();
     }
+    public async ValueTask<TenantApprovalRequest?> FindTaskDelegationApprovalAsync(Guid tenantId, string sourceScope, string requestKey, CancellationToken ct = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        return (await db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE TenantId={tenantId}
+                AND json_extract(PayloadJson,'$.Operation.TaskDelegation.Task.Source.OperationScope')={sourceScope}
+                AND json_extract(PayloadJson,'$.Operation.TaskDelegation.Task.Request.RequestKey')={requestKey}
+            """).AsNoTracking().SingleOrDefaultAsync(ct).ConfigureAwait(false))?.Domain();
+    }
     public async ValueTask<TenantApprovalRequest?> FindRootApprovalAsync(Guid tenantId, Guid rootId, Guid executorId, PreparedTenantOperation operation, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -34,7 +43,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (row.Domain().Operation.OperationFingerprint == fingerprint) return row;
         return null;
     }
-    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null, TenantAttachmentReadApprovalVisibility? attachmentReadVisibility = null, bool backgroundCreationReadable = true, TenantBackgroundReportApprovalVisibility? reportVisibility = null, TenantAutomationApprovalVisibility? automationVisibility = null, TenantMemoryApprovalVisibility? memoryVisibility = null, TenantContinuityApprovalVisibility? continuityVisibility = null, TenantManagementApprovalVisibility? managementVisibility = null, TenantHttpApprovalVisibility? httpVisibility = null)
+    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null, TenantAttachmentReadApprovalVisibility? attachmentReadVisibility = null, TenantBackgroundReportApprovalVisibility? reportVisibility = null, TenantAutomationApprovalVisibility? automationVisibility = null, TenantMemoryApprovalVisibility? memoryVisibility = null, TenantContinuityApprovalVisibility? continuityVisibility = null, TenantManagementApprovalVisibility? managementVisibility = null, TenantHttpApprovalVisibility? httpVisibility = null, TenantTaskApprovalVisibility? taskVisibility = null)
     {
         page.Validate();
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -75,6 +84,8 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             && db.Set<SpaceRecord>().Any(owner => owner.TenantId == r.TenantId && owner.SpaceId == r.SpaceId && owner.DeletedAt == null)).ToArrayAsync(ct).ConfigureAwait(false);
         foreach (var spaceSource in spaceResources) ownedResources.Add(spaceSource.Key);
         var ownedResourceJson = System.Text.Json.JsonSerializer.Serialize(ownedResources);
+        var reportSpacesJson = System.Text.Json.JsonSerializer.Serialize(reportVisibility?.Spaces?.Select(id => id.ToString("D")).ToArray());
+        var reportEnvironmentSpacesJson = System.Text.Json.JsonSerializer.Serialize(reportVisibility?.EnvironmentSpaces?.Select(id => id.ToString("D")).ToArray());
         var reportCanCreate = reportVisibility?.CanCreate ?? true;
         var reportSessionsJson = System.Text.Json.JsonSerializer.Serialize(reportVisibility?.Sessions?.Select(id => id.ToString("D")).ToArray());
         var reportRunsJson = System.Text.Json.JsonSerializer.Serialize(reportVisibility?.Runs?.Select(id => id.ToString("D")).ToArray());
@@ -143,27 +154,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                         AND lower(fact.MemoryId) = json_extract(source.value, '$.MemoryId')
                         AND ({memoryAgentsJson} = 'null' OR fact.AgentInstanceId IN (SELECT value FROM json_each({memoryAgentsJson})))
                         AND (fact.Scope <> 0 OR {memorySessionsJson} = 'null' OR fact.SessionId IN (SELECT value FROM json_each({memorySessionsJson}))))))) AND
-            (json_type(PayloadJson, '$.Operation.BackgroundStart') IS NOT 'object' OR ({backgroundCreationReadable}
-                AND ({artifactReadJson} = 'null' OR SessionId IN (SELECT value FROM json_each({artifactReadJson})))
-                AND EXISTS (SELECT 1 FROM Sessions s WHERE s.SessionId = TenantApprovalRequests.SessionId AND s.DurablyDeletedAtUtc IS NULL)))
-            AND (json_type(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead') IS NOT 'object' OR (
-                ({reportSessionsJson} = 'null' OR (SessionId IN (SELECT value FROM json_each({reportSessionsJson}))
-                    AND json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.ChildSessionId') IN (SELECT value FROM json_each({reportSessionsJson}))))
-                AND ({reportRunsJson} = 'null' OR (json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.InitialRunId') IN (SELECT value FROM json_each({reportRunsJson}))
-                    AND json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.SourceRunId') IN (SELECT value FROM json_each({reportRunsJson}))))
-                AND ({artifactVerifyJson} = 'null' OR NOT EXISTS (SELECT 1 FROM json_each(json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.ArtifactsJson')) file
-                    WHERE json_extract(file.value, '$.ArtifactId') NOT IN (SELECT value FROM json_each({artifactVerifyJson}))))
-                AND EXISTS (SELECT 1 FROM TenantSessions child JOIN Sessions saved ON saved.SessionId = child.SessionId
-                    WHERE child.TenantId = TenantApprovalRequests.TenantId AND child.AgentInstanceId = TenantApprovalRequests.InstanceId
-                    AND child.ExecutorPrincipalId = TenantApprovalRequests.ExecutorPrincipalId AND saved.DurablyDeletedAtUtc IS NULL
-                    AND child.SessionId = json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.ChildSessionId'))
-                AND EXISTS (SELECT 1 FROM AgentRuns initial WHERE initial.TenantId = TenantApprovalRequests.TenantId
-                    AND initial.SessionId = json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.ChildSessionId')
-                    AND initial.AgentRunId = json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.InitialRunId'))
-                AND EXISTS (SELECT 1 FROM AgentRuns source WHERE source.TenantId = TenantApprovalRequests.TenantId
-                    AND source.SessionId = json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.ChildSessionId')
-                    AND source.AgentRunId = json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.SourceRunId'))))
-            AND (json_type(TenantApprovalRequests.PayloadJson, '$.Operation.ReportSourceRead') IS NOT 'object' OR (
+            (json_type(TenantApprovalRequests.PayloadJson, '$.Operation.ReportSourceRead') IS NOT 'object' OR (
                 ({reportSessionsJson} = 'null' OR (SessionId IN (SELECT value FROM json_each({reportSessionsJson}))
                     AND json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.ReportSourceRead.ParentSessionId') IN (SELECT value FROM json_each({reportSessionsJson}))))
                 AND ({reportRunsJson} = 'null' OR (RunId IN (SELECT value FROM json_each({reportRunsJson}))
@@ -179,6 +170,9 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 AND ({reportSessionsJson} = 'null' OR (SessionId IN (SELECT value FROM json_each({reportSessionsJson}))
                     AND json_extract(PayloadJson, '$.Operation.BackgroundReport.ParentSessionId') IN (SELECT value FROM json_each({reportSessionsJson}))))
                 AND ({reportRunsJson} = 'null' OR RunId IN (SELECT value FROM json_each({reportRunsJson})))
+                AND ({reportSpacesJson} = 'null' OR json_extract(PayloadJson,'$.Operation.BackgroundReport.DestinationContext.SpaceId') IN (SELECT value FROM json_each({reportSpacesJson})))
+                AND (json_extract(PayloadJson,'$.Operation.BackgroundReport.DestinationContext.EnvironmentId') IS NULL OR {reportEnvironmentSpacesJson} = 'null'
+                    OR json_extract(PayloadJson,'$.Operation.BackgroundReport.DestinationContext.SpaceId') IN (SELECT value FROM json_each({reportEnvironmentSpacesJson})))
                 AND EXISTS (SELECT 1 FROM Sessions s WHERE s.SessionId = TenantApprovalRequests.SessionId AND s.DurablyDeletedAtUtc IS NULL)
                 AND EXISTS (SELECT 1 FROM TenantSessions root JOIN Sessions s ON s.SessionId = root.SessionId WHERE root.TenantId = TenantApprovalRequests.TenantId
                     AND root.SessionId = json_extract(PayloadJson, '$.Operation.BackgroundReport.ParentSessionId') AND s.DurablyDeletedAtUtc IS NULL)))
@@ -299,6 +293,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                                     AND source.SessionId = a.SessionId AND source.AttachmentId = a.SourceAttachmentId))))))
             """);
         var query = source.AsNoTracking().Where(r => r.TenantId == tenantId);
+        query = TaskApprovalVisibility(db, tenantId, query, taskVisibility);
         var managementWrites = db.Set<TenantApprovalRecord>().FromSqlRaw("SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson,'$.Operation.ManagementMutation') IS 'object'");
         if (managementVisibility is null) query = query.Where(r => r.Permission != "agents.read" && !managementWrites.Any(m => m.RequestId == r.RequestId));
         else if (managementVisibility.Agents is { } managementAgents)
@@ -327,7 +322,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         {
             var id = session.ToString("D");
             query = query.Where(r => r.SessionId == id || db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-                SELECT * FROM TenantApprovalRequests WHERE json_extract(PayloadJson, '$.Operation.BackgroundReport.ParentSessionId') = {id} OR json_extract(PayloadJson, '$.Operation.ReportSourceRead.ParentSessionId') = {id}
+                SELECT * FROM TenantApprovalRequests WHERE json_extract(PayloadJson, '$.Operation.BackgroundReport.ParentSessionId') = {id} OR json_extract(PayloadJson, '$.Operation.ReportSourceRead.ParentSessionId') = {id} OR json_extract(PayloadJson,'$.Operation.TaskDelegation.Task.Source.SessionId')={id}
                 """).Any(parent => parent.RequestId == r.RequestId));
         }
         if (allowedRequests is not null) query = query.Where(r => allowedRequests.Contains(r.RequestId));
@@ -518,7 +513,12 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         var written = await WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
         {
             var duplicate = await RootApprovalAsync(db, request.TenantId, request.RootActivationId.ToString("D"), request.ExecutorPrincipalId, request.Operation, ct).ConfigureAwait(false);
-            if (duplicate is not null) { result = duplicate.Domain(); return false; }
+            if (duplicate is not null)
+            {
+                result = duplicate.Domain();
+                if (request.Operation.TaskDelegation is { } intent) TenantApprovalRules.MatchTaskDelegationRequest(result, intent.Task.Request);
+                return false;
+            }
             if (request.ExpiresAt <= ApprovalNow) throw new SecurityConflictException("approval_expired");
             var row = await OwnedRuns(db, request.TenantId).SingleOrDefaultAsync(r => r.AgentRunId == request.RunId.ToString("D"), ct).ConfigureAwait(false);
             var target = await OwnedAgents(db, request.TenantId).SingleOrDefaultAsync(r => r.Instance.InstanceId == request.Operation.InstanceId.ToString("D"), ct).ConfigureAwait(false);
@@ -526,7 +526,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             var run = AgentRunStoreMapping.ToDomain(row); var agent = Owned(target);
             TenantApprovalRules.Validate(request, run, agent);
             if (request.Operation.BackgroundReport is not null) await RequireBackgroundReportOperation(db, request, run, agent, ct).ConfigureAwait(false);
-            if (request.Operation.BackgroundStart is not null) await RequireBackgroundCreationOperation(db, request, run, agent, ct).ConfigureAwait(false);
+            if (request.Operation.TaskDelegation is not null) _ = await RequireTaskConsentOperation(db, request, run, agent, ct, creation: true);
             if (request.Operation.ArtifactPublication is not null) await RequireArtifactOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.BrowserCommand is not null) await RequireBrowserOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.AutomationMutation is not null) _ = await RequireAutomationMutationApproval(db, request, run, ct).ConfigureAwait(false);
@@ -540,7 +540,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (request.Operation.WorkspaceMutation is not null) await RequireWorkspaceMutationOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.AttachmentRead is not null) await RequireAttachmentReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.ReportSourceRead is not null) await RequireReportSourceReadOperation(db, request, ct, pending: true).ConfigureAwait(false);
-            if (request.Operation.CompletionRead is not null) await RequireCompletionReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
+
             if (request.Operation.ArtifactVerification is not null) await RequireArtifactVerificationOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if(request.Operation.HttpRequest is not null)await RequireHttpOperation(db,request,run,agent,ct).ConfigureAwait(false);
             if (request.Operation.AccountAction is not null) await RequireAccountActionOperation(db, request, run, agent, ct).ConfigureAwait(false);
@@ -600,6 +600,19 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (grant is not null) throw new ArgumentException("Evaluation Review grants no exceptional operation permission.");
             db.Entry(row).CurrentValues.SetValues(TenantApprovalRecord.From(request)); db.Add(decision); db.Add(signal); return true;
         }
+        if (TenantTaskConsentRules.IsHuman(request))
+        {
+            TenantTaskConsentRules.RequireHumanShape(request);
+            if (grant is not null) throw new ArgumentException("A human Task command cannot borrow an exceptional grant.");
+            if (request.ExpiresAt <= ApprovalNow) throw new SecurityConflictException("approval_expired");
+            if (request.Status != TenantApprovalStatus.Cancelled)
+            {
+                var humanState = (await ReadTenantAsync(db, request.TenantId, ct))!;
+                _ = await RequireHumanTaskConsentOperation(db, request, ct);
+                await TenantTaskConsentRules.ReviewerAsync(humanState, request, human.PrincipalId, new(this), ct);
+            }
+            db.Entry(row).CurrentValues.SetValues(TenantApprovalRecord.From(request)); db.Add(decision); db.Add(signal); return true;
+        }
         if (request.Operation.AutomationAdmission is not null)
         {
             if (request.ExpiresAt <= ApprovalNow) throw new SecurityConflictException("approval_expired");
@@ -634,10 +647,10 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 await RequireBackgroundReportOperation(db, request, run, agent, ct).ConfigureAwait(false);
                 await TenantBackgroundReportRules.ReviewerAsync(state, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
             }
-            if (request.Operation.BackgroundStart is not null)
+            if (request.Operation.TaskDelegation is not null)
             {
-                await RequireBackgroundCreationOperation(db, request, run, agent, ct).ConfigureAwait(false);
-                await TenantBackgroundCreationRules.ReviewerAsync(state, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+                _ = await RequireTaskConsentOperation(db, request, run, agent, ct);
+                await TenantTaskConsentRules.ReviewerAsync(state, request, decision.HumanPrincipalId, new(this), ct);
             }
             if (request.Operation.ArtifactPublication is not null)
             {
@@ -708,11 +721,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 await RequireAttachmentReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
                 await TenantAttachmentReadRules.ReviewerAsync(state, request.Operation.AttachmentRead, request.OriginalInitiatorPrincipalId, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
             }
-            if (request.Operation.CompletionRead is not null)
-            {
-                await RequireCompletionReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
-                await TenantCompletionReadRules.ReviewerAsync(state, request.Operation.CompletionRead, request.OriginalInitiatorPrincipalId, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
-            }
+
             if (request.Operation.ArtifactVerification is not null)
             {
                 await RequireArtifactVerificationOperation(db, request, run, agent, ct).ConfigureAwait(false);

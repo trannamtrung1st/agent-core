@@ -38,7 +38,7 @@ public sealed partial class TenantCredentialAccessTests
             Requests.Enqueue(request); Entered.TrySetResult(); await Release.Task.WaitAsync(ct);
             if (conversation) Assert.DoesNotContain(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
             else Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
-            Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.BrowserFillCredential);
+            Assert.DoesNotContain(request.Tools!, t => t.Name is "background.start" or ToolCatalog.BrowserFillCredential);
             var results = request.Messages.Where(m => m.Role == ModelRole.Tool && m.ToolCallId?.StartsWith("independent-stage-", StringComparison.Ordinal) == true).ToArray();
             var refused = results.Any(m => m.Text.Contains("\"error\":", StringComparison.Ordinal) || m.Text.Contains("\"decision\":\"denied\"", StringComparison.Ordinal));
             if (refused)
@@ -119,7 +119,7 @@ public sealed partial class TenantCredentialAccessTests
         var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
         var draft = await Json(await owner.PostAsJsonAsync(api + "/agent-definitions", new { name = "Independent exact task", expectedRevision = await Revision(owner, tenant) }));
         var candidate = JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
-        var baseline = (await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 32))!;
+        var baseline = (await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 35))!;
         candidate["triggerPolicy"] = JsonSerializer.SerializeToNode(baseline.TriggerPolicy, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         if (kind is "docx" or "xlsx")
         {

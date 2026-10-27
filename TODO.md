@@ -111,11 +111,11 @@ Historical [foundation](docs/reports/unified-scripts-evaluation-2026-10-27.md) a
 
 ### 8. Session Goals
 
-Closed locally after the transition stabilization and audit-wording refinement. Implemented explicit Session Goals in their creating Space, accepted criteria/checkpoints, protected human/model progress, independent verification, immutable Run bindings and bounded continuation through existing execution owners. [Delivery and final review](docs/reports/session-goals-delivery-2026-10-27.md) record local qualification and external deployment limits. Session lifecycle remains independent; Environments remain variable profiles. Initiative 9 — Task Delegation & Communication is next and remains unstarted.
+Closed locally after the transition stabilization and audit-wording refinement. Implemented explicit Session Goals in their creating Space, accepted criteria/checkpoints, protected human/model progress, independent verification, immutable Run bindings and bounded continuation through existing execution owners. [Delivery and final review](docs/reports/session-goals-delivery-2026-10-27.md) record local qualification and external deployment limits. Session lifecycle remains independent; Environments remain variable profiles. Initiative 9 — Task Delegation & Communication is implemented with focused local verification and explicit external qualification limits.
 
 ### 9. Task Delegation & Communication
 
-Build internal cooperation on existing execution and authorization: durable delegated tasks, agent-to-agent communication, scoped authorization/identity propagation, independent execution with reporting back, task state/outcomes/recovery, delegation routing and workflow coordination. External A2A interoperability may follow internal foundations. Reuse existing owners without another general-purpose execution engine or redundant orchestration infrastructure; multi-agent implementation requires an explicit specification revision.
+Implemented bounded internal cooperation through existing Session/Activation/Run and IAM owners: durable Tasks, independently owned workers, Task/direct two-party communication, opt-in wake, exact Review, reports, cancellation/retry and retained source protection. The [delivery report](docs/reports/initiative-9-local-verification-2026-10-27.md) records focused local checks, T01–T40 coverage, finish-review disposition and unrun external qualification. External A2A, Group Chat and general workflow orchestration remain outside this scope.
 
 ### 10. Group Chat
 

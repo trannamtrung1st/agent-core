@@ -42,7 +42,7 @@ public sealed partial class TenantCredentialAccessTests
         var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
         var draft = await Json(await owner.PostAsJsonAsync(api + "/agent-definitions", new { name = "Completion recovery", expectedRevision = await Revision(owner, tenant) }));
         var candidate = JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
-        var baseline = (await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 32))!;
+        var baseline = (await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 35))!;
         candidate["triggerPolicy"] = JsonSerializer.SerializeToNode(baseline.TriggerPolicy, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         string[] capabilities = [ToolCatalog.WorkspaceWrite, ToolCatalog.WorkspaceRead, ToolCatalog.ArtifactsCreateFromWorkspace];
         candidate["executionPolicy"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(),

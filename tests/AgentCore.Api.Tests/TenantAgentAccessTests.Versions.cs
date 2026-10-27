@@ -14,7 +14,7 @@ public sealed partial class TenantAgentAccessTests
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();
         var root = $"/api/v2/tenants/{tenant}/agents";
-        var created = await Json(await owner.PostAsJsonAsync(root, new { templateId = "general-assistant", version = 21, expectedRevision = await Revision(owner, tenant) }));
+        var created = await Json(await owner.PostAsJsonAsync(root, new { templateId = "general-assistant", version = 35, expectedRevision = await Revision(owner, tenant) }));
         var id = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); root += $"/{id}";
         var catalog = await Json(await owner.GetAsync(root + "/versions?pageSize=1"));
         Assert.Equal(1, catalog.GetProperty("items").GetArrayLength()); Assert.True(catalog.GetProperty("total").GetInt32() > 1);

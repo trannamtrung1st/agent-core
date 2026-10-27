@@ -26,7 +26,7 @@ public sealed class SelfManagementRemediationTests
     {
         await using var host = new AgentCoreApiFactory();
         var services = host.Services;
-        var owner = await NativeInstanceConfigurationSeed.CreateAsync(services, "general-assistant", 23);
+        var owner = await NativeInstanceConfigurationSeed.CreateAsync(services, "general-assistant", 35);
         var policy = await NativeInstanceConfigurationSeed.PolicyAsync(services, owner.InstanceId, owner.Revision,
             new(new(HarnessManagementMode.Assisted), new([HarnessManagementScope.Settings])));
         var resolver = services;

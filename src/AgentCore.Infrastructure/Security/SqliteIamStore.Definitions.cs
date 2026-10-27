@@ -11,6 +11,14 @@ public sealed partial class SqliteIamStore
 {
     public async ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
+        if (AgentCore.Application.Tasks.TaskAuthority.TryScope(scope, out var taskScope))
+        {
+            await using var db = await contexts.CreateDbContextAsync(ct);
+            return scope.ResourceType == "task"
+                ? await db.Set<DelegatedTaskRow>().AnyAsync(t => t.TenantId == scope.TenantId && t.TaskId == taskScope
+                    && db.Set<TenantSessionRecord>().Any(s => s.TenantId == t.TenantId && s.SessionId == t.SourceSessionId), ct)
+                : await db.Set<AgentThreadRow>().AnyAsync(t => t.TenantId == scope.TenantId && t.ThreadId == taskScope, ct);
+        }
         if (AgentCore.Application.Evaluations.EvaluationStoreRules.TryScope(scope, out _))
         {
             await using var db = await contexts.CreateDbContextAsync(ct);
@@ -64,12 +72,13 @@ public sealed partial class SqliteIamStore
         if (TenantRunRules.TryId(scope, out var run))
         {
             await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-            return await OwnedRuns(db, scope.TenantId!.Value).AnyAsync(r => r.AgentRunId == run.ToString("D"), ct).ConfigureAwait(false);
+            return await OwnedRuns(db, scope.TenantId!.Value).AnyAsync(r => r.AgentRunId == run.ToString("D")
+                && OwnedSessions(db, scope.TenantId.Value).Any(s => s.SessionId == r.SessionId), ct).ConfigureAwait(false);
         }
         if (TenantSessionRules.TryId(scope, out var session))
         {
             await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-            return await OwnedSessions(db, scope.TenantId!.Value).AnyAsync(s => s.SessionId == session.ToString("D"), ct).ConfigureAwait(false);
+            return await OwnedSessions(db, scope.TenantId!.Value, session.ToString("D")).AnyAsync(s => s.SessionId == session.ToString("D"), ct).ConfigureAwait(false);
         }
         if (TenantCredentialRules.TryId(scope, out var credential))
         {

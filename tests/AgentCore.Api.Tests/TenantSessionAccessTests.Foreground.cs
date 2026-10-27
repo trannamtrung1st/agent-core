@@ -18,7 +18,7 @@ public sealed partial class TenantSessionAccessTests
         public TaskCompletionSource ChildRelease { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public override async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            if (Origin(request) == ExecutionOrigin.ImmediateBackground)
+            if (Origin(request) == ExecutionOrigin.DelegatedTask)
             {
                 ChildEntered.TrySetResult();
                 await ChildRelease.Task.WaitAsync(cancellationToken);

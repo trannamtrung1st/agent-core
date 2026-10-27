@@ -12,7 +12,7 @@ public sealed record TenantApprovalPreparationResult(OperationDecisionKind Decis
     PreparedTenantOperation Operation, TenantApprovalRequest? Request);
 public sealed record TenantApprovalViewPage(IReadOnlyList<TenantApprovalView> Items, int Total, int Page, int PageSize);
 public sealed record TenantApprovalView(TenantApprovalRequest Request, long SecurityRevision,
-    TenantOperationReceipt? OperationResult = null, TenantApprovalDecision? Decision = null, TenantApprovalReview? Review = null, TenantAccountActionResult? AccountResult = null);
+    TenantOperationReceipt? OperationResult = null, TenantApprovalDecision? Decision = null, TenantApprovalReview? Review = null, TenantAccountActionResult? AccountResult = null, AgentCore.Domain.Tasks.HumanTaskApprovalOutcome? HumanTaskOutcome = null);
 
 public sealed partial class TenantApprovalService(IIamStore security,
     ITenantApprovalStore approvals,
@@ -31,10 +31,8 @@ public sealed partial class TenantApprovalService(IIamStore security,
     TenantWorkspaceMutationTarget? workspaceMutations = null,
     TenantArtifactSourceTarget? artifactSources = null,
     TenantAttachmentRuntimeContextService? attachmentReads = null,
-    TenantBackgroundCreationTarget? backgroundCreations = null,
     TenantBackgroundReportTarget? backgroundReports = null,
     ITenantRuntimeStore? reportRuntime = null,
-    TenantCompletionReadService? completionReads = null,
     TenantReportSourceReadService? reportSourceReads = null,
     TenantAccountRuntimeReadService? accountReads = null,
     TenantAccountActionTarget? accountActions = null,
@@ -44,7 +42,10 @@ public sealed partial class TenantApprovalService(IIamStore security,
     TenantExperienceOperationService? experienceOperations = null,
     TenantManagementOperationTarget? managementTargets = null,
     TenantPublicWebOperationTarget? webTargets = null,
-    AgentCore.Application.Evaluations.EvaluationSandboxAuthority? evaluationSandbox = null)
+    AgentCore.Application.Evaluations.EvaluationSandboxAuthority? evaluationSandbox = null,
+    AgentCore.Application.Tasks.TenantTaskService? taskDelegations = null,
+    TenantTaskDelegationTarget? taskTargets = null,
+    ITenantHumanTaskApprovalStore? humanTaskApprovals = null)
 {
     // Trusted internal typed preparation. No model-supplied tenant, principal, permission, grant or arbitrary action JSON.
     public ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(TenantRunReference reference, AgentIdentity persona,
@@ -113,7 +114,11 @@ public sealed partial class TenantApprovalService(IIamStore security,
         long expectedRunRevision, Guid? generation, CancellationToken ct)
     {
         var existing = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.Activation.RootActivationId, agent.PrincipalId, operation, ct).ConfigureAwait(false);
-        if (existing is not null) return await DuplicateOutcome(state, run, existing, ct).ConfigureAwait(false);
+        if (existing is not null)
+        {
+            if (operation.TaskDelegation is { } intent) TenantApprovalRules.MatchTaskDelegationRequest(existing, intent.Task.Request);
+            return await DuplicateOutcome(state, run, existing, ct).ConfigureAwait(false);
+        }
         OperationAuthorizationDecision decision;
         try
         {
@@ -130,9 +135,11 @@ public sealed partial class TenantApprovalService(IIamStore security,
         }
         if (decision.Decision != OperationDecisionKind.RequiresApproval) return new(decision.Decision, decision.ReasonCode, operation, null);
         var at = time.GetUtcNow();
+        var expiresAt = operation.TaskDelegation is { } delegation && delegation.Task.DeadlineAt < at.AddHours(1) ? delegation.Task.DeadlineAt : at.AddHours(1);
+        if (expiresAt <= at) return await PreparationOutcome(state, run, operation, OperationDecisionKind.Denied, "task_deadline_exceeded", null, ct).ConfigureAwait(false);
         var request = new TenantApprovalRequest(ids.NewId(), reference.TenantId, run.AgentRunId, run.SessionId, run.Admission.Activation.RootActivationId,
             agent.PrincipalId, run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, decision.ApprovalKind!.Value,
-            operation, TenantApprovalStatus.Pending, 1, at, at.AddHours(1), snapshot);
+            operation, TenantApprovalStatus.Pending, 1, at, expiresAt, snapshot);
         if (operation.AccountAction is not null)
         {
             var qualified = false;
@@ -168,6 +175,7 @@ public sealed partial class TenantApprovalService(IIamStore security,
                 current.Admission.ExecutionContext!.AgentPrincipalId, operation, ct).ConfigureAwait(false)
                 ?? throw new SecurityConflictException("stale_revision");
         }
+        if (operation.TaskDelegation is { } taskIntent) TenantApprovalRules.MatchTaskDelegationRequest(saved, taskIntent.Task.Request);
         return new(saved.Status == TenantApprovalStatus.Pending ? OperationDecisionKind.RequiresApproval : OperationDecisionKind.Denied,
             saved.RequestId == request.RequestId ? "approval_pending" : TenantApprovalRules.DuplicateReason(saved), saved.Operation, saved);
     }
@@ -234,7 +242,7 @@ public sealed partial class TenantApprovalService(IIamStore security,
         var workspaceWrites = await VisibleWorkspaceScopes(before, human.PrincipalId, ct, "workspaces.write").ConfigureAwait(false);
         var workspaceDeletes = await VisibleWorkspaceScopes(before, human.PrincipalId, ct, "workspaces.delete").ConfigureAwait(false);
         var creationRead = true;
-        foreach (var key in TenantBackgroundCreationRules.Permissions)
+        foreach (var key in new[] { "sessions.create", "agent-runs.create" })
             creationRead &= (await authorizer.CheckTenantAsync(before, human.PrincipalId, PermissionCatalog.Get(key), AccessScope.ForTenant(tenant), ct).ConfigureAwait(false)).Allowed;
         var reportRuns = await VisibleIds(before, human.PrincipalId, "agent-runs.read", "agent-run", ct).ConfigureAwait(false);
         var reportCreate = (await authorizer.CheckTenantAsync(before, human.PrincipalId, PermissionCatalog.Get("agent-runs.create"), AccessScope.ForTenant(tenant), ct).ConfigureAwait(false)).Allowed;
@@ -249,7 +257,9 @@ public sealed partial class TenantApprovalService(IIamStore security,
         memoryAgents = memoryAgents is null ? homeAgents : homeAgents is null ? memoryAgents : memoryAgents.Intersect(homeAgents).ToArray();
         var httpAgents=await VisibleIds(before,human.PrincipalId,"http.request","agent",ct).ConfigureAwait(false);
         httpAgents=httpAgents is null?homeAgents:homeAgents is null?httpAgents:httpAgents.Intersect(homeAgents).ToArray();
-        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct, credentialIds, new(sandboxIds, sandboxProfiles, sandboxSessions, controlIds, controlReadIds), new(browserRead, browserUse, sandboxSessions), new(credentialRead, sandboxSessions, emailRead, driveRead, emailDraft, emailSend, driveWrite, driveDelete), artifactCreate, new(artifactReadIds, sandboxSessions), new(workspaceScopes, homeSpaces, sandboxSessions, resourceScopes, homeAgents), new(workspaceScopes, workspaceWrites, workspaceDeletes, homeSpaces, sandboxSessions), new(attachmentReadIds, sandboxSessions), creationRead, new(reportCreate, sandboxSessions, reportRuns), new(creationRead, homeAgents, automationReads, automationRuns, webhookSources, coreEvents, emailSourceIds, reportCreate, sandboxSessions, automationChatAgents), new(human.PrincipalId, memoryAgents, sandboxSessions), new(human.PrincipalId, homeAgents, automationChatAgents, sandboxSessions, memoryAgents), await ManagementVisibility(before, human.PrincipalId, ct).ConfigureAwait(false), new(httpAgents,sandboxSessions)).ConfigureAwait(false);
+        var taskDelegateSessions = await VisibleIds(before, human.PrincipalId, "tasks.delegate", "session", ct);
+        var taskEnvironmentSpaces = await VisibleIds(before, human.PrincipalId, "environments.read", "space", ct);
+        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct, credentialIds, new(sandboxIds, sandboxProfiles, sandboxSessions, controlIds, controlReadIds), new(browserRead, browserUse, sandboxSessions), new(credentialRead, sandboxSessions, emailRead, driveRead, emailDraft, emailSend, driveWrite, driveDelete), artifactCreate, new(artifactReadIds, sandboxSessions), new(workspaceScopes, homeSpaces, sandboxSessions, resourceScopes, homeAgents), new(workspaceScopes, workspaceWrites, workspaceDeletes, homeSpaces, sandboxSessions), new(attachmentReadIds, sandboxSessions), new(reportCreate, sandboxSessions, reportRuns, homeSpaces, taskEnvironmentSpaces), new(creationRead, homeAgents, automationReads, automationRuns, webhookSources, coreEvents, emailSourceIds, reportCreate, sandboxSessions, automationChatAgents), new(human.PrincipalId, memoryAgents, sandboxSessions), new(human.PrincipalId, homeAgents, automationChatAgents, sandboxSessions, memoryAgents), await ManagementVisibility(before, human.PrincipalId, ct).ConfigureAwait(false), new(httpAgents,sandboxSessions), new(creationRead, homeAgents, sandboxSessions, taskDelegateSessions, homeSpaces, taskEnvironmentSpaces, (await authorizer.CheckTenantAsync(before, human.PrincipalId, PermissionCatalog.Get("models.read"), AccessScope.ForTenant(tenant), ct)).Allowed)).ConfigureAwait(false);
         var metadata = new List<TenantApprovalView>();
         foreach (var request in requests.Items) metadata.Add(await Metadata(request, ct).ConfigureAwait(false));
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
@@ -276,13 +286,15 @@ public sealed partial class TenantApprovalService(IIamStore security,
 
     private async ValueTask<TenantApprovalView> Metadata(TenantApprovalRequest request, CancellationToken ct)
     {
+        var humanTaskOutcome = TenantTaskConsentRules.IsHuman(request)
+            ? await (humanTaskApprovals ?? throw new AccessDeniedException("task_consent_unavailable")).FindHumanTaskApprovalOutcomeAsync(request.TenantId, request.Operation.OperationId, ct) : null;
         var receipt = await effects.FindOperationReceiptAsync(request.TenantId, request.Operation.OperationId, ct).ConfigureAwait(false);
         var decision = await effects.FindApprovalDecisionAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false);
-        if (request.Status == TenantApprovalStatus.Pending && (receipt is not null || decision is not null))
+        if (request.Status == TenantApprovalStatus.Pending && (receipt is not null || decision is not null || humanTaskOutcome is not null))
             request = await approvals.FindApprovalAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
         var accountResult = request.Operation.AccountAction is not null && receipt is not null
             ? TenantAccountActionResults.Read(request, receipt, await operations.FindRunAsync(new(request.TenantId, receipt.RunId), ct).ConfigureAwait(false)) : null;
-        return new(request, 0, receipt, decision, AccountResult: accountResult);
+        return new(request, 0, receipt, decision, AccountResult: accountResult, HumanTaskOutcome: humanTaskOutcome);
     }
 
     private async ValueTask<IReadOnlyList<string>?> VisibleResourceReadScopes(TenantSecurityState state, Guid human, CancellationToken ct, string permissionKey = "resources.read", string resourceType = "resource")
@@ -364,6 +376,7 @@ public sealed partial class TenantApprovalService(IIamStore security,
         if (!string.Equals(request.Operation.ActionHash, actionHash, StringComparison.Ordinal)) throw new SecurityConflictException("operation_mismatch");
         var at = time.GetUtcNow();
         if (at >= request.ExpiresAt) throw new SecurityConflictException("approval_expired");
+        if (TenantTaskConsentRules.IsHuman(request)) return await ChangeHumanTaskAsync(state, request, human, outcome, ct);
         if (request.Operation.SandboxCommand?.Evaluation is not null)
             return await ChangeEvaluationSandboxAsync(state, request, human, outcome, ct);
         if (request.Operation.AutomationAdmission is not null) return await ChangeAutomationAdmissionAsync(state, request, human, outcome, ct).ConfigureAwait(false);
@@ -483,12 +496,7 @@ public sealed partial class TenantApprovalService(IIamStore security,
                 await reads.RequireInspectionAsync(request, run, ct).ConfigureAwait(false);
                 await reads.RequireInspectionReviewerAsync(request, state, human.PrincipalId, ct).ConfigureAwait(false);
             }
-            if (request.Operation.CompletionRead is not null)
-            {
-                var reads = completionReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
-                await reads.RequireInspectionAsync(request, run, ct).ConfigureAwait(false);
-                await reads.RequireInspectionReviewerAsync(request, state, human.PrincipalId, ct).ConfigureAwait(false);
-            }
+
             if (request.Operation.ArtifactVerification is not null)
             {
                 var reads = artifactReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
@@ -501,10 +509,10 @@ public sealed partial class TenantApprovalService(IIamStore security,
                 await reads.RequireInspectionAsync(request, run, ct).ConfigureAwait(false);
                 await reads.RequireInspectionReviewerAsync(request, state, human.PrincipalId, ct).ConfigureAwait(false);
             }
-            if (request.Operation.BackgroundStart is not null)
+            if (request.Operation.TaskDelegation is not null)
             {
-                await (backgroundCreations ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(request, run, state, ct).ConfigureAwait(false);
-                await TenantBackgroundCreationRules.ReviewerAsync(state, request, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+                await (taskTargets ?? throw new AccessDeniedException("approval_unavailable")).RequireAsync(request, run, state, ct);
+                await TenantTaskConsentRules.ReviewerAsync(state, request, human.PrincipalId, authorizer, ct);
             }
             if (request.Operation.BrowserCommand is { } browser)
             {
@@ -542,7 +550,9 @@ public sealed partial class TenantApprovalService(IIamStore security,
         foreach (var signal in await approvals.PendingApprovalSignalsAsync(100, ct).ConfigureAwait(false))
         {
             var request = await approvals.FindApprovalAsync(signal.TenantId, signal.RequestId, ct).ConfigureAwait(false);
-            if (request?.Operation.AutomationAdmission is not null)
+            if (request is not null && TenantTaskConsentRules.IsHuman(request))
+            { if (await ProcessHumanTaskAsync(signal, request, ct)) count++; }
+            else if (request?.Operation.AutomationAdmission is not null)
             { if (await ProcessAutomationAdmissionAsync(signal, request, ct).ConfigureAwait(false)) count++; }
             else if (request?.Operation.ReportSourceRead is not null)
             { if (await (reportRuntime ?? throw new AccessDeniedException("tenant_effect_unavailable")).SettleTenantReportSourceReadAsync(signal, ids.NewId(), ct).ConfigureAwait(false)) count++; }
@@ -597,11 +607,7 @@ public sealed partial class TenantApprovalService(IIamStore security,
         }
         if (request.Operation.ReportSourceRead is not null)
             await (reportSourceReads ?? throw new AccessDeniedException("approval_unavailable")).RequireInspectionAsync(request, state, human, ct).ConfigureAwait(false);
-        if (request.Operation.CompletionRead is not null)
-        {
-            try { await (completionReads ?? throw new AccessDeniedException("approval_unavailable")).RequireInspectionReadAsync(request, state, human, ct).ConfigureAwait(false); }
-            catch (AccessDeniedException) { throw new AccessDeniedException("approval_unavailable"); }
-        }
+
         if (request.Operation.ArtifactVerification is not null)
         {
             try { await (artifactReads ?? throw new AccessDeniedException("approval_unavailable")).RequireInspectionReadAsync(request, state, human, ct).ConfigureAwait(false); }
@@ -652,7 +658,12 @@ public sealed partial class TenantApprovalService(IIamStore security,
             AccessScope.ForResource(request.TenantId, "agent", request.ResourceId), ct).ConfigureAwait(false)).Allowed) throw new AccessDeniedException("approval_unavailable");
         if (request.Operation.AutomationAdmission is not null) await TenantAutomationAdmissionApprovalRules.ReadAsync(state, request, human, authorizer, ct).ConfigureAwait(false);
         if (request.Operation.BackgroundReport is not null) await TenantBackgroundReportRules.ReadAsync(state, request, human, authorizer, ct).ConfigureAwait(false);
-        if (request.Operation.BackgroundStart is not null) await TenantBackgroundCreationRules.ReadAsync(state, request, human, authorizer, ct).ConfigureAwait(false);
+        if (request.Operation.TaskDelegation is not null)
+        {
+            if (await (security as ITenantSessionStore ?? throw new AccessDeniedException("approval_unavailable")).FindTenantSessionAsync(request.TenantId, request.SessionId, ct) is null)
+                throw new AccessDeniedException("approval_unavailable");
+            await TenantTaskConsentRules.ReadAsync(state, request, human, authorizer, ct);
+        }
         var actionScope = TenantApprovalRules.Scope(request.TenantId, request.Operation);
         if (request is { Status: TenantApprovalStatus.Approved, Operation.ManagementMutation.Skill.Result.Deleted: true })
         {

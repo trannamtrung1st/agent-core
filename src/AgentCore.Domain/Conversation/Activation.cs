@@ -7,7 +7,7 @@ public enum ActivationKind
 {
     UserTurn,
     Initiative,
-    ImmediateBackground,
+    Reserved2,
     ScheduledWork,
     ApplicationEvent,
     ManualBackground,
@@ -16,7 +16,10 @@ public enum ActivationKind
     ConfigurationContinuation,
     ApprovalContinuation,
     ContextContinuation,
-    GoalContinuation
+    GoalContinuation,
+    DelegatedTask,
+    TaskCompletion,
+    AgentMessage
 }
 
 /// <summary>Immutable admission of one effective turn, including its ordered input batch.</summary>
@@ -39,7 +42,7 @@ public sealed class Activation
         Guid? parentActivationId,
         string? evidenceJson = null)
     {
-        if (activationId == Guid.Empty || sessionId == Guid.Empty || !Enum.IsDefined(kind))
+        if (activationId == Guid.Empty || sessionId == Guid.Empty || !Enum.IsDefined(kind) || kind == ActivationKind.Reserved2)
             throw new ArgumentException("Activation, Session and valid kind are required.");
         ArgumentNullException.ThrowIfNull(sourceEntryIds);
         var entries = sourceEntryIds.ToArray();
@@ -53,7 +56,7 @@ public sealed class Activation
         AgentRunText.RequireOptionalId(sourceSessionId, "Source Session");
         AgentRunText.RequireOptionalId(sourceAgentRunId, "Source AgentRun");
         AgentRunText.RequireOptionalId(parentActivationId, "Parent Activation");
-        var continuation = kind is ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ConfigurationContinuation or ActivationKind.ApprovalContinuation or ActivationKind.ContextContinuation or ActivationKind.GoalContinuation;
+        var continuation = kind == ActivationKind.DelegatedTask && sourceAgentRunId is not null || kind is ActivationKind.BackgroundCompleted or ActivationKind.TaskCompletion or ActivationKind.ConfigurationContinuation or ActivationKind.ApprovalContinuation or ActivationKind.ContextContinuation or ActivationKind.GoalContinuation;
         if (rootActivationId == Guid.Empty || continuation && (parentActivationId is null || parentActivationId == activationId
                 || rootActivationId == activationId || sourceAgentRunId is null || sourceSessionId is null)
             || !continuation && (rootActivationId != activationId || parentActivationId is not null || sourceAgentRunId is not null || sourceSessionId is not null))
@@ -65,7 +68,7 @@ public sealed class Activation
             throw new ArgumentException("Approval continuation requires a decision signal, same Session source and no newly owned inputs.");
         if (kind == ActivationKind.ScheduledWork && triggerOccurrenceId is null)
             throw new ArgumentException("Scheduled work requires its admitted occurrence.");
-        if (kind is ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted
+        if (kind is ActivationKind.BackgroundCompleted
             && (sourceSessionId is null || sourceAgentRunId is null || sourceSessionId == sessionId))
             throw new ArgumentException("Background admission requires another Session and its source run.");
         AgentRunTime.RequireUtc(admittedAtUtc, "Admission");

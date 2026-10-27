@@ -21,6 +21,7 @@ public static class TenantRunProfileRules
         && StateIsolationAccess.RestrictDefinition(pin.Definition, current).StateIsolationPolicy?.ProfileEvidence != false;
     public static TenantUser? User(AgentRun run, AgentRun root, TenantSecurityState state)
     {
+        if (run.Admission.DelegatedTask is not null || run.Admission.AgentMessage is not null) return null;
         if (root.Admission.ExecutionContext is not { Origin: ExecutionOrigin.UserMessage, OriginalInitiatorPrincipalId: { } user }
             || run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId != user) return null;
         var owner = state.Users.SingleOrDefault(u => u.PrincipalId == user && u.Status == IdentityStatus.Active);

@@ -35,7 +35,7 @@ test("failed assistant details copy and survive reload", async ({ page }) => {
 
 test("repeated blocked strategies remain bounded and terminal finalization diagnostics survive reload", async ({ page }) => {
   await page.goto("/");
-  await selectInstanceIdentity(page, { id: "general-assistant", version: 21 }, {
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 35 }, {
     interactiveBrowser: { maxSteps: 8, durationSeconds: 300, perToolSeconds: 30, preset: 3 }
   });
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
@@ -62,7 +62,7 @@ test("repeated blocked strategies remain bounded and terminal finalization diagn
 
 test("blocked malformed close permits an unrelated observation and corrected close", async ({ page }) => {
   await page.goto("/");
-  await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 35 });
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("synthetic-invalid-tool-recover");
   await page.getByRole("button", { name: "Send" }).click();
@@ -94,7 +94,7 @@ async function latestRun(page: import("@playwright/test").Page) {
 for (const replyFails of [false, true]) {
   test(`browser actions survive ${replyFails ? "failed" : "recovered"} finalization`, async ({ page }) => {
     await page.goto("/");
-    await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
+    await selectInstanceIdentity(page, { id: "general-assistant", version: 35 });
     await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
     const origin = `http://127.0.0.1:${process.env.PLAYWRIGHT_FIXTURE_PORT ?? "5091"}`;
     await page.getByLabel("Message").fill(`synthetic-finalization-${replyFails ? "fail" : "recover"} ${origin}/`);
@@ -120,7 +120,7 @@ for (const replyFails of [false, true]) {
 
 test("native sign-out confirmation completes before closure and final reply", async ({ page }) => {
   await page.goto("/");
-  await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 35 });
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill(`synthetic-browser-cleanup http://127.0.0.1:${process.env.PLAYWRIGHT_FIXTURE_PORT ?? "5091"}/ Sign out and close browser.`);
   await page.getByRole("button", { name: "Send" }).click();

@@ -71,7 +71,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [InlineData(false, "agents.read")] [InlineData(true, "agents.read")]
     public async Task Tenant_workspace_mutation_Review_requires_current_compound_independent_reviewer(bool sqlite, string permission)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         await SeedRuntimeWorkspace(f, s, false); await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read", "workspaces.read", "workspaces.write"]);
         var peer = await User(f, s, "independent-mutation-reviewer@example.test", ["approvals.read", "approvals.approve", "agents.read", "sessions.read", "workspaces.read", "workspaces.write"]);
         await Policies(f).SaveAsync(s.Tenant, s.Owner, permission, new(OperationApprovalMode.Always, true), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 0);
@@ -90,7 +90,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_mutation_Review_does_not_inherit_missing_secondary_write_from_an_exact_delete_grant(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         await SeedRuntimeWorkspace(f, s, true); await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read"]);
         var service = ApprovalService(f, workspaceMutations: MutationTargets(f)); var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
         var failure = await Assert.ThrowsAsync<AccessDeniedException>(() => service.PrepareWorkspaceMutationAsync(new(s.Tenant, frame.RunId), new("delete-with-ungranted-write", ToolCatalog.WorkspaceBatch,
@@ -102,7 +102,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_workspace_mutation_Review_mixed_batch_retains_independent_write_and_only_primary_delete_grant(bool sqlite, bool exceptional)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         await SeedRuntimeWorkspace(f, s, true);
         await GrantWorkspaceRuntimeReads(f, s, exceptional ? ["agents.read", "sessions.read", "workspaces.write"] : ["agents.read", "sessions.read", "workspaces.write", "workspaces.delete"]);
         var service = ApprovalService(f, workspaceMutations: MutationTargets(f)); var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
@@ -123,7 +123,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_mutation_Review_cross_root_copy_filters_independent_source_and_destination_scopes_before_counts(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         await SeedRuntimeWorkspace(f, s, false); await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read", "workspaces.read", "workspaces.write"]);
         await Policies(f).SaveAsync(s.Tenant, s.Owner, "workspaces.write", new(OperationApprovalMode.Always, false), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 0);
         var service = ApprovalService(f, workspaceMutations: MutationTargets(f)); var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;

@@ -45,7 +45,7 @@ The most important qualities are:
 5. restrained proactive behavior;
 6. conversation continuity.
 
-Complex tool orchestration, multi-agent systems, workflow builders, marketplaces, and advanced long-term memory are intentionally outside the first MVP.
+Complex tool orchestration, unbounded multi-Agent systems beyond the bounded Initiative 9 contract, workflow builders, marketplaces, and advanced long-term memory are intentionally outside the first MVP.
 
 ## License
 
@@ -125,4 +125,10 @@ The Playwright MCP configurations use isolated browser profiles so editor sessio
 
 ## Session Goals
 
-Initiative 8 is closed for its verified local scope; Initiative 9 — Task Delegation & Communication is next and remains unstarted. Explicit optional Goals track accepted outcomes and ordered, independently verified checkpoints beside a tenant conversation. Deliberate Work binds an existing Run; ordinary chat/voice stays unbound. Optional human-approved continuation has finite total Run/time limits. Goal completion leaves the Session active. See [architecture](docs/03-system-architecture.md#session-goals), [HTTP contract](docs/14-api-and-realtime-protocol.md#tenant-session-goal-http-contract), [offline cutover](docs/15-persistence-and-configuration.md#session-goal-persistence-and-cutover) and [delivery evidence](docs/reports/session-goals-delivery-2026-10-27.md).
+Initiative 8 is closed for its verified local scope; Initiative 9 — Task Delegation & Communication is implemented with [focused local verification and explicit qualification limits](docs/reports/initiative-9-local-verification-2026-10-27.md). Explicit optional Goals track accepted outcomes and ordered, independently verified checkpoints beside a tenant conversation. Deliberate Work binds an existing Run; ordinary chat/voice stays unbound. Optional human-approved continuation has finite total Run/time limits. Goal completion leaves the Session active. See [architecture](docs/03-system-architecture.md#session-goals), [HTTP contract](docs/14-api-and-realtime-protocol.md#tenant-session-goal-http-contract), [offline cutover](docs/15-persistence-and-configuration.md#session-goal-persistence-and-cutover) and [delivery evidence](docs/reports/session-goals-delivery-2026-10-27.md).
+
+## Task delegation and communication
+
+General Assistant v35 uses canonical `tasks.*` and `agent-messages.*` tools. Tasks bind real source actors to independently authorized workers with their own Session, principal, Space, configuration and model. Cooperation is off by default. Chat includes a Task drawer; Agent Activity includes scoped communication, and Settings includes Cooperation controls. Completion, notification acknowledgment, parent reporting and Goal verification remain separate facts.
+
+The [delivery report](docs/reports/initiative-9-local-verification-2026-10-27.md) records both-store/runtime/HTTP/native-browser and responsive UI evidence. The [offline cutover](docs/15-persistence-and-configuration.md#initiative-9--task-delegation-and-communication) refuses unmappable predecessor child state; back up coordinated roots and apply the migration deliberately. Old child tools and General Assistant v21–34 are unsupported after cutover. Independent Automation destinations retain their existing reporting owner.

@@ -69,12 +69,12 @@ public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore r
             new(OperationDecisionKind.Denied, reason, permission, AccessScope.ForTenant(reference.TenantId)), purpose, ct).ConfigureAwait(false);
     }
     internal ValueTask<AgentRun> RootAsync(AgentRun run, CancellationToken ct) => TenantExecutionLineage.RootAsync(run, runs, ct);
-    internal async ValueTask<(AgentRun Run, TenantSecurityState State)> ResolveAsync(TenantRunReference reference, CancellationToken ct)
+    internal async ValueTask<(AgentRun Run, TenantSecurityState State)> ResolveAsync(TenantRunReference reference, CancellationToken ct, bool retained = false)
     {
         var run = await runs.FindTenantRunAsync(reference.TenantId, reference.RunId, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("run_unavailable");
         var context = run.Admission.ExecutionContext;
-        if (context is null || context.TenantId != reference.TenantId || run.IsTerminal) throw new AccessDeniedException("run_unavailable");
+        if (context is null || context.TenantId != reference.TenantId || run.IsTerminal && !retained) throw new AccessDeniedException("run_unavailable");
         var state = await store.ReadTenantAsync(reference.TenantId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         if (state.Tenant.Status != IdentityStatus.Active) throw new AccessDeniedException("tenant_unavailable");
         var agent = await agents.FindTenantAgentAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false)

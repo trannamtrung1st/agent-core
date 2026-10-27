@@ -48,6 +48,7 @@ public static partial class TenantApprovalRules
 
     private static PreparedTenantOperation RebuildCore(PreparedTenantOperation op) => op.Kind switch
     {
+        TenantOperationKind.TaskDelegation => PrepareTaskDelegation(op.OperationId, op.InstanceId, op.TaskDelegation!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.AutomationMutation => PrepareAutomationMutation(op.OperationId, op.InstanceId, op.AutomationMutation!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.HttpRequest => PrepareHttpRequest(op.OperationId, op.InstanceId, op.HttpRequest!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.ManagementMutation => PrepareManagementMutation(op.OperationId, op.InstanceId, op.ManagementMutation!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
@@ -60,9 +61,7 @@ public static partial class TenantApprovalRules
         TenantOperationKind.AccountAction => PrepareAccountAction(op.OperationId, op.InstanceId, op.AccountAction!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.AccountRead => PrepareAccountRead(op.OperationId, op.InstanceId, op.AccountRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.ReportSourceRead => PrepareReportSourceRead(op.OperationId, op.InstanceId, op.ReportSourceRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
-        TenantOperationKind.CompletionRead => PrepareCompletionRead(op.OperationId, op.InstanceId, op.CompletionRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.BackgroundReport => PrepareBackgroundReport(op.OperationId, op.InstanceId, op.BackgroundReport!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
-        TenantOperationKind.BackgroundStart => PrepareBackgroundStart(op.OperationId, op.InstanceId, op.BackgroundStart!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.WorkspaceMutation => PrepareWorkspaceMutation(op.OperationId, op.InstanceId, op.WorkspaceMutation!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.WorkspaceRead => PrepareWorkspaceRead(op.OperationId, op.InstanceId, op.WorkspaceRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.AttachmentRead => PrepareAttachmentRead(op.OperationId, op.InstanceId, op.AttachmentRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
@@ -90,6 +89,11 @@ public static partial class TenantApprovalRules
         else if (op.BackgroundReport is not null) TenantBackgroundReportRules.Source(request, run);
         else TenantApprovalContinuationRules.Require(request, run, source);
         if (op.HttpRequest is { } http && http.SessionId != request.SessionId) throw new ArgumentException("Use the actual HTTP request Session.");
+        if (op.TaskDelegation is { } delegation && (delegation.Task.Source.TenantId != request.TenantId
+            || delegation.Task.Source.SessionId != request.SessionId || delegation.Task.Source.RunId != request.RunId
+            || delegation.Task.Source.ActorKind != AgentCore.Domain.Tasks.TaskActorKind.Agent
+            || delegation.Task.Source.PrincipalId != request.ExecutorPrincipalId || delegation.Task.Source.RootActivationId != request.RootActivationId))
+            throw new ArgumentException("Task consent must retain its real claimed source, independently of its worker.");
         if (op.ManagementMutation is { } managementMutation && managementMutation.SessionId != request.SessionId) throw new ArgumentException("Use the actual management change Session.");
         if (op.AutomationMutation is { } automationMutation && automationMutation.SessionId != request.SessionId) throw new ArgumentException("Use the actual Automation authoring Session.");
         if (op.ManagementRead is { } managementRead && managementRead.SessionId != request.SessionId) throw new ArgumentException("Use the actual management read Session.");
@@ -99,8 +103,6 @@ public static partial class TenantApprovalRules
             || op.MemoryOperation is { } memory && memory.SessionId != request.SessionId
             || op.AccountAction is { } accountAction && accountAction.SessionId != request.SessionId
             || op.AccountRead is { } accountRead && accountRead.SessionId != request.SessionId
-            || op.CompletionRead is { } completion && completion.ParentSessionId != request.SessionId
-            || op.BackgroundStart is { } background && (background.SessionId != request.SessionId || background.TenantId != request.TenantId)
             || op.AttachmentRead is { } attachment && attachment.SessionId != request.SessionId
             || op.WorkspaceMutation is { } mutation && mutation.SessionId != request.SessionId
             || op.WorkspaceRead is { } workspace && workspace.SessionId != request.SessionId
@@ -109,7 +111,7 @@ public static partial class TenantApprovalRules
             || request.RootActivationId != context.RootActivationId || request.ExecutorPrincipalId != context.AgentPrincipalId
             || request.OriginalInitiatorPrincipalId != context.OriginalInitiatorPrincipalId || op.InstanceId != run.AgentInstanceId
             || target.TenantId != request.TenantId || target.Instance.InstanceId != op.InstanceId || target.PrincipalId != context.AgentPrincipalId
-            || !Enum.IsDefined(request.Kind) || (request.Operation.ManagementRead is not null || request.Operation.AutomationRead is not null || request.Operation.ExperienceOperation is { ToolName: "experience.source" } || request.Operation.ContinuityRead is not null || (request.Operation.MemoryOperation is { } memoryOperation && AgentCore.Application.Tools.TenantMemoryToolContract.ReadOnly(memoryOperation.ToolName)) || request.Operation.ReportSourceRead is not null || request.Operation.CompletionRead is not null || request.Operation.AttachmentRead is not null || request.Operation.WorkspaceRead is not null || request.Operation.ArtifactVerification is not null || request.Operation.SandboxCommand is not null || request.Operation.SandboxControl is not null || request.Operation.SandboxRead is not null || request.Operation.CredentialRead is not null || request.Operation.BrowserCommand is { Credential: null }) && request.Kind != ApprovalKind.Review || !Enum.IsDefined(request.Status) || request.Revision < 1
+            || !Enum.IsDefined(request.Kind) || (request.Operation.ManagementRead is not null || request.Operation.AutomationRead is not null || request.Operation.ExperienceOperation is { ToolName: "experience.source" } || request.Operation.ContinuityRead is not null || (request.Operation.MemoryOperation is { } memoryOperation && AgentCore.Application.Tools.TenantMemoryToolContract.ReadOnly(memoryOperation.ToolName)) || request.Operation.ReportSourceRead is not null || request.Operation.AttachmentRead is not null || request.Operation.WorkspaceRead is not null || request.Operation.ArtifactVerification is not null || request.Operation.SandboxCommand is not null || request.Operation.SandboxControl is not null || request.Operation.SandboxRead is not null || request.Operation.CredentialRead is not null || request.Operation.BrowserCommand is { Credential: null }) && request.Kind != ApprovalKind.Review || !Enum.IsDefined(request.Status) || request.Revision < 1
             || request.CreatedAt.Offset != TimeSpan.Zero || request.ExpiresAt.Offset != TimeSpan.Zero
             || request.ExpiresAt <= request.CreatedAt || request.ExpiresAt - request.CreatedAt > TimeSpan.FromDays(1)
             || Rebuild(op) != op)

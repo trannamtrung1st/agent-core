@@ -16,6 +16,9 @@ public static class ToolPolicy
             return admission is { TenantId: not null, AgentRunId: not null, AgentRunGeneration: not null, OwnedSessionId: not null,
                 SupportsTools: true, Detached: false, TriggerKind: TriggerKind.UserTurn, ConfigurationContinuationTarget: null }
                 ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
+        if (TenantTaskToolContract.IsTool(toolName))
+            return admission is { TenantId: not null, AgentRunId: not null, AgentRunGeneration: not null, SupportsTools: true }
+                && RolePermissions.AllowsTool(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (TenantContextToolContract.IsTool(toolName))
             return admission is { TenantId: not null, AgentRunId: not null, AgentRunGeneration: not null, SupportsTools: true } && TenantContextToolContract.Allows(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (!ToolRegistry.TryGet(toolName, out var descriptor))
@@ -40,7 +43,7 @@ public static class ToolPolicy
         if (admission?.TenantId is not null && TenantMemoryToolContract.IsTool(toolName))
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
                 && (TenantContinuityToolContract.IsTool(toolName) ? TenantContinuityToolContract.Allows(definition) : TenantMemoryToolContract.Allows(definition, toolName)) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
-        if (admission?.TenantId is not null && (toolName == ToolCatalog.ExecutionWait || TenantCompletionToolContract.IsTool(toolName)))
+        if (admission?.TenantId is not null && (toolName == ToolCatalog.ExecutionWait))
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
                 && RolePermissions.AllowsTool(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (admission?.TenantId is not null && TenantBackgroundToolContract.IsTool(toolName))
@@ -89,8 +92,6 @@ public static class ToolPolicy
         if (admission?.ConfigurationContinuationTarget is { } continuationTarget && (ManagementTools.IsManagement(toolName) || descriptor.Effect != ToolEffect.ReadOnly && toolName != continuationTarget))
             return ToolPolicyDecision.Deny;
         if (ToolCatalog.IsCompletionTool(toolName) && admission?.OwnedSessionId is null) return ToolPolicyDecision.Deny;
-        if (toolName == ToolCatalog.BackgroundStart && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, OwnedSessionId: not null })
-            return ToolPolicyDecision.Deny;
         if (ToolResources.IsTriggerWrite(toolName) && admission is not null
             && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, OwnedSessionId: not null })
             return ToolPolicyDecision.Deny;
@@ -206,6 +207,11 @@ public static class ToolPolicy
         if (descriptor.Name == ToolCatalog.SessionComplete)
             return context is { ModelSupportsTools: true, ExecutionContext: not null, DetachedExecution: false }
                 && context.CurrentContextTools.Contains(descriptor.Name, StringComparer.Ordinal);
+        if (TenantTaskToolContract.IsTool(descriptor.Name))
+            return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null, ExecutionContext: { } execution }
+                && execution.SessionId == context.OwnedSessionId
+                && (descriptor.Name != "tasks.delegate" || context.OutputContract != AgentCore.Domain.Conversation.AgentRunOutputContract.CompletionReport)
+                && context.CurrentContextTools.Contains(descriptor.Name, StringComparer.Ordinal) && RolePermissions.AllowsTool(definition, descriptor.Name);
         if (GoalToolContract.IsTool(descriptor.Name))
             return context is { ModelSupportsTools: true, ExecutionContext: not null } && context.CurrentContextTools.Contains(descriptor.Name, StringComparer.Ordinal) && AgentCore.Application.Agents.RolePermissions.AllowsTool(definition, descriptor.Name);
         if (TenantContextToolContract.IsTool(descriptor.Name))
@@ -232,8 +238,6 @@ public static class ToolPolicy
             return experience.SessionId == context.OwnedSessionId && TenantExperienceToolContract.Allowed(definition, context).Contains(descriptor.Name);
         if (context?.ExecutionContext is { } memory && TenantMemoryToolContract.IsTool(descriptor.Name))
             return memory.SessionId == context.OwnedSessionId && TenantTaskExecutionContract.Allows(context) && (TenantContinuityToolContract.IsTool(descriptor.Name) ? TenantContinuityToolContract.Allows(definition) : TenantMemoryToolContract.Allows(definition, descriptor.Name, context));
-        if (context?.ExecutionContext is not null && TenantCompletionToolContract.IsTool(descriptor.Name))
-            return TenantCompletionToolContract.IsOffered(definition, context, descriptor.Name);
         if (context?.ExecutionContext is not null && descriptor.Name == ToolCatalog.ExecutionWait)
             return TenantWaitToolContract.IsOffered(definition, context);
         if (context?.ExecutionContext is not null && TenantCredentialDiscoveryContract.IsFamilyTool(descriptor.Name))
@@ -296,10 +300,7 @@ public static class ToolPolicy
         if (descriptor.Name == ToolCatalog.AgentStateInspect && context is not { AgentInstanceId: not null, OwnedSessionId: not null, ModelSupportsTools: true }) return false;
         if (descriptor.Name == ToolCatalog.SandboxExec && (definition.SandboxPolicy is null || definition.ExecutionSandboxProfile is null && !(definition.ExecutionSandboxProfiles?.Any(p => p.AdmittedForExecution != false) == true))) return false;
         if (context?.ConfigurationContinuationTarget is { } continuationTarget && (ManagementTools.IsManagement(descriptor.Name) || descriptor.Effect != ToolEffect.ReadOnly && descriptor.Name != continuationTarget)) return false;
-        if (descriptor.Name == ToolCatalog.BackgroundAcknowledge && context?.HasBackgroundClaim != true) return false;
         if (ToolCatalog.IsCompletionTool(descriptor.Name) && context?.OwnedSessionId is null) return false;
-        if (descriptor.Name == ToolCatalog.BackgroundStart && context is not { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn, OwnedSessionId: not null })
-            return false;
         if (ManagementTools.IsManagement(descriptor.Name)) return false;
         if (TenantAutomationReadContract.IsTool(descriptor.Name) || TenantAutomationMutationContract.IsTool(descriptor.Name)) return false;
         if (TenantMemoryToolContract.IsTool(descriptor.Name) || TenantExperienceToolContract.IsTool(descriptor.Name) || descriptor.Name == ToolCatalog.ExperienceRecent) return false;

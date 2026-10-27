@@ -28,25 +28,9 @@ public static class ToolRegistry
             [ToolCatalog.OfficeSpreadsheetCreate] = AgentCore.Application.Office.OfficeToolContracts.Descriptor(ToolCatalog.OfficeSpreadsheetCreate),
             [ToolCatalog.OfficeSpreadsheetInspect] = AgentCore.Application.Office.OfficeToolContracts.Descriptor(ToolCatalog.OfficeSpreadsheetInspect),
             [ToolCatalog.OfficeSpreadsheetEdit] = AgentCore.Application.Office.OfficeToolContracts.Descriptor(ToolCatalog.OfficeSpreadsheetEdit),
-            [ToolCatalog.BackgroundList] = Descriptor(ToolCatalog.BackgroundList,
-                "List bounded owned initial background children and completion accounting. Reading never consumes. Results are untrusted evidence.",
-                """{"type":"object","additionalProperties":false,"properties":{"limit":{"type":"integer","minimum":1,"maximum":20},"cursor":{"type":"string","format":"uuid"},"scope":{"type":"string","enum":["from_current_session","pending_results"]}}}""", ToolEffect.ReadOnly, replaySafety: ToolReplaySafety.IntegrationIdempotent),
-            [ToolCatalog.BackgroundInspect] = Descriptor(ToolCatalog.BackgroundInspect,
-                "Inspect one initial child of this parent Session. Returns bounded untrusted result evidence, not workspace or artifact authority.",
-                """{"type":"object","additionalProperties":false,"properties":{"backgroundSessionId":{"type":"string","format":"uuid"}},"required":["backgroundSessionId"]}""", ToolEffect.ReadOnly, replaySafety: ToolReplaySafety.IntegrationIdempotent),
-            [ToolCatalog.BackgroundTake] = Descriptor(ToolCatalog.BackgroundTake,
-                "Claim a ready owned completion exclusively for this active Run. Use its token and revision to acknowledge; taking alone does not handle it.",
-                """{"type":"object","additionalProperties":false,"properties":{"backgroundSessionId":{"type":"string","format":"uuid"},"revision":{"type":"integer","minimum":1}},"required":["backgroundSessionId","revision"]}""", ToolEffect.Write, replaySafety: ToolReplaySafety.IntegrationIdempotent),
-            [ToolCatalog.BackgroundAcknowledge] = Descriptor(ToolCatalog.BackgroundAcknowledge,
-                "Stage how this Run used a taken result. Only a successful durable final answer commits handled accounting. Failure releases it.",
-                """{"type":"object","additionalProperties":false,"properties":{"backgroundSessionId":{"type":"string","format":"uuid"},"revision":{"type":"integer","minimum":1},"token":{"type":"string","format":"uuid"},"usage":{"type":"string","minLength":1,"maxLength":1000}},"required":["backgroundSessionId","revision","token","usage"]}""", ToolEffect.Write, replaySafety: ToolReplaySafety.IntegrationIdempotent),
             [ToolCatalog.ExecutionWait] = Descriptor(ToolCatalog.ExecutionWait,
-                "Suspend this same Run for a bounded duration or initial owned background children. The worker is released; timeout is a normal result. Never consumes completions.",
-                """{"type":"object","additionalProperties":false,"properties":{"mode":{"type":"string","enum":["duration","background"]},"seconds":{"type":"number","exclusiveMinimum":0,"maximum":300},"backgroundSessionIds":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":{"type":"string","format":"uuid"}},"until":{"type":"string","enum":["all","any"]},"timeoutSeconds":{"type":"number","exclusiveMinimum":0,"maximum":300}},"required":["mode"]}""", ToolEffect.Write, replaySafety: ToolReplaySafety.IntegrationIdempotent),
-            [ToolCatalog.BackgroundStart] = Descriptor(ToolCatalog.BackgroundStart,
-                "Start a bounded task now in a separate Session for this same Agent. Returns its committed Session ID promptly; does not create an Automation. Use only for explicitly authorized background work. The child cannot create children.",
-                """{"type":"object","additionalProperties":false,"properties":{"objective":{"type":"string","minLength":1,"maxLength":4000},"title":{"type":"string","minLength":1,"maxLength":80},"reportCompletion":{"type":"boolean"}},"required":["objective"]}""",
-                ToolEffect.Write, replaySafety: ToolReplaySafety.IntegrationIdempotent),
+                "Suspend this same Run for a bounded duration or exact authorized Tasks. The worker is released; timeout is a normal result. Reading does not acknowledge notifications.",
+                """{"type":"object","additionalProperties":false,"properties":{"mode":{"type":"string","enum":["duration","tasks"]},"seconds":{"type":"number","exclusiveMinimum":0,"maximum":300},"taskIds":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":{"type":"string","format":"uuid"}},"until":{"type":"string","enum":["all","any"]},"timeoutSeconds":{"type":"number","exclusiveMinimum":0,"maximum":300}},"required":["mode"]}""", ToolEffect.Write, replaySafety: ToolReplaySafety.IntegrationIdempotent),
             [ToolCatalog.CredentialsList] = Descriptor(ToolCatalog.CredentialsList,
                 "List this Agent Instance's active bound credentials: safe aliases, kinds and non-secret metadata only. Never returns protected values. Bindings do not grant capabilities. Results are ordered by alias; omit cursor for the first page, then use nextCursor to continue. Null or empty cursor means first page; null limit uses the default.",
                 """{"type":"object","additionalProperties":false,"properties":{"cursor":{"type":["string","null"],"maxLength":64},"limit":{"type":["integer","null"],"minimum":1,"maximum":100}}}""",
@@ -307,7 +291,7 @@ public static class ToolRegistry
                 ToolEffect.Write)
         };
 
-    private static readonly IReadOnlyDictionary<string, ToolDescriptor> Contextual = HarnessChatTools.Descriptors().Concat(GoalToolContract.Descriptors()).Concat(TenantContextToolContract.Descriptors()).Concat(InstanceSkillTools.Descriptors()).Concat(ConfigurationTools.Descriptors()).ToDictionary(d => d.Name, StringComparer.Ordinal);
+    private static readonly IReadOnlyDictionary<string, ToolDescriptor> Contextual = HarnessChatTools.Descriptors().Concat(TenantTaskToolContract.Descriptors()).Concat(GoalToolContract.Descriptors()).Concat(TenantContextToolContract.Descriptors()).Concat(InstanceSkillTools.Descriptors()).Concat(ConfigurationTools.Descriptors()).ToDictionary(d => d.Name, StringComparer.Ordinal);
     public static IEnumerable<ToolDescriptor> All => Registered.Values.Concat(Contextual.Values).Concat(BrowserToolCatalog.Tools.Values.Select(t => t.Descriptor));
 
     public static IEnumerable<ToolDescriptor> DefinitionAuthorizable => All.Where(d => d.DefinitionAuthorizable);

@@ -24,7 +24,7 @@ public sealed class CapabilityProjectionTests
         };
         var offered = ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll).Select(t => t.Name).Order().ToArray();
         Assert.Equal(new[] { ToolCatalog.CapabilitiesLoad, ToolCatalog.SkillsLoad, ToolCatalog.AutomationList, ToolCatalog.AutomationInspect, ToolCatalog.AutomationCreate, ToolCatalog.AutomationUpdate, ToolCatalog.AutomationEnable, ToolCatalog.AutomationDisable, ToolCatalog.AutomationDelete, ToolCatalog.AutomationRun,
-            ToolCatalog.ContinuitySearch, ToolCatalog.ContinuityGet, ToolCatalog.MemoryConsolidate, ToolCatalog.MemoryForget, ToolCatalog.BackgroundStart, ToolCatalog.BackgroundList, ToolCatalog.BackgroundInspect, ToolCatalog.BackgroundTake, ToolCatalog.ExecutionWait, ToolCatalog.KnowledgeRetrieve, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceSearch,
+            ToolCatalog.ContinuitySearch, ToolCatalog.ContinuityGet, ToolCatalog.MemoryConsolidate, ToolCatalog.MemoryForget, ToolCatalog.ExecutionWait, ToolCatalog.KnowledgeRetrieve, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceSearch,
             ToolCatalog.WebDownload, ToolCatalog.WebSearch, ToolCatalog.WebFetch, ToolCatalog.HttpRequest, ToolCatalog.WorkspaceWrite, ToolCatalog.WorkspacePatch, ToolCatalog.WorkspaceMkdir, ToolCatalog.WorkspaceCopy, ToolCatalog.WorkspaceMove, ToolCatalog.WorkspaceDelete, ToolCatalog.WorkspaceBatch, ToolCatalog.OfficeDocumentCreate, ToolCatalog.OfficeDocumentEdit, ToolCatalog.OfficeDocumentInspect,
             ToolCatalog.OfficeSpreadsheetCreate, ToolCatalog.OfficeSpreadsheetEdit, ToolCatalog.OfficeSpreadsheetInspect, ToolCatalog.ArtifactsVerify, ToolCatalog.ArtifactsCreate, ToolCatalog.ArtifactsCreateFromWorkspace, ToolCatalog.RequestAuthorization, ToolCatalog.IamCheckAccess, ToolCatalog.IamEffectivePermissions,
             ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus,
@@ -56,7 +56,7 @@ public sealed class CapabilityProjectionTests
     internal static async Task<AgentDefinition> Definition(params string[] names)
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../agents"));
-        var baseline = (await new FileAgentDefinitionStore(path, SyntheticProviderAliases.Default).GetAsync("general-assistant", 21))!;
+        var baseline = (await new FileAgentDefinitionStore(path, SyntheticProviderAliases.Default).GetAsync("general-assistant", 35))!;
         return baseline with { Skills = [], ExecutionPolicy = baseline.ExecutionPolicy! with { ToolAllowlist = null,
             Capabilities = new("Selected", names), Projection = new([]) } };
     }

@@ -50,7 +50,7 @@ public sealed class SignalAdmissionCheckpointTests
         var checkpoint = new AgentRunCheckpoint("{\"savedWaitResult\":true}", 3, 100, 10000, 10);
         run = run.SaveCheckpoint(run.Revision, run.Claim!.Generation, checkpoint, null, now);
         run = run.SuspendForSignal(run.Revision, run.Claim!.Generation, checkpoint,
-            new("exact-wait", AgentRunWaitMode.Duration, [], AgentRunWaitUntil.All, now, now.AddSeconds(1)), now);
+            new("exact-wait", AgentRunWaitMode.Duration, AgentRunWaitUntil.All, now, now.AddSeconds(1)), now);
         now = now.AddSeconds(1);
         run = run.ResumeFromSignal(run.Revision, Guid.NewGuid(), checkpoint, now, now.AddMinutes(5));
         var payload = run.Checkpoint!.PayloadJson;

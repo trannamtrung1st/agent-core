@@ -17,7 +17,7 @@ public sealed partial class TenantOperationAuthorizationTests
         new(Operations(f), (ITenantSessionStore)f.Iam, f.RunConfiguration(currentBuiltIns), content ?? (ITenantResourceSourceContentStore)f.RunContent, f.Authorizer, f.Clock);
     private static async Task<ResourceCase> ResourceSourceCase(Fixture f, Environment? existing = null, byte[]? data = null, string logicalPath = "source.txt", string mediaType = "text/plain", AgentDefinitionResourceKind kind = AgentDefinitionResourceKind.Reference)
     {
-        var s = existing ?? await Setup(f, "general-assistant", 32); byte[] bytes = data ?? Encoding.UTF8.GetBytes("Private bound resource: thử nghiệm");
+        var s = existing ?? await Setup(f, "general-assistant", 35); byte[] bytes = data ?? Encoding.UTF8.GetBytes("Private bound resource: thử nghiệm");
         var added = await f.AgentConfiguration().UpsertResourceAsync(s.Owner.PrincipalId, s.Tenant, s.Agent.Instance.InstanceId,
             (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1, new(null, null, logicalPath, kind, mediaType, bytes), initiator: s.Owner);
         var resource = added.Resource!;
@@ -119,7 +119,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_resource_source_inherited_binding_keeps_the_admitted_Definition_origin(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var resource = s.Run.Admission.Configuration!.Resources.First(r => r.Key.StartsWith("definition:", StringComparison.Ordinal));
         var frame = await ClaimArtifactRun(f, s); await GrantWorkspaceRuntimeReads(f, s, ["sessions.read", "agents.read"]);
         await GrantWorkspaceRuntimeReads(f, s, ["resources.read"], TenantAgentChildScopes.Scope(s.Tenant, s.Agent.Instance.InstanceId, "resource", resource.Key));
@@ -213,7 +213,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var system = (await f.Iam.ReadSystemAsync()).Principals.Single(p => p.AccountId == a.Owner.AccountId);
         var beta = await f.Access.CreateTenantAsync(system.PrincipalId, a.Owner.AccountId, "Beta", "beta");
         var betaHuman = a.Owner with { PrincipalId = beta.Users.Single().PrincipalId };
-        var betaAgent = await f.Agents.CreateAsync(betaHuman.PrincipalId, beta.Tenant.TenantId, "general-assistant", 32, beta.Tenant.Revision);
+        var betaAgent = await f.Agents.CreateAsync(betaHuman.PrincipalId, beta.Tenant.TenantId, "general-assistant", 35, beta.Tenant.Revision);
         var bound = await ResourceSourceCase(f, new(beta.Tenant.TenantId, betaHuman, betaAgent, a.Run), Encoding.UTF8.GetBytes("Private Beta resource")); var b = bound.Setup;
         Assert.NotEqual(a.Owner.PrincipalId, b.Owner.PrincipalId); Assert.Equal(alpha.Path, bound.Path);
         var frameA = await ClaimArtifactRun(f, a); var frameB = await ClaimArtifactRun(f, b);

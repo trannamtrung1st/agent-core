@@ -45,7 +45,7 @@ public sealed class TenantSpaceContextResolver(ITenantSpaceStore spaces, ITenant
         if (pin.TenantId != run.Owner.TenantId) throw new AccessDeniedException("tenant_context_mismatch");
         var current = await CurrentAsync(pin.TenantId, run.AgentInstanceId, pin.SpaceId, pin.EnvironmentId, pin.EnvironmentSelectionEpoch, ct).ConfigureAwait(false);
         if (current.Private.SpaceId != pin.PrivateSpaceId) throw new AccessDeniedException("private_space_changed");
-        if (run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is { } human)
+        if (run.Admission.DelegatedTask is null && run.Admission.AgentMessage is null && run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is { } human)
         {
             await authorizer.RequireAsync(human, "spaces.read", TenantSpaceService.Scope(pin.TenantId, pin.SpaceId), ct).ConfigureAwait(false);
             if (pin.EnvironmentId is not null) await authorizer.RequireAsync(human, "environments.read", TenantSpaceService.Scope(pin.TenantId, pin.SpaceId), ct).ConfigureAwait(false);

@@ -82,12 +82,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 TenantAttachmentReadRules.ReviewerAsync(before, request.Operation.AttachmentRead, request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             }
-            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.CompletionRead is not null)
-            {
-                RequireCompletionReadOperation(request, run, target);
-                TenantCompletionReadRules.ReviewerAsync(before, request.Operation.CompletionRead, request.OriginalInitiatorPrincipalId,
-                    decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
-            }
+
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ArtifactVerification is not null)
             {
                 RequireArtifactVerificationOperation(request, run, target);
@@ -200,13 +195,19 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 at = (clock ?? TimeProvider.System).GetUtcNow(); commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
                 audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
             }
-            TenantSessionRoot? childRoot = null;
-            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.BackgroundStart is not null)
+            TenantAgent? taskWorker = null;
+            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.TaskDelegation is not null)
             {
-                var parent = RequireBackgroundCreationOperation(request, run, target);
-                TenantBackgroundCreationRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
-                childRoot = TenantBackgroundCreationRules.Admission(request, run, parent, target, commit.BackgroundAdmission!, at);
+                try
+                {
+                    TenantTaskConsentRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new(this), ct).AsTask().GetAwaiter().GetResult();
+                    taskWorker = ValidateApprovedTask(request, commit.TaskDelegationAdmission!, run, target, ct);
+                }
+                catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode, TaskDelegationAdmission = null }; }
+                catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode, TaskDelegationAdmission = null }; }
+                audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
             }
+
             audit = TenantOperationAuditRules.WithEffectResult(audit, before, run, request, grant?.GrantId);
             var complete = commit.Outcome == TenantOperationOutcome.Completed;
             var savedRun = run.RecordApprovedLocalEffect(run.Revision, commit.Generation, request.RequestId, commit.OperationId, commit.ActionHash, complete, at);
@@ -256,7 +257,8 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()),
                 ManagementResource: complete && request.Operation.ManagementMutation is { Resource: not null } resourceEvidence ? TenantManagementResourceRules.Evidence(resourceEvidence, target.Instance.Revision) : null,
                 ManagementSkill: complete && request.Operation.ManagementMutation is { Skill: not null } skillEvidence ? TenantManagementSkillRules.Evidence(skillEvidence, target.Instance.Revision) : null,
-                AutomationMutation: complete && request.Operation.AutomationMutation is { } mutationEvidence ? TenantAutomationMutationCommitRules.Evidence(mutationEvidence) : null);
+                AutomationMutation: complete && request.Operation.AutomationMutation is { } mutationEvidence ? TenantAutomationMutationCommitRules.Evidence(mutationEvidence) : null,
+                TaskAdmission: complete && commit.TaskDelegationAdmission is { } admittedTask ? new(admittedTask.Task.TaskId, 1, admittedTask.Task.WorkerSessionId, admittedTask.Task.InitialWorkerRunId) : null);
             SandboxLease? pending = null; SandboxExecution? stopped = null;
             if (complete && control is { } current)
             {
@@ -271,11 +273,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 (artifactBacking ?? throw new AccessDeniedException("tenant_effect_unavailable")).PublishTenantLocal(frame,
                     TenantArtifactRules.Record(frame, commit.OperationId, artifact.DisplayName, artifact.ContentType, bytes, at), bytes, false, ct);
             }
-            if (complete && childRoot is not null)
-            {
-                var child = commit.BackgroundAdmission!;
-                StageTenantBackgroundGraph(childRoot, child.Session, child.Run);
-            }
+            if (complete && taskWorker is not null) StageApprovedTask(commit.TaskDelegationAdmission!, taskWorker);
             if (configure) foreach (var fact in AgentCore.Infrastructure.Persistence.CoreEventPersistence.Instance(target.Instance, updated,
                 AgentCore.Domain.Triggers.TriggerOwner.ForTenant(request.TenantId, updated.InstanceId, target.PrincipalId))) AppendTenantCore(fact);
             if (commit.Outcome == TenantOperationOutcome.Completed) foreach (var value in experienceValues) SaveExperience(value);

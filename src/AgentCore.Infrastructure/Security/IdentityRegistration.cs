@@ -184,8 +184,6 @@ public static class IdentityRegistration
         services.TryAddSingleton<ITenantApprovedOperationStore>(p => (ITenantApprovedOperationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantApprovedOperationService>();
         services.TryAddSingleton<ITenantRuntimeStore>(p => (ITenantRuntimeStore)p.GetRequiredService<IIamStore>());
-        services.TryAddSingleton<TenantWaitSourceAuthority>();
-        services.TryAddSingleton<TenantCompletionReadService>();
         services.TryAddSingleton<TenantReportReadAuthority>();
         services.TryAddSingleton<TenantEventReadAuthority>();
         services.TryAddSingleton<TenantCoreEventReadService>();
@@ -207,7 +205,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<ITenantWorkspaceOperationStore>(p => (ITenantWorkspaceOperationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantWorkspaceMutationEffectService>();
         services.TryAddSingleton<TenantWorkspaceMutationTarget>();
-        services.TryAddSingleton<TenantBackgroundCreationTarget>();
+        services.TryAddSingleton<TenantTaskDelegationTarget>();
         services.TryAddSingleton<TenantBackgroundReportTarget>();
         services.TryAddSingleton<ITenantAttachmentStore>(p => (ITenantAttachmentStore)p.GetRequiredService<IAttachmentStore>());
         services.TryAddSingleton<ITenantAttachmentMutationStore>(p => (ITenantAttachmentMutationStore)p.GetRequiredService<IIamStore>());
@@ -223,6 +221,13 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantEmailMonitoringService>();
         services.TryAddSingleton<TenantAutomationOperationTarget>();
         services.TryAddSingleton<TenantSessionService>();
+        services.TryAddSingleton<ITenantHumanTaskApprovalStore>(p => (ITenantHumanTaskApprovalStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<ITenantTaskStore>(p => (ITenantTaskStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<ITenantAgentMessageStore>(p => (ITenantAgentMessageStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<AgentCore.Application.Tasks.TenantTaskService>();
+        services.TryAddSingleton<AgentCore.Application.Tasks.TenantTaskAccessService>();
+        services.TryAddSingleton<AgentCore.Application.Tasks.TenantTaskToolService>();
+        services.TryAddSingleton<AgentCore.Application.Tasks.TenantTaskCoordinationService>();
         services.TryAddSingleton<ITenantSessionGoalStore>(p => (ITenantSessionGoalStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<AgentCore.Application.Goals.TenantSessionGoalService>();
         services.TryAddSingleton<AgentCore.Application.Goals.GoalToolService>();

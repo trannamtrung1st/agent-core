@@ -197,11 +197,10 @@ Destination, report creation, source reads and recipient delivery have separate 
 
 ### Independent child task and completion ownership
 
-Immediate background children require exact Session/Run creation authority. Independent tasks may use their explicitly eligible child/inbox/wait operations without pretending to be a chat child. Completion accounting follows actual causal children and receipts. Only an eligible immediate child's completion can activate its real parent; an independent Automation does not manufacture one.
+Independent Automation/Event/Manual work remains rooted in its authentic occurrence, with its configured destination and separately authorized report source/creation/delivery. It acquires no parent by pretending to be immediate child work.
 
-Completion reports bind the exact original result and source reads, creation policy, destination and recipients. Inbox acknowledgement/consumption is factual, bounded and idempotent. Typed waits release provider/claim resources and resume from durable state without duplicating completed effects. [Destination and completion contracts](04-backend-interfaces.md#automation-destination-and-delivery-ports) own this protocol.
+Canonical delegation uses durable Task metadata and a distinct worker Session/Run under the selected Agent principal. It preserves the actual source Run/root and nullable original requester. Exact Task notifications and acknowledgment are separate from independent Automation completion accounting. Task waits release provider/claim resources and resume the same saved Run; they neither acknowledge nor cancel work. See [Task coordination](04-backend-interfaces.md#initiative-9--adopted-successor-implementation-in-progress).
 
-<a id="p7c-harness-resources-and-workspace-boundary-observed"></a>
 ## Files, private sources and publication
 
 Definition resources, Instance Resources, Skills, home/working files, Attachments and Artifacts retain separate owners and stores. Parent read, child read, source read, mutation, publication and recipient download are independent checks. Private inventories filter authorization before exposed counts/paging. A digest or metadata projection does not authorize blob access.
@@ -304,3 +303,12 @@ Initiative 8 introduces optional tenant → Session → Goal → ordered checkpo
 The Goal aggregate has Proposed/Active/Paused/Completed/Cancelled lifecycle independent of Session lifecycle. Only Core verifies checkpoints from exact current-authorized Evaluation, source receipt or authenticated human acceptance. Reported progress, a completed Run and Session termination cannot imply Goal success. Material plan changes require human acceptance and preserve verified history. Goals inherit Session retention and deletion, including access cutoff before cleanup.
 
 `TenantSessionGoalService` and `ITenantSessionGoalStore` compose existing IAM, Session, Space, Run and Evaluation owners. Both existing IAM stores own atomic CAS and activity writes. Focus uses the incumbent serialized Session writer. Optional bounded continuation uses the same Activation/AgentRun admission and coordinator, with fresh authority, one successor and durable aggregate limits; it introduces no scheduler or execution engine. Goal text is bounded task data, never privileged instructions.
+
+
+<a id="initiative-9--adopted-successor-implementation-in-progress"></a>
+
+## Initiative 9 — Task delegation and communication
+
+A DelegatedTask is coordination metadata owned by the existing tenant IAM/persistence transaction. The source actor requests an assignment; the target principal owns a distinct ordinary worker Session/Activation/Run, its own pinned Definition/model and independently authorized Space. Same-Agent assignments use this identical path. Task settlement reads actual final Run facts; parent reports belong to the parent principal. Messages are inert bounded evidence in a separate exactly-two-role task thread or exactly-two-Agent direct thread. Direct wake is off by default and uses incumbent Run admission. The historical same-owner immediate-child contract is superseded only by the new Task cutover; independent Automation destinations remain occurrence-owned. No second mailbox writer or execution engine is authorized.
+
+See the [adopted proposal](proposals/initiative-9-task-delegation-communication.md), [removal audit](reports/initiative-9-source-audit-2026-10-27.md) and [local delivery evidence and limits](reports/initiative-9-local-verification-2026-10-27.md). The implementation has focused local verification; the report distinguishes exercised behavior from unrun deployment, provider and device qualification.

@@ -18,7 +18,7 @@ public sealed partial class TenantSessionAccessTests
         var model = new IsolatedChildModel(false); model.ReleaseChild.TrySetResult();
         await using WebApplicationFactory<Program> factory = sqlite ? new NativeTenantSqliteFactory(root, model) : new NativeTenantMemoryFactory(root, model);
         factory.UseKestrel(0); using var client = factory.CreateClient();
-        var setup = await StartTenantBackground(factory, client, submit: false, independentTask: true, fileCapabilities: [ToolCatalog.BackgroundStart], requestIsolated: true);
+        var setup = await StartTenantBackground(factory, client, submit: false, independentTask: true, fileCapabilities: ["tasks.delegate"], requestIsolated: true);
         var repo = new DirectoryInfo(AppContext.BaseDirectory); while (repo is not null && !File.Exists(Path.Combine(repo.FullName, "AgentCore.sln"))) repo = repo.Parent;
         Assert.NotNull(repo); var start = new System.Diagnostics.ProcessStartInfo("node", "tenant-request-isolation.mjs") {
             WorkingDirectory = Path.Combine(repo.FullName, "tests", "realtime-js"), UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
@@ -26,6 +26,30 @@ public sealed partial class TenantSessionAccessTests
         using var process = System.Diagnostics.Process.Start(start)!; var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync(); using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(70));
         try { await process.WaitForExitAsync(deadline.Token); } finally { if (!process.HasExited) { process.Kill(entireProcessTree: true); await process.WaitForExitAsync(); } }
         Assert.True(process.ExitCode == 0, await stdout + await stderr); Assert.Contains("Tenant request isolation wire passed", await stdout);
+    }
+    [Fact(Timeout = 60000)]
+    public async Task Task_runtime_shutdown_waits_for_unregistered_Runtime_retirement_before_disposal()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "task-runtime-retirement-" + Guid.NewGuid().ToString("N"));
+        var model = new IsolatedChildModel(false); model.ReleaseChild.TrySetResult();
+        await using var factory = new TenantBackgroundMemoryFactory(root, model);
+        using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
+        var setup = await StartTenantBackground(factory, owner, submit: false);
+        var host = factory.Services.GetRequiredService<AgentCore.Api.Realtime.TenantSessionRuntimeHost>();
+        var unregistered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.AfterRuntimeUnregistered = async run => { if (run.SessionId == setup.Session) { unregistered.TrySetResult(); await release.Task; } };
+        try
+        {
+            var response = await owner.PostAsJsonAsync($"/api/v2/tenants/{setup.Tenant}/sessions/{setup.Session}/messages", new {
+                messageId = Guid.NewGuid(), text = "Start exact Task shutdown check", expectedRevision = await Revision(owner, setup.Tenant), expectedSessionRevision = 1 });
+            Assert.True(response.IsSuccessStatusCode);
+            await unregistered.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            var stop = host.StopAsync();
+            await Task.Delay(50); Assert.False(stop.IsCompleted);
+            release.TrySetResult(); await stop.WaitAsync(TimeSpan.FromSeconds(20));
+        }
+        finally { release.TrySetResult(); }
     }
     private sealed class IsolatedChildModel(bool report, bool quiet = false, bool childFirst = false) : TenantBackgroundModel
     {
@@ -35,13 +59,13 @@ public sealed partial class TenantSessionAccessTests
         public TaskCompletionSource ReleaseParent { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public override async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            if (Origin(request) == ExecutionOrigin.ImmediateBackground) { ChildEntered.TrySetResult(); await ReleaseChild.Task.WaitAsync(cancellationToken); }
-            if (childFirst && Origin(request) == ExecutionOrigin.UserMessage && request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.BackgroundStart))
+            if (Origin(request) == ExecutionOrigin.DelegatedTask) { ChildEntered.TrySetResult(); await ReleaseChild.Task.WaitAsync(cancellationToken); }
+            if (childFirst && Origin(request) == ExecutionOrigin.UserMessage && request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == "tasks.delegate"))
             { ParentEntered.TrySetResult(); await ReleaseParent.Task.WaitAsync(cancellationToken); }
             await foreach (var value in base.GenerateAsync(request, cancellationToken))
             {
-                if (!report && value is ModelToolCallEvent { Call.Name: ToolCatalog.BackgroundStart } call)
-                    yield return new ModelToolCallEvent(call.Call with { ArgumentsJson = call.Call.ArgumentsJson.Replace("\"reportCompletion\":true", "\"reportCompletion\":false", StringComparison.Ordinal) });
+                if (!report && value is ModelToolCallEvent { Call.Name: "tasks.delegate" } call)
+                    yield return new ModelToolCallEvent(call.Call with { ArgumentsJson = call.Call.ArgumentsJson.Replace("\"reportOnCompletion\":true", "\"reportOnCompletion\":false", StringComparison.Ordinal) });
                 else if (quiet && value is ModelToolCallEvent { Call.Name: ToolCatalog.WorkComplete } complete)
                     yield return new ModelToolCallEvent(complete.Call with { ArgumentsJson = complete.Call.ArgumentsJson.Replace("\"outcome\":\"Response\"", "\"outcome\":\"NoAction\"", StringComparison.Ordinal) });
                 else yield return value;
@@ -56,12 +80,12 @@ public sealed partial class TenantSessionAccessTests
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-isolated-child-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         var model = new IsolatedChildModel(report, quiet, childFirst);
-        await using WebApplicationFactory<Program> factory = sqlite ? new TenantBackgroundSqliteFactory(root, model, holdCompletion: report) : new TenantBackgroundMemoryFactory(root, model, holdCompletion: report);
+        await using WebApplicationFactory<Program> factory = sqlite ? new TenantBackgroundSqliteFactory(root, model) : new TenantBackgroundMemoryFactory(root, model);
         using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         try
         {
             var (tenant, session, source) = await StartTenantBackground(factory, owner, reportReads: report, independentTask: true,
-                fileCapabilities: [ToolCatalog.BackgroundStart], requestIsolated: true);
+                fileCapabilities: ["tasks.delegate"], requestIsolated: true);
             await model.ChildEntered.Task.WaitAsync(TimeSpan.FromSeconds(20));
             var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var sessions = factory.Services.GetRequiredService<ITenantSessionStore>();
             if (childFirst)
@@ -89,26 +113,35 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Single(await runs.ListTenantRunIdsAsync(tenant, session));
             }
             model.ReleaseChild.TrySetResult();
-            if (report && !quiet)
+            for (var i = 0; i < 400 && (await sessions.FindTenantSessionAsync(tenant, session))?.Snapshot.LifecycleStatus != SessionLifecycleStatus.Completed; i++)
             {
-                var runtime = factory.Services.GetRequiredService<ITenantRuntimeStore>();
-                for (var i = 0; i < 400 && (await runtime.ListTenantBackgroundCompletionsAsync(100)).Count == 0; i++) await Task.Delay(25);
-                Assert.Single(await runtime.ListTenantBackgroundCompletionsAsync(100));
-                Assert.Equal(SessionLifecycleStatus.Active, (await sessions.FindTenantSessionAsync(tenant, session))!.Snapshot.LifecycleStatus);
-                Assert.False(await factory.Services.GetRequiredService<ITenantRequestIsolationControl>().SettleRequestAsync(parent.Owner));
-                var beforeReport = model.Requests.Count;
-                await factory.Services.GetRequiredService<TenantBackgroundCompletionService>().AdmitPendingAsync(8, CancellationToken.None);
-                await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
-                Assert.Equal(beforeReport, model.Requests.Count); // Reports use the exact saved outcome, with no LLM call.
+                await factory.Services.GetRequiredService<ITenantRequestIsolationControl>().SettleRequestAsync(parent.Owner);
+                await Task.Delay(25);
             }
-            for (var i = 0; i < 400 && (await sessions.FindTenantSessionAsync(tenant, session))?.Snapshot.LifecycleStatus != SessionLifecycleStatus.Completed; i++) await Task.Delay(25);
-            Assert.Equal(SessionLifecycleStatus.Completed, (await sessions.FindTenantSessionAsync(tenant, session))!.Snapshot.LifecycleStatus);
+            var settlement = await factory.Services.GetRequiredService<ITenantRequestIsolationStore>().ReadTenantRequestIsolationAsync(parent.Owner);
+            var currentChildren = (await sessions.ListTenantSessionsAsync(tenant, null, 0, 100)).Items.Where(s => s.Snapshot.Origin.OriginatingSessionId == session).ToArray();
+            var facts = new List<object>();
+            foreach (var currentChild in currentChildren)
+                foreach (var childId in await runs.ListTenantRunIdsAsync(tenant, currentChild.Owner.SessionId))
+                {
+                    var currentRun = (await runs.FindTenantRunAsync(tenant, childId))!;
+                    var savedTask = currentRun.Admission.DelegatedTask is { } work ? await factory.Services.GetRequiredService<ITenantTaskStore>().FindTaskAsync(tenant, work.TaskId) : null;
+                    facts.Add(new { currentRun.Status, currentRun.SideEffect, currentRun.Failure, Task = savedTask is null ? null : new { savedTask.State, savedTask.Reason, savedTask.TerminalRunId } });
+                }
+            Assert.True((await sessions.FindTenantSessionAsync(tenant, session))!.Snapshot.LifecycleStatus == SessionLifecycleStatus.Completed,
+                System.Text.Json.JsonSerializer.Serialize(new { settlement?.Ready, Source = (await runs.FindTenantRunAsync(tenant, source))!.SideEffect, Facts = facts, Failures = model.Failures }));
             var completedChild = (await sessions.ListTenantSessionsAsync(tenant, null, 0, 100)).Items.Single(s => s.Snapshot.Origin.OriginatingAgentRunId == source);
             var childRun = (await runs.FindTenantRunAsync(tenant, completedChild.Snapshot.Origin.InitialBackgroundAgentRunId!.Value))!;
             Assert.Equal(quiet ? AgentRunOutcomeKind.NoAction : AgentRunOutcomeKind.Response, childRun.Result!.OutcomeKind);
-            var accounting = await runs.FindTenantCompletionAsync(childRun.Owner, childRun.AgentRunId);
-            if (report) Assert.Equal(quiet ? CompletionInboxStatus.Skipped : CompletionInboxStatus.Delivered, accounting!.Status);
-            else Assert.Null(accounting);
+            Assert.Null(await runs.FindTenantCompletionAsync(childRun.Owner, childRun.AgentRunId));
+            var task = (await factory.Services.GetRequiredService<ITenantTaskStore>().FindTaskAsync(tenant, childRun.Admission.DelegatedTask!.TaskId))!;
+            Assert.True(AgentCore.Domain.Tasks.TaskLimits.Terminal(task.State));
+            Assert.Equal(childRun.AgentRunId, task.TerminalRunId);
+            var reportRuns = new List<AgentRun>();
+            foreach (var id in await runs.ListTenantRunIdsAsync(tenant, session))
+                if (await runs.FindTenantRunAsync(tenant, id) is { Admission.TaskReport: not null } item) reportRuns.Add(item);
+            if (report) Assert.True(Assert.Single(reportRuns).IsTerminal);
+            else Assert.Empty(reportRuns);
             var requests = model.Requests.Count; Assert.False(await factory.Services.GetRequiredService<ITenantRequestIsolationControl>().SettleRequestAsync(parent.Owner));
             Assert.Equal(requests, model.Requests.Count);
             var history = await Json(await owner.GetAsync($"/api/v2/tenants/{tenant}/sessions/{session}/messages?limit=100"));

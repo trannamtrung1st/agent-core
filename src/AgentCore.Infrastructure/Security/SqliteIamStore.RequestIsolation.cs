@@ -2,6 +2,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Tasks;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -54,14 +55,17 @@ public sealed partial class SqliteIamStore : ITenantRequestIsolationStore
         var leaseRow = await db.Set<SandboxLeaseRow>().AsNoTracking().SingleOrDefaultAsync(l => l.SessionId == id, ct).ConfigureAwait(false);
         var lease = leaseRow is null ? null : SandboxRuntimePersistence.Value(leaseRow);
         if (lease is not null && !TenantRequestIsolationRules.LeaseOwner(owner, lease)) throw new AccessDeniedException("sandbox_owner_mismatch");
-        return (new(session, runs, children, childRuns, receipts, childRows.Length <= 100), lease);
+        var tasks = (await db.Set<DelegatedTaskRow>().AsNoTracking().Where(t => t.TenantId == tenant && t.SourceSessionId == id).OrderBy(t => t.TaskId).Take(101).ToArrayAsync(ct)).Select(TaskPersistence.Value).ToArray();
+        var notices = (await db.Set<TaskNotificationRow>().AsNoTracking().Where(n => n.TenantId == tenant && n.RecipientSessionId == id).OrderBy(n => n.NotificationId).Take(1001).ToArrayAsync(ct))
+            .Select(n => System.Text.Json.JsonSerializer.Deserialize<TaskNotification>(n.Json)!).ToArray();
+        return (new TenantSessionSettlement(session, runs, children, childRuns, receipts, childRows.Length <= 100) { Tasks = tasks, TaskNotifications = notices }, lease);
     }
     private async ValueTask<TenantRequestIsolationState?> RequestIsolation(AgentCoreDbContext db, TenantSessionRoot owner, CancellationToken ct)
     {
         var state = await SessionSettlement(db, owner, ct).ConfigureAwait(false);
         if (state is null) return null;
         var graph = state.Value.Graph;
-        return new(graph.Session, graph.Complete && TenantRequestIsolationRules.Ready(graph.Session, graph.Runs, graph.Children, graph.ChildRuns, graph.Receipts), state.Value.Lease);
+        return new(graph.Session, graph.Complete && TenantRequestIsolationRules.Ready(graph.Session, graph.Runs, graph.Children, graph.ChildRuns, graph.Receipts, graph.Tasks, graph.TaskNotifications), state.Value.Lease);
     }
     public async ValueTask<TenantRequestIsolationState?> ReadTenantRequestIsolationAsync(TenantSessionRoot owner, CancellationToken ct = default)
     {

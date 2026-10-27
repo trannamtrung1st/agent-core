@@ -43,7 +43,7 @@ public sealed partial class TenantSessionAccessTests
             using var owner = factory.CreateClient(); await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
             var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
-            var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
+            var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 35, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
             const string path = "/home/reference.txt"; const string body = "Private Composer body → thử nghiệm";
             Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(api + $"/agents/{instance}/workspace/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent(Encoding.UTF8.GetBytes(body)))).StatusCode);
@@ -104,7 +104,7 @@ public sealed partial class TenantSessionAccessTests
                 await foreach (var item in new ScriptedLanguageModel().GenerateAsync(request, cancellationToken)) yield return item;
                 yield break;
             }
-            if (Origin(request) == ExecutionOrigin.ImmediateBackground)
+            if (Origin(request) == ExecutionOrigin.DelegatedTask)
             { ChildEntered.TrySetResult(); await ChildRelease.Task.WaitAsync(cancellationToken); }
             await foreach (var item in base.GenerateAsync(request, cancellationToken)) yield return item;
         }
@@ -201,7 +201,7 @@ public sealed partial class TenantSessionAccessTests
             using var owner = factory.CreateClient(); await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
             var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
-            var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
+            var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 35, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
             const string path = "/home/source-fence.txt";
             var workspace = api + $"/agents/{instance}/workspace/content?path={Uri.EscapeDataString(path)}";

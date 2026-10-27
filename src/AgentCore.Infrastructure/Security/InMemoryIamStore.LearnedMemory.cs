@@ -18,7 +18,7 @@ public sealed partial class InMemoryIamStore : ITenantLearnedMemoryStore
         var tenant = run.Owner.TenantId ?? throw new AccessDeniedException("memory_context_unavailable");
         var state = _tenants.GetValueOrDefault(tenant) ?? throw new AccessDeniedException("memory_context_unavailable");
         var root = TenantCoreRoot(run); var user = TenantRunProfileRules.User(run, root, state);
-        if (root.Admission.ExecutionContext?.Origin == ExecutionOrigin.UserMessage && (user is null || _accounts.GetValueOrDefault(user.AccountId)?.Status != IdentityStatus.Active))
+        if (run.Admission.DelegatedTask is null && run.Admission.AgentMessage is null && root.Admission.ExecutionContext?.Origin == ExecutionOrigin.UserMessage && (user is null || _accounts.GetValueOrDefault(user.AccountId)?.Status != IdentityStatus.Active))
             throw new AccessDeniedException("memory_context_unavailable");
         var session = sessionBacking.ReadTenantSession(tenant, run.SessionId) ?? throw new AccessDeniedException("memory_context_unavailable");
         var parent = sessionBacking.ReadTenantSession(tenant, root.SessionId) ?? throw new AccessDeniedException("memory_context_unavailable");

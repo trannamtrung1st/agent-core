@@ -23,7 +23,7 @@ public sealed partial class TenantOperationAuthorizationTests
     }
     private static async Task<(Environment Setup,TenantRuntimeFrame Frame,TenantApprovalRequest Request)> ApprovedHttp(Fixture f,bool exceptional=false)
     {
-        var s=await Setup(f,"general-assistant",32);var frame=await ClaimArtifactRun(f,s);
+        var s=await Setup(f,"general-assistant",35);var frame=await ClaimArtifactRun(f,s);
         await GrantWorkspaceRuntimeReads(f,s,exceptional?["agents.read","sessions.read"]:["agents.read","sessions.read","http.request"]);
         const string args="{\"method\":\"POST\",\"url\":\"https://public.example/submit\",\"body\":\"exact HTTP proposal\"}";
         var call=new ModelToolCall("exact-http",ToolCatalog.RequestAuthorization,"{\"operation\":\"send_http_request\",\"request\":"+args+"}");

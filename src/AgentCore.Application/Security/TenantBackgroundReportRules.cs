@@ -62,7 +62,7 @@ public static class TenantBackgroundReportRules
             || parent.Snapshot.Revision != p.ParentRevision || parent.Snapshot.DurableLastEntrySequence != p.InputBoundarySequence
             || agent.Instance.Revision != request.Operation.ExpectedInstanceRevision || agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision
             || agent.PrincipalId != request.ExecutorPrincipalId || agent.Instance.InstanceId != request.Operation.InstanceId
-            || !TenantCompletionDestinationRules.Configured(source) && !RolePermissions.AllowsTool(current, ToolCatalog.BackgroundStart)
+            || !TenantCompletionDestinationRules.Configured(source)
             || p.EvidenceJson != BackgroundCompletionProjection.Build(source.Child, source.Child.Admission.TaskIntent?.Text ?? source.ChildSession.Snapshot.Title, [], p.InputBoundarySequence))
             throw new AccessDeniedException("operation_witness_changed");
     }
@@ -82,7 +82,7 @@ public static class TenantBackgroundReportRules
     public static async ValueTask ReviewerAsync(TenantSecurityState state, TenantApprovalRequest request, Guid human, IamAuthorizer iam, CancellationToken ct)
     {
         await ReadAsync(state, request, human, iam, ct).ConfigureAwait(false);
-        // Includes existing immediate-child reports: a decision is a communication boundary.
+        // Independent destination reporting is a communication boundary.
         if (!(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get("agents.chat"),
             AccessScope.ForResource(request.TenantId, "agent", request.Operation.InstanceId.ToString("D")), ct)).Allowed)
             throw new AccessDeniedException("approver_unqualified");
@@ -104,7 +104,7 @@ public static class TenantBackgroundReportRules
     public static AgentRun Build(TenantApprovalRequest request, TenantBackgroundCompletion source, ResolvedAgentRunConfiguration resolved)
     {
         var p = request.Operation.BackgroundReport!;
-        if (TenantBackgroundCreationRules.Hash(resolved) != p.ConfigurationHash || resolved.Configuration.SpaceContext?.MatchesSelection(p.DestinationContext) != true)
+        if (TenantApprovalRules.ConfigurationHash(resolved) != p.ConfigurationHash || resolved.Configuration.SpaceContext?.MatchesSelection(p.DestinationContext) != true)
             throw new AccessDeniedException("operation_witness_changed");
         return TenantBackgroundCompletionFactory.Create(source, resolved, new(p.Model.OfferingId, p.Model.ConnectionId, p.Model.ExternalModelId, ModelSelectionSource.Host, p.Model.ReasoningEffort, Binding: p.Model.Binding, Decision: p.Model.Decision),
             p.ActivationId, p.RunId, p.ResponseId, request.CreatedAt);
@@ -117,7 +117,7 @@ public static class TenantBackgroundReportRules
         if (report.AgentRunId != p.RunId || report.ActivationId != p.ActivationId || report.ResponseId != p.ResponseId
             || report.CreatedAtUtc != request.CreatedAt || report.Admission.Activation.EvidenceJson != p.EvidenceJson
             || report.Admission.Configuration!.SpaceContext?.MatchesSelection(p.DestinationContext) != true
-            || JsonSerializer.Serialize(report.PinnedModel) != JsonSerializer.Serialize(p.Model.ToPin()) || TenantBackgroundCreationRules.Hash(resolved) != p.ConfigurationHash)
+            || JsonSerializer.Serialize(report.PinnedModel) != JsonSerializer.Serialize(p.Model.ToPin()) || TenantApprovalRules.ConfigurationHash(resolved) != p.ConfigurationHash)
             throw new SecurityConflictException("operation_mismatch");
     }
     public static void Decision(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant, DateTimeOffset now)

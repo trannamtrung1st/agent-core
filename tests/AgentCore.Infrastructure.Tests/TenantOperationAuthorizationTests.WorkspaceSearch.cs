@@ -36,7 +36,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_search_empty_scope_does_not_initialize_and_file_and_depth_limits_remain_bounded(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantWorkspaceRuntimeReads(f, s); var reads = WorkspaceRuntimeReads(f);
         var physical = AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(f.Root, "workspaces"), s.Agent.Instance.InstanceId, s.Run.SessionId);
         var call = new ModelToolCall("bounded-search", ToolCatalog.WorkspaceSearch, """{"path":"/working","query":"needle"}""");
@@ -61,7 +61,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_workspace_search_withholds_matches_when_executor_read_is_revoked_during_traversal(bool sqlite, bool working)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, working); var grant = await GrantWorkspaceRuntimeReads(f, s);
         var probe = new WorkspaceRuntimeReadProbe(WorkspaceReader(f), async () => await f.Access.RevokeAssignmentAsync(s.Owner.PrincipalId, s.Tenant,
             grant.AssignmentId, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision));
@@ -104,7 +104,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_workspace_search_returns_actual_bounded_name_and_UTF8_content_matches_under_current_authority(bool sqlite, bool working)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); var root = working ? "/working" : "/home";
         await SeedRuntimeWorkspace(f, s, working, "report-name.txt", "Unrelated literal body"u8.ToArray());
         await SeedRuntimeWorkspace(f, s, working, "nested/note.txt", Encoding.UTF8.GetBytes("Unicode report: thử nghiệm\nExact content"));

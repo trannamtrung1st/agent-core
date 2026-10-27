@@ -138,7 +138,7 @@ for (const width of [1440, 768, 390, 320])
     await page.goto('/');
     await selectInstanceIdentity(page, {
       id: 'general-assistant',
-      version: 25,
+      version: 35,
     });
     await page
       .getByLabel('Message')

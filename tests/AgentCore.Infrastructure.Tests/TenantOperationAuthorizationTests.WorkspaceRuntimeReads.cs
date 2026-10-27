@@ -30,7 +30,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_workspace_model_reads_and_lists_use_actual_files_and_executor_authority(bool sqlite, bool working)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, working);
         var service = WorkspaceRuntimeReads(f); var executor = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, Operations(f), f.Clock, workspaceReads: service));
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: s.Agent.Instance.InstanceId, OwnedSessionId: frame.SessionId,
@@ -54,11 +54,14 @@ public sealed partial class TenantOperationAuthorizationTests
     }
 
     [Theory] [InlineData(false, "sessions.read")] [InlineData(true, "sessions.read")]
-    [InlineData(false, "agents.read")] [InlineData(true, "agents.read")]
+    [InlineData(false, "spaces.read")] [InlineData(true, "spaces.read")]
     [InlineData(false, "workspaces.read")] [InlineData(true, "workspaces.read")]
-    public async Task Tenant_workspace_model_retained_observations_repeat_current_compound_policy(bool sqlite, string permission)
+    [InlineData(false, "sessions.read", true)] [InlineData(true, "sessions.read", true)]
+    [InlineData(false, "spaces.read", true)] [InlineData(true, "spaces.read", true)]
+    [InlineData(false, "workspaces.read", true)] [InlineData(true, "workspaces.read", true)]
+    public async Task Tenant_workspace_model_retained_observations_repeat_current_compound_policy(bool sqlite, string permission, bool terminal = false)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, false); await GrantWorkspaceRuntimeReads(f, s);
         var service = WorkspaceRuntimeReads(f); var call = new ModelToolCall("retained-workspace", ToolCatalog.WorkspaceRead, """{"path":"/home/private.txt"}""");
         var text = await service.InspectAsync(frame, call, 16000);
@@ -66,16 +69,22 @@ public sealed partial class TenantOperationAuthorizationTests
         var messages = new ModelMessage[] { new(ModelRole.Assistant, "", ToolCalls: [call]), new(ModelRole.Tool, text, ToolCallId: call.Id, Name: call.Name) };
         run = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
             new AgentRunCommand.Checkpoint(run.Revision, f.Clock.GetUtcNow(), frame.Generation, new(AgentRunToolCallCheckpoint.Write(messages), 1, text.Length, 10000, 100), null), f.Ids.NewId());
-        await service.RequireStoredAsync(run);
+        if (terminal)
+        {
+            run = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
+                new AgentRunCommand.Complete(run.Revision, f.Clock.GetUtcNow(), frame.Generation, "Saved source observation", AgentRunOutcomeKind.NoAction, null), f.Ids.NewId());
+            Assert.Null(run.Claim); Assert.True(run.IsTerminal);
+        }
+        await service.RequireStoredAsync(run, live: !terminal);
         await Policies(f).SaveAsync(s.Tenant, s.Owner, permission, new(OperationApprovalMode.Always, false), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 0);
-        Assert.Equal("workspace_read_review_required", (await Assert.ThrowsAsync<AccessDeniedException>(() => service.RequireStoredAsync(run).AsTask())).ReasonCode);
+        Assert.Equal("workspace_read_review_required", (await Assert.ThrowsAsync<AccessDeniedException>(() => service.RequireStoredAsync(run, live: !terminal).AsTask())).ReasonCode);
         Assert.Null(await new TenantRunExecutionAuthority(Operations(f), f.Iam, f.Clock, f.RunConfiguration(), workspaceReads: service).CurrentDefinitionAsync(run));
     }
 
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_workspace_model_withholds_read_or_list_when_authority_changes_during_IO(bool sqlite, bool list)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, true); var grant = await GrantWorkspaceRuntimeReads(f, s);
         var probe = new WorkspaceRuntimeReadProbe(WorkspaceReader(f), async () => await f.Access.RevokeAssignmentAsync(s.Owner.PrincipalId, s.Tenant,
             grant.AssignmentId, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision));
@@ -88,7 +97,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_read_remains_valid_when_the_same_claim_persists_ordinary_response_progress(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, true); await GrantWorkspaceRuntimeReads(f, s);
         var runtime = (ITenantRuntimeStore)f.Iam;
         var before = (await runtime.LoadTenantRuntimeAsync(frame))!;
@@ -125,7 +134,7 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Tenant_workspace_read_withholds_captured_bytes_after_cancellation_or_generation_replacement(bool sqlite, bool replace)
     {
         var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
-        await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, true); await GrantWorkspaceRuntimeReads(f, s);
         var runtime = (ITenantRuntimeStore)f.Iam;
         var probe = new WorkspaceRuntimeReadProbe(WorkspaceReader(f), async () =>
@@ -152,7 +161,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_model_empty_lists_do_not_initialize_and_bounded_pages_preserve_next_unseen_path(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantWorkspaceRuntimeReads(f, s); var service = WorkspaceRuntimeReads(f);
         var list = new ModelToolCall("page-workspace", ToolCatalog.WorkspaceList, """{"path":"/working","limit":1}""");
         using (var empty = JsonDocument.Parse(await service.InspectAsync(frame, list, 1000))) Assert.Empty(empty.RootElement.GetProperty("entries").EnumerateArray());
@@ -185,7 +194,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_model_exact_home_read_scope_cannot_read_working_or_borrow_owner_access(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, false); await SeedRuntimeWorkspace(f, s, true);
         await GrantWorkspaceRuntimeReads(f, s, ["sessions.read", "agents.read"]);
         var homeGrant = await GrantWorkspaceRuntimeReads(f, s, ["workspaces.read"], TenantWorkspaceRules.Home(s.Tenant, SpaceId(s)));

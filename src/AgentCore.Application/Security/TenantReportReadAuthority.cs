@@ -66,6 +66,16 @@ public sealed class TenantReportReadAuthority(ITenantRuntimeStore storage, ITena
     public async ValueTask RequireAsync(AgentRun report, CancellationToken ct)
     {
         if (report.Admission.OutputContract != AgentRunOutputContract.CompletionReport) return;
+        if (report.Admission.TaskReport is not null)
+        {
+            if (runs is not ITenantTaskStore tasks) throw new AccessDeniedException("task_report_unavailable");
+            await tasks.RequireTaskReportSourcesAsync(report, ct);
+            var worker = await runs.FindTenantRunAsync(report.Owner.TenantId!.Value, report.Admission.TaskReport.TerminalRunId, ct)
+                ?? throw new AccessDeniedException("task_report_source_unavailable");
+            if (TenantRunSourceAuthority.HasSources(worker))
+                await (sourceAuthority ?? throw new AccessDeniedException("source_context_unavailable")).RequireAsync(worker, ct);
+            return;
+        }
         var tenant = report.Owner.TenantId!.Value;
         var source = await TenantReportReadRules.SourceAsync(report, (id, token) => runs.FindTenantRunAsync(tenant, id, token),
             (id, token) => storage.ReadTenantBackgroundCompletionAsync(report.Owner, id, token), ct).ConfigureAwait(false);

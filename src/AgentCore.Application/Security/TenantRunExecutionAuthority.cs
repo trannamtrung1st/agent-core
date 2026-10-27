@@ -9,9 +9,11 @@ namespace AgentCore.Application.Security;
 public sealed partial class TenantRunExecutionAuthority(TenantOperationAuthorizer operations, IIamStore store, TimeProvider time,
     TenantRunConfigurationResolver configurations, TenantBrowserEffectService? browserEffects = null, TenantBrowserReadService? browserReads = null,
     TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantAttachmentRuntimeContextService? attachmentContext = null,
-    TenantWaitSourceAuthority? waitSources = null, TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantEventReadAuthority? eventReads = null, TenantRunSourceAuthority? sourceAuthority = null, ITenantModelCatalogReader? configurationModels = null, AgentCore.Application.Tools.IToolConfigurationGate? configurationTools = null, TenantPublicWebReadService? publicWebReads = null, TenantHttpEffectService? httpEffects = null,
-    ILogger<TenantRunExecutionAuthority>? logger = null, TenantContextToolService? contextTools = null, AgentCore.Application.Models.AutoModelRouter? routing = null) : IAgentRunAuthority, ITenantRunContext
+    TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantEventReadAuthority? eventReads = null, TenantRunSourceAuthority? sourceAuthority = null, ITenantModelCatalogReader? configurationModels = null, AgentCore.Application.Tools.IToolConfigurationGate? configurationTools = null, TenantPublicWebReadService? publicWebReads = null, TenantHttpEffectService? httpEffects = null,
+    ILogger<TenantRunExecutionAuthority>? logger = null, TenantContextToolService? contextTools = null, AgentCore.Application.Models.AutoModelRouter? routing = null) : IAgentRunAuthority, ITenantRunContext, ITaskRunBudgetAuthority
 {
+    public ValueTask<TaskExecutionAllowance?> TaskAllowanceAsync(AgentRun run, CancellationToken ct = default) => store is ITenantTaskStore tasks
+        ? tasks.ReadTaskExecutionAllowanceAsync(run, ct) : ValueTask.FromResult<TaskExecutionAllowance?>(null);
     public ValueTask RecordContextOutputFailureAsync(TenantRunReference reference, string reason, CancellationToken ct) =>
         operations.RecordFailureAsync(reference, "variables.resolve", reason, ExecutionAuthorizationPurpose.EffectEligibility, ct);
     public ValueTask RecordAccountOutputFailureAsync(TenantRunReference reference, string reason, CancellationToken ct) =>
@@ -44,14 +46,17 @@ public sealed partial class TenantRunExecutionAuthority(TenantOperationAuthorize
                 if (before.State.Tenant.Revision == after.State.Tenant.Revision)
                 {
                     phase = "admission";
-                    if (after.Run.Admission.OutputContract is AgentRunOutputContract.BackgroundOutcome or AgentRunOutputContract.CompletionReport
-                        || TenantAutomationConversationRules.IsConversationRoot(await TenantExecutionLineage.RootAsync(after.Run, (ITenantRunStore)store, cancellationToken).ConfigureAwait(false)))
+                    if (store is ITenantTaskStore taskBudgets && await taskBudgets.ReadTaskExecutionAllowanceAsync(after.Run, cancellationToken).ConfigureAwait(false) is { } allowance
+                        && (after.Run.Checkpoint?.StepCount > allowance.MaxSteps || after.Run.Checkpoint?.ActiveExecutionMs > allowance.DurationSeconds * 1000)) return null;
+                    if (after.Run.Admission.AgentMessage is not null && (current.Agent.Instance.Cooperation?.AcceptDirectMessages != true || current.Agent.Instance.Cooperation.AllowDirectMessageWake != true)) return null;
+                    if (after.Run.Admission.DelegatedTask is not null && current.Agent.Instance.Cooperation?.AcceptTasks != true) return null;
+                    if (after.Run.Admission.DelegatedTask is null && after.Run.Admission.TaskReport is null && after.Run.Admission.AgentMessage is null && (after.Run.Admission.OutputContract is AgentRunOutputContract.BackgroundOutcome or AgentRunOutputContract.CompletionReport
+                        || TenantAutomationConversationRules.IsConversationRoot(await TenantExecutionLineage.RootAsync(after.Run, (ITenantRunStore)store, cancellationToken).ConfigureAwait(false))))
                     {
                         var root = await TenantExecutionLineage.RootAsync(after.Run, (ITenantRunStore)store, cancellationToken).ConfigureAwait(false);
                         if (root.Admission.ExecutionContext!.Origin == ExecutionOrigin.UserMessage)
                         {
-                            if (TenantExperienceReviewRules.Selected(root) is null
-                                && !AgentCore.Application.Agents.RolePermissions.AllowsTool(current.Definition, AgentCore.Application.Tools.ToolCatalog.BackgroundStart)) return null;
+                            if (TenantExperienceReviewRules.Selected(root) is null) return null;
                         }
                         else
                         {
@@ -96,8 +101,6 @@ public sealed partial class TenantRunExecutionAuthority(TenantOperationAuthorize
                     phase = "workspace_read";
                     if (workspaceReads is not null) await workspaceReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     phase = "wait_source";
-                    if (waitSources is not null) await waitSources.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
-                    else if (TenantWaitSourceAuthority.HasStoredSources(after.Run)) throw new AccessDeniedException("wait_source_unavailable");
                     phase = "attachment_context";
                     if (attachmentContext is not null) await attachmentContext.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     else if (AgentCore.Application.Execution.AgentRunToolCallCheckpoint.ReadExecutionState(after.Run.Checkpoint).TenantAttachmentSources is { Count: > 0 }

@@ -23,7 +23,7 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Registered_model_tools_require_current_claim_before_policy_arguments_or_dispatch(bool sqlite, string boundary)
     {
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        await using var f = await Fixture.Create(sqlite, clock); var setup = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, clock); var setup = await Setup(f, "general-assistant", 35);
         var storage = (ITenantRuntimeStore)f.Iam; var runs = (ITenantRunStore)f.Iam; var run = setup.Run;
         if (boundary != "queued") run = await storage.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
             new AgentRunCommand.Claim(run.Revision, clock.GetUtcNow(), f.Ids.NewId(), clock.GetUtcNow().AddMinutes(1)), f.Ids.NewId());
@@ -169,14 +169,14 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Runtime_owned_commands_cannot_borrow_IAM_inspection_through_the_generic_tool_adapter(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite); var setup = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite); var setup = await Setup(f, "general-assistant", 35);
         var runtime = (ITenantRuntimeStore)f.Iam;
         var run = await runtime.ApplyTenantRuntimeCommandAsync(setup.Run.Owner, setup.Run.AgentRunId,
             new AgentRunCommand.Claim(setup.Run.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId());
         var executor = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, Operations(f), f.Clock));
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: run.AgentInstanceId, AgentRunId: run.AgentRunId,
             OwnedSessionId: run.SessionId, TenantId: setup.Tenant, AgentRunGeneration: run.Claim!.Generation);
-        foreach (var name in new[] { ToolCatalog.BackgroundStart, ToolCatalog.ExecutionWait })
+        foreach (var name in new[] { "tasks.delegate", ToolCatalog.ExecutionWait })
         {
             using var result = JsonDocument.Parse((await executor.ExecuteAsync(run.Admission.Configuration!.Definition, run.SessionId,
                 new("wrong-owner", name, JsonSerializer.Serialize(new { resourceType = "agent", resourceId = run.AgentInstanceId })), 4096, admission: admission)).Text);

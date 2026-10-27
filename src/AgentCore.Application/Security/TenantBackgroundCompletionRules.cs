@@ -30,9 +30,9 @@ public static class TenantBackgroundCompletionRules
         if (JsonSerializer.Serialize(expected.Admission) != JsonSerializer.Serialize(report.Admission))
             throw new AccessDeniedException("completion_admission_mismatch");
     }
-    public static CompletionInboxItem Settle(CompletionInboxItem item, AgentRun run, Guid? generation)
+    public static CompletionInboxItem Settle(CompletionInboxItem item, AgentRun run)
     {
-        var next = item.Settle(run, generation);
+        var next = item.Settle(run);
         if (next.Status == CompletionInboxStatus.DeliveryQueued && next.ReportActivationId == run.ActivationId && run.IsTerminal
             && run.Result?.OutcomeKind != AgentRunOutcomeKind.Continued)
             next = next with { Revision = next.Revision + 1, Status = CompletionInboxStatus.Skipped,

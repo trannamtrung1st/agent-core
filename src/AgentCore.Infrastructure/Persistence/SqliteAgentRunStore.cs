@@ -47,13 +47,6 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
         return updated;
     }
 
-    public ValueTask<AgentRunAdmissionResult> AdmitImmediateAsync(SessionSnapshot snapshot, AgentRun run,
-        Guid expectedParentGeneration, CancellationToken cancellationToken = default)
-    {
-        AgentRunStoreMapping.ValidateImmediateAdmission(run, expectedParentGeneration);
-        return AdmitCoreAsync(snapshot, 0, run, null, cancellationToken, expectedParentGeneration);
-    }
-
     public ValueTask<AgentRunAdmissionResult> AdmitAsync(SessionSnapshot snapshot, long expectedSessionRevision,
         AgentRun run, CancellationToken cancellationToken = default)
     {
@@ -66,7 +59,7 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
         AdmitCoreAsync(snapshot, 0, run, expectedRoutingRevision, cancellationToken);
 
     private async ValueTask<AgentRunAdmissionResult> AdmitCoreAsync(SessionSnapshot snapshot, long expectedSessionRevision,
-        AgentRun run, long? expectedRoutingRevision, CancellationToken cancellationToken, Guid? expectedParentGeneration = null, Guid? completionSourceRunId = null, IReadOnlyList<Guid>? additionalCompletionSources = null)
+        AgentRun run, long? expectedRoutingRevision, CancellationToken cancellationToken, Guid? completionSourceRunId = null, IReadOnlyList<Guid>? additionalCompletionSources = null)
     {
         AgentRunStoreMapping.ValidateAdmission(snapshot, run);
         snapshot = snapshot with { PendingAgentInputIds = snapshot.PendingAgentInputIds.Except(run.Admission.Activation.SourceEntryIds).ToArray() };
@@ -136,36 +129,11 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
             var selection = selectionRow is null ? null : System.Text.Json.JsonSerializer.Deserialize<AgentCore.Application.Ports.EmailAccountSelection>(selectionRow.SelectionJson);
             AgentRunStoreMapping.ValidateConfigurationContinuation(run, sourceRow is null ? null : AgentRunStoreMapping.ToDomain(sourceRow), selection);
         }
-        if (run.Admission.Activation.Kind == ActivationKind.ImmediateBackground)
-        {
-            var sourceId = run.Admission.Activation.SourceAgentRunId!.Value.ToString("D");
-            var source = await LegacyRuns(db).AsNoTracking().SingleOrDefaultAsync(row => row.AgentRunId == sourceId,
-                cancellationToken).ConfigureAwait(false);
-            var sourceSession = source is null ? null : await db.Sessions.AsNoTracking().Include(row => row.Snapshot)
-                .SingleOrDefaultAsync(row => row.SessionId == source.SessionId, cancellationToken).ConfigureAwait(false);
-            AgentRunStoreMapping.ValidateImmediateSource(run, source is null ? null : AgentRunStoreMapping.ToDomain(source),
-                sourceSession is not null && sourceSession.DurablyDeletedAtUtc is null && sourceSession.ArchivedAtUtc is null
-                && sourceSession.Status is not (nameof(SessionStatus.Ended) or nameof(SessionStatus.Ending))
-                && sourceSession.Snapshot?.LifecycleStatus is not (nameof(SessionLifecycleStatus.Completed)
-                    or nameof(SessionLifecycleStatus.Cancelled) or nameof(SessionLifecycleStatus.Expired) or nameof(SessionLifecycleStatus.Ended))
-                && sourceSession.AgentInstanceId == run.AgentInstanceId.ToString("D")
-                && sourceSession.Snapshot?.ProfileId == run.ProfileId.ToString("D"));
-        }
         if (run.Admission.Activation.ParentActivationId is not null)
         {
             var parentId = run.Admission.Activation.SourceAgentRunId!.Value.ToString("D");
             var parentRow = await LegacyRuns(db).AsNoTracking().SingleOrDefaultAsync(row => row.AgentRunId == parentId, cancellationToken).ConfigureAwait(false);
             AgentRunStoreMapping.ValidateLineage(run, parentRow is null ? null : AgentRunStoreMapping.ToDomain(parentRow));
-        }
-        if (run.Admission.Activation.Kind == ActivationKind.ImmediateBackground)
-        {
-            var rows = await LegacyRuns(db).AsNoTracking().Where(row => row.AgentInstanceId == run.AgentInstanceId.ToString("D")
-                && row.ProfileId == run.ProfileId.ToString("D")).ToArrayAsync(cancellationToken).ConfigureAwait(false);
-            var owned = rows.Select(AgentRunStoreMapping.ToDomain).ToArray();
-            var parent = owned.SingleOrDefault(item => item.AgentRunId == run.Admission.Activation.SourceAgentRunId);
-            if (expectedParentGeneration is { } generation && parent?.Claim?.Generation != generation)
-                throw AgentCoreErrors.Conflict("Background admission generation is stale.");
-            AgentRunStoreMapping.ValidateBackgroundBudget(run, owned);
         }
         if (completionSourceRunId is { } completionSource)
         {
@@ -301,8 +269,7 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var utc = asOfUtc.ToUnixTimeMilliseconds();
         var waiting = await LegacyRuns(db).AsNoTracking().Where(r => r.Status == (int)AgentRunStatus.WaitingForSignal).ToArrayAsync(cancellationToken).ConfigureAwait(false);
-        var children = waiting.Length > 0 ? await WaitChildrenAsync(db, waiting.Select(AgentRunStoreMapping.ToDomain).SelectMany(r => r.Wait!.BackgroundSessionIds).Distinct().ToArray(), cancellationToken).ConfigureAwait(false) : [];
-        var readyWaits = waiting.Select(AgentRunStoreMapping.ToDomain).Where(r => AgentRunWaitExecution.IsReady(r, asOfUtc, children)).ToArray();
+        var readyWaits = waiting.Select(AgentRunStoreMapping.ToDomain).Where(r => AgentRunWaitExecution.IsReady(r, asOfUtc)).ToArray();
         var rows = await LegacyRuns(db).AsNoTracking().Where(row => row.Status == (int)AgentRunStatus.Queued
             || row.Status == (int)AgentRunStatus.WaitingToRetry && row.NextRetryAtUtc <= utc
             || row.Status == (int)AgentRunStatus.Running && row.LeaseExpiresAtUtc <= utc)
@@ -361,7 +328,7 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
         }
         AgentRun updated;
         try { updated = command is AgentRunCommand.SuspendWait or AgentRunCommand.ResumeWait
-            ? AgentRunWaitExecution.Apply(run, command, await WaitChildrenAsync(db, command is AgentRunCommand.SuspendWait suspend ? suspend.Wait.BackgroundSessionIds : run.Wait?.BackgroundSessionIds ?? [], cancellationToken).ConfigureAwait(false)) : command.Apply(run, diagnostics.NewId); }
+            ? AgentRunWaitExecution.Apply(run, command) : command.Apply(run, diagnostics.NewId); }
         catch (Exception e) when (e is AgentRunTransitionException or ArgumentException)
         { throw AgentRunStoreMapping.Map(e); }
         AgentRunStoreMapping.Apply(row, updated);

@@ -63,6 +63,8 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
             throw new InvalidOperationException(EvaluationCutover.Recovery);
         if (applied.LastOrDefault() == "20261027020000_EvaluationSandboxExecutions" && !applied.Contains("20261027040000_SessionGoals", StringComparer.Ordinal))
             throw new InvalidOperationException("Session Goal cutover required. Stop all writers and workers, back up SQLite and protected roots, inventory legacy Goal-purpose snapshots, then explicitly apply 20261027040000_SessionGoals with matching backend/SPA. Do not reset customer data. Repair any GoalPurposeCannotMap source before retrying; restore the matching backup to roll back. See docs/15-persistence-and-configuration.md#session-goal-persistence-and-cutover.");
+        if (applied.LastOrDefault() == "20261027040000_SessionGoals")
+            throw new InvalidOperationException("task_cutover_reset_required: Stop writers, back up SQLite and all protected roots, inventory immediate child state, and explicitly apply 20261027060000_TaskDelegation. Populated predecessor child graphs require a deliberate isolated reset or offline migration. Do not delete customer data. See docs/17-observability-and-operations.md#initiative-9--adopted-successor-implementation-in-progress.");
         var isModelUpgrade = migrations.LastOrDefault() == "20261025090000_CanonicalModelIdentity"
             && applied.LastOrDefault() is "20261025085000_TenantDynamicModels" or "20261025080000_SpaceResourceApprovals"
             && applied.SequenceEqual(migrations.Take(applied.Length), StringComparer.Ordinal);

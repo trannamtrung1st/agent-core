@@ -3,10 +3,12 @@ namespace AgentCore.Domain.Conversation;
 public enum SessionOriginKind
 {
     UserChat,
-    ImmediateBackground,
+    Reserved1,
     AutomationOccurrence,
     ManualBackground,
-    SourceOccurrence
+    SourceOccurrence,
+    DelegatedTask,
+    DirectAgentMessage
 }
 
 [Flags]
@@ -26,7 +28,7 @@ public sealed record SessionOrigin
         Guid? originatingAgentRunId = null, Guid? initialBackgroundAgentRunId = null,
         Guid? automationId = null, Guid? triggerOccurrenceId = null, bool reportCompletionToOrigin = false, string? initialTitle = null)
     {
-        if (!Enum.IsDefined(kind)) throw new ArgumentException("Session origin kind is invalid.");
+        if (!Enum.IsDefined(kind) || kind == SessionOriginKind.Reserved1) throw new ArgumentException("Session origin kind is invalid.");
         AgentRunText.RequireOptionalId(originatingSessionId, "Originating Session");
         AgentRunText.RequireOptionalId(originatingAgentRunId, "Originating run");
         AgentRunText.RequireOptionalId(initialBackgroundAgentRunId, "Initial background run");
@@ -38,9 +40,6 @@ public sealed record SessionOrigin
             throw new ArgumentException("User chat has no background provenance.");
         if (kind != SessionOriginKind.UserChat && initialBackgroundAgentRunId is null)
             throw new ArgumentException("Background origin requires its initial run identity.");
-        if (kind == SessionOriginKind.ImmediateBackground
-            && (originatingSessionId is null || originatingAgentRunId is null || automationId is not null || triggerOccurrenceId is not null))
-            throw new ArgumentException("Immediate work requires parent identity and has no Automation.");
         if (kind == SessionOriginKind.AutomationOccurrence && (automationId is null || triggerOccurrenceId is null))
             throw new ArgumentException("An Automation origin requires both Automation and occurrence.");
         if (kind == SessionOriginKind.SourceOccurrence && (automationId is not null || triggerOccurrenceId is null))
@@ -48,7 +47,7 @@ public sealed record SessionOrigin
         if (kind is not (SessionOriginKind.AutomationOccurrence or SessionOriginKind.SourceOccurrence)
             && (automationId is not null || triggerOccurrenceId is not null))
             throw new ArgumentException("Only occurrence origins carry occurrence provenance.");
-        if (reportCompletionToOrigin && (kind is not (SessionOriginKind.ImmediateBackground or SessionOriginKind.AutomationOccurrence) || originatingSessionId is null))
+        if (reportCompletionToOrigin && (kind is not (SessionOriginKind.AutomationOccurrence or SessionOriginKind.DelegatedTask) || originatingSessionId is null))
             throw new ArgumentException("Only explicitly parent-linked work can report back.");
         Kind = kind;
         OriginatingSessionId = originatingSessionId;

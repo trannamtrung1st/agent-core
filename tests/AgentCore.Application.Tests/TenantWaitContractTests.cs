@@ -8,7 +8,7 @@ public sealed class TenantWaitContractTests
 {
     [Theory] [InlineData(ExecutionOrigin.UserMessage, AgentRunOutputContract.ConversationResponse)]
     [InlineData(ExecutionOrigin.ApprovalContinuation, AgentRunOutputContract.ConversationResponse)]
-    [InlineData(ExecutionOrigin.ImmediateBackground, AgentRunOutputContract.BackgroundOutcome)]
+    [InlineData(ExecutionOrigin.DelegatedTask, AgentRunOutputContract.BackgroundOutcome)]
     [InlineData(ExecutionOrigin.ApprovalContinuation, AgentRunOutputContract.BackgroundOutcome)]
     public async Task Tenant_wait_requires_exact_owned_human_derived_execution_and_explicit_capability(ExecutionOrigin origin, AgentRunOutputContract output)
     {
@@ -18,12 +18,13 @@ public sealed class TenantWaitContractTests
             value == ExecutionOrigin.UserMessage ? activation : Guid.NewGuid(), value == ExecutionOrigin.UserMessage ? null : Guid.NewGuid(), value == ExecutionOrigin.UserMessage ? null : Guid.NewGuid(), value);
         var context = CapabilityProjectionTests.Context(definition) with { AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session,
             OutputContract = output, DetachedExecution = origin != ExecutionOrigin.UserMessage, LoadedCapabilityIds = [ToolCatalog.ExecutionWait],
-            ExecutionContext = Execution(origin) };
+            ExecutionContext = Execution(origin), RunTaskIntent = output == AgentRunOutputContract.BackgroundOutcome
+                ? new("Exact delegated task", AgentRunTaskSource.DelegatedTask, Guid.NewGuid().ToString("D")) : null };
         Assert.Contains(ToolProjectionService.Project(definition, context, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.ExecutionWait);
         foreach (var invalid in new[] { context with { OwnedSessionId = Guid.NewGuid() }, context with { ModelSupportsTools = false },
             context with { OutputContract = AgentRunOutputContract.CompletionReport }, context with { ExecutionContext = Execution(ExecutionOrigin.CompletionReport) } })
             Assert.DoesNotContain(ToolProjectionService.Project(definition, invalid, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.ExecutionWait);
-        var noCapability = await CapabilityProjectionTests.Definition(ToolCatalog.BackgroundStart);
+        var noCapability = await CapabilityProjectionTests.Definition(ToolCatalog.WorkspaceRead);
         Assert.DoesNotContain(ToolProjectionService.Project(noCapability, context, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.ExecutionWait);
     }
 
@@ -47,7 +48,7 @@ public sealed class TenantWaitContractTests
         var id = Guid.NewGuid(); using var duration = JsonDocument.Parse("""{"mode":"duration","seconds":0.125}""");
         var wait = ExecutionWaitContract.Parse("wait", duration.RootElement, DateTimeOffset.UnixEpoch);
         Assert.Equal(TimeSpan.FromMilliseconds(125), wait.DeadlineUtc - wait.StartedAtUtc);
-        using var duplicate = JsonDocument.Parse(JsonSerializer.Serialize(new { mode = "background", backgroundSessionIds = new[] { id, id }, until = "any", timeoutSeconds = 1 }));
+        using var duplicate = JsonDocument.Parse(JsonSerializer.Serialize(new { mode = "tasks", taskIds = new[] { id, id }, until = "any", timeoutSeconds = 1 }));
         Assert.Throws<ArgumentException>(() => ExecutionWaitContract.Parse("wait", duplicate.RootElement, DateTimeOffset.UnixEpoch));
     }
 }

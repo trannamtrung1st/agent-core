@@ -12,7 +12,7 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Sandbox_workspace_mounts_intersect_actual_read_write_delete_IAM_and_reject_revoked_authority(bool sqlite)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35);
         async Task<TenantSecurityState> State() => (await f.Iam.ReadTenantAsync(s.Tenant))!;
         async Task<SandboxWorkspaceAccess> Access(HomeAccess policy = HomeAccess.ReadWrite) =>
             await TenantSandboxWorkspaceRules.ResolveAsync(await State(), s.Run, policy, f.Authorizer, default);

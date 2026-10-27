@@ -207,7 +207,7 @@ public sealed partial class TenantCredentialAccessTests
                 if (model is not null) { services.RemoveAll<ILanguageModel>(); services.AddSingleton(model); }
                 if (TenantExecutionEnabled) services.Replace(ServiceDescriptor.Singleton<ITenantRunExecution>(p => new ExecutionGate(this,
                     new AgentCore.Application.Execution.TenantRunExecution(p.GetRequiredService<ITenantRuntimeStore>(), p.GetRequiredService<ITenantRunStore>(),
-                        p.GetRequiredService<ITenantRunDispatcher>(), p.GetRequiredService<IIdGenerator>(), p.GetRequiredService<TimeProvider>()))));
+                        p.GetRequiredService<ITenantRunDispatcher>(), p.GetRequiredService<IIdGenerator>(), p.GetRequiredService<TimeProvider>(), tasks: p.GetRequiredService<AgentCore.Application.Tasks.TenantTaskCoordinationService>()))));
                 servicesOverride?.Invoke(services);
             });
         }

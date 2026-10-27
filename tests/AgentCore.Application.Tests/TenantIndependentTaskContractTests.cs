@@ -7,23 +7,22 @@ namespace AgentCore.Application.Tests;
 public sealed class TenantIndependentTaskContractTests
 {
     [Theory]
-    [InlineData(ExecutionOrigin.ImmediateBackground, true)] [InlineData(ExecutionOrigin.ApprovalContinuation, true)]
-    [InlineData(ExecutionOrigin.ImmediateBackground, false)] [InlineData(ExecutionOrigin.ApprovalContinuation, false)]
+    [InlineData(ExecutionOrigin.DelegatedTask, true)] [InlineData(ExecutionOrigin.ApprovalContinuation, true)]
+    [InlineData(ExecutionOrigin.DelegatedTask, false)] [InlineData(ExecutionOrigin.ApprovalContinuation, false)]
     public async Task No_human_child_controls_require_a_frozen_child_task_and_owned_trusted_parent(ExecutionOrigin origin, bool task)
     {
-        var names = new[] { ToolCatalog.BackgroundStart, ToolCatalog.BackgroundList, ToolCatalog.BackgroundInspect,
-            ToolCatalog.BackgroundTake, ToolCatalog.BackgroundAcknowledge, ToolCatalog.ExecutionWait };
+        var names = new[] { "tasks.delegate", "tasks.list", "tasks.inspect", "tasks.cancel", "tasks.messages.list", "tasks.messages.send", "tasks.acknowledge", ToolCatalog.ExecutionWait };
         var definition = await CapabilityProjectionTests.Definition(names); var session = Guid.NewGuid(); var parent = Guid.NewGuid();
         var context = CapabilityProjectionTests.Context(definition) with { AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session,
-            OutputContract = AgentRunOutputContract.BackgroundOutcome, DetachedExecution = true, LoadedCapabilityIds = names, HasBackgroundClaim = true,
+            OutputContract = AgentRunOutputContract.BackgroundOutcome, DetachedExecution = true, LoadedCapabilityIds = names, CurrentContextTools = task ? names : [],
             ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), null, session, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), parent, Guid.NewGuid(), origin),
-            RunTaskIntent = task ? new("Exact child task", AgentRunTaskSource.AgentRun, parent.ToString("D")) : null };
+            RunTaskIntent = task ? new("Exact child task", AgentRunTaskSource.DelegatedTask, Guid.NewGuid().ToString("D")) : null };
         var tools = ToolProjectionService.Project(definition, context, ToolConfigurationGates.AllowAll);
         foreach (var name in names) Assert.Equal(task, tools.Any(t => t.Name == name));
         if (task)
         {
             var schema = Assert.Single(tools, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson;
-            Assert.Contains("start_background_work", schema); Assert.Contains("inspect_background_completion", schema);
+            Assert.Contains("delegate_task", schema); Assert.DoesNotContain("inspect_background_completion", schema);
             Assert.DoesNotContain("update_persona", schema);
         }
         var foreign = ToolProjectionService.Project(definition, context with { OwnedSessionId = Guid.NewGuid() }, ToolConfigurationGates.AllowAll);
@@ -43,11 +42,11 @@ public sealed class TenantIndependentTaskContractTests
     [InlineData(ExecutionOrigin.Initiative, false, true, false)]
     public async Task Independent_discovery_requires_a_converted_origin_and_frozen_Automation_task_without_chat_child_capability(ExecutionOrigin origin, bool human, bool automation, bool expected)
     {
-        var definition = await CapabilityProjectionTests.Definition(ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreateFromWorkspace, ToolCatalog.BackgroundInspect, ToolCatalog.ExecutionWait);
+        var definition = await CapabilityProjectionTests.Definition(ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreateFromWorkspace, ToolCatalog.ExecutionWait);
         var session = Guid.NewGuid(); var activation = Guid.NewGuid(); var continuation = origin == ExecutionOrigin.ApprovalContinuation;
         var context = CapabilityProjectionTests.Context(definition) with {
             AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session, ModelSupportsTools = true, DetachedExecution = true, OutputContract = AgentRunOutputContract.BackgroundOutcome,
-            LoadedCapabilityIds = [ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreateFromWorkspace, ToolCatalog.ExecutionWait, ToolCatalog.BackgroundInspect],
+            LoadedCapabilityIds = [ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreateFromWorkspace, ToolCatalog.ExecutionWait ],
             ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), human ? Guid.NewGuid() : null, session, Guid.NewGuid(), activation,
                 continuation ? Guid.NewGuid() : activation, continuation ? Guid.NewGuid() : null, continuation ? Guid.NewGuid() : null, origin),
             RunTaskIntent = new("The exact frozen task", automation ? AgentRunTaskSource.Automation : AgentRunTaskSource.AgentRun, Guid.NewGuid().ToString("D") + ":1") };
@@ -56,12 +55,11 @@ public sealed class TenantIndependentTaskContractTests
         Assert.Equal(expected, tools.Any(t => t.Name == ToolCatalog.WorkspaceRead));
         Assert.Equal(expected, tools.Any(t => t.Name == ToolCatalog.WorkspaceWrite));
         Assert.Equal(expected, tools.Any(t => t.Name == ToolCatalog.ExecutionWait));
-        Assert.DoesNotContain(tools, t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.BrowserFillCredential);
+        Assert.DoesNotContain(tools, t => t.Name == ToolCatalog.BrowserFillCredential);
         if (expected)
         {
             Assert.Contains(tools, t => t.Name == ToolCatalog.ExecutionWait);
-            Assert.Contains(tools, t => t.Name == ToolCatalog.BackgroundInspect);
-            Assert.Contains("inspect_background_completion", Assert.Single(tools, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson);
+            Assert.DoesNotContain("inspect_background_completion", Assert.Single(tools, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson);
         }
     }
     [Theory] [InlineData(false, 32, 0, 0, 0, 0, null)] [InlineData(true, 32, 0, 0, 0, 0, "approval_rate_limited")]

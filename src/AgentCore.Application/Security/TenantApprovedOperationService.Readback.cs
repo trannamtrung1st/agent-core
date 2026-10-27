@@ -41,7 +41,6 @@ public sealed partial class TenantApprovedOperationService
                     => await (memoryOperations ?? throw Unavailable()).InspectApprovedAsync(frame, request, receipt, budget, ct).ConfigureAwait(false),
                 TenantOperationKind.WorkspaceRead => await (workspaceReads ?? throw Unavailable()).InspectApprovedForRunAsync(frame, request, receipt, budget, ct).ConfigureAwait(false),
                 TenantOperationKind.AttachmentRead => await (attachmentReads ?? throw Unavailable()).InspectApprovedForRunAsync(frame, request, receipt, budget, ct).ConfigureAwait(false),
-                TenantOperationKind.CompletionRead => await (completionReads ?? throw Unavailable()).InspectApprovedForRunAsync(frame, request, receipt, budget, ct).ConfigureAwait(false),
                 TenantOperationKind.ArtifactVerification => await (artifactReads ?? throw Unavailable()).InspectApprovedForRunAsync(frame, request, receipt, budget, ct).ConfigureAwait(false),
                 TenantOperationKind.AccountRead => await (accountReads ?? throw Unavailable()).InspectApprovedForRunAsync(frame, request, receipt, budget, ct).ConfigureAwait(false),
                 TenantOperationKind.CredentialRead => await (credentialReads ?? throw Unavailable()).InspectApprovedForRunAsync(frame, request, receipt, budget, ct).ConfigureAwait(false),

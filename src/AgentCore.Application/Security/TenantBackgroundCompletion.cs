@@ -33,7 +33,7 @@ public static class TenantBackgroundCompletionFactory
     public static long? InputBoundary(AgentRun run)
     {
         if (run.Admission.OutputContract != AgentRunOutputContract.CompletionReport) return null;
-        if (run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.CompletionReport or ExecutionOrigin.ApprovalContinuation)
+        if (run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.TaskCompletion or ExecutionOrigin.CompletionReport or ExecutionOrigin.ApprovalContinuation)
             || run.Admission.Activation.EvidenceJson is not { } json) throw new AccessDeniedException("completion_input_unavailable");
         var signal = JsonSerializer.Deserialize<AgentRunAdmissionFactory.SignalInput>(json);
         return signal is { TriggerKind: TriggerKind.BackgroundCompleted, InputBoundarySequence: >= 0 }

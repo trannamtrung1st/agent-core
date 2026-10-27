@@ -23,7 +23,8 @@ public sealed class AgentRunHostedService : BackgroundService
         AgentCore.Application.Security.TenantCredentialCheckService credentialChecks,
         AgentCore.Application.Security.TenantBrowserEffectService browserEffects,
         ITenantRunExecution tenantExecution, AgentCore.Application.Security.TenantWorkspaceMutationEffectService workspaceEffects,
-        AgentCore.Application.Security.TenantAccountEffectService accountEffects, AgentCore.Application.Security.TenantHttpEffectService httpEffects)
+        AgentCore.Application.Security.TenantAccountEffectService accountEffects, AgentCore.Application.Security.TenantHttpEffectService httpEffects,
+        AgentCore.Api.Realtime.TenantSessionLiveDelivery delivery, ITenantTaskStore tasks, ITenantAgentMessageStore messages)
         : this(
             async cancellationToken =>
             {
@@ -34,6 +35,7 @@ public sealed class AgentRunHostedService : BackgroundService
                 await accountEffects.RecoverAsync(cancellationToken).ConfigureAwait(false);
                 await httpEffects.RecoverAsync(cancellationToken).ConfigureAwait(false);
                 var executed = await tenantExecution.ExecuteRunnableAsync(AgentRunCoordinator.DefaultBatchSize, cancellationToken).ConfigureAwait(false);
+                await delivery.PublishTaskHintsAsync(tasks, messages, cancellationToken).ConfigureAwait(false);
                 if (executed > 0)
                 {
                     logger.LogInformation("AgentRun pass dispatched {ExecutedCount} turn(s).", executed);

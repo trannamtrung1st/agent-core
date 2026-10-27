@@ -18,7 +18,7 @@ public sealed partial class SqliteIamStore : ITenantLearnedMemoryStore
         var tenant = run.Owner.TenantId ?? throw new AccessDeniedException("memory_context_unavailable");
         var state = await ReadTenantAsync(db, tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("memory_context_unavailable");
         var root = await TenantCoreEventProduction.RootAsync(db, run, ct).ConfigureAwait(false); var user = TenantRunProfileRules.User(run, root, state);
-        if (root.Admission.ExecutionContext?.Origin == ExecutionOrigin.UserMessage && (user is null
+        if (run.Admission.DelegatedTask is null && run.Admission.AgentMessage is null && root.Admission.ExecutionContext?.Origin == ExecutionOrigin.UserMessage && (user is null
             || !await db.Set<Account>().AnyAsync(a => a.AccountId == user.AccountId && a.Status == IdentityStatus.Active, ct).ConfigureAwait(false)))
             throw new AccessDeniedException("memory_context_unavailable");
         var session = await ReadSandboxSession(db, tenant, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("memory_context_unavailable");

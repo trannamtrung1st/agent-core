@@ -53,7 +53,7 @@ public sealed partial class TenantCredentialAccessTests
         var definition = draft.GetProperty("definitionId").GetString(); var draftId = draft.GetProperty("draftId").GetGuid();
         var candidate = JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
         candidate["agentInstructions"] = "Original immutable Session configuration.";
-        candidate["triggerPolicy"] = JsonSerializer.SerializeToNode((await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 32))!.TriggerPolicy, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        candidate["triggerPolicy"] = JsonSerializer.SerializeToNode((await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 35))!.TriggerPolicy, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         var saved = await Json(await owner.PutAsJsonAsync(api + $"/definition-drafts/{draftId}", new { candidate, expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 1 }));
         await Json(await owner.PostAsJsonAsync(api + $"/definition-drafts/{draftId}/publish", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = saved.GetProperty("revision").GetInt64() }));
         var created = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = definition, version = 1, expectedRevision = await Revision(owner, tenant) }));

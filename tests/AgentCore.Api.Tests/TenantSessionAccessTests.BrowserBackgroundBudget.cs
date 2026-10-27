@@ -19,7 +19,7 @@ public sealed partial class TenantSessionAccessTests
         public new ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
         public override async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            if (Origin(request) != ExecutionOrigin.ImmediateBackground)
+            if (Origin(request) != ExecutionOrigin.DelegatedTask)
             { await foreach (var item in base.GenerateAsync(request, ct)) yield return item; yield break; }
             await Task.Yield(); ct.ThrowIfCancellationRequested(); Requests.Enqueue(request);
             Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete); Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.BrowserSnapshot);
@@ -42,7 +42,7 @@ public sealed partial class TenantSessionAccessTests
             { ((BrowserOptions)services.Single(d => d.ServiceType == typeof(BrowserOptions)).ImplementationInstance!).Enabled = true; services.Replace(ServiceDescriptor.Singleton<IBrowser>(browser)); }
             await using WebApplicationFactory<Program> factory = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
             using var owner = factory.CreateClient(); var setup = await StartTenantBackground(factory, owner, submit: false,
-                fileCapabilities: [ToolCatalog.BackgroundStart, ToolCatalog.BrowserSnapshot], reportReads: true);
+                fileCapabilities: ["tasks.delegate", ToolCatalog.BrowserSnapshot], reportReads: true);
             var api = $"/api/v2/tenants/{setup.Tenant}";
             var parent = (await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(setup.Tenant, setup.Session))!;
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
@@ -59,7 +59,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal("Checked 26 changing owned pages.", child.Result!.Text); Assert.NotNull(report);
             Assert.Equal(26, browser.Requests.Count); Assert.All(browser.Requests, r => { Assert.IsType<BrowserObserve>(r.Command); Assert.True(r.TenantReadOnly);
                 Assert.Equal(child.SessionId, r.SessionId); Assert.Equal(child.Owner.TenantId, r.TenantOwner!.TenantId); Assert.Equal(child.AgentInstanceId, r.TenantOwner.AgentInstanceId); });
-            var requests = model.Requests.Where(r => TenantBackgroundModel.Origin(r) == ExecutionOrigin.ImmediateBackground).ToArray(); Assert.Equal(27, requests.Length);
+            var requests = model.Requests.Where(r => TenantBackgroundModel.Origin(r) == ExecutionOrigin.DelegatedTask).ToArray(); Assert.Equal(27, requests.Length);
             Assert.Equal(26, requests.Last().Messages.Count(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.BrowserSnapshot));
             Assert.DoesNotContain(browser.Requests, r => r.Command is BrowserNavigate);
             Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);

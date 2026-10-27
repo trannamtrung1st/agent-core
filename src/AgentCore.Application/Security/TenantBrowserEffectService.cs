@@ -175,7 +175,7 @@ public sealed partial class TenantBrowserEffectService(IIamStore security, ITena
     }
     // A saved observation is historical tool data, never permission for another command.
     // Recheck its delivery scope before every resumed model generation as well as first delivery.
-    public async ValueTask RequireStoredObservationAsync(AgentRun run, CancellationToken ct = default)
+    public async ValueTask RequireStoredObservationAsync(AgentRun run, CancellationToken ct = default, bool live = true)
     {
         if (run.Checkpoint is null || !AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var messages)) return;
         var observations = new HashSet<(Guid RequestId, Guid OperationId)>();
@@ -191,7 +191,8 @@ public sealed partial class TenantBrowserEffectService(IIamStore security, ITena
         if (observations.Count == 0) return;
         var tenant = run.Owner.TenantId!.Value;
         var current = await runs.FindTenantRunAsync(tenant, run.AgentRunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
-        RequireClaim(current, run.Claim!.Generation);
+        if (live) RequireClaim(current, run.Claim!.Generation);
+        if (current.Owner != run.Owner || current.SessionId != run.SessionId || current.Revision != run.Revision) throw new AccessDeniedException("browser_source_changed");
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         foreach (var observation in observations)
         {
@@ -206,7 +207,7 @@ public sealed partial class TenantBrowserEffectService(IIamStore security, ITena
         if ((await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false))?.Tenant.Revision != state.Tenant.Revision)
             throw new AccessDeniedException("browser_source_changed");
         var finalRun = await runs.FindTenantRunAsync(tenant, run.AgentRunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
-        RequireClaim(finalRun, run.Claim.Generation);
+        if (live) RequireClaim(finalRun, run.Claim!.Generation);
         if (finalRun.Revision != current.Revision) throw new AccessDeniedException("browser_source_changed");
     }
 

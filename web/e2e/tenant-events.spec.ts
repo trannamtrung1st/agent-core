@@ -85,7 +85,7 @@ test('exact webhook read scope filters records and revocation retires protected 
 test('typed subscriptions test filters, preserve child identities, and separate receipt approval from Run admission', async ({ page }) => {
   const f = await fixture(); const observed = watch(page);
   try {
-    const agent = await call<{ principalId: string; instance: { instanceId: string; revision: number } }>(f.api, f.root + '/agents', { templateId: 'general-assistant', version: 32, expectedRevision: await f.revision() });
+    const agent = await call<{ principalId: string; instance: { instanceId: string; revision: number } }>(f.api, f.root + '/agents', { templateId: 'general-assistant', version: 35, expectedRevision: await f.revision() });
     const instance = agent.instance.instanceId; const resource = f.root + `/agents/${instance}/automations`;
     const role = await call<{ roleId: string }>(f.api, f.root + '/roles', { name: 'Independent event executor', permissions: ['automations.run', 'sessions.create', 'agent-runs.create', 'webhooks.read', 'core-events.read'], expectedRevision: await f.revision() });
     await call(f.api, f.root + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await f.revision() });

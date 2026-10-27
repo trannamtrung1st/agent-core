@@ -49,7 +49,7 @@ public sealed partial class SessionRuntime
                 try
                 {
                     await PublishProgressAsync(input.Context, input.ResponseId, ResponseProgressKind.WaitingExternal,
-                        ResponseProgressState.Started, _ids.NewId(), wait.Mode == AgentRunWaitMode.Duration ? "Waiting for the requested duration…" : "Waiting for background results…", ct).ConfigureAwait(false);
+                        ResponseProgressState.Started, _ids.NewId(), wait.Mode == AgentRunWaitMode.Duration ? "Waiting for the requested duration…" : "Waiting for the requested task signal…", ct).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -59,12 +59,7 @@ public sealed partial class SessionRuntime
                 }
                 return;
             }
-            if (_runtimeOwner is not null)
-            {
-                input.Completed.TrySetResult(new(await ExecuteTenantCompletionToolAsync(parent, input.Call, args, ct).ConfigureAwait(false)));
-                return;
-            }
-            input.Completed.TrySetResult(new(SkillLoadAdmission.Error("forbidden", "Trusted tenant execution is required.")));
+            throw new ArgumentException("Unsupported wait operation.");
         }
         catch (AgentCore.Application.Security.AccessDeniedException e)
         { input.Completed.TrySetResult(new(SkillLoadAdmission.Error("forbidden", e.ReasonCode))); }
@@ -75,7 +70,4 @@ public sealed partial class SessionRuntime
         finally { input.Completed.TrySetResult(new(SkillLoadAdmission.Error("failed", "Completion operation did not finish."))); }
     }
 
-    private static object? InboxProjection(CompletionInboxItem? item) => item is null ? null : new {
-        status = item.Status.ToString(), revision = item.Revision, handledByRunId = item.HandledByRunId, reportActivationId = item.ReportActivationId,
-        acknowledgmentPending = item.Acknowledgment is not null };
 }

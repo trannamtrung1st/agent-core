@@ -22,11 +22,12 @@ public sealed partial class TenantCredentialAccessTests
         using var owner = ConnectedClient(factory); var s = await ConnectedReadAccount(factory, owner, family == "email" ? "EmailAccount" : "GoogleDriveAccount", tools: true);
         var api = $"/api/v2/tenants/{s.Tenant}"; var actor = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
         var access = factory.Services.GetRequiredService<TenantAccessService>(); var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(s.Tenant, s.Instance))!;
-        var role = await access.SaveRoleAsync(actor, s.Tenant, null, "Exact background discovery", ["sessions.create", "agent-runs.create", "sessions.read", "credentials.read", family + ".read"], await Revision(owner, s.Tenant));
+        var role = await access.SaveRoleAsync(actor, s.Tenant, null, "Exact background discovery", ["tasks.delegate", "tasks.read", "spaces.read", "agents.read", "sessions.create", "agent-runs.create", "sessions.read", "credentials.read", family + ".read"], await Revision(owner, s.Tenant));
         await access.AssignRoleAsync(actor, s.Tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(s.Tenant), await Revision(owner, s.Tenant));
+        await EnableAccountTask(owner, s, model);
         if (review) Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/" + family + ".read", new { mode = "always", independentReview = false,
             expectedRevision = await Revision(owner, s.Tenant), expectedPolicyRevision = 0 })).StatusCode);
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 3 }))).GetProperty("sessionId").GetGuid();
         var initial = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Start exact account background test",
             expectedRevision = await Revision(owner, s.Tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
         var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var sessions = factory.Services.GetRequiredService<ITenantSessionStore>();

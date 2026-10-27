@@ -104,7 +104,7 @@ test('Definition deletion locks stale revisions and recovers after repeated refr
 
 test('Instance bulk deletion reports partial conflicts and reload restores remaining selection', async ({ page }) => {
   const headers = await capability(page);
-  const response = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'general-assistant', version: 21 } });
+  const response = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'general-assistant', version: 35 } });
   expect(response.ok()).toBe(true);
   const owner = await response.json();
   const root = `/api/v2/admin/agent-instances/${owner.instanceId}`;

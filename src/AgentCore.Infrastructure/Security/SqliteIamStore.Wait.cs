@@ -11,23 +11,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore
 {
-    private async Task<IReadOnlyList<BackgroundCompletionCandidate>> TenantWaitChildren(AgentCoreDbContext db, AgentRun run,
-        AgentRunWait wait, bool requireAll, CancellationToken ct)
-    {
-        var state = await ReadTenantAsync(db, run.Owner.TenantId!.Value, ct).ConfigureAwait(false);
-        var result = new List<BackgroundCompletionCandidate>();
-        foreach (var id in wait.BackgroundSessionIds)
-        {
-            var root = await OwnedSessions(db, run.Owner.TenantId.Value).AsNoTracking().SingleOrDefaultAsync(s => s.SessionId == id.ToString("D"), ct).ConfigureAwait(false);
-            var child = await TenantWaitRules.ChildAsync(run, root is null ? null : await SessionView(db, root, ct).ConfigureAwait(false), async (runId, token) => {
-                var row = await OwnedRuns(db, run.Owner.TenantId.Value).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == runId.ToString("D"), token).ConfigureAwait(false);
-                return row is null ? null : AgentRunStoreMapping.ToDomain(row);
-            }, ct).ConfigureAwait(false);
-            if (state is not null && child is not null && await AuthorizeCompletionSource(db, run, child, ct).ConfigureAwait(false) is { } allowed) result.Add(allowed);
-        }
-        if (requireAll && result.Count != wait.BackgroundSessionIds.Count) throw AgentCoreErrors.NotFound("Owned readable initial background child was not found.");
-        return result;
-    }
+
 
     private async Task RequireTenantWait(AgentCoreDbContext db, AgentRun run, AgentRunCommand.SuspendWait suspend, CancellationToken ct)
     {
