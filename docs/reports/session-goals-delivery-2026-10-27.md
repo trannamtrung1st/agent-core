@@ -4,7 +4,7 @@ Status: **Ready for the completed local Initiative 8 scope.** Deployment, hosted
 
 ## Scope and ownership
 
-Implemented Initiative 8 from the owner-approved final proposal on baseline `9f5c22bcd0b5bb2c376b2a9f65c9b953bf5d091f`. The final implementation commit and source fingerprint are recorded in the source section after qualification. Historical milestone reports retain their original scope.
+Implemented Initiative 8 from the owner-approved final proposal on baseline `9f5c22bcd0b5bb2c376b2a9f65c9b953bf5d091f`. The qualified implementation commit and source fingerprint are recorded in the source section. Historical milestone reports retain their original scope.
 
 Explicit Goals belong to their tenant Session and creating Space, with bounded accepted plans, stable ordered checkpoints, independently qualified evidence, immutable activity and one Session focus. Human APIs and four claimed model tools share authority and transitions. Ordinary text/voice is unbound; deliberate Work uses existing UserTurn admission and a frozen Goal/checkpoint/plan/Space/focus witness. GoalContinuation uses existing Activation/AgentRun lineage and coordinator, not another scheduler. Focus persists through the Session mailbox writer. Goal completion leaves Session lifecycle independent.
 
@@ -27,7 +27,7 @@ All runs were local and focused. VSTest and Chromium required macOS loopback/pro
 | Native Goal proof on real OpenSandbox and SQLite | 3 passed: Passed, Failed followed by reviewed repair, timeout saved Inconclusive |
 | Web service/Activity/Run-presentation tests | 20 passed in three files |
 | TypeScript and production Vite build | Passed; existing large-chunk advisory remains |
-| Real Synthetic SQLite browser journey | Passed, including delayed-response privacy regression; final-source host replay passed |
+| Real Synthetic SQLite browser journey | Passed, including delayed-response privacy regression; committed-build host replay passed in 19.2 seconds |
 | Impeccable detector on four changed UI targets | One scan, empty findings |
 | Whitespace and documentation checks | Recorded in completion below |
 
@@ -68,7 +68,7 @@ The integrated browser test creates protected fixtures through authenticated HTT
 
 A deterministic privacy regression holds a factual Run inspector response, denies the Goal refresh, then releases that response after private content is retired. The Run drawer remains absent. Scope retirement advances the epoch, aborts pending reads and clears every inspector/draft/action/activity state; late callbacks cannot reopen retired private data.
 
-Playwright MCP independently exercised real human-only completion and a five-checkpoint blocked plan. Settled layouts were checked at 320/390/768/1024/1440; Escape returns focus to the Goals trigger. Reduced motion and 200% CSS layout zoom were exercised. This is not physical-device/browser chrome zoom certification.
+Playwright MCP independently exercised real human-only completion and a five-checkpoint blocked plan. After restarting the committed API build against retained fixtures, the same focused blocked Goal and its saved attributable activity reloaded correctly. Settled layouts were checked at 320/390/768/1024/1440; Escape returns focus to the Goals trigger. Reduced motion and 200% CSS layout zoom were exercised. This is not physical-device/browser chrome zoom certification.
 
 The [design-first surface contract](../../.impeccable/surfaces/session-goals.md) preceded UI implementation. Baseline inspection used source and recent rendered incumbent evidence while migration tooling was being repaired; it is not claimed as a live pre-change screenshot. A distinct bounded polish pass followed integrated behavior. Valid captures under `.impeccable/review/` cover all five widths, desktop/mobile editor and CSS layout zoom. Own fixes made the mobile selector full width, added accessible evidence names, preserved unopened checkpoints and immutable Suite pins, displayed exact policy witnesses and removed terminal editing controls.
 
@@ -88,6 +88,6 @@ Local readiness does not certify production data conversion, customer backup res
 
 ## Source and completion
 
-The qualified implementation starts at baseline `9f5c22bcd0b5bb2c376b2a9f65c9b953bf5d091f`. A sorted manifest of {path,sha256} for the 97 changed/new implementation and test files under src/tests/web has SHA-256 `87a9b7ae8340fc7f1f0e927cfbac7c1df5d512997c4adfca98c98cfe3d6bd748` (compact JSON, sorted keys). The local manifest is `/tmp/session-goals-source-manifest.json`. The implementation commit is recorded by the documentation-only handoff commit after the source is committed.
+The qualified implementation starts at baseline `9f5c22bcd0b5bb2c376b2a9f65c9b953bf5d091f`. A sorted manifest of {path,sha256} for the 97 changed/new implementation and test files under src/tests/web has SHA-256 `87a9b7ae8340fc7f1f0e927cfbac7c1df5d512997c4adfca98c98cfe3d6bd748` (compact JSON, sorted keys). The local manifest is `/tmp/session-goals-source-manifest.json`. Qualified implementation commit: `b2ab0d21d34451a645b7dfa0951e4aeabb914667`. All 97 manifest entries were checked against that commit with matching hashes. The following documentation-only handoff commit records this immutable identity without changing implementation or tests.
 
 Documentation checks passed: 14 changed Markdown documents, 1800 relative local links/anchors, balanced fences and the complete new Goal creation JSON example. `git diff --check` passed. README/TODO/implementation plan agree on Initiative 8 and retain historical milestone scope. The final local verdict is **Ready** with the explicit external limits above; no material finding remains in the requested implementation scope. No further code refinement is planned.
