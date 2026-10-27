@@ -38,6 +38,7 @@ public sealed partial class TenantCredentialIntegrationTests
         }, await Revision(), 0)).Profile;
         var verification = await services.GetRequiredService<TenantSandboxVerificationService>().VerifyAsync(tenant, profile.Id, human, await Revision(), profile.Revision);
         Assert.True(verification.Attempt!.Result!.Passed, verification.Attempt.Result.Message);
+        var adapter = services.GetRequiredService<OpenSandboxService>();
         var evals = services.GetRequiredService<TenantEvaluationService>(); var defs = services.GetRequiredService<TenantDefinitionService>();
         const string assertion = """
             set -eu
@@ -86,8 +87,21 @@ public sealed partial class TenantCredentialIntegrationTests
         var approval = await approvalService.ReadAsync(tenant, native.ApprovalRequestId, human);
         Assert.Equal(run.Revision, (await runs.FindTenantRunAsync(tenant, run.AgentRunId))!.Revision);
         await approvalService.DecideAsync(tenant, approval.RequestId, human, true, approval.Operation.ActionHash, await Revision(), approval.Revision);
+        void ChangeUnrelatedTenantState(int sequence)
+        {
+            var revision = f.Iam.ReadTenantAsync(tenant).AsTask().GetAwaiter().GetResult()!.Tenant.Revision;
+            _ = f.Access.SaveRoleAsync(human.PrincipalId, tenant, null, "Unrelated settlement " + sequence, ["agents.read"], revision).AsTask().GetAwaiter().GetResult();
+        }
+        var validations = 0; var commandCount = 0;
+        adapter.EvaluationCheckpoint = phase => {
+            if (phase == "commandStarted") commandCount++;
+            if (phase == "settlementValidated" && ++validations <= 2) ChangeUnrelatedTenantState(validations);
+        };
         await approvalService.DispatchPendingAsync();
         await evals.ObserveTerminalsAsync(8, CancellationToken.None);
+        adapter.EvaluationCheckpoint = null;
+        Assert.Equal(3, validations); Assert.Equal(1, commandCount);
+        evaluationOutput.WriteLine("Native settlement: two unrelated tenant commits; three validations; one command");
         var observed = await evals.ReadAsync(human.PrincipalId, tenant, attempt.AttemptId, human);
         var evidence = Assert.Single(await evals.SandboxEvidenceAsync(human.PrincipalId, tenant, attempt.AttemptId, human));
         evaluationOutput.WriteLine($"Native outcome={observed.Outcome}; reason={evidence.ReasonCode}; phase={evidence.Phase}; exit={evidence.ExitCode}; cleanupPending={evidence.CleanupPending}; execution={evidence.ExecutionId}");
@@ -155,7 +169,6 @@ public sealed partial class TenantCredentialIntegrationTests
             var review = await approvalService.ReadAsync(tenant, item.ApprovalRequestId, human);
             await approvalService.DecideAsync(tenant, review.RequestId, human, true, review.Operation.ActionHash, await Revision(), review.Revision);
         }
-        var adapter = services.GetRequiredService<OpenSandboxService>();
         var timeoutCase = await Prepare("native-timeout", "sleep 15; exit 0", 1);
         await Assert.ThrowsAsync<AccessDeniedException>(() => adapter.ExecuteEvaluationAsync(tenant, timeoutCase.Evidence.ExecutionId, sourceGeneration).AsTask());
         await Approve(timeoutCase.Evidence);
@@ -219,6 +232,18 @@ public sealed partial class TenantCredentialIntegrationTests
         Assert.Equal(2, parallelResults.Select(item => item!.ProviderId).Distinct().Count());
         evaluationOutput.WriteLine("Concurrent native attempts: both Passed; distinct provider identities; confirmed cleanup");
 
+        var contendedCase = await Prepare("native-settlement-contended", "exit 0"); await Approve(contendedCase.Evidence);
+        validations = 0; commandCount = 0;
+        adapter.EvaluationCheckpoint = phase => {
+            if (phase == "commandStarted") commandCount++;
+            if (phase == "settlementValidated") ChangeUnrelatedTenantState(10 + ++validations);
+        };
+        await evals.ObserveTerminalsAsync(8, CancellationToken.None); adapter.EvaluationCheckpoint = null;
+        var contended = (await store.FindSandboxEvaluationAsync(tenant, contendedCase.Evidence.ExecutionId))!;
+        Assert.Equal(3, validations); Assert.Equal(1, commandCount); Assert.Equal(EvaluationOutcome.Inconclusive, contended.Outcome);
+        Assert.Equal("sandbox_evaluation_settlement_conflict", contended.ReasonCode); Assert.Equal(0, contended.ExitCode); Assert.True(contended.TerminationConfirmed);
+        evaluationOutput.WriteLine("Native settlement exhaustion: Inconclusive; one command; confirmed termination");
+
         // A current executor permission is independent from the completed source Run's old authority.
         var beforeDispatchCase = await Prepare("native-before-dispatch-revoked", "exit 0"); await Approve(beforeDispatchCase.Evidence);
         state = (await f.Iam.ReadTenantAsync(tenant))!;
@@ -233,7 +258,7 @@ public sealed partial class TenantCredentialIntegrationTests
         state = (await f.Iam.ReadTenantAsync(tenant))!;
         Assert.True(await f.Iam.TrySaveTenantAsync(state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 }, Assignments = state.Assignments.Append(nativeAssignment).ToArray() }, state.Tenant.Revision, f.Audit(tenant, human.PrincipalId, agent.Instance.InstanceId)));
         var revokedCase = await Prepare("native-settlement-revoked", "exit 0"); await Approve(revokedCase.Evidence);
-        adapter.EvaluationCheckpoint = phase => { if (phase == "commandCompleted") f.Identity.SignOutAsync(human.AuthenticationSessionId).AsTask().GetAwaiter().GetResult(); };
+        adapter.EvaluationCheckpoint = phase => { if (phase == "settlementValidated") f.Identity.SignOutAsync(human.AuthenticationSessionId).AsTask().GetAwaiter().GetResult(); };
         await evals.ObserveTerminalsAsync(8, CancellationToken.None); adapter.EvaluationCheckpoint = null;
         var revoked = (await store.FindSandboxEvaluationAsync(tenant, revokedCase.Evidence.ExecutionId))!;
         Assert.Equal(EvaluationOutcome.Inconclusive, revoked.Outcome); Assert.True(revoked.TerminationConfirmed); Assert.Null(revoked.InputJson);

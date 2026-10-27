@@ -19,5 +19,5 @@ public partial interface ITenantEvaluationStore
         long attemptRevision, AuthorizationAudit audit, HumanSessionReference? human, CancellationToken ct = default);
     ValueTask<bool> TrySaveSandboxEvaluationAsync(EvaluationSandboxExecution value, long expectedRevision, CancellationToken ct = default,
         long? expectedSecurityRevision = null);
-    ValueTask<bool> TryRecordSandboxSettlementUnavailableAsync(Guid tenant, Guid executionId, CancellationToken ct = default);
+    ValueTask<bool> TryRecordSandboxSettlementUnavailableAsync(Guid tenant, Guid executionId, long expectedAttemptRevision, CancellationToken ct = default);
 }

@@ -68,12 +68,13 @@ public sealed partial class InMemoryIamStore
             sandboxEvaluations[(value.TenantId, value.ExecutionId)] = EvaluationPersistence.Copy(value); return ValueTask.FromResult(true);
         }
     }
-    public ValueTask<bool> TryRecordSandboxSettlementUnavailableAsync(Guid tenant, Guid executionId, CancellationToken ct = default)
+    public ValueTask<bool> TryRecordSandboxSettlementUnavailableAsync(Guid tenant, Guid executionId, long expectedAttemptRevision, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate)
         {
             if (sandboxEvaluations.GetValueOrDefault((tenant, executionId)) is not { Phase: EvaluationSandboxPhase.Settled } execution
                 || evaluationAttempts.GetValueOrDefault((tenant, execution.AttemptId)) is not { Status: EvaluationStatus.Pending } attempt
+                || attempt.Revision != expectedAttemptRevision
                 || !attempt.Findings.Any(f => f.SandboxExecutionId == executionId && f.ReasonCode == "sandbox_approval_required")) return ValueTask.FromResult(false);
             var state = _tenants[tenant]; var revision = state.Tenant.Revision + 1;
             var next = attempt with { Revision = attempt.Revision + 1, CommitSequence = revision, UpdatedAt = ApprovalNow,

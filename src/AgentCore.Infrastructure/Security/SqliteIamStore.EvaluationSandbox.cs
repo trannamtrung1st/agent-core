@@ -69,14 +69,14 @@ public sealed partial class SqliteIamStore
         try { await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return true; }
         catch (DbUpdateConcurrencyException) { return false; }
     }
-    public async ValueTask<bool> TryRecordSandboxSettlementUnavailableAsync(Guid tenant, Guid executionId, CancellationToken ct = default)
+    public async ValueTask<bool> TryRecordSandboxSettlementUnavailableAsync(Guid tenant, Guid executionId, long expectedAttemptRevision, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct); await using var tx = await db.Database.BeginTransactionAsync(ct);
         var nativeRow = await db.Set<EvaluationSandboxRow>().SingleOrDefaultAsync(r => r.TenantId == tenant && r.ExecutionId == executionId, ct);
         if (nativeRow is null) return false;
         var execution = EvaluationSandboxPersistence.Value(nativeRow);
         var row = await db.Set<EvaluationAttemptRow>().SingleOrDefaultAsync(r => r.TenantId == tenant && r.AttemptId == execution.AttemptId, ct);
-        if (execution.Phase != EvaluationSandboxPhase.Settled || row?.Status != EvaluationStatus.Pending) return false;
+        if (execution.Phase != EvaluationSandboxPhase.Settled || row?.Status != EvaluationStatus.Pending || row.Revision != expectedAttemptRevision) return false;
         var attempt = EvaluationPersistence.Value(row);
         if (!attempt.Findings.Any(f => f.SandboxExecutionId == executionId && f.ReasonCode == "sandbox_approval_required")) return false;
         var state = await db.Set<Tenant>().SingleAsync(t => t.TenantId == tenant, ct); var revision = state.Revision + 1;
@@ -88,7 +88,8 @@ public sealed partial class SqliteIamStore
         db.Entry(nativeRow).CurrentValues.SetValues(EvaluationSandboxPersistence.Row(execution with { FindingPublished = true, Revision = execution.Revision + 1 }));
         db.Entry(state).CurrentValues.SetValues(state with { Revision = revision });
         db.Add(new AuthorizationAudit(modelIdSource.NewId(), tenant, execution.ActorId, "evaluations.recover", attempt.AttemptId.ToString("D"), "recorded", next.ReasonCode, ApprovalNow));
-        await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return true;
+        try { await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return true; }
+        catch (DbUpdateConcurrencyException) { return false; }
     }
 
 }

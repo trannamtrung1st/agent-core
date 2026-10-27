@@ -179,6 +179,8 @@ public sealed partial class TenantEvaluationService(IIamStore security, ITenantE
         var suite = (await store.FindSuiteAsync(before.TenantId, before.SuiteId, before.SuiteVersion, ct))!;
         await SuitePermission(state, actor, suite, before.Status == EvaluationStatus.Pending && !native ? "review" : "run", ct);
         var source = await Subject(state, actor, before.SubjectKind, before.SubjectId, before.Status != EvaluationStatus.Pending || native, ct);
+        if (native && (source.Revision != before.SubjectRevision || source.Fingerprint != before.SourceFingerprint))
+            throw new AccessDeniedException("evaluation_source_changed");
         if (human is null && source.Run?.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is { } original)
             _ = await Subject(state, original, before.SubjectKind, before.SubjectId, false, ct);
         await ScriptPermissions(state, actor, suite, before.Status != EvaluationStatus.Pending || native, ct);

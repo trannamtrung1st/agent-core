@@ -219,7 +219,7 @@ public sealed partial class TenantDefinitionAccessTests
         public ValueTask<IReadOnlyList<EvaluationSandboxExecution>> ListSandboxEvaluationsAsync(int limit, DateTimeOffset now, CancellationToken ct = default) => inner.ListSandboxEvaluationsAsync(limit, now, ct);
         public ValueTask<bool> TryReserveSandboxEvaluationAsync(TenantSecurityState next, long expected, EvaluationSandboxExecution value, long revision, AuthorizationAudit audit, HumanSessionReference? human, CancellationToken ct = default) => inner.TryReserveSandboxEvaluationAsync(next, expected, value, revision, audit, human, ct);
         public ValueTask<bool> TrySaveSandboxEvaluationAsync(EvaluationSandboxExecution value, long expected, CancellationToken ct = default, long? securityRevision = null) => inner.TrySaveSandboxEvaluationAsync(value, expected, ct, securityRevision);
-        public ValueTask<bool> TryRecordSandboxSettlementUnavailableAsync(Guid tenant, Guid executionId, CancellationToken ct = default) => inner.TryRecordSandboxSettlementUnavailableAsync(tenant, executionId, ct);
+        public ValueTask<bool> TryRecordSandboxSettlementUnavailableAsync(Guid tenant, Guid executionId, long expectedAttemptRevision, CancellationToken ct = default) => inner.TryRecordSandboxSettlementUnavailableAsync(tenant, executionId, expectedAttemptRevision, ct);
         public async ValueTask<int> RecoverExpiredEvaluationsAsync(DateTimeOffset now, int limit, CancellationToken ct = default)
         { return await inner.RecoverExpiredEvaluationsAsync(now, limit, ct); }
         public async ValueTask<EvaluationGovernance> ReadEvaluationGovernanceAsync(Guid tenant, CancellationToken ct = default)

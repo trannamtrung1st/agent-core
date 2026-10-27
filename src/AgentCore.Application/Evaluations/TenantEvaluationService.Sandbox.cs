@@ -147,15 +147,28 @@ public sealed partial class TenantEvaluationService
     }
     private async ValueTask<bool> SettleSandboxFinding(EvaluationSandboxExecution execution, CancellationToken ct)
     {
-        var attempt = await store.FindAttemptAsync(execution.TenantId, execution.AttemptId, ct);
-        if (attempt is not { Status: EvaluationStatus.Pending } || !attempt.Findings.Any(f => f.SandboxExecutionId == execution.ExecutionId && f.ReasonCode == "sandbox_approval_required")) return true;
-        var findings = attempt.Findings.Select(f => f.SandboxExecutionId == execution.ExecutionId ? EvaluationSandboxRules.Finding(f, execution) : f).ToArray();
-        var pending = findings.Any(f => f.ReasonCode is "review_required" or "sandbox_approval_required");
-        try { await Settle(attempt, findings, pending ? EvaluationStatus.Pending : EvaluationStatus.Completed, null, execution.Human is null ? null : new HumanSessionReference(execution.Human.AccountId, execution.Human.AuthenticationSessionId, execution.Human.PrincipalId), ct, native: true); return true; }
-        catch (Exception error) when (error is AccessDeniedException or SecurityConflictException)
+        for (var pass = 0; pass < 3; pass++)
         {
-            // Technical recovery may record unavailable evidence, never a pass or a new effect.
-            return await store.TryRecordSandboxSettlementUnavailableAsync(execution.TenantId, execution.ExecutionId, ct);
+            var attempt = await store.FindAttemptAsync(execution.TenantId, execution.AttemptId, ct);
+            if (attempt is not { Status: EvaluationStatus.Pending } || !attempt.Findings.Any(f => f.SandboxExecutionId == execution.ExecutionId && f.ReasonCode == "sandbox_approval_required")) return true;
+            // Merge only this native finding into the latest immutable evidence. Never rerun a check.
+            var findings = attempt.Findings.Select(f => f.SandboxExecutionId == execution.ExecutionId ? EvaluationSandboxRules.Finding(f, execution) : f).ToArray();
+            var pending = findings.Any(f => f.ReasonCode is "review_required" or "sandbox_approval_required");
+            try
+            {
+                await Settle(attempt, findings, pending ? EvaluationStatus.Pending : EvaluationStatus.Completed, null,
+                    execution.Human is null ? null : new HumanSessionReference(execution.Human.AccountId, execution.Human.AuthenticationSessionId, execution.Human.PrincipalId), ct, native: true);
+                return true;
+            }
+            catch (SecurityConflictException) { /* Reread and revalidate before retrying a contended write. */ }
+            catch (AccessDeniedException)
+            {
+                // Only confirmed unavailable authority/source can use technical recovery. Its CAS
+                // must not invalidate findings that committed after this observation.
+                if (await store.TryRecordSandboxSettlementUnavailableAsync(execution.TenantId, execution.ExecutionId, attempt.Revision, ct)) return true;
+            }
         }
+        // Leave bounded contention pending for the existing sweep; execution is already settled.
+        return false;
     }
 }

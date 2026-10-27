@@ -105,27 +105,34 @@ public sealed partial class OpenSandboxService
         using var cleanupBudget = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         var clean = false;
         try { clean = await CleanupEvaluationAsync(value, cleanupBudget.Token); } catch { /* The durable owner retains cleanup obligations. */ }
-        if (value.CancellationRequestedAt is not null) { known = false; reason = "sandbox_evaluation_cancelled"; }
-        long? securityRevision = null;
-        if (known && clean)
-        {
-            try { securityRevision = (await EvaluationAuthority.RequireAsync(value, CancellationToken.None, approved: true, dispatchClaim: dispatchClaim)).Tenant.Revision; }
-            catch { known = false; reason = "sandbox_evaluation_authority_changed"; }
-        }
         if (!clean) { known = false; reason = "sandbox_evaluation_cleanup_pending"; }
-        var settled = value with { Revision = value.Revision + 1, Phase = EvaluationSandboxPhase.Settled, InputJson = null,
-            Outcome = known ? exitCode == 0 ? EvaluationOutcome.Passed : EvaluationOutcome.Failed : EvaluationOutcome.Inconclusive, ReasonCode = reason,
-            ExitCode = exitCode, DurationMs = (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds,
-            OutputHash = EvaluationRules.Hash(new { stdout = stdout.Text, stderr = stderr.Text, truncated = stdout.Truncated || stderr.Truncated }),
+        var duration = (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        var outputHash = EvaluationRules.Hash(new { stdout = stdout.Text, stderr = stderr.Text, truncated = stdout.Truncated || stderr.Truncated });
+        EvaluationSandboxExecution Result(EvaluationSandboxExecution current, EvaluationOutcome outcome, string code) => current with {
+            Revision = current.Revision + 1, Phase = EvaluationSandboxPhase.Settled, InputJson = null, Outcome = outcome, ReasonCode = code,
+            ExitCode = exitCode, DurationMs = duration, OutputHash = outputHash,
             CleanupPending = !clean, TerminationConfirmed = clean, RetryCleanupAt = clean ? null : time.GetUtcNow().AddSeconds(30) };
-        if (!await EvaluationStore.TrySaveSandboxEvaluationAsync(settled, value.Revision, CancellationToken.None, securityRevision))
+        for (var pass = 0; pass < 3; pass++)
         {
-            var latest = await EvaluationStore.FindSandboxEvaluationAsync(tenant, executionId, CancellationToken.None);
-            if (latest is { Phase: EvaluationSandboxPhase.Dispatching } && latest.DispatchClaim == dispatchClaim)
-                _ = await EvaluationStore.TrySaveSandboxEvaluationAsync(settled with { Revision = latest.Revision + 1,
-                    CancellationRequestedAt = latest.CancellationRequestedAt, Outcome = EvaluationOutcome.Inconclusive,
-                    ReasonCode = latest.CancellationRequestedAt is not null ? "sandbox_evaluation_cancelled" : "sandbox_evaluation_authority_changed" }, latest.Revision, CancellationToken.None);
+            value = (await EvaluationStore.FindSandboxEvaluationAsync(tenant, executionId, CancellationToken.None))!;
+            if (value.Phase != EvaluationSandboxPhase.Dispatching || value.DispatchClaim != dispatchClaim) return;
+            if (value.CancellationRequestedAt is not null) { known = false; reason = "sandbox_evaluation_cancelled"; }
+            long? securityRevision = null;
+            if (known)
+            {
+                try { securityRevision = (await EvaluationAuthority.RequireAsync(value, CancellationToken.None, approved: true, dispatchClaim: dispatchClaim)).Tenant.Revision; }
+                catch { known = false; reason = "sandbox_evaluation_authority_changed"; }
+                if (known) EvaluationCheckpoint?.Invoke("settlementValidated");
+            }
+            var outcome = known ? exitCode == 0 ? EvaluationOutcome.Passed : EvaluationOutcome.Failed : EvaluationOutcome.Inconclusive;
+            if (await EvaluationStore.TrySaveSandboxEvaluationAsync(Result(value, outcome, reason), value.Revision, CancellationToken.None, securityRevision)) return;
         }
+        // Retry only the retained result write, never SDK create/command or cleanup. Exhaustion
+        // stays Inconclusive; a real authority failure/cancellation remains latched across retries.
+        var latest = await EvaluationStore.FindSandboxEvaluationAsync(tenant, executionId, CancellationToken.None);
+        if (latest is { Phase: EvaluationSandboxPhase.Dispatching } && latest.DispatchClaim == dispatchClaim)
+            _ = await EvaluationStore.TrySaveSandboxEvaluationAsync(Result(latest, EvaluationOutcome.Inconclusive,
+                latest.CancellationRequestedAt is not null ? "sandbox_evaluation_cancelled" : known ? "sandbox_evaluation_settlement_conflict" : reason), latest.Revision, CancellationToken.None);
     }
     public async ValueTask<bool> CleanupEvaluationAsync(EvaluationSandboxExecution execution, CancellationToken ct = default)
     {
