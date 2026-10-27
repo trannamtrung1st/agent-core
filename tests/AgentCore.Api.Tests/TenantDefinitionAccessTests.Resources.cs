@@ -34,6 +34,11 @@ public sealed partial class TenantDefinitionAccessTests
         Assert.Equal(HttpStatusCode.OK, runResponse.StatusCode); var run = await Json(runResponse);
         Assert.Equal(0, run.GetProperty("outcome").GetInt32());
         Assert.True(run.GetProperty("commitSequence").GetInt64() > 0);
+        var beforeRecovery = await Revision(owner, tenant);
+        var recovered = await Json(await owner.GetAsync($"/api/v2/tenants/{tenant}/evaluation-attempts/recovery?dedupKey=" + Uri.EscapeDataString(run.GetProperty("dedupKey").GetString()!)));
+        Assert.Equal(run.GetProperty("attemptId").GetGuid(), recovered.GetProperty("attempt").GetProperty("attemptId").GetGuid());
+        Assert.Equal(JsonValueKind.Null, (await Json(await owner.GetAsync($"/api/v2/tenants/{tenant}/evaluation-attempts/recovery?dedupKey=never-submitted"))).GetProperty("attempt").ValueKind);
+        Assert.Equal(beforeRecovery, await Revision(owner, tenant));
         var renamed = await owner.PostAsJsonAsync(path + "/resources/batch", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 3,
             items = new[] { new { resourceId = firstId, logicalPath = "second.txt", kind = 2, mediaType = "text/plain" }, new { resourceId = secondId, logicalPath = "first.txt", kind = 2, mediaType = "text/plain" } } });
         Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);

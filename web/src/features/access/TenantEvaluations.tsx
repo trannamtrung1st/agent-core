@@ -1,3 +1,5 @@
+import { useEvaluationLaunch } from './useEvaluationLaunch';
+import { useEvaluationCatalog } from './useEvaluationCatalog';
 import { useState } from 'react';
 import { Alert, App, Button, Checkbox, Descriptions, Drawer, Empty, Flex, Form, Input, InputNumber, Select, Table, Tabs, Tag, Typography } from 'antd';
 import { confirmAction } from '../../app/confirmAction';
@@ -16,10 +18,10 @@ export function TenantEvaluations({ context }: { context: TenantContext }) {
   const params = new URLSearchParams(window.location.search); const [tab, setTab] = useState(params.has('subjectId') ? 'results' : 'suites');
   return <Flex vertical gap="var(--ac-space-section)">
     <Typography.Paragraph type="secondary">Versioned checks and attributable evidence for Definitions and Runs. Passing an evaluation never grants operation permission.</Typography.Paragraph>
-    <Tabs activeKey={tab} onChange={setTab} destroyOnHidden items={[
-      { key: 'suites', label: 'Suites', children: <EvaluationCatalog key={`suites:${context.tenant.tenantId}`} context={context} /> },
-      { key: 'scripts', label: 'Scripts', children: <EvaluationCatalog key={`scripts:${context.tenant.tenantId}`} context={context} scripts /> },
-      { key: 'results', label: 'Results / Manual review', children: <EvaluationResults context={context} /> }
+    <Tabs activeKey={tab} onChange={setTab} items={[
+      { key: 'suites', label: 'Suites', destroyOnHidden: true, children: <EvaluationCatalog key={`suites:${context.tenant.tenantId}`} context={context} /> },
+      { key: 'scripts', label: 'Scripts', destroyOnHidden: true, children: <EvaluationCatalog key={`scripts:${context.tenant.tenantId}`} context={context} scripts /> },
+      { key: 'results', label: 'Results / Manual review', destroyOnHidden: false, children: <EvaluationResults key={`${context.tenant.tenantId}:${context.principalId}`} context={context} /> }
     ]} />
   </Flex>;
 }
@@ -81,26 +83,26 @@ function ScriptEditor({ tenant, existing, onClose, onSaved }: { tenant: string; 
 function EvaluationResults({ context }: { context: TenantContext }) {
   const params = new URLSearchParams(window.location.search); const [kind, setKind] = useState(Number(params.get('subjectKind') ?? 1)); const [subject, setSubject] = useState(params.get('subjectId') ?? ''); const [source, setSource] = useState(params.get('subjectId') ?? '');
   const [attempt, setAttempt] = useState<string>(); const [page, setPage] = useState(0); const tenant = context.tenant.tenantId;
-  const command = useTenantCommand(); const { modal } = App.useApp(); const [suiteId, setSuiteId] = useState<string>(); const [requestKey, setRequestKey] = useState(() => crypto.randomUUID()); const [recovering, setRecovering] = useState(false);
+  const { modal } = App.useApp(); const [suiteId, setSuiteId] = useState<string>();
+  const state = useIdentityQuery<EvaluationPage<EvaluationAttempt>>(source ? tenantApi(tenant, `/evaluation-attempts?subjectKind=${kind}&subjectId=${encodeURIComponent(source)}&page=${page}&pageSize=20`) : null);
+  const command = useEvaluationLaunch(tenant, result => { setAttempt(result.attemptId); state.reload(); }); const recovering = !!command.pending;
+  const recoveryGuard = useAccessDraftGuard(recovering, command.busy, () => {});
   const subjectState = useIdentityQuery<{ subjectId: string; revision: number; label: string; canEvaluate: boolean }>(source ? tenantApi(tenant, `/evaluation-subjects/${kind}/${source}`) : null);
-  const suites = useIdentityQuery<EvaluationPage<EvaluationSuite>>(tenantApi(tenant, '/evaluation-suites?page=0&pageSize=100'));
+  const suites = useEvaluationCatalog<EvaluationSuite>(tenant, 'evaluation-suites');
   const selectedSuite = suites.data?.items.find(s => s.suiteId === suiteId);
   const invoke = () => {
+    if (recovering) { void command.recover(); return; }
     if (!subjectState.data || !selectedSuite) return;
-    const submit = () => command.run(async signal => {
-      setRecovering(true);
-      return identityRequest<EvaluationAttempt>(tenantApi(tenant, '/evaluation-attempts'), { method: 'POST', signal, body: { subjectKind: kind, subjectId: source, subjectRevision: subjectState.data!.revision,
-        suiteId: selectedSuite.suiteId, suiteVersion: selectedSuite.version, dedupKey: requestKey, expectedRevision: await freshTenantRevision(tenant, signal), hook: 3 } });
-    }, result => { if (result.tenantId !== tenant || result.subjectId !== source || result.suiteId !== selectedSuite.suiteId) throw new IdentityCompletionError(); setAttempt(result.attemptId); setRecovering(false); setRequestKey(crypto.randomUUID()); state.reload(); });
-    if (recovering) void submit(); else confirmAction(modal, { title: 'Evaluate this saved subject?', content: 'Use the selected immutable Suite version and current source access. Configured model judges may incur provider charges. Sandbox checks require independent effect authority and may be Inconclusive.', okText: 'Run evaluation', onOk: submit });
+    confirmAction(modal, { title: 'Evaluate this saved subject?', content: 'Use the selected immutable Suite version and current source access. Configured model judges may incur provider charges. Uncertain submissions are recovered by reading their exact status, without replay.', okText: 'Run evaluation', onOk: () => command.submit({ subjectKind: kind, subjectId: source, subjectRevision: subjectState.data!.revision, suiteId: selectedSuite.suiteId, suiteVersion: selectedSuite.version, dedupKey: crypto.randomUUID(), hook: 3 }) });
   };
-  const state = useIdentityQuery<EvaluationPage<EvaluationAttempt>>(source ? tenantApi(tenant, `/evaluation-attempts?subjectKind=${kind}&subjectId=${encodeURIComponent(source)}&page=${page}&pageSize=20`) : null);
-  return <Flex vertical gap="var(--ac-space-section)">
+  return <Flex vertical gap="var(--ac-space-section)">{recoveryGuard.holder}
     <Typography.Paragraph type="secondary">Open evidence from a Definition or Run, or inspect an exact readable subject below. Private sources require independent current access.</Typography.Paragraph>
     <Flex wrap gap="var(--ac-space-compact)"><Select aria-label="Subject kind" disabled={command.busy || recovering} value={kind} onChange={value => { setKind(value); setSource(''); setPage(0); }} options={[{ value: 0, label: 'Definition draft' }, { value: 1, label: 'Agent Run' }]} /><Input aria-label="Exact subject ID" disabled={command.busy || recovering} placeholder="Exact subject ID" value={subject} onChange={event => setSubject(event.target.value)} style={{ flex: '1 1 240px' }} /><Button disabled={command.busy || recovering || !/^[a-f0-9-]{36}$/i.test(subject)} onClick={() => { setPage(0); setSource(subject); state.reload(); }}>Inspect results</Button></Flex>
     {source && <Flex vertical gap="var(--ac-space-compact)">
       {subjectState.error ? <AccessError error={subjectState.error} retry={subjectState.reload} /> : subjectState.data && <Typography.Text strong>{subjectState.data.label} · revision {subjectState.data.revision}</Typography.Text>}
-      {context.permissions.includes('evaluations.run') && <Flex wrap gap="var(--ac-space-compact)"><Select aria-label="Evaluation Suite" placeholder="Choose an immutable Suite" disabled={command.busy || recovering} style={{ flex: '1 1 240px' }} value={suiteId} onChange={id => { setSuiteId(id); setRequestKey(crypto.randomUUID()); }} options={suites.data?.items.filter(s => !s.archived).map(s => ({ value: s.suiteId, label: `${s.name} · v${s.version}` }))} /><Button disabled={!selectedSuite || !subjectState.data?.canEvaluate || command.requiresReload} loading={command.busy} onClick={invoke}>{recovering ? 'Recover evaluation status' : 'Run evaluation'}</Button></Flex>}
+      {suites.error && <AccessError error={suites.error} retry={suites.reload} />}
+      {context.permissions.includes('evaluations.run') && <Flex wrap gap="var(--ac-space-compact)"><Select aria-label="Evaluation Suite" placeholder="Choose an immutable Suite" disabled={command.busy || recovering} style={{ flex: '1 1 240px' }} value={suiteId} onChange={id => { setSuiteId(id); }} options={suites.data?.items.filter(s => !s.archived).map(s => ({ value: s.suiteId, label: `${s.name} · v${s.version}` }))} /><Button disabled={command.busy || !recovering && (!selectedSuite || !subjectState.data?.canEvaluate)} loading={command.busy} onClick={invoke}>{recovering ? 'Recover evaluation status' : 'Run evaluation'}</Button></Flex>}
+      {recovering && <Alert type="info" showIcon title="Submission outcome is uncertain" description="Recover the exact stored status with the button above. Recovery only reads evidence and never runs the evaluator again. Keep this page open until recovery completes." />}
       {command.error !== undefined && <AccessError error={command.error} />}
     </Flex>}
     {!source ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Choose a subject to inspect its authorized evidence." /> : state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={state.reload} /> : <Table<EvaluationAttempt> className="admin-collection-table" rowKey="attemptId" dataSource={state.data?.items} pagination={{ ...adminCollectionPagination, current: page + 1, pageSize: 20, showSizeChanger: false, total: state.data?.total, onChange: value => setPage(value - 1) }} columns={[

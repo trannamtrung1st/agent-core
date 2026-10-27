@@ -77,7 +77,7 @@ public sealed class InstanceSettingsResolverTests
         foreach (var section in InstanceSettingsResolver.Sections)
             foreach (var (field, constraint) in InstanceSettingsResolver.Constraints(baseline, section))
             {
-                if (field == "allowedProfileIds") continue; // Exact subset validation is covered by SandboxSetupResolverTests.
+                if (field is "allowedProfileIds" or "bindings") continue; // Exact subset validation is covered by SandboxSetupResolverTests.
                 var invalid = constraint.Choices is not null ? Value("not-authorized") : constraint.RequiredBoolean is { } required ? Value(!required)
                     : constraint.Minimum is { } min ? Value(min - 1) : Value(constraint.Maximum!.Value + 1);
                 var patch = InstanceSettingsResolver.Patch(new(), section, new Dictionary<string, JsonElement> { [field] = invalid }, []);

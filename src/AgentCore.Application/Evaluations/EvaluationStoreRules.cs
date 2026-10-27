@@ -44,6 +44,9 @@ public static class EvaluationStoreRules
             throw new SecurityConflictException("stale_revision");
         if (before is null)
         {
+            if (value.Hook is EvaluationHook.BeforeRun or EvaluationHook.AfterRun or EvaluationHook.OnFailure && value.LifecycleOrigin is null
+                || value.Hook is EvaluationHook.Manual or EvaluationHook.Publication && value.LifecycleOrigin is not null)
+                throw new ArgumentException("Automatic hooks require runtime-owned lifecycle provenance.");
             if (value.Status != EvaluationStatus.Running || value.ActorId != actor || value.Findings.Count != 0 || value.Outcome is not null)
                 throw new ArgumentException("New attempts must be reserved before evaluation.");
             return;
@@ -76,6 +79,11 @@ public static class EvaluationStoreRules
                 || changed[0].ReviewerId != actor) throw new ArgumentException("Review must attribute exactly one pending Manual check to the signed-in actor.");
         }
     }
+    public static bool MatchesRunOrigin(EvaluationAttempt attempt, AgentCore.Domain.Conversation.AgentRun run) => attempt.LifecycleOrigin is null
+        ? attempt.Hook is EvaluationHook.Manual or EvaluationHook.Publication
+        : attempt.LifecycleOrigin == new EvaluationLifecycleOrigin(run.AgentRunId, run.Revision, run.Owner.ExecutorPrincipalId!.Value, run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId)
+            && attempt.ActorId == run.Owner.ExecutorPrincipalId
+            && attempt.DedupKey == TenantEvaluationService.HookKey(run, attempt.SuiteId, attempt.SuiteVersion, attempt.Hook);
     public static void RequireScripts(EvaluationSuiteVersion suite, Func<ScriptReference, ScriptVersion?> resolve)
     {
         foreach (var reference in suite.Checks.Select(c => c.Script).OfType<ScriptReference>())

@@ -83,7 +83,7 @@ public sealed partial class TenantEvaluationService(IIamStore security, ITenantE
         await SuitePermission(state, actor, suite, "run", ct); await SuitePermission(state, actor, suite, "read", ct);
         var subject = await Subject(state, actor, request.SubjectKind, request.SubjectId, true, ct);
         if (!Enum.IsDefined(request.Hook) || request.SubjectKind == EvaluationSubjectKind.DefinitionDraft && request.Hook is not (EvaluationHook.Manual or EvaluationHook.Publication)
-            || request.SubjectKind == EvaluationSubjectKind.AgentRun && !subject.Run!.IsTerminal) throw new ArgumentException("Manual Run evaluation requires a terminal Run.");
+            || request.SubjectKind == EvaluationSubjectKind.AgentRun && (request.Hook != EvaluationHook.Manual || !subject.Run!.IsTerminal)) throw new ArgumentException("Public Run evaluation requires a terminal Run and the Manual hook. Automatic lifecycle provenance is assigned only by the runtime.");
         if (suite.DraftId is { } draft && (request.SubjectKind != EvaluationSubjectKind.DefinitionDraft || draft != request.SubjectId)) throw new AccessDeniedException("resource_unavailable");
         var duplicate = await store.FindDedupAsync(tenant, actor, request.DedupKey, ct);
         if (duplicate is not null)
@@ -124,6 +124,14 @@ public sealed partial class TenantEvaluationService(IIamStore security, ITenantE
             }
         }
         finally { slots.Release(); AgentCore.Application.Observability.EvaluationTelemetry.Record(request.Hook, settled?.Status ?? EvaluationStatus.Indeterminate, settled?.Outcome, System.Diagnostics.Stopwatch.GetElapsedTime(executionStarted).TotalMilliseconds); }
+    }
+    public async ValueTask<EvaluationAttempt?> RecoverAsync(Guid actor, Guid tenant, string key, HumanSessionReference? human, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(key) || key.Length > 128) throw new ArgumentException("Use the original evaluation request key.");
+        var state = await State(actor, tenant, human, ct);
+        var attempt = await store.FindDedupAsync(tenant, actor, key, ct);
+        await Current(state, human, ct);
+        return attempt is null ? null : await ReadAsync(actor, tenant, attempt.AttemptId, human, ct);
     }
     public async ValueTask<EvaluationAttempt> ReadAsync(Guid actor, Guid tenant, Guid id, HumanSessionReference? human, CancellationToken ct = default)
     {

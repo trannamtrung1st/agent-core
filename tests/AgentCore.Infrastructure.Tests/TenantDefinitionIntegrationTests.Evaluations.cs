@@ -227,4 +227,33 @@ public sealed partial class TenantDefinitionIntegrationTests
         await Assert.ThrowsAsync<AccessDeniedException>(() => evals.ReadAsync(reader.PrincipalId, tenant, attempt.AttemptId, null).AsTask());
     }
 
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Unified_instance_selections_use_sparse_settings_and_preserve_required_definition_ceilings(bool sqlite)
+    {
+        await using var f = await Fixture.Create(sqlite);
+        var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
+        var tenant = owner.TenantId; var actor = owner.OwnerPrincipalId;
+        async Task<long> Revision() => (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision;
+        var suite = await f.Evaluations().SaveSuiteAsync(actor, tenant, f.Ids.NewId(), new("Saved output", [new("output", "Output", EvaluatorKind.Script, true, EvaluationPredicate.OutputPresent)], 0, await Revision()), null);
+        var optional = new EvaluationBinding(suite.SuiteId, 1, EvaluationHook.OnFailure);
+        var required = new EvaluationBinding(suite.SuiteId, 1, EvaluationHook.AfterRun, EvaluationPolicy.RequirePassForVerifiedOutcome);
+        var draft = await f.Service.CreateAsync(actor, tenant, "Selectable hooks", await Revision());
+        draft = await f.Service.UpdateAsync(actor, tenant, draft.DraftId, draft.Candidate with { EvaluationBindings = [optional, required] }, await Revision(), draft.Revision);
+        await f.Service.PublishAsync(actor, tenant, draft.DraftId, await Revision(), draft.Revision);
+        var (agents, configuration) = ConfigurationServices(f);
+        var agent = await agents.CreateFromPublicationAsync(actor, tenant, Guid.Parse(draft.DefinitionId), 1, await Revision());
+        var changed = await configuration.PatchSettingsAsync(actor, tenant, agent.Instance.InstanceId, "evaluationPolicy", await Revision(), agent.Instance.Revision,
+            Fields(new { bindings = new[] { EvaluationRules.BindingKey(required) } }), []);
+        Assert.Equal(required, Assert.Single((await configuration.ReadAsync(actor, tenant, agent.Instance.InstanceId)).Definition.EvaluationBindings!));
+        await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(async () => await configuration.PatchSettingsAsync(actor, tenant, agent.Instance.InstanceId, "evaluationPolicy", await Revision(), changed.Instance.Revision, Fields(new { bindings = Array.Empty<string>() }), []));
+        if (sqlite)
+        {
+            var reopened = ConfigurationServices(f, new SqliteIamStore(f.Contexts!, f.Content)).Configuration;
+            Assert.Equal(required, Assert.Single((await reopened.ReadAsync(actor, tenant, agent.Instance.InstanceId)).Definition.EvaluationBindings!));
+        }
+        await configuration.PatchSettingsAsync(actor, tenant, agent.Instance.InstanceId, "evaluationPolicy", await Revision(), changed.Instance.Revision, Fields(new { }), ["bindings"]);
+        Assert.Equal(2, (await configuration.ReadAsync(actor, tenant, agent.Instance.InstanceId)).Definition.EvaluationBindings!.Count);
+    }
+
 }

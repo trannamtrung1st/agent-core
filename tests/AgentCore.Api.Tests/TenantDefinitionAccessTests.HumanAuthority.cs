@@ -221,8 +221,8 @@ public sealed partial class TenantDefinitionAccessTests
         { return await inner.ReadEvaluationGovernanceAsync(tenant, ct); }
         public async ValueTask<bool> TrySaveEvaluationGovernanceAsync(TenantSecurityState next, long expectedSecurityRevision, EvaluationGovernance value, long expectedRevision, AuthorizationAudit audit, HumanSessionReference human, CancellationToken ct = default)
         { if (Interlocked.Exchange(ref factory.BeforeCommand, null) is { } hook) await hook(); return await inner.TrySaveEvaluationGovernanceAsync(next, expectedSecurityRevision, value, expectedRevision, audit, human, ct); }
-        public async ValueTask<IReadOnlyList<AgentCore.Domain.Conversation.AgentRun>> ListPendingRunEvaluationsAsync(int limit, CancellationToken ct = default, int offset = 0)
-        { return await inner.ListPendingRunEvaluationsAsync(limit, ct, offset); }
+        public async ValueTask<IReadOnlyList<AgentCore.Domain.Conversation.AgentRun>> ListPendingRunEvaluationsAsync(int limit, CancellationToken ct = default, int offset = 0, IReadOnlyList<Guid>? excludedRuns = null)
+        { return await inner.ListPendingRunEvaluationsAsync(limit, ct, offset, excludedRuns); }
         public async ValueTask<EvaluationPage<EvaluationSuiteVersion>> ListSuitesAsync(Guid tenant, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default)
         { return await inner.ListSuitesAsync(tenant, allowed, page, pageSize, ct); }
         public async ValueTask<EvaluationPage<ScriptVersion>> ListScriptsAsync(Guid tenant, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default)

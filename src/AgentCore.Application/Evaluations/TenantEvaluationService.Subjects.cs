@@ -16,9 +16,9 @@ public sealed partial class TenantEvaluationService
     public async ValueTask<IReadOnlyList<EvaluationBindingView>> InstanceBindingsAsync(Guid actor, Guid tenant, Guid instance, HumanSessionReference human, TenantRunConfigurationResolver resolver, CancellationToken ct = default)
     {
         var state = await State(actor, tenant, human, ct); await Require(state, actor, "agents.read", AccessScope.ForResource(tenant, "agent", instance.ToString("D")), ct);
-        var (_, definition) = await resolver.CurrentPolicyAsync(tenant, instance, ct); var defaults = await store.ReadEvaluationGovernanceAsync(tenant, ct);
+        var (agent, definition) = await resolver.CurrentPolicyAsync(tenant, instance, ct); var defaults = await store.ReadEvaluationGovernanceAsync(tenant, ct);
         var result = new List<EvaluationBindingView>();
-        foreach (var (binding, source) in defaults.Defaults.Select(b => (b, "Organization default")).Concat((definition.EvaluationBindings ?? []).Select(b => (b, "Definition v" + definition.Version))))
+        foreach (var (binding, source) in defaults.Defaults.Select(b => (b, "Organization default")).Concat((definition.EvaluationBindings ?? []).Select(b => (b, agent.Instance.SettingsOverrides?.EvaluationBindings is null || b.Hook == EvaluationHook.Publication ? "Definition v" + definition.Version : "Instance selection from Definition v" + definition.Version))))
         {
             var suite = await SuiteAsync(actor, tenant, binding.SuiteId, binding.Version, human, ct);
             result.Add(new(binding, suite.Name, source));

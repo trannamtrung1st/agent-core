@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Evaluations;
 
 namespace AgentCore.Application.Agents;
 
@@ -9,9 +10,10 @@ public sealed record InstanceSettingConstraint(string Reason, bool? RequiredBool
 public static class InstanceSettingsResolver
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.Strict };
-    public static IReadOnlyList<string> Sections { get; } = ["instructions", "conversationPolicy", "behaviorPolicy", "initiativePolicy", "voice", "modelDefaults", "memoryPolicy", "capabilities", "triggerPolicy", "providerPreferences", "sandboxPolicy", "stateIsolationPolicy"];
+    public static IReadOnlyList<string> Sections { get; } = ["instructions", "conversationPolicy", "behaviorPolicy", "initiativePolicy", "voice", "modelDefaults", "memoryPolicy", "capabilities", "triggerPolicy", "providerPreferences", "sandboxPolicy", "stateIsolationPolicy", "evaluationPolicy"];
     public static IReadOnlyList<string> Fields(string section) => section switch
     {
+        "evaluationPolicy" => ["bindings"],
         "stateIsolationPolicy" => ["conversationContextScope", "homeAccess", "workingCleanup", "browserIsolation", "agentStateVisibility", "experienceRecord", "experienceRecall", "profileEvidence", "crossSessionContinuity"],
         "sandboxPolicy" => ["allowedProfileIds", "profileId", "initializationScript", "cpu", "memoryMiB", "maxCommandSeconds", "idleTtlSeconds", "maxLifetimeSeconds", "storageBytes"],
         "instructions" => ["agentInstructions"],
@@ -42,6 +44,7 @@ public static class InstanceSettingsResolver
                 var remove = !set.ContainsKey(field);
                 next = (section, field) switch
                 {
+                    ("evaluationPolicy", "bindings") => next with { EvaluationBindings = remove ? null : new(Read<string[]>(set[field])) },
                     ("stateIsolationPolicy", "conversationContextScope") => next with { ConversationContextScope = remove ? null : new(Read<string>(set[field])) },
                     ("stateIsolationPolicy", "homeAccess") => next with { HomeAccess = remove ? null : new(Read<string>(set[field])) },
                     ("stateIsolationPolicy", "workingCleanup") => next with { WorkingCleanup = remove ? null : new(Read<string>(set[field])) },
@@ -132,6 +135,10 @@ public static class InstanceSettingsResolver
         }
         switch (section)
         {
+            case "evaluationPolicy":
+                result["bindings"] = new("Select optional bindings from the adopted Definition. Required policies and organization defaults remain enforced.",
+                    Choices: (baseline.EvaluationBindings ?? []).Where(b => b.Hook != EvaluationHook.Publication).Select(EvaluationRules.BindingKey).ToArray());
+                break;
             case "stateIsolationPolicy":
                 var state = baseline.StateIsolationPolicy ?? StateIsolationPolicy.Default;
                 result["conversationContextScope"] = new("Instance continuity can only be narrowed.", Choices: state.ConversationContextScope == ConversationContextScope.CurrentRequest ? ["CurrentRequest"] : ["Session", "CurrentRequest"]);
@@ -208,6 +215,12 @@ public static class InstanceSettingsResolver
         return sources;
     }
 
+    private static IReadOnlyList<EvaluationBinding>? ResolveEvaluationBindings(AgentDefinition baseline, InstanceSettingsOverrides o)
+    {
+        if (o.EvaluationBindings is { Value: null }) throw AgentCoreErrors.Validation("Evaluation binding selections must be an array; clear the override to inherit.");
+        try { return EvaluationRules.ResolveInstance(baseline.EvaluationBindings, o.EvaluationBindings?.Value); }
+        catch (ArgumentException error) { throw AgentCoreErrors.Validation(error.Message); }
+    }
     public static AgentDefinition Resolve(AgentDefinition baseline, InstanceSettingsOverrides? overrides)
     {
         if (overrides is null) return baseline;
@@ -218,6 +231,7 @@ public static class InstanceSettingsResolver
         var trigger = TriggerOf(baseline);
         var d = baseline with
         {
+            EvaluationBindings = ResolveEvaluationBindings(baseline, o),
             SandboxPolicy = SandboxSetupResolver.ResolvePolicy(baseline.SandboxPolicy, o),
             ExecutionSandboxProfile = baseline.ExecutionSandboxProfile is { } sandbox ? SandboxSetupResolver.Resolve(sandbox, o, sandbox.InstanceRevision) : null,
             AgentInstructions = o.AgentInstructions is { } instructions ? instructions.Value : baseline.AgentInstructions,
@@ -333,6 +347,7 @@ public static class InstanceSettingsResolver
 
     public static IReadOnlyDictionary<string, object?> Values(AgentDefinition d, string section) => section switch
     {
+        "evaluationPolicy" => new Dictionary<string, object?> { ["bindings"] = (d.EvaluationBindings ?? []).Where(b => b.Hook != EvaluationHook.Publication).Select(EvaluationRules.BindingKey).ToArray() },
         "stateIsolationPolicy" => StateValues(d.StateIsolationPolicy ?? StateIsolationPolicy.Default),
         "sandboxPolicy" => new Dictionary<string, object?> { ["profileId"] = d.SandboxPolicy?.DefaultProfileId, ["allowedProfileIds"] = d.SandboxPolicy?.AllowedProfileIds ?? [],
             ["initializationScript"] = d.ExecutionSandboxProfile?.InstanceInitializationScript,
@@ -409,6 +424,9 @@ public static class InstanceSettingsResolver
         var result = new Dictionary<string, object?>();
         switch (section)
         {
+            case "evaluationPolicy":
+                if (o.EvaluationBindings is { } evaluations) result["bindings"] = evaluations.Value;
+                break;
             case "stateIsolationPolicy":
                 if (o.CrossSessionContinuity is { } crossSession) result["crossSessionContinuity"] = crossSession.Value;
                 if (o.ConversationContextScope is { } stateConversationContextScope) result["conversationContextScope"] = stateConversationContextScope.Value;

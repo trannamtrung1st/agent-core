@@ -27,11 +27,12 @@ public sealed record ScriptVersion(Guid TenantId, Guid ScriptId, int Version, st
 public sealed record EvaluationFinding(string CheckId, EvaluatorKind Kind, bool Required, EvaluationOutcome Outcome,
     string ReasonCode, string Summary, Guid? ReviewerId = null, DateTimeOffset? ReviewedAt = null,
     string? ModelIdentity = null);
+public sealed record EvaluationLifecycleOrigin(Guid RunId, long RunRevision, Guid ExecutorId, Guid? OriginalInitiatorId);
 public sealed record EvaluationAttempt(Guid AttemptId, Guid TenantId, EvaluationSubjectKind SubjectKind, Guid SubjectId,
     long SubjectRevision, string SourceFingerprint, Guid SuiteId, int SuiteVersion, string SuiteHash,
     EvaluationHook Hook, Guid ActorId, string DedupKey, EvaluationStatus Status, EvaluationOutcome? Outcome,
     IReadOnlyList<EvaluationFinding> Findings, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt,
-    long Revision = 1, long? CommitSequence = null, string? ReasonCode = null, IReadOnlyList<EvaluationModelPin>? ModelPins = null, Guid? SourceDefinitionId = null);
+    long Revision = 1, long? CommitSequence = null, string? ReasonCode = null, IReadOnlyList<EvaluationModelPin>? ModelPins = null, Guid? SourceDefinitionId = null, EvaluationLifecycleOrigin? LifecycleOrigin = null);
 public sealed record EvaluationModelPin(string CheckId, AgentCore.Domain.Models.ModelBinding Binding);
 
 public static class EvaluationRules
@@ -80,6 +81,19 @@ public static class EvaluationRules
         var hooks = Array.AsReadOnly(script.Hooks.Order().ToArray());
         return script with { Hooks = hooks, ContentHash = Hash(new { script.Kind, script.Predicate, script.Expected, script.Body, Hooks = hooks }) };
     }
+    public static string BindingKey(EvaluationBinding b) => $"{b.SuiteId:D}:{b.Version}:{(int)b.Hook}:{(int)b.Policy}";
+    public static IReadOnlyList<EvaluationBinding>? ResolveInstance(IReadOnlyList<EvaluationBinding>? defaults, string[]? selected)
+    {
+        if (selected is null) return defaults;
+        if (selected.Length > 8 || selected.Distinct(StringComparer.Ordinal).Count() != selected.Length)
+            throw new ArgumentException("Select at most eight distinct Definition-permitted evaluation bindings.");
+        var allowed = (defaults ?? []).Where(b => b.Hook != EvaluationHook.Publication).ToArray();
+        if (selected.Any(k => !allowed.Any(b => BindingKey(b) == k)))
+            throw new ArgumentException("Instance evaluation selections must retain exact Suite versions, hooks and policies permitted by the adopted Definition.");
+        if (allowed.Any(b => b.Policy != EvaluationPolicy.RecordOnly && !selected.Contains(BindingKey(b), StringComparer.Ordinal)))
+            throw new ArgumentException("Required Definition evaluation policies cannot be disabled by an Instance. Only optional observation bindings may be disabled.");
+        return (defaults ?? []).Where(b => b.Hook == EvaluationHook.Publication || selected.Contains(BindingKey(b), StringComparer.Ordinal)).ToArray();
+    }
     public static void ValidateBindings(IReadOnlyList<EvaluationBinding>? bindings)
     {
         if (bindings is null) return;
@@ -93,6 +107,15 @@ public static class EvaluationRules
     }
     public static void ValidatePolicy(EvaluationBinding binding, EvaluationSuiteVersion suite)
     {
+        if (binding.Policy == EvaluationPolicy.RequirePassBeforeRun)
+        {
+            var required = suite.Checks.Where(c => c.Required).ToArray();
+            if (required.Length == 0) throw new ArgumentException("Require pass before generation needs at least one required check.");
+            if (required.Any(c => c.Kind == EvaluatorKind.Manual))
+                throw new ArgumentException("Required Before Run checks cannot await human assessment. Use a Manual or After Run binding for human review.");
+            if (required.Any(c => c.Kind == EvaluatorKind.Script && c.Script is null && c.Predicate != EvaluationPredicate.InputPresent))
+                throw new ArgumentException("Required Before Run assertions must inspect available input. Completed Run, output and offline Definition predicates are unavailable before generation.");
+        }
         if (binding.Policy == EvaluationPolicy.RequestManualAssessment && !suite.Checks.Any(c => c.Kind == EvaluatorKind.Manual))
             throw new ArgumentException("Request human assessment requires a Manual check in the exact Suite version.");
     }

@@ -81,7 +81,7 @@ public sealed partial class InMemoryIamStore
                 if (target is null || target.Archived || Suite(next.Tenant.TenantId, binding.SuiteId)?.Archived != false
                     || target.DraftId is not null && (binding.Hook != AgentCore.Domain.Evaluations.EvaluationHook.Publication || target.DefinitionId != Guid.Parse(draft.DefinitionId)))
                     throw new AccessDeniedException("evaluation_suite_unavailable");
-                AgentCore.Domain.Evaluations.EvaluationRules.ValidatePolicy(binding, target);
+                AgentCore.Application.Evaluations.EvaluationBindingValidation.Require(binding, target, reference => Script(next.Tenant.TenantId, reference.ScriptId, reference.Version));
             }
             if (!definitions.SaveTenantDraft(next.Tenant.TenantId, draft, expectedDraftRevision)) return null;
             if (clone is not null) evaluationSuites.Add((clone.TenantId, clone.SuiteId, 1), clone);

@@ -89,6 +89,7 @@ public sealed partial class TenantRunConfigurationResolver(ITenantAgentStore age
         {
             var suite = evaluations is null ? null : await evaluations.FindSuiteAsync(tenant, binding.SuiteId, binding.Version, ct);
             if (suite is null) throw new AccessDeniedException("evaluation_suite_unavailable");
+            await AgentCore.Application.Evaluations.EvaluationBindingValidation.RequireAsync(evaluations!, tenant, binding, suite, ct);
             // Only a required precondition constrains factual execution admission.
             // Other observations repeat execution authority at their own hook and remain unverified on denial.
             if (binding.Policy != AgentCore.Domain.Evaluations.EvaluationPolicy.RequirePassBeforeRun) continue;

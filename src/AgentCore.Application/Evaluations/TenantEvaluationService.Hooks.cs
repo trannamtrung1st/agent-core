@@ -5,11 +5,16 @@ using AgentCore.Domain.Evaluations;
 
 namespace AgentCore.Application.Evaluations;
 
-public sealed record RunVerificationSummary(string Status, int RequiredChecks, int PassedChecks, IReadOnlyList<Guid> AttemptIds);
+public sealed record RunVerificationSummary(string Status, int RequiredChecks, int PassedChecks, IReadOnlyList<Guid> AttemptIds, string? ObservationReason = null, DateTimeOffset? RetryAfter = null);
 
 public sealed partial class TenantEvaluationService
 {
     private int terminalScanOffset;
+    private static EvaluationLifecycleOrigin Origin(AgentRun run) => new(run.AgentRunId, run.Revision, run.Owner.ExecutorPrincipalId!.Value, run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId);
+    private static bool Applicable(EvaluationHook hook, AgentRun run) => hook == EvaluationHook.AfterRun && run.IsTerminal
+        || hook == EvaluationHook.OnFailure && run.Status is AgentRunStatus.Failed or AgentRunStatus.Cancelled;
+    private static bool TrustedObservation(EvaluationAttempt attempt, AgentRun run) => attempt.LifecycleOrigin == Origin(run)
+        && attempt.ActorId == run.Owner.ExecutorPrincipalId && attempt.DedupKey == HookKey(run, attempt.SuiteId, attempt.SuiteVersion, attempt.Hook);
     public static string HookKey(AgentRun run, Guid suite, int version, EvaluationHook hook) => $"hook:{run.AgentRunId:D}:{suite:D}:{version}:{(int)hook}:{run.Revision}";
     public async ValueTask<bool> BeforeRunAsync(AgentRun run, CancellationToken ct)
     {
@@ -36,17 +41,26 @@ public sealed partial class TenantEvaluationService
     {
         _ = await store.RecoverExpiredEvaluationsAsync(time.GetUtcNow(), limit, ct);
         limit = Math.Clamp(limit, 1, 32);
+        lock (deferredGate) if (scanPauseUntil > time.GetUtcNow()) return;
+        var suppressed = await SuppressedRuns(ct);
         var offset = Volatile.Read(ref terminalScanOffset);
-        var candidates = await store.ListPendingRunEvaluationsAsync(limit, ct, offset);
+        var candidates = await store.ListPendingRunEvaluationsAsync(limit, ct, offset, suppressed);
         Interlocked.Exchange(ref terminalScanOffset, candidates.Count < limit || offset > 100_000 - limit ? 0 : offset + limit);
         foreach (var run in candidates)
         {
-            foreach (var binding in (run.Admission.Configuration?.Definition.EvaluationBindings ?? []).Where(b => b.Hook == EvaluationHook.AfterRun || b.Hook == EvaluationHook.OnFailure && run.Status != AgentRunStatus.Completed))
+            var denied = false; var authorityOnly = true; var catalogSensitive = false;
+            foreach (var binding in (run.Admission.Configuration?.Definition.EvaluationBindings ?? []).Where(b => Applicable(b.Hook, run)))
             {
                 try { _ = await ObserveRun(run, binding, ct); }
                 catch (Exception error) when (error is AccessDeniedException or SecurityConflictException or AgentCore.Application.Sessions.AgentCoreException)
-                { /* Current denial never awards verification or replays a native action. */ }
+                {
+                    denied = true; authorityOnly &= error is AccessDeniedException;
+                    catalogSensitive |= error is AccessDeniedException { ReasonCode: "evaluation_suite_unavailable" or "script_unavailable" };
+                    // No evaluation occurred and no passing evidence is manufactured.
+                }
             }
+            if (denied) await DeferObservation(run, authorityOnly, catalogSensitive, ct);
+            else lock (deferredGate) deferred.Remove(run.AgentRunId);
         }
     }
     private async ValueTask<EvaluationAttempt> ObserveRun(AgentRun run, EvaluationBinding binding, CancellationToken ct, CancellationToken? originCancellation = null)
@@ -58,6 +72,7 @@ public sealed partial class TenantEvaluationService
         if (source.Revision != run.Revision) throw new SecurityConflictException("evaluation_source_changed");
         if (run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is { } initiator)
             _ = await Subject(state, initiator, EvaluationSubjectKind.AgentRun, run.AgentRunId, false, ct);
+        await EvaluationBindingValidation.RequireAsync(store, tenant, binding, suite, ct);
         var key = HookKey(run, suite.SuiteId, suite.Version, binding.Hook);
         var duplicate = await store.FindDedupAsync(tenant, actor, key, ct); if (duplicate is not null) return duplicate;
         if (suite.Archived || (await store.FindSuiteAsync(tenant, suite.SuiteId, ct: ct))?.Archived != false) throw new AccessDeniedException("evaluation_suite_unavailable");
@@ -73,7 +88,7 @@ public sealed partial class TenantEvaluationService
             var pins = modelEvaluator is null ? null : await modelEvaluator.PinAsync(state, actor, suite, linked.Token);
             var now = time.GetUtcNow();
             var attempt = new EvaluationAttempt(ids.NewId(), tenant, EvaluationSubjectKind.AgentRun, run.AgentRunId, run.Revision, source.Fingerprint,
-                suite.SuiteId, suite.Version, suite.ContentHash, binding.Hook, actor, key, EvaluationStatus.Running, null, [], now, now, ModelPins: pins);
+                suite.SuiteId, suite.Version, suite.ContentHash, binding.Hook, actor, key, EvaluationStatus.Running, null, [], now, now, ModelPins: pins, LifecycleOrigin: Origin(run));
             if (!await store.TrySaveAttemptAsync(Advance(state), state.Tenant.Revision, attempt, 0, Audit(state, actor, "evaluations.run", attempt.AttemptId), null, linked.Token)) throw new SecurityConflictException("stale_revision");
             var findings = new List<EvaluationFinding>();
             try
@@ -94,7 +109,7 @@ public sealed partial class TenantEvaluationService
     public async ValueTask<RunVerificationSummary> SummaryAsync(Guid actor, Guid tenant, AgentRun run, HumanSessionReference? human, CancellationToken ct)
     {
         var state = await State(actor, tenant, human, ct); _ = await Subject(state, actor, EvaluationSubjectKind.AgentRun, run.AgentRunId, false, ct);
-        var bindings = (run.Admission.Configuration?.Definition.EvaluationBindings ?? []).Where(b => b.Hook is EvaluationHook.AfterRun or EvaluationHook.OnFailure or EvaluationHook.Manual).ToArray();
+        var bindings = (run.Admission.Configuration?.Definition.EvaluationBindings ?? []).Where(b => b.Hook == EvaluationHook.Manual || Applicable(b.Hook, run)).ToArray();
         var findings = new List<EvaluationFinding>(); var attempts = new List<Guid>(); var expected = 0; var stale = false;
         foreach (var binding in bindings)
         {
@@ -106,7 +121,7 @@ public sealed partial class TenantEvaluationService
             for (var pageNumber = 0; latest is null; pageNumber++)
             {
                 var page = await store.ListAttemptsAsync(tenant, EvaluationSubjectKind.AgentRun, run.AgentRunId, pageNumber, 100, ct);
-                latest = page.Items.FirstOrDefault(a => a.SuiteId == suite.SuiteId && a.SuiteVersion == suite.Version && a.Hook == binding.Hook && a.CommitSequence is > 0);
+                latest = page.Items.FirstOrDefault(a => a.SuiteId == suite.SuiteId && a.SuiteVersion == suite.Version && a.Hook == binding.Hook && a.CommitSequence is > 0 && (binding.Hook == EvaluationHook.Manual || TrustedObservation(a, run)));
                 if ((pageNumber + 1) * page.PageSize >= page.Total) break;
             }
             if (latest is null) continue;
@@ -118,6 +133,7 @@ public sealed partial class TenantEvaluationService
         var passed = findings.Count(f => f.Outcome == EvaluationOutcome.Passed);
         var status = expected == 0 ? "NotConfigured" : stale ? "Stale" : findings.Any(f => f.Outcome == EvaluationOutcome.Failed) ? "Failed"
             : passed == expected ? "Verified" : attempts.Count == 0 ? "NotEvaluated" : "Inconclusive";
-        return new(status, expected, passed, attempts);
+        DeferredObservation? observation; lock (deferredGate) deferred.TryGetValue(run.AgentRunId, out observation);
+        return new(status, expected, passed, attempts, observation is null ? null : "automatic_not_performed", observation is { Count: < 5 } pending ? pending.RetryAt : null);
     }
 }

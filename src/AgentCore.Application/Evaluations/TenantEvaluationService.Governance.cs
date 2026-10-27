@@ -21,7 +21,7 @@ public sealed partial class TenantEvaluationService
         {
             var suite = await SuiteAsync(actor, tenant, binding.SuiteId, binding.Version, human, ct);
             if (suite.DraftId is not null || suite.Archived || (await store.FindSuiteAsync(tenant, suite.SuiteId, ct: ct))?.Archived != false) throw new ArgumentException("Use an available reusable Suite for organization defaults.");
-            EvaluationRules.ValidatePolicy(binding, suite);
+            await EvaluationBindingValidation.RequireAsync(store, tenant, binding, suite, ct);
         }
         var value = new EvaluationGovernance(tenant, expectedPolicyRevision + 1, Array.AsReadOnly(defaults.ToArray()));
         if (!await store.TrySaveEvaluationGovernanceAsync(Advance(state), state.Tenant.Revision, value, expectedPolicyRevision, Audit(state, actor, "tenant.governance.manage", tenant), human, ct)) throw new SecurityConflictException("stale_revision");

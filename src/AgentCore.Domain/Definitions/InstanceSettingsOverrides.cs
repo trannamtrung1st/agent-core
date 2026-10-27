@@ -68,9 +68,11 @@ public sealed record InstanceSettingsOverrides(
     InstanceField<bool>? ExperienceRecord = null,
     InstanceField<bool>? ExperienceRecall = null,
     InstanceField<bool>? ProfileEvidence = null,
-    InstanceField<bool>? CrossSessionContinuity = null)
+    InstanceField<bool>? CrossSessionContinuity = null,
+    InstanceField<string[]>? EvaluationBindings = null)
 {
     public InstanceSettingsOverrides Copy() => this with {
+        EvaluationBindings = EvaluationBindings is { } evaluations ? new(evaluations.Value.ToArray()) : null,
         SandboxAllowedProfileIds = SandboxAllowedProfileIds is { } profiles ? new(profiles.Value.ToArray()) : null,
         InitiativeTriggers = InitiativeTriggers is { } initiative ? new(initiative.Value.ToArray()) : null,
         SelectedCapabilities = SelectedCapabilities is { } selected ? new(selected.Value.ToArray()) : null,

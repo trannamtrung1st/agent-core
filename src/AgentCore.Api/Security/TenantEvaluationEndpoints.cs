@@ -52,6 +52,9 @@ public static class TenantEvaluationEndpoints
         group.MapPost("/evaluation-attempts", (EvaluationRequest body, HttpContext http, TenantEvaluationService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
             var a = IdentityHttp.TenantContext(http); return Results.Json(await service.RunAsync(a.PrincipalId, a.TenantId, body, IdentityHttp.TenantHuman(http), ct));
         }));
+        group.MapGet("/evaluation-attempts/recovery", (string dedupKey, HttpContext http, TenantEvaluationService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
+            var a = IdentityHttp.TenantContext(http); return Results.Json(new { attempt = await service.RecoverAsync(a.PrincipalId, a.TenantId, dedupKey, IdentityHttp.TenantHuman(http), ct) });
+        }));
         group.MapGet("/evaluation-attempts/{attemptId:guid}", (Guid attemptId, HttpContext http, TenantEvaluationService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
             var a = IdentityHttp.TenantContext(http); return Results.Json(await service.ReadAsync(a.PrincipalId, a.TenantId, attemptId, IdentityHttp.TenantHuman(http), ct));
         }));

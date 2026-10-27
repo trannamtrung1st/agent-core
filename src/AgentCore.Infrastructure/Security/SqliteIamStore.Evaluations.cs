@@ -40,13 +40,14 @@ public sealed partial class SqliteIamStore : ITenantEvaluationStore
             else { row.Revision = value.Revision; row.Json = System.Text.Json.JsonSerializer.Serialize(value); }
             return true;
         }, ct, human);
-    public async ValueTask<IReadOnlyList<AgentCore.Domain.Conversation.AgentRun>> ListPendingRunEvaluationsAsync(int limit, CancellationToken ct = default, int offset = 0)
+    public async ValueTask<IReadOnlyList<AgentCore.Domain.Conversation.AgentRun>> ListPendingRunEvaluationsAsync(int limit, CancellationToken ct = default, int offset = 0, IReadOnlyList<Guid>? excludedRuns = null)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         var now = (clock ?? TimeProvider.System).GetUtcNow().ToUnixTimeMilliseconds();
+        var excluded = System.Text.Json.JsonSerializer.Serialize((excludedRuns ?? []).Take(512).Select(id => id.ToString("D")));
         var rows = await db.AgentRuns.FromSqlInterpolated($"""
             SELECT r.* FROM AgentRuns r JOIN Sessions s ON s.SessionId=r.SessionId
-            WHERE r.TenantId IS NOT NULL AND r.Status IN (4,5,6) AND s.DurablyDeletedAtUtc IS NULL AND (s.RetentionDueAtUtc IS NULL OR s.RetentionDueAtUtc>{now})
+            WHERE NOT EXISTS(SELECT 1 FROM json_each({excluded}) x WHERE x.value=r.AgentRunId) AND r.TenantId IS NOT NULL AND r.Status IN (4,5,6) AND s.DurablyDeletedAtUtc IS NULL AND (s.RetentionDueAtUtc IS NULL OR s.RetentionDueAtUtc>{now})
               AND EXISTS(SELECT 1 FROM json_each(r.PayloadJson,'$.admission.configuration.definition.evaluationBindings') b
                 WHERE (json_extract(b.value,'$.hook')=1 OR (json_extract(b.value,'$.hook')=2 AND r.Status IN (5,6)))
                 AND NOT EXISTS(SELECT 1 FROM EvaluationAttempts a WHERE a.TenantId=r.TenantId AND lower(a.SubjectId)=r.AgentRunId
@@ -162,7 +163,7 @@ public sealed partial class SqliteIamStore : ITenantEvaluationStore
                 var key = value.SubjectId.ToString("D");
                 var runRow = await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == key && r.TenantId == value.TenantId, ct);
                 var run = runRow is null ? null : AgentRunStoreMapping.ToDomain(runRow);
-                if (run is null || run.Revision != value.SubjectRevision || EvaluationRules.Hash(new { run.AgentRunId, run.Revision, run.Status }) != value.SourceFingerprint) return false;
+                if (run is null || !EvaluationStoreRules.MatchesRunOrigin(value, run) || run.Revision != value.SubjectRevision || EvaluationRules.Hash(new { run.AgentRunId, run.Revision, run.Status }) != value.SourceFingerprint) return false;
             }
             var saved = value with { CommitSequence = value.Status == EvaluationStatus.Running ? null : next.Tenant.Revision };
             if (row is null) db.Add(EvaluationPersistence.Row(saved)); else db.Entry(row).CurrentValues.SetValues(EvaluationPersistence.Row(saved));

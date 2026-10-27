@@ -51,6 +51,14 @@ public sealed partial class TenantAgentConfigurationService
         if (aliases is null) throw Sessions.AgentCoreErrors.Validation("Configured provider choices are unavailable.");
         var models = await ModelCatalogForAgentAsync(actor, tenant, current.InstanceId, ct).ConfigureAwait(false);
         var (next, effective) = InstanceSettingsRules.ResolvePatch(definition, current.SettingsOverrides ?? new(), section, set, clear, models, aliases);
+        if (section == "evaluationPolicy" && security is ITenantEvaluationStore evaluations)
+            foreach (var binding in (effective.EvaluationBindings ?? []).Where(b => b.Hook != AgentCore.Domain.Evaluations.EvaluationHook.Publication))
+            {
+                await authorizer.RequireAsync(actor, "evaluations.read", AgentCore.Application.Evaluations.EvaluationStoreRules.Scope(tenant, binding.SuiteId), ct);
+                var suite = await evaluations.FindSuiteAsync(tenant, binding.SuiteId, binding.Version, ct) ?? throw new AccessDeniedException("evaluation_suite_unavailable");
+                if (suite.Archived || (await evaluations.FindSuiteAsync(tenant, binding.SuiteId, ct: ct))?.Archived != false) throw new AccessDeniedException("evaluation_suite_unavailable");
+                await AgentCore.Application.Evaluations.EvaluationBindingValidation.RequireAsync(evaluations, tenant, binding, suite, ct);
+            }
         InstanceSettingsRules.ValidateBrowser(effective, browser);
         _ = EffectiveSkillCatalogResolver.Resolve(effective, snapshot.Skills);
         _ = InstanceResourceRules.Resolve(effective, await Resources(tenant, definition, ct).ConfigureAwait(false), snapshot.Resources, snapshot.Skills);

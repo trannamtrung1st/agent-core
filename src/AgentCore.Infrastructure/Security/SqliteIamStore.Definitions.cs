@@ -181,7 +181,7 @@ public sealed partial class SqliteIamStore
                 if (target is null || target.Archived || (await Suite(db, next.Tenant.TenantId, binding.SuiteId, null, ct))?.Archived != false
                     || target.DraftId is not null && (binding.Hook != AgentCore.Domain.Evaluations.EvaluationHook.Publication || target.DefinitionId != Guid.Parse(draft.DefinitionId)))
                     throw new AccessDeniedException("evaluation_suite_unavailable");
-                AgentCore.Domain.Evaluations.EvaluationRules.ValidatePolicy(binding, target);
+                await AgentCore.Application.Evaluations.EvaluationBindingValidation.RequireAsync(binding, target, async reference => await Script(db, next.Tenant.TenantId, reference.ScriptId, reference.Version, ct));
             }
             var row = await Draft(db, next.Tenant.TenantId, draft.DraftId).SingleOrDefaultAsync(ct).ConfigureAwait(false);
             if (expectedDraftRevision is null)

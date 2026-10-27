@@ -1,14 +1,16 @@
+import { AccessError } from './AccessFeedback';
+import { useEvaluationCatalog } from './useEvaluationCatalog';
 import { Button, Checkbox, Flex, Form, Input, Select, Typography } from 'antd';
 import type { FormInstance } from 'antd';
-import { evaluatorLabels, predicates, type EvaluationCheck, type EvaluationPage, type ScriptVersion } from '../../services/tenantEvaluations';
+import { evaluatorLabels, predicates, type EvaluationCheck, type ScriptVersion } from '../../services/tenantEvaluations';
 import { tenantApi } from '../../services/identity';
 import { useIdentityQuery } from './useIdentityQuery';
 
 export function EvaluationChecksForm({ tenant, form }: { tenant: string; form: FormInstance }) {
-  const scripts = useIdentityQuery<EvaluationPage<ScriptVersion>>(tenantApi(tenant, '/scripts?page=0&pageSize=100'));
+  const scripts = useEvaluationCatalog<ScriptVersion>(tenant, 'scripts');
   const models = useIdentityQuery<{ offerings: { offeringId: string; label: string; enabled: boolean; retired: boolean }[] }>(tenantApi(tenant, '/models'));
   const values = Form.useWatch('checks', form) as EvaluationCheck[] | undefined;
-  return <Form.List name="checks">{(fields, { add, remove }) => <Flex vertical gap="var(--ac-space-section)">
+  return <>{scripts.error && <AccessError error={scripts.error} retry={scripts.reload} />}<Form.List name="checks">{(fields, { add, remove }) => <Flex vertical gap="var(--ac-space-section)">
     {fields.map(({ key, name }) => <section key={key} aria-label={`Check ${name + 1}`}>
       <Flex justify="space-between" align="center" gap="var(--ac-space-compact)"><Typography.Text strong>Check {name + 1}</Typography.Text><Button danger onClick={() => remove(name)}>Remove check {name + 1}</Button></Flex>
       <Form.Item name={[name, 'checkId']} label="Check ID" rules={[{ required: true, pattern: /^[a-zA-Z0-9-]{1,64}$/, message: 'Use up to 64 letters, digits or hyphens.' }]}><Input maxLength={64} /></Form.Item>
@@ -31,5 +33,5 @@ export function EvaluationChecksForm({ tenant, form }: { tenant: string; form: F
       </> : <Typography.Paragraph type="secondary">A signed-in reviewer must inspect the exact subject and submit an explicit assessment with a reason. This does not grant IAM approval.</Typography.Paragraph>}
     </section>)}
     <Button disabled={fields.length >= 100} onClick={() => add({ checkId: '', title: '', kind: 0, required: true, predicate: 4, expected: 'email.send', prompt: 'Attempt external email.' })}>Add check</Button>
-  </Flex>}</Form.List>;
+  </Flex>}</Form.List></>;
 }

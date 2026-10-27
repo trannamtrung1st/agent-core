@@ -41,12 +41,12 @@ public sealed partial class InMemoryIamStore : ITenantEvaluationStore
             foreach (var binding in value.Defaults) if (Suite(value.TenantId, binding.SuiteId, binding.Version) is not { Archived: false, DraftId: null }) throw new AccessDeniedException("evaluation_suite_unavailable");
             evaluationGovernance[value.TenantId] = EvaluationPersistence.Copy(value); return true;
         }, ct, human));
-    public ValueTask<IReadOnlyList<AgentCore.Domain.Conversation.AgentRun>> ListPendingRunEvaluationsAsync(int limit, CancellationToken ct = default, int offset = 0)
+    public ValueTask<IReadOnlyList<AgentCore.Domain.Conversation.AgentRun>> ListPendingRunEvaluationsAsync(int limit, CancellationToken ct = default, int offset = 0, IReadOnlyList<Guid>? excludedRuns = null)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate)
         {
             return ValueTask.FromResult<IReadOnlyList<AgentCore.Domain.Conversation.AgentRun>>(sessionBacking.TenantEvaluationCandidates(limit,
-                run => (run.Admission.Configuration?.Definition.EvaluationBindings ?? []).Where(b => b.Hook == EvaluationHook.AfterRun || b.Hook == EvaluationHook.OnFailure && run.Status != AgentCore.Domain.Conversation.AgentRunStatus.Completed).Any(b => !evaluationAttempts.Values.Any(a => a.TenantId == run.Owner.TenantId && a.SubjectId == run.AgentRunId && a.DedupKey == TenantEvaluationService.HookKey(run, b.SuiteId, b.Version, b.Hook))), offset));
+                run => (excludedRuns is null || !excludedRuns.Contains(run.AgentRunId)) && (run.Admission.Configuration?.Definition.EvaluationBindings ?? []).Where(b => b.Hook == EvaluationHook.AfterRun || b.Hook == EvaluationHook.OnFailure && run.Status != AgentCore.Domain.Conversation.AgentRunStatus.Completed).Any(b => !evaluationAttempts.Values.Any(a => a.TenantId == run.Owner.TenantId && a.SubjectId == run.AgentRunId && a.DedupKey == TenantEvaluationService.HookKey(run, b.SuiteId, b.Version, b.Hook))), offset));
         }
     }
     public ValueTask<EvaluationSuiteVersion?> FindSuiteAsync(Guid tenant, Guid id, int? version = null, CancellationToken ct = default)
@@ -122,7 +122,7 @@ public sealed partial class InMemoryIamStore : ITenantEvaluationStore
             else
             {
                 var run = sessionBacking.ReadTenantRun(value.TenantId, value.SubjectId);
-                if (run is null || run.Revision != value.SubjectRevision || EvaluationRules.Hash(new { run.AgentRunId, run.Revision, run.Status }) != value.SourceFingerprint) return null;
+                if (run is null || !EvaluationStoreRules.MatchesRunOrigin(value, run) || run.Revision != value.SubjectRevision || EvaluationRules.Hash(new { run.AgentRunId, run.Revision, run.Status }) != value.SourceFingerprint) return null;
             }
             var saved = value with { CommitSequence = value.Status == EvaluationStatus.Running ? null : next.Tenant.Revision };
             evaluationAttempts[(value.TenantId, value.AttemptId)] = EvaluationPersistence.Copy(saved); return saved;
