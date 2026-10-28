@@ -175,6 +175,6 @@ The owner-approved local-demo cutover includes one per-Session SDK environment, 
 
 ## Initiative 9 — Task delegation and communication
 
-Initiative 9 explicitly authorizes post-MVP same-tenant delegation and two-party Agent communication. It does not expand the original MVP acceptance. Tasks coordinate existing Session/Activation/AgentRun execution; Group Chat is Initiative 10 and remains unstarted.
+Initiative 9 explicitly authorizes post-MVP same-tenant delegation and two-party Agent communication. It does not expand the original MVP acceptance. Tasks coordinate existing Session/Activation/AgentRun execution; Group Chat remains unstarted and follows self-hosting and owner manual validation in the current [planning sequence](../TODO.md#prioritized-roadmap).
 
 See the [adopted proposal](proposals/initiative-9-task-delegation-communication.md), [removal audit](reports/initiative-9-source-audit-2026-10-27.md) and [local delivery evidence and limits](reports/initiative-9-local-verification-2026-10-27.md). The implementation has focused local verification; the report distinguishes exercised behavior from unrun deployment, provider and device qualification.

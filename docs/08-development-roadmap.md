@@ -1,5 +1,7 @@
 # Development Roadmap
 
+The current implementation sequence and remaining work are maintained in [TODO.md](../TODO.md#prioritized-roadmap). After Initiative 9, the next priority is the Built-in General Assistant, then Workflow. Group Chat follows self-hosting and owner manual validation; application integrations follow scenario validation. The milestone and initiative records below retain their historical identities and evidence.
+
 The OpenSandbox cutover is synchronized with main snapshot `aef7ffe5` (application
 behavior through `d279abfe`, followed by its documentation review).
 General Assistant v30 preserves main's immutable v29 and combines its current
@@ -81,6 +83,6 @@ Initiative 8 is closed for its verified local scope, including the transition st
 
 ## Initiative 9 — Task delegation and communication
 
-Initiative 9 implements durable Tasks, independent worker identity, two-party communication, default-off cooperation and the canonical child-tool cutover. The [delivery report](reports/initiative-9-local-verification-2026-10-27.md) maps T01–T40 to local evidence and qualification limits. Initiative 8 remains locally closed for its recorded scope. Initiative 10 — Group Chat is unstarted.
+Initiative 9 implements durable Tasks, independent worker identity, two-party communication, default-off cooperation and the canonical child-tool cutover. The [delivery report](reports/initiative-9-local-verification-2026-10-27.md) maps T01–T40 to local evidence and qualification limits. Initiative 8 remains locally closed for its recorded scope. Group Chat is unstarted; follow the current [planning sequence](../TODO.md#prioritized-roadmap).
 
 See the [adopted proposal](proposals/initiative-9-task-delegation-communication.md), [removal audit](reports/initiative-9-source-audit-2026-10-27.md) and [local delivery evidence and limits](reports/initiative-9-local-verification-2026-10-27.md). The implementation has focused local verification; the report distinguishes exercised behavior from unrun deployment, provider and device qualification.
