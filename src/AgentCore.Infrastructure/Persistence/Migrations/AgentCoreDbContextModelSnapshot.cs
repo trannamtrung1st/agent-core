@@ -1678,6 +1678,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<long>("UpdatedAtUtc")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("WorkflowTargetJson")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("AutomationId");
 
                     b.HasIndex("AgentInstanceId", "ProfileId", "Status");
@@ -1692,7 +1695,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.ToTable("Automations", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Automations_Destination", "(ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)");
+                            t.HasCheckConstraint("CK_Automations_Destination", "((ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)) AND WorkflowTargetJson IS NULL OR COALESCE((ExecutionTargetKind = 2 AND TenantId IS NOT NULL AND TargetSessionId IS NULL AND ReportToSessionId IS NULL AND json_valid(WorkflowTargetJson) AND json_type(WorkflowTargetJson) = 'object' AND length(json_extract(WorkflowTargetJson,'$.WorkflowId')) = 36 AND json_extract(WorkflowTargetJson,'$.Version') >= 1 AND length(json_extract(WorkflowTargetJson,'$.GraphHash')) = 64 AND json_type(WorkflowTargetJson,'$.InputsJson') = 'text' AND json_valid(json_extract(WorkflowTargetJson,'$.InputsJson')) AND length(CAST(WorkflowTargetJson AS BLOB)) <= 32768),0)");
 
                             t.HasCheckConstraint("CK_Automations_Mode", "TriggerMode IN (0,1)");
 
@@ -2115,7 +2118,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("SourceSessionId")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<int>("State")
@@ -2129,6 +2131,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("WorkerSessionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("WorkflowExecutionId")
                         .HasColumnType("TEXT");
 
                     b.HasKey("TenantId", "TaskId");
@@ -2145,6 +2150,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.HasIndex("TenantId", "WorkerInstanceId", "State", "TaskId");
+
+                    b.HasIndex("TenantId", "WorkflowExecutionId", "OperationScope", "RequestKey")
+                        .IsUnique()
+                        .HasFilter("WorkflowExecutionId IS NOT NULL");
 
                     b.ToTable("TenantDelegatedTasks", null, t =>
                         {
@@ -3992,6 +4001,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("AcceptedWorkflowExecutionId")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("AdmittedAtUtc")
                         .HasColumnType("INTEGER");
 
@@ -4115,6 +4127,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<long?>("TriggerRevision")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid?>("WorkflowInitiatorPrincipalId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WorkflowTargetJson")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("OccurrenceId");
 
                     b.HasIndex("AcceptedAgentRunId")
@@ -4126,6 +4144,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasIndex("LiveSessionId");
 
                     b.HasIndex("Disposition", "ClaimLeaseExpiresAtUtc");
+
+                    b.HasIndex("TenantId", "AcceptedWorkflowExecutionId")
+                        .IsUnique()
+                        .HasFilter("AcceptedWorkflowExecutionId IS NOT NULL");
 
                     b.HasIndex("AgentInstanceId", "ProfileId", "DedupeKey")
                         .IsUnique();
@@ -4144,9 +4166,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.ToTable("TriggerOccurrences", null, t =>
                         {
-                            t.HasCheckConstraint("CK_TriggerOccurrences_Destination", "(ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)");
+                            t.HasCheckConstraint("CK_TriggerOccurrences_Destination", "((ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)) AND WorkflowTargetJson IS NULL OR COALESCE((ExecutionTargetKind = 2 AND TenantId IS NOT NULL AND TargetSessionId IS NULL AND ReportToSessionId IS NULL AND json_valid(WorkflowTargetJson) AND json_type(WorkflowTargetJson) = 'object' AND length(json_extract(WorkflowTargetJson,'$.WorkflowId')) = 36 AND json_extract(WorkflowTargetJson,'$.Version') >= 1 AND length(json_extract(WorkflowTargetJson,'$.GraphHash')) = 64 AND json_type(WorkflowTargetJson,'$.InputsJson') = 'text' AND json_valid(json_extract(WorkflowTargetJson,'$.InputsJson')) AND length(CAST(WorkflowTargetJson AS BLOB)) <= 32768),0)");
 
-                            t.HasCheckConstraint("CK_TriggerOccurrences_ExecutionLink", "(ExecutionSessionId IS NULL AND AcceptedAgentRunId IS NULL) OR (ExecutionSessionId IS NOT NULL AND LiveSessionId IS NULL AND AcceptedAgentRunId IS NOT NULL) OR (ExecutionSessionId IS NULL AND LiveSessionId IS NOT NULL AND AcceptedAgentRunId IS NOT NULL AND LiveEvaluationCompletedAtUtc IS NOT NULL)");
+                            t.HasCheckConstraint("CK_TriggerOccurrences_ExecutionLink", "((ExecutionSessionId IS NULL AND AcceptedAgentRunId IS NULL) OR (ExecutionSessionId IS NOT NULL AND LiveSessionId IS NULL AND AcceptedAgentRunId IS NOT NULL) OR (ExecutionSessionId IS NULL AND LiveSessionId IS NOT NULL AND AcceptedAgentRunId IS NOT NULL AND LiveEvaluationCompletedAtUtc IS NOT NULL)) AND AcceptedWorkflowExecutionId IS NULL AND (ExecutionTargetKind <> 2 OR Disposition <> 6) OR (ExecutionTargetKind = 2 AND AcceptedWorkflowExecutionId IS NOT NULL AND Disposition = 6 AND ExecutionSessionId IS NULL AND AcceptedAgentRunId IS NULL AND LiveSessionId IS NULL AND ModelOfferingId IS NULL)");
 
                             t.HasCheckConstraint("CK_TriggerOccurrences_SpacePins", "(PinnedSpaceId IS NULL AND PinnedEnvironmentId IS NULL) OR (TenantId IS NOT NULL AND PinnedSpaceId IS NOT NULL AND lower(PinnedSpaceId) <> '00000000-0000-0000-0000-000000000000' AND (PinnedEnvironmentId IS NULL OR lower(PinnedEnvironmentId) <> '00000000-0000-0000-0000-000000000000'))");
 
@@ -4214,6 +4236,207 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_WebhookEvents_TenantOwner", "(TenantId IS NULL AND CreatedByPrincipalId IS NULL) OR COALESCE((TenantId IS NOT NULL AND CreatedByPrincipalId IS NOT NULL AND Kind = 0 AND Revision >= 1 AND UpdatedAtUtc >= CreatedAtUtc AND length(DisplayName) BETWEEN 1 AND 80 AND length(EventKey) BETWEEN 1 AND 64 AND substr(EventKey,1,1) GLOB '[a-z]' AND EventKey NOT GLOB '*[^a-z0-9._-]*' AND substr(EventKey,-1) GLOB '[a-z0-9]' AND DisplayName = trim(DisplayName) AND ((Status = 0 AND length(CredentialHash) = 64 AND CredentialHash NOT GLOB '*[^0-9a-f]*') OR (Status = 1 AND CredentialHash IS NULL))),0)");
                         });
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkflowCatalogReceiptRow", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ActorId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("WorkflowId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("TenantId", "ActorId", "RequestKey");
+
+                    b.HasIndex("TenantId", "WorkflowId");
+
+                    b.ToTable("TenantWorkflowCatalogReceipts", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkflowDecisionRow", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ExecutionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NodeId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ActorId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("TenantId", "ExecutionId", "NodeId");
+
+                    b.HasIndex("TenantId", "ActorId", "RequestKey")
+                        .IsUnique();
+
+                    b.ToTable("TenantWorkflowDecisions", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkflowDefinitionRow", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("WorkflowId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("TenantId", "WorkflowId");
+
+                    b.ToTable("TenantWorkflows", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkflowExecutionRow", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ExecutionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourceScope")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("WorkflowId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("TenantId", "ExecutionId");
+
+                    b.HasIndex("Status", "CreatedAt", "ExecutionId");
+
+                    b.HasIndex("TenantId", "SourceScope", "RequestKey")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "WorkflowId", "ExecutionId");
+
+                    b.HasIndex("TenantId", "WorkflowId", "Version");
+
+                    b.ToTable("TenantWorkflowExecutions", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkflowPublicationRow", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ActorId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("WorkflowId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("TenantId", "ActorId", "RequestKey");
+
+                    b.HasIndex("TenantId", "WorkflowId");
+
+                    b.ToTable("TenantWorkflowPublicationIntents", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkflowStepRow", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ExecutionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NodeId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("TenantId", "ExecutionId", "NodeId");
+
+                    b.HasIndex("TenantId", "OperationId")
+                        .IsUnique();
+
+                    b.ToTable("TenantWorkflowSteps", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkflowVersionRow", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("WorkflowId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("TenantId", "WorkflowId", "Version");
+
+                    b.ToTable("TenantWorkflowVersions", (string)null);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Security.CredentialOAuthAttemptRow", b =>
@@ -5853,13 +6076,17 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId", "SourceSessionId")
                         .HasPrincipalKey("TenantId", "SessionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AgentCore.Infrastructure.Security.TenantSessionRecord", null)
                         .WithMany()
                         .HasForeignKey("TenantId", "WorkerSessionId")
                         .HasPrincipalKey("TenantId", "SessionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Persistence.WorkflowExecutionRow", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "WorkflowExecutionId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
@@ -6272,6 +6499,11 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasForeignKey("LiveSessionId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("AgentCore.Infrastructure.Persistence.WorkflowExecutionRow", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "AcceptedWorkflowExecutionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgentCore.Infrastructure.Security.SpaceRecord", null)
                         .WithMany()
                         .HasForeignKey("TenantId", "PinnedSpaceId")
@@ -6301,6 +6533,69 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId", "CreatedByPrincipalId")
                         .HasPrincipalKey("TenantId", "PrincipalId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkflowCatalogReceiptRow", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.WorkflowDefinitionRow", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "WorkflowId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkflowDecisionRow", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.WorkflowStepRow", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ExecutionId", "NodeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkflowDefinitionRow", b =>
+                {
+                    b.HasOne("AgentCore.Domain.Security.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkflowExecutionRow", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.WorkflowVersionRow", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "WorkflowId", "Version")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkflowPublicationRow", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.WorkflowDefinitionRow", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "WorkflowId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkflowStepRow", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.WorkflowExecutionRow", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ExecutionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkflowVersionRow", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.WorkflowDefinitionRow", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "WorkflowId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Security.CredentialOAuthAttemptRow", b =>

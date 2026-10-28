@@ -49,7 +49,7 @@ public static class TaskReportRules
         }
         if (task.Source.OriginalInitiatorPrincipalId is { } requester)
             foreach (var key in new[] { "sessions.read" })
-                await TaskAuthority.RequireAsync(state, requester, key, TenantSessionRules.Scope(task.Source.TenantId, task.Source.SessionId), iam, ct);
+                await TaskAuthority.RequireAsync(state, requester, key, TenantSessionRules.Scope(task.Source.TenantId, task.Source.RequireSessionId()), iam, ct);
     }
     public static AgentRun Create(TaskReportSource source, ResolvedAgentRunConfiguration resolved, AgentRunModelPin model,
         Guid activationId, Guid runId, Guid responseId, DateTimeOffset at)

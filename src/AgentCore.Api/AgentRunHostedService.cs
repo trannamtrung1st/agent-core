@@ -12,6 +12,7 @@ public sealed class AgentRunHostedService : BackgroundService
 
     private readonly Func<CancellationToken, Task> _pass;
     private readonly Func<CancellationToken, Task>? _hints;
+    private readonly Func<CancellationToken, Task>? _workflows;
     private readonly TimeProvider _time;
     private readonly ILogger<AgentRunHostedService> _logger;
     private readonly IDiagnosticIdSource _diagnostics;
@@ -25,7 +26,8 @@ public sealed class AgentRunHostedService : BackgroundService
         AgentCore.Application.Security.TenantBrowserEffectService browserEffects,
         ITenantRunExecution tenantExecution, AgentCore.Application.Security.TenantWorkspaceMutationEffectService workspaceEffects,
         AgentCore.Application.Security.TenantAccountEffectService accountEffects, AgentCore.Application.Security.TenantHttpEffectService httpEffects,
-        AgentCore.Api.Realtime.TenantSessionLiveDelivery delivery, ITenantTaskStore tasks, ITenantAgentMessageStore messages)
+        AgentCore.Api.Realtime.TenantSessionLiveDelivery delivery, ITenantTaskStore tasks, ITenantAgentMessageStore messages,
+        AgentCore.Application.Workflows.TenantWorkflowExecutionService workflows)
         : this(
             async cancellationToken =>
             {
@@ -44,7 +46,8 @@ public sealed class AgentRunHostedService : BackgroundService
             time,
             logger,
             diagnostics,
-            cancellationToken => delivery.PublishTaskHintsAsync(tasks, messages, cancellationToken).AsTask())
+            cancellationToken => delivery.PublishTaskHintsAsync(tasks, messages, cancellationToken).AsTask(),
+            cancellationToken => workflows.ReconcileAsync(4, cancellationToken).AsTask())
     {
     }
 
@@ -53,9 +56,9 @@ public sealed class AgentRunHostedService : BackgroundService
         TimeProvider time,
         ILogger<AgentRunHostedService> logger,
         IDiagnosticIdSource diagnostics,
-        Func<CancellationToken, Task>? hints = null)
+        Func<CancellationToken, Task>? hints = null, Func<CancellationToken, Task>? workflows = null)
     {
-        _pass = pass; _hints = hints;
+        _pass = pass; _hints = hints; _workflows = workflows;
         _time = time;
         _logger = logger;
         _diagnostics = diagnostics;
@@ -63,9 +66,20 @@ public sealed class AgentRunHostedService : BackgroundService
 
     internal IDiagnosticIdSource DiagnosticIds => _diagnostics;
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) => _hints is null
-        ? LoopAsync(RunPassAsync, stoppingToken)
-        : Task.WhenAll(LoopAsync(RunPassAsync, stoppingToken), LoopAsync(RunHintPassAsync, stoppingToken));
+    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        var loops = new List<Task> { LoopAsync(RunPassAsync, stoppingToken) };
+        if (_hints is not null) loops.Add(LoopAsync(RunHintPassAsync, stoppingToken));
+        if (_workflows is not null) loops.Add(LoopAsync(RunWorkflowPassAsync, stoppingToken));
+        return Task.WhenAll(loops);
+    }
+
+    private async Task RunWorkflowPassAsync(CancellationToken stoppingToken)
+    {
+        try { await _workflows!(stoppingToken).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
+        catch (Exception exception) { DiagnosticLog.Warning(_logger, exception, _diagnostics.NewId(), "Workflow recovery pass failed."); }
+    }
 
     // Separately awaited loops in the existing host: slow hint reads never hold up
     // Run dispatch, and shutdown still cancels and drains both owned operations.

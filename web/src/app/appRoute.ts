@@ -27,9 +27,21 @@ export function lastChatUrl(): string {
   return sessionStorage.getItem(`${LAST_CHAT_URL_KEY}:${tenant}`) ?? newChatPath();
 }
 export type NavigationGuard = (path: string) => boolean | Promise<boolean>;
-let guard: NavigationGuard | undefined;
-export function registerNavigationGuard(next: NavigationGuard): () => void { guard = next; return () => { if (guard === next) guard = undefined; }; }
-export function approveAppNavigation(path: string): Promise<boolean> { return Promise.resolve(guard?.(path) ?? true); }
+const guards = new Map<symbol, NavigationGuard>();
+export function registerNavigationGuard(next: NavigationGuard): () => void { const key = Symbol(); guards.set(key, next); return () => { guards.delete(key); }; }
+function navigationApproval(path: string): boolean | Promise<boolean> {
+  const active = [...guards.values()].reverse();
+  function check(from: number): boolean | Promise<boolean> {
+    for (let index = from; index < active.length; index++) {
+      const result = active[index](path);
+      if (typeof result !== 'boolean') return result.then(allowed => allowed ? check(index + 1) : false);
+      if (!result) return false;
+    }
+    return true;
+  }
+  return check(0);
+}
+export function approveAppNavigation(path: string): Promise<boolean> { return Promise.resolve(navigationApproval(path)); }
 export function initializeAppHistory() {
   if (typeof window.history.state?.acIndex !== 'number') window.history.replaceState({ ...window.history.state, acIndex: 0 }, '', window.location.href);
 }
@@ -44,6 +56,6 @@ export function navigateToAppPath(path: string, replace = false): void {
     window.history[replace ? 'replaceState' : 'pushState']({ acIndex: replace ? index : index + 1 }, '', canonicalAppUrl(path));
     window.dispatchEvent(Object.assign(new PopStateEvent('popstate', { state: window.history.state }), { appNavigation: true }));
   };
-  const approved = guard?.(path) ?? true;
+  const approved = navigationApproval(path);
   if (typeof approved === "boolean") { if (approved) commit(); } else void approved.then(ok => { if (ok) commit(); });
 }

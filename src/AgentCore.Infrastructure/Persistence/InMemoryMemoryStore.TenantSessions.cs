@@ -19,6 +19,7 @@ public sealed partial class InMemoryMemoryStore
             Include(current.RetentionDueAtUtc); Include(current.DurablyDeletedAt);
             if (!seen.Add(current.SessionId)) { Include(root.CreatedAt); return due; }
             if (current.Origin.Kind is not (SessionOriginKind.DelegatedTask or SessionOriginKind.DirectAgentMessage)) return due;
+            if (current.Origin.Kind == SessionOriginKind.DelegatedTask && current.Origin.WorkflowExecutionId is not null && current.Origin.OriginatingSessionId is null) return due;
             if (depth == 64 || current.Origin.OriginatingSessionId is not { } parent
                 || !tenantSessions.TryGetValue(parent, out var owner) || owner.TenantId != tenant || !_sessions.TryGetValue(parent, out current!))
             { Include(root.CreatedAt); return due; }
@@ -107,6 +108,7 @@ public sealed partial class InMemoryMemoryStore
         {
             if (!seen.Add(snapshot.SessionId) || snapshot.DurablyDeletedAt is not null || !RetentionAvailable(snapshot)) return false;
             if (snapshot.Origin.Kind is not (SessionOriginKind.DelegatedTask or SessionOriginKind.DirectAgentMessage)) return true;
+            if (snapshot.Origin.Kind == SessionOriginKind.DelegatedTask && snapshot.Origin.WorkflowExecutionId is not null && snapshot.Origin.OriginatingSessionId is null) return true;
             if (snapshot.Origin.OriginatingSessionId is not { } source || !tenantSessions.TryGetValue(source, out var owner)
                 || owner.TenantId != tenant || !_sessions.TryGetValue(source, out snapshot!)) return false;
         }

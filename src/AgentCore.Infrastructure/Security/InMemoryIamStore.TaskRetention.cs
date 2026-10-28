@@ -18,22 +18,23 @@ public sealed partial class InMemoryIamStore
             var roots = root is { } exact ? new HashSet<Guid> { exact } : tasks.Where(t => t.Source.SessionId == source).Select(t => t.Source.RootActivationId).ToHashSet();
             return !runs.Any(r => (r.SessionId == source || roots.Contains(r.Admission.Activation.RootActivationId)) && (!r.IsTerminal || r.RequiresEffectReconciliation));
         }
-        foreach (var task in tasks.Where(t => t.ContentRetiredAt is null && TaskLimits.Terminal(t.State) && Deleted(t.Source.SessionId) && Quiescent(t.Source.SessionId, t.Source.RootActivationId)).OrderBy(t => t.TaskId).Take(100))
+        static Guid? ContentSource(DelegatedTask task) => task.Source.SessionId ?? task.Source.Workflow?.OriginalSessionId ?? (task.Source.ActorKind == TaskActorKind.WorkflowContinuation ? task.WorkerSessionId : null);
+        foreach (var task in tasks.Where(t => t.ContentRetiredAt is null && TaskLimits.Terminal(t.State) && ContentSource(t) is { } sourceSession && Deleted(sourceSession) && Quiescent(sourceSession, t.Source.RootActivationId)).OrderBy(t => t.TaskId).Take(100))
         {
-            if (task.ContentRetiredAt is not null || !TaskLimits.Terminal(task.State) || !Deleted(task.Source.SessionId) || !Quiescent(task.Source.SessionId, task.Source.RootActivationId)) continue;
+            if (task.ContentRetiredAt is not null || !TaskLimits.Terminal(task.State) || !Deleted(ContentSource(task)!.Value) || !Quiescent(ContentSource(task)!.Value, task.Source.RootActivationId)) continue;
             delegatedTasks[(tenant, task.TaskId)] = task.RetireContent(at);
             foreach (var entry in taskCommands.Where(c => c.Key.Tenant == tenant && c.Key.Task == task.TaskId).ToArray())
                 taskCommands[entry.Key] = (entry.Value.Hash, entry.Value.Task.RetireContent(at));
         }
-        foreach (var approval in _approvals.Values.Where(a => a.TenantId == tenant && a.Operation.TaskDelegation is not null && Deleted(a.Operation.TaskDelegation.Task.Source.SessionId) && Quiescent(a.Operation.TaskDelegation.Task.Source.SessionId, a.RootActivationId) && !_approvalSignals.Values.Any(signal => signal.RequestId == a.RequestId && signal.ProcessedAt is null)).OrderBy(a => a.RequestId).Take(100).ToArray())
+        foreach (var approval in _approvals.Values.Where(a => a.TenantId == tenant && a.Operation.TaskDelegation is not null && Deleted(a.Operation.TaskDelegation.Task.Source.RequireSessionId()) && Quiescent(a.Operation.TaskDelegation.Task.Source.RequireSessionId(), a.RootActivationId) && !_approvalSignals.Values.Any(signal => signal.RequestId == a.RequestId && signal.ProcessedAt is null)).OrderBy(a => a.RequestId).Take(100).ToArray())
         {
             var task = approval.Operation.TaskDelegation!.Task;
-            if (!Deleted(task.Source.SessionId) || !Quiescent(task.Source.SessionId, task.Source.RootActivationId)
+            if (!Deleted(ContentSource(task)!.Value) || !Quiescent(ContentSource(task)!.Value, task.Source.RootActivationId)
                 || _approvalSignals.Values.Any(s => s.RequestId == approval.RequestId && s.ProcessedAt is null)) continue;
             foreach (var grant in _operationGrants.Values.Where(g => g.RequestId == approval.RequestId && g.Status == OperationGrantStatus.Available).ToArray())
                 _operationGrants[grant.RequestId] = grant with { Status = OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) };
             retiredTaskApprovals[approval.RequestId] = new(tenant, approval.RequestId, approval.Operation.OperationId, task.TaskId,
-                task.Source.SessionId, task.Assignment.InstanceId, task.Assignment.PrincipalId, approval.Operation.ActionHash,
+                task.Source.RequireSessionId(), task.Assignment.InstanceId, task.Assignment.PrincipalId, approval.Operation.ActionHash,
                 approval.Status == TenantApprovalStatus.Pending ? at >= approval.ExpiresAt ? TenantApprovalStatus.Expired : TenantApprovalStatus.Cancelled : approval.Status, at);
             _approvals.Remove(approval.RequestId);
         }

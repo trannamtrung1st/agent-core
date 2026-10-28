@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { Alert, App, Button, Collapse, Empty, Flex, Form, Input, Select, Spin, Tag, Typography, theme } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { identityRequest, IdentityError } from '../../services/identity';
-import { checkpointStatus, goalsApi, goalStatus, readGoals, verificationLabel, writeGoal, type GoalCommand, type GoalPlan, type GoalVerification, type GoalsView } from '../../services/tenantSessionGoals';
+import { checkpointStatus, goalsApi, goalStatus, readGoals, verificationLabel, writeGoal, type GoalCommand, type GoalPlan, type GoalVerification, type GoalsView, type SessionGoal } from '../../services/tenantSessionGoals';
 import type { ActivitySource, AgentRun } from '../../services/activitySource';
 import { confirmAction } from '../../app/confirmAction';
 import { EvaluationAttemptInspector } from '../access/EvaluationAttemptInspector';
@@ -16,12 +16,12 @@ import { AgentRunDetailDrawer } from './AgentRunDetails';
 const privateDenial = (reason: unknown) => reason instanceof IdentityError && [401,403,404,410].includes(reason.status);
 const verificationText = (v: GoalVerification) => v.kind === 0 ? `Exact Evaluation pass · Suite ${v.suiteId} · version ${v.suiteVersion} · hash ${v.suiteHash}` : verificationLabel[v.kind];
 const blankAction = { note: '', runId: '', sourceId: '', evidenceKind: 0 };
-export function SessionGoalsDrawer({ tenant, session, instance, source, open, narrow, readonly, refreshKey, openerRef, onClose, onWorked }: {
+export function SessionGoalsDrawer({ tenant, session, instance, source, open, narrow, readonly, refreshKey, openerRef, onClose, onWorked, initialGoalId }: {
   tenant: string; session: string; instance: string; source: ActivitySource | null; open: boolean; narrow: boolean; readonly: boolean; refreshKey: string;
-  openerRef: RefObject<HTMLButtonElement | null>; onClose: () => void; onWorked: () => void;
+  initialGoalId?: string; openerRef: RefObject<HTMLButtonElement | null>; onClose: () => void; onWorked: () => void;
 }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
-  const [view, setView] = useState<GoalsView | null>(null); const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("goal"));
+  const [view, setView] = useState<GoalsView | null>(null); const [selectedId, setSelectedId] = useState<string | null>(() => initialGoalId ?? new URLSearchParams(window.location.search).get("goal"));
   const [loading, setLoading] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const [editor, setEditor] = useState<'create' | 'revise' | null>(null); const [dirty, setDirty] = useState(false); const [reloadRequired, setReloadRequired] = useState(false);
   const [checkpointAction, setCheckpointAction] = useState<string | null>(null); const [action, setAction] = useState(blankAction);
@@ -29,7 +29,7 @@ export function SessionGoalsDrawer({ tenant, session, instance, source, open, na
   const [activity, setActivity] = useState<{ revision: number; action: string; at: string; actorId: string; note: string | null }[]>([]); const [activityPage, setActivityPage] = useState(0); const [activityTotal, setActivityTotal] = useState(0);
   const epoch = useRef(0); const readSequence = useRef(0); const controller = useRef(new AbortController()); const activeMutation = useRef(false);
   const guard = useAccessDraftGuard(dirty, busy, onClose);
-  const goal = view?.goals.items.find(g => g.goalId === selectedId) ?? view?.goals.items.find(g => g.goalId === view.focusedGoalId) ?? view?.goals.items[0];
+  const goal = initialGoalId ? view?.goals.items.find(g => g.goalId === initialGoalId) : view?.goals.items.find(g => g.goalId === selectedId) ?? view?.goals.items.find(g => g.goalId === view.focusedGoalId) ?? view?.goals.items[0];
   const currentGoalId = useRef(goal?.goalId); currentGoalId.current = goal?.goalId;
   const retirePrivate = useCallback(() => {
     epoch.current++; readSequence.current++; controller.current.abort(); controller.current = new AbortController(); activeMutation.current = false;
@@ -44,6 +44,11 @@ export function SessionGoalsDrawer({ tenant, session, instance, source, open, na
     if (explicit) setLoading(true);
     try {
       const next = await readGoals(tenant, session, controller.current.signal);
+      if (initialGoalId && !next.goals.items.some(g => g.goalId === initialGoalId)) {
+        const exact = await identityRequest<SessionGoal>(goalsApi(tenant, session, `/${encodeURIComponent(initialGoalId)}`), { signal: controller.current.signal });
+        if (exact.tenantId !== tenant || exact.sessionId !== session || exact.goalId !== initialGoalId) throw new Error('Goal response does not match the requested evidence.');
+        next.goals = { ...next.goals, items: [...next.goals.items, exact] };
+      }
       if (generation !== epoch.current || sequence !== readSequence.current) return;
       setView(next); if (explicit) { setError(null); setReloadRequired(false); }
     } catch (reason) {
@@ -51,7 +56,7 @@ export function SessionGoalsDrawer({ tenant, session, instance, source, open, na
       if (privateDenial(reason)) { retirePrivate(); }
       setError(reason instanceof Error ? reason.message : 'Goals could not be loaded.');
     } finally { if (generation === epoch.current && sequence === readSequence.current) setLoading(false); }
-  }, [tenant, session, retirePrivate]);
+  }, [tenant, session, initialGoalId, retirePrivate]);
   useEffect(() => {
     epoch.current++; controller.current.abort(); controller.current = new AbortController();
     activeMutation.current = false; setBusy(false); setView(null); setEditor(null); setDirty(false); setActivity([]); setError(null); setRun(null); setEvaluationId(null); setReloadRequired(false);
@@ -101,7 +106,7 @@ export function SessionGoalsDrawer({ tenant, session, instance, source, open, na
     {error && <Alert type="error" showIcon title={error} description={reloadRequired ? 'Your draft is retained. Refresh authoritative state, compare the current plan and submit deliberately.' : undefined} />}
     {loading && !view ? <Spin aria-label="Loading goals" /> : view && !goal && !editor ? <Empty description="No goals in this conversation"><Typography.Paragraph type="secondary">Create an explicit outcome with criteria and checkpoints when you want to track verified work.</Typography.Paragraph></Empty> : null}
     {view && goal && !editor && <>
-      <Form.Item layout="vertical" label="Goals in this conversation" style={{ marginBottom: 0 }}><Select aria-label="Goals in this conversation" value={goal.goalId} disabled={busy} style={{ width: '100%' }} onChange={id => { setSelectedId(id); setActivity([]); }} options={view.goals.items.map(g => ({ value: g.goalId, label: `${g.plan.title} · ${goalStatus[g.status]}${g.goalId === view.focusedGoalId ? ' · Focused' : ''}` }))} /></Form.Item>
+      <Form.Item layout="vertical" label="Goals in this conversation" style={{ marginBottom: 0 }}><Select aria-label="Goals in this conversation" value={goal.goalId} disabled={busy || !!initialGoalId} style={{ width: '100%' }} onChange={id => { setSelectedId(id); setActivity([]); }} options={view.goals.items.map(g => ({ value: g.goalId, label: `${g.plan.title} · ${goalStatus[g.status]}${g.goalId === view.focusedGoalId ? ' · Focused' : ''}` }))} /></Form.Item>
       <Flex vertical gap={token.paddingXS}>
         <Flex wrap align="center" gap={token.paddingXS}><Typography.Title level={3} style={{ margin: 0, overflowWrap: 'anywhere' }}>{goal.plan.title}</Typography.Title><Tag color={goal.status === 3 ? 'success' : undefined}>{goalStatus[goal.status]}</Tag></Flex>
         <Typography.Text aria-live="polite">{verified} of {required.length} required checkpoints verified</Typography.Text>
@@ -110,7 +115,7 @@ export function SessionGoalsDrawer({ tenant, session, instance, source, open, na
         {goal.plan.deadlineAt && <Typography.Text type="secondary">Deadline: {new Date(goal.plan.deadlineAt).toLocaleString()}</Typography.Text>}
         <Typography.Text type="secondary">{goal.plan.autoContinuation.enabled ? `${Math.max(0, goal.plan.autoContinuation.maxRuns - goal.autoRunsUsed)} automatic Runs remain · until ${new Date(goal.plan.autoContinuation.until!).toLocaleString()}` : 'Automatic continuation is off. Use Work on checkpoint deliberately.'}</Typography.Text>
         {goal.status === 3 && <Alert type="success" showIcon title="Goal completed" description="All required criteria were verified. This does not end the conversation." />}
-        {readonly && <Alert type="info" showIcon title="Conversation history is read-only" description="Ending a conversation does not verify its open Goals." />}
+        {readonly && <Alert type="info" showIcon title={initialGoalId ? "Goal evidence is read-only here" : "Conversation history is read-only"} description={initialGoalId ? "Goal changes belong to its owning conversation. Process sign-off cannot replace independent Goal verification." : "Ending a conversation does not verify its open Goals."} />}
       </Flex>
       {wrongSpace && <Alert type="warning" showIcon title="Return to this goal’s Space to continue" description="The goal stays in its creating Space. Close this panel and use the conversation’s Space selector, or create a separate goal in the current Space." />}
       {goal.pendingPlan && <Alert type="warning" showIcon title="A revised plan needs human review" description={<Flex vertical gap={token.paddingXS}>
@@ -127,7 +132,7 @@ export function SessionGoalsDrawer({ tenant, session, instance, source, open, na
         {editable && goal.status < 3 && <Button disabled={busy} onClick={() => { setEditor('revise'); setDirty(false); }}>Revise plan</Button>}
         {editable && goal.status < 3 && <Button danger disabled={busy} onClick={() => confirmAction(modal, { title: 'Cancel this goal?', content: 'Future Goal work will stop. Any current Run retains its admitted intent; its Stop control remains available in the conversation. Existing effects and evidence remain factual.', okText: 'Cancel goal', danger: true, onOk: () => command(6, { action: 'cancel' }) })}>Cancel goal</Button>}
       </Flex>
-      {goal.goalId !== view.focusedGoalId && goal.status === 1 && <Typography.Text type="secondary">Focus this goal before starting work. Focus applies to future Runs.</Typography.Text>}
+      {!readonly && goal.goalId !== view.focusedGoalId && goal.status === 1 && <Typography.Text type="secondary">Focus this goal before starting work. Focus applies to future Runs.</Typography.Text>}
       <Collapse items={goal.plan.checkpoints.map((p, index) => {
         const state = goal.checkpoints.find(c => c.checkpointId === p.checkpointId)!; const eligible = p.dependencies.every(id => goal.checkpoints.find(c => c.checkpointId === id)?.status === 4);
         return { key: p.checkpointId, label: `${index + 1}. ${p.title} · ${checkpointStatus[state.status]}`, children: <Flex vertical gap={token.paddingSM}>

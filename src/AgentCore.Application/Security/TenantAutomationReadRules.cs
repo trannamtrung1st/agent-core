@@ -96,7 +96,7 @@ public static class TenantAutomationReadRules
             d.Subscription.SourceKind, d.Subscription.ResourceId, d.Core?.Event.Key == "email.message.received" ? AgentCore.Domain.Email.EmailEventReferences.AccountId(d.Core.Event.DataJson) : null, EventHash(d))));
         object Summary(Automation a) => new { a.AutomationId, a.Revision, a.Name, status = Status(a.Status), instructions = TenantContinuityRules.Safe(a.Instructions, args.AutomationId is null ? 160 : 600, out _),
             instructionsExcerpt = a.Instructions.Length > (args.AutomationId is null ? 160 : 600), a.ModelPreference, a.RequiresTools, a.RequiresVision,
-            a.Provenance.PresetId, a.Provenance.PresetVersion, a.ExecutionTarget, a.CompletionDelivery, a.NextOccurrenceAtUtc, a.OccurrenceCount,
+            a.Provenance.PresetId, a.Provenance.PresetVersion, executionTarget = new { a.ExecutionTarget.Kind, a.ExecutionTarget.SessionId, workflow = a.ExecutionTarget.Workflow is { } workflow ? new { workflow.WorkflowId, workflow.Version, workflow.GraphHash } : null }, a.CompletionDelivery, a.NextOccurrenceAtUtc, a.OccurrenceCount,
             triggerCount = a.Triggers.Count, nextTriggerCursor = args.AutomationId is null || a.Triggers.Count <= args.TriggerCursor + 2 ? (int?)null : args.TriggerCursor + 2,
             triggers = args.AutomationId is null ? null : a.Triggers.Skip(args.TriggerCursor).Take(2).Select(t => new { t.TriggerId, t.Revision, t.Enabled, kind = t.Configuration.Kind.ToString(),
                 schedule = t.Configuration is ScheduleTrigger s ? JsonSerializer.SerializeToElement(s.Schedule, s.Schedule.GetType()) : (JsonElement?)null,

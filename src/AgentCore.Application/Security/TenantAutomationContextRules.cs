@@ -12,7 +12,8 @@ public static class TenantAutomationContextRules
         "permission_denied" => "automation_context_permission_required",
         "automation_context_permission_required" or "space_unavailable" or "private_space_unavailable" or "space_membership_unavailable"
             or "environment_unavailable" or "environments_disabled" or "environment_selection_expired" or "environment_activation_required"
-            or "automation_context_mismatch" => code,
+            or "automation_context_mismatch" or "workflow_version_unavailable" or "workflow_destination_unavailable"
+            or "workflow_source_unavailable" or "workflow_review_required" or "workflow_bindings_unavailable" => code,
         _ => null
     };
     public static bool IsSuspension(Automation value) => value.Status == AutomationStatus.SuspendedPolicy

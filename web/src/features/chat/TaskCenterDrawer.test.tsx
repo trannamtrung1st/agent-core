@@ -140,7 +140,9 @@ describe('Task Center current private scope', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Discard changes' })).toBeVisible(), { timeout: 5000 });
     expect(screen.getByLabelText('Human guidance')).toHaveValue('Only for the first worker');
     fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
-    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Inspect task' })).toHaveLength(2));
+    // The guarded switch commits after the Modal close animation, not on its OK click.
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Discard changes' })).not.toBeInTheDocument(), { timeout: 5000 });
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Inspect task' })).toHaveLength(2), { timeout: 5000 });
     fireEvent.click(screen.getAllByRole('button', { name: 'Inspect task' })[1]);
     expect(await screen.findByText('Private second-task')).toBeVisible();
     expect(screen.getByLabelText('Human guidance')).toHaveValue('');

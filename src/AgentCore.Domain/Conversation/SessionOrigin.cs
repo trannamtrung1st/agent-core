@@ -26,7 +26,8 @@ public sealed record SessionOrigin
 
     public SessionOrigin(SessionOriginKind kind, Guid? originatingSessionId = null,
         Guid? originatingAgentRunId = null, Guid? initialBackgroundAgentRunId = null,
-        Guid? automationId = null, Guid? triggerOccurrenceId = null, bool reportCompletionToOrigin = false, string? initialTitle = null)
+        Guid? automationId = null, Guid? triggerOccurrenceId = null, bool reportCompletionToOrigin = false, string? initialTitle = null,
+        Guid? workflowExecutionId = null, Guid? workflowOperationId = null)
     {
         if (!Enum.IsDefined(kind) || kind == SessionOriginKind.Reserved1) throw new ArgumentException("Session origin kind is invalid.");
         AgentRunText.RequireOptionalId(originatingSessionId, "Originating Session");
@@ -34,6 +35,10 @@ public sealed record SessionOrigin
         AgentRunText.RequireOptionalId(initialBackgroundAgentRunId, "Initial background run");
         AgentRunText.RequireOptionalId(automationId, "Automation");
         AgentRunText.RequireOptionalId(triggerOccurrenceId, "Occurrence");
+        AgentRunText.RequireOptionalId(workflowExecutionId, "Workflow execution");
+        AgentRunText.RequireOptionalId(workflowOperationId, "Workflow operation");
+        if ((workflowExecutionId is null) != (workflowOperationId is null) || workflowExecutionId is not null && kind != SessionOriginKind.DelegatedTask)
+            throw new ArgumentException("Only a Workflow Task carries its exact process/operation source.");
         if (kind == SessionOriginKind.UserChat
             && (originatingSessionId is not null || originatingAgentRunId is not null
                 || initialBackgroundAgentRunId is not null || automationId is not null || triggerOccurrenceId is not null))
@@ -55,6 +60,8 @@ public sealed record SessionOrigin
         InitialBackgroundAgentRunId = initialBackgroundAgentRunId;
         AutomationId = automationId;
         TriggerOccurrenceId = triggerOccurrenceId;
+        WorkflowExecutionId = workflowExecutionId;
+        WorkflowOperationId = workflowOperationId;
         ReportCompletionToOrigin = reportCompletionToOrigin;
         InitialTitle = initialTitle is null ? null : AgentRunText.RequireUtf8(initialTitle.Trim(), 800, "Initial title");
     }
@@ -65,6 +72,10 @@ public sealed record SessionOrigin
     public Guid? InitialBackgroundAgentRunId { get; }
     public Guid? AutomationId { get; }
     public Guid? TriggerOccurrenceId { get; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? WorkflowExecutionId { get; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? WorkflowOperationId { get; }
     public bool ReportCompletionToOrigin { get; }
     public string? InitialTitle { get; }
     public SessionSurface InitialSurface => Kind == SessionOriginKind.UserChat ? SessionSurface.ChatList : SessionSurface.BackgroundWork;

@@ -22,7 +22,8 @@ public sealed record PreparedTaskDelegation(DelegatedTask Task, Guid? SourceGene
     {
         ArgumentNullException.ThrowIfNull(Task);
         Task.Source.Validate(); Task.Assignment.Validate();
-        if (Task.ContentRetiredAt is not null || Task.Request.RetiredFingerprint is not null || Task.Revision != 1 || Task.State is not (DelegatedTaskState.Queued or DelegatedTaskState.PendingDependencies)
+        if (Task.Source.ActorKind is not (TaskActorKind.Agent or TaskActorKind.Human)
+            || Task.ContentRetiredAt is not null || Task.Request.RetiredFingerprint is not null || Task.Revision != 1 || Task.State is not (DelegatedTaskState.Queued or DelegatedTaskState.PendingDependencies)
             || Task.CreatedAt != Task.UpdatedAt || Task.TerminalRunId is not null || Task.Result is not null || Task.Reason is not null || Task.CancellationRequested
             || Task.Assignment.Model is null || Task.Assignment.Budget is null
             || Task.Source.ActorKind == TaskActorKind.Agent && (SourceGeneration is null || SourceGeneration == Guid.Empty)

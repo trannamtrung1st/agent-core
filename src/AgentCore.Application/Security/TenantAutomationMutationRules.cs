@@ -63,6 +63,7 @@ public static class TenantAutomationMutationRules
     }
     public static (Guid? Target, Guid? Report) Destinations(AgentRun run, Automation? current, string arguments)
     {
+        if (current?.ExecutionTarget.Workflow is not null) throw new AccessDeniedException("automation_workflow_edit_in_designer");
         using var doc = JsonDocument.Parse(arguments); var root = doc.RootElement;
         var target = root.TryGetProperty("executionTarget", out var mode) ? mode.GetString() == "currentSession" ? run.SessionId : (Guid?)null : current?.ExecutionTarget.SessionId;
         var report = root.TryGetProperty("reportBack", out var back) ? back.GetBoolean() ? run.SessionId : (Guid?)null : target is not null ? null : current?.CompletionDelivery.SessionId;

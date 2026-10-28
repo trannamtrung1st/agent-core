@@ -34,7 +34,7 @@ public sealed partial class InMemoryIamStore
         {
             RequireTaskReader(tenant, actor, ct); var state = _tenants[tenant];
             var task = delegatedTasks.GetValueOrDefault((tenant, taskId)) ?? throw new AccessDeniedException("resource_unavailable");
-            if (sessionBacking.ReadTenantSession(tenant, task.Source.SessionId) is not { } source || AgentCore.Domain.Conversation.SessionRetention.IsDue(source.Snapshot, TaskNow) || !CanReadTask(state, actor, task, ct)) throw new AccessDeniedException("resource_unavailable");
+            if (!TaskSourceAvailable(task, ct, dispatch: false) || !CanReadTask(state, actor, task, ct)) throw new AccessDeniedException("resource_unavailable");
             return ValueTask.FromResult(new TaskPage<TaskNotification>(taskNotifications.TryGetValue((tenant, taskId), out var notification) ? [notification] : [], null, false, state.Tenant.Revision));
         }
     }
@@ -47,7 +47,7 @@ public sealed partial class InMemoryIamStore
             var task = delegatedTasks[(command.TenantId, command.TaskId)];
             if (command.Actor.Agent is { } frame && frame.SessionId != task.Source.SessionId) throw new AccessDeniedException("resource_unavailable");
             if (command.Actor.Human is not null) TaskAuthority.RequireAsync(_tenants[command.TenantId], command.Actor.PrincipalId, "sessions.manage",
-                TenantSessionRules.Scope(command.TenantId, task.Source.SessionId), new(this), ct).AsTask().GetAwaiter().GetResult();
+                TenantSessionRules.Scope(command.TenantId, task.Source.RequireSessionId()), new(this), ct).AsTask().GetAwaiter().GetResult();
             var key = (command.TenantId, command.NotificationId, command.Actor.PrincipalId, TaskLimits.Key(command.RequestKey));
             var hash = TaskLimits.Hash(new { command.TaskId, command.NotificationId, command.ExpectedRevision });
             if (taskAcks.TryGetValue(key, out var replay))
@@ -71,7 +71,7 @@ public sealed partial class InMemoryIamStore
             if (taskId is { } task)
             {
                 if (threadId is not null || delegatedTasks.GetValueOrDefault((tenant, task)) is not { } saved
-                    || sessionBacking.ReadTenantSession(tenant, saved.Source.SessionId) is null
+                    || !TaskSourceAvailable(saved, ct, dispatch: false)
                     || !CanReadTask(_tenants[tenant], actor, saved, ct)) throw new AccessDeniedException("resource_unavailable");
                 threadId = agentThreads.Values.SingleOrDefault(t => t.TenantId == tenant && t.TaskId == task)?.ThreadId;
                 if (threadId is null) return ValueTask.FromResult(new TaskPage<AgentMessage>([], null, false, _tenants[tenant].Tenant.Revision));

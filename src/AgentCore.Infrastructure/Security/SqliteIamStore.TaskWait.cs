@@ -17,7 +17,7 @@ public sealed partial class SqliteIamStore
         {
             var row = await db.Set<DelegatedTaskRow>().AsNoTracking().SingleOrDefaultAsync(t => t.TenantId == tenant && t.TaskId == witness.TaskId, ct);
             var task = row is null ? null : TaskPersistence.Value(row);
-            var source = task is null ? null : await ReadSandboxSession(db, tenant, task.Source.SessionId, ct);
+            var source = task is null ? null : await ReadSandboxSession(db, tenant, task.Source.RequireSessionId(), ct);
             var available = state is not null && task is not null && source is not null && !SessionRetention.IsDue(source.Snapshot, TaskNow)
                 && (task.Source.SessionId == run.SessionId || task.WorkerSessionId == run.SessionId)
                 && await CanReadTaskAsync(db, state, actor, task, ct);

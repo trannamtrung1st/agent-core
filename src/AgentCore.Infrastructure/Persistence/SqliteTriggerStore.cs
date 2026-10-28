@@ -1082,6 +1082,7 @@ internal static class TriggerStoreMapping
     {
         ExecutionTargetKind = (int)registration.ExecutionTarget.Kind,
         TargetSessionId = registration.ExecutionTarget.SessionId?.ToString("D"),
+        WorkflowTargetJson = registration.ExecutionTarget.Workflow is { } workflow ? JsonSerializer.Serialize(workflow) : null,
         ReportToSessionId = registration.CompletionDelivery.SessionId?.ToString("D"),
         AutomationId = registration.AutomationId.ToString("D"),
         AgentInstanceId = registration.Owner.AgentInstanceId.ToString("D"),
@@ -1128,7 +1129,7 @@ internal static class TriggerStoreMapping
         row.SuspensionReason,
         row.ModelPreferenceJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Models.ModelPreference>(row.ModelPreferenceJson),
         row.RequiresVision,
-        row.Name, new((AutomationExecutionTargetKind)row.ExecutionTargetKind, ParseOptional(row.TargetSessionId)),
+        row.Name, new((AutomationExecutionTargetKind)row.ExecutionTargetKind, ParseOptional(row.TargetSessionId), row.WorkflowTargetJson is null ? null : JsonSerializer.Deserialize<AutomationWorkflowStart>(row.WorkflowTargetJson)),
         new(ParseOptional(row.ReportToSessionId)), row.RequiresTools, row.PinnedSpaceId, row.PinnedEnvironmentId);
 
     public static AutomationTriggerRecordEntity ToChild(Guid parentId, AutomationTriggerRecord t) => new()
@@ -1154,6 +1155,7 @@ internal static class TriggerStoreMapping
     {
         ExecutionTargetKind = (int)occurrence.ExecutionTarget.Kind,
         TargetSessionId = occurrence.ExecutionTarget.SessionId?.ToString("D"),
+        WorkflowTargetJson = occurrence.ExecutionTarget.Workflow is { } workflow ? JsonSerializer.Serialize(workflow) : null,
         ReportToSessionId = occurrence.CompletionDelivery.SessionId?.ToString("D"),
         TriggerId = occurrence.TriggerId?.ToString("D"),
         PinnedSpaceId = occurrence.PinnedSpaceId, PinnedEnvironmentId = occurrence.PinnedEnvironmentId,
@@ -1177,6 +1179,7 @@ internal static class TriggerStoreMapping
         ClaimLeaseExpiresAtUtc = occurrence.ClaimLeaseExpiresAtUtc?.ToUnixTimeMilliseconds(),
         ExecutionSessionId = occurrence.ExecutionSessionId?.ToString("D"),
         AcceptedAgentRunId = occurrence.AcceptedAgentRunId?.ToString("D"),
+        AcceptedWorkflowExecutionId = occurrence.AcceptedWorkflowExecutionId, WorkflowInitiatorPrincipalId = occurrence.WorkflowInitiatorPrincipalId,
         LiveSessionId = occurrence.LiveSessionId?.ToString("D"),
         LiveEvaluationCompletedAtUtc = occurrence.LiveEvaluationCompletedAtUtc?.ToUnixTimeMilliseconds(),
         ModelOfferingId = occurrence.ModelPin?.OfferingId,
@@ -1198,6 +1201,7 @@ internal static class TriggerStoreMapping
         row.ClaimLeaseExpiresAtUtc = next.ClaimLeaseExpiresAtUtc?.ToUnixTimeMilliseconds();
         row.ExecutionSessionId = next.ExecutionSessionId?.ToString("D");
         row.AcceptedAgentRunId = next.AcceptedAgentRunId?.ToString("D");
+        row.AcceptedWorkflowExecutionId = next.AcceptedWorkflowExecutionId; row.WorkflowInitiatorPrincipalId = next.WorkflowInitiatorPrincipalId;
         row.LiveSessionId = next.LiveSessionId?.ToString("D");
         row.LiveEvaluationCompletedAtUtc = next.LiveEvaluationCompletedAtUtc?.ToUnixTimeMilliseconds();
     }
@@ -1221,7 +1225,7 @@ internal static class TriggerStoreMapping
         ParseOptional(row.ClaimId),
         FromUnix(row.ClaimLeaseExpiresAtUtc),
         ReadModelPin(row), ParseOptional(row.ExecutionSessionId), ParseOptional(row.AcceptedAgentRunId), ParseOptional(row.LiveSessionId), FromUnix(row.LiveEvaluationCompletedAtUtc),
-        new((AutomationExecutionTargetKind)row.ExecutionTargetKind, ParseOptional(row.TargetSessionId)), new(ParseOptional(row.ReportToSessionId)), triggerId: ParseOptional(row.TriggerId), pinnedSpaceId: row.PinnedSpaceId, pinnedEnvironmentId: row.PinnedEnvironmentId);
+        new((AutomationExecutionTargetKind)row.ExecutionTargetKind, ParseOptional(row.TargetSessionId), row.WorkflowTargetJson is null ? null : JsonSerializer.Deserialize<AutomationWorkflowStart>(row.WorkflowTargetJson)), new(ParseOptional(row.ReportToSessionId)), triggerId: ParseOptional(row.TriggerId), pinnedSpaceId: row.PinnedSpaceId, pinnedEnvironmentId: row.PinnedEnvironmentId, acceptedWorkflowExecutionId: row.AcceptedWorkflowExecutionId, workflowInitiatorPrincipalId: row.WorkflowInitiatorPrincipalId);
 
     private static ExecutionModelPin? ReadModelPin(TriggerOccurrenceRecord row)
     {

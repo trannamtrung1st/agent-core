@@ -291,7 +291,7 @@ public static class ToolRegistry
                 ToolEffect.Write)
         };
 
-    private static readonly IReadOnlyDictionary<string, ToolDescriptor> Contextual = HarnessChatTools.Descriptors().Concat(TenantTaskToolContract.Descriptors()).Concat(GoalToolContract.Descriptors()).Concat(TenantContextToolContract.Descriptors()).Concat(InstanceSkillTools.Descriptors()).Concat(ConfigurationTools.Descriptors()).ToDictionary(d => d.Name, StringComparer.Ordinal);
+    private static readonly IReadOnlyDictionary<string, ToolDescriptor> Contextual = HarnessChatTools.Descriptors().Concat(WorkflowToolContract.Descriptors()).Concat(TenantTaskToolContract.Descriptors()).Concat(GoalToolContract.Descriptors()).Concat(TenantContextToolContract.Descriptors()).Concat(InstanceSkillTools.Descriptors()).Concat(ConfigurationTools.Descriptors()).ToDictionary(d => d.Name, StringComparer.Ordinal);
     public static IEnumerable<ToolDescriptor> All => Registered.Values.Concat(Contextual.Values).Concat(BrowserToolCatalog.Tools.Values.Select(t => t.Descriptor));
 
     public static IEnumerable<ToolDescriptor> DefinitionAuthorizable => All.Where(d => d.DefinitionAuthorizable);

@@ -2987,3 +2987,21 @@ body,
 
 .access-collection-filters { display: flex; flex-direction: column; gap: var(--ac-space-default); }
 .access-collection-filters .ant-form-item { flex: 1 1 12rem; min-inline-size: 0; margin-block-end: 0; }
+
+/* Formal process composition; Ant Design tokens own controls and content insets. */
+.workflow-designer { min-width: 0; display: grid; grid-template-columns: 220px minmax(0, 1fr) 320px; gap: var(--ac-space-section); align-items: start; }
+.workflow-designer > * { min-width: 0; }
+.workflow-palette, .workflow-properties { display: flex; flex-direction: column; gap: var(--ac-space-section); }
+.workflow-diagram { height: min(65vh, 640px); min-height: 360px; overflow: hidden; border: 1px solid var(--ac-color-border); border-radius: var(--ac-radius-surface); }
+.workflow-diagram-step { width: 224px; padding: var(--ac-space-default); border: 1px solid var(--ac-color-border-strong); border-radius: var(--ac-radius-control); background: var(--ac-color-container); color: var(--ac-color-text); }
+.workflow-diagram-step-selected { border-color: var(--ac-color-primary); outline: 2px solid var(--ac-color-primary-bg); }
+.workflow-diagram-step .ant-typography { overflow-wrap: anywhere; }
+.workflow-diagram .react-flow__controls { box-shadow: none; border: 1px solid var(--ac-color-border); border-radius: var(--ac-radius-control); overflow: hidden; }
+.workflow-outline { display: flex; flex-direction: column; gap: var(--ac-space-compact); padding: 0; margin: 0; list-style: none; }
+.workflow-outline .ant-btn { height: auto; min-height: 40px; white-space: normal; text-align: start; width: 100%; justify-content: start; }
+.workflow-outline-label { display: flex; flex-direction: column; gap: var(--ac-space-tight); align-items: start; min-width: 0; overflow-wrap: anywhere; }
+.workflow-action-header { padding-block: var(--ac-space-default); background: var(--ac-color-layout); }
+.workflow-reading { max-width: 72ch; }
+@media (max-width: 1279px) { .workflow-designer { grid-template-columns: 200px minmax(0, 1fr); } .workflow-properties { grid-column: 1 / -1; } }
+@media (max-width: 767px) { .workflow-designer { display: flex; flex-direction: column; } .workflow-designer > * { width: 100%; } .workflow-diagram { height: 360px; } .workflow-action-header { position: static; } }
+@media (prefers-reduced-motion: reduce) { .workflow-diagram *, .workflow-diagram *::before, .workflow-diagram *::after { animation: none !important; transition: none !important; } }

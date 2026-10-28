@@ -17,5 +17,6 @@ public sealed partial class InMemoryIamStore
             if (!ReferenceEquals(run, minimized)) sessionBacking.SaveRetainedTenantOperationRun(minimized, run.Revision);
         }
         RetireTaskContent(tenant, at);
+        RetireWorkflowContent(tenant, at);
     }
 }

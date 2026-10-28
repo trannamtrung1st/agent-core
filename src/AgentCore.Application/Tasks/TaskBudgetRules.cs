@@ -30,10 +30,10 @@ public static class TaskBudgetRules
         // use that same small profile; completing a worker cannot reset root credit.
         return (Math.Min(reserved.MaxSteps, steps) + reserved.ReportMaxSteps, Math.Min(reserved.DurationSeconds, seconds) + reserved.ReportDurationSeconds);
     }
-    public static TaskExecutionAllowance Allowance(AgentRun source, IReadOnlyList<DelegatedTask> all, Func<Guid, AgentRun?> runs)
+    public static TaskExecutionAllowance Allowance(AgentRun source, IReadOnlyList<DelegatedTask> all, Func<Guid, AgentRun?> runs, TaskExecutionAllowance? workflowCharge = null)
     {
         var profile = source.Admission.ExecutionBudget?.Profile ?? throw new AccessDeniedException("task_budget_unavailable");
-        var steps = profile.MaxSteps; var seconds = profile.DurationSeconds;
+        var steps = profile.MaxSteps - (workflowCharge?.MaxSteps ?? 0); var seconds = profile.DurationSeconds - (workflowCharge?.DurationSeconds ?? 0);
         foreach (var child in all.Where(t => t.Source.SessionId == source.SessionId && t.Source.RootActivationId == source.Admission.Activation.RootActivationId
             && t.Source.ActorKind == TaskActorKind.Agent))
         {
@@ -41,7 +41,7 @@ public static class TaskBudgetRules
         }
         return new(Math.Max(0, steps), Math.Max(0, seconds));
     }
-    public static TaskBudgetReservation Allocate(AgentRun? source, ExecutionBudgetProfile worker, IReadOnlyList<DelegatedTask> all, Func<Guid, AgentRun?> runs, DateTimeOffset at, Guid? logicalSourceRunId = null, bool reportOnCompletion = false)
+    public static TaskBudgetReservation Allocate(AgentRun? source, ExecutionBudgetProfile worker, IReadOnlyList<DelegatedTask> all, Func<Guid, AgentRun?> runs, DateTimeOffset at, Guid? logicalSourceRunId = null, bool reportOnCompletion = false, TaskExecutionAllowance? workflowCharge = null)
     {
         worker.Validate();
         var reportSteps = reportOnCompletion ? 8 : 0; var reportSeconds = reportOnCompletion ? 60 : 0;
@@ -52,7 +52,7 @@ public static class TaskBudgetRules
             if (human.MaxSteps < 8 || human.DurationSeconds < 60) throw new AccessDeniedException("task_root_budget_exhausted");
             human.Validate(); return human;
         }
-        var allowance = Allowance(source, all, runs); var own = source.Admission.ExecutionBudget!.Profile;
+        var allowance = Allowance(source, all, runs, workflowCharge); var own = source.Admission.ExecutionBudget!.Profile;
         var parentTask = source.Admission.DelegatedTask is { } work ? all.SingleOrDefault(t => t.TaskId == work.TaskId) : null;
         if (source.Admission.DelegatedTask is not null && parentTask is null) throw new AccessDeniedException("task_budget_unavailable");
         var rootSteps = parentTask?.Assignment.Budget?.RootMaxSteps ?? own.MaxSteps;

@@ -125,7 +125,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
                 var taskRow = await db.Set<DelegatedTaskRow>().AsNoTracking().SingleOrDefaultAsync(t => t.TenantId == owner.TenantId && t.TaskId == taskWork.TaskId, ct);
                 var task = taskRow is null ? null : TaskPersistence.Value(taskRow);
                 if (task is null || task.DeadlineAt <= TaskNow || task.CancellationRequested || AgentCore.Domain.Tasks.TaskLimits.Terminal(task.State)
-                    || await ReadSandboxSession(db, owner.TenantId!.Value, task.Source.SessionId, ct) is null)
+                    || !await TaskSourceAvailable(db, task, ct))
                 {
                     var stopped = TenantRunCancellationRules.Cancel(run, TaskNow); AgentRunStoreMapping.Apply(row, stopped);
                     await SaveTaskChanges(db, ct); await tx.CommitAsync(ct); return stopped;

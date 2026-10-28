@@ -14,10 +14,19 @@ using AgentCore.Application.Triggers;
 using AgentCore.Contracts.Http;
 using AgentCore.Infrastructure;
 using AgentCore.Infrastructure.Browser;
+using AgentCore.Infrastructure.Workflows;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.SignalR;
+
+if (args.Length > 0 && args[0] == "migrate-workflows")
+{
+    if (args.Length != 3) throw new ArgumentException("Usage: migrate-workflows <database-path> <new-backup-path>");
+    await FormalWorkflowCutover.MigrateAsync(args[1], args[2]);
+    Console.WriteLine("Formal Workflow schemas validated. Backup: " + Path.GetFullPath(args[2]));
+    return;
+}
 
 if (args.Length > 0 && args[0] == "migrate-evaluations")
 {
@@ -194,6 +203,7 @@ TenantWebhookIngressEndpoints.Map(app);
 TenantSessionEndpoints.Map(app);
 TenantSessionGoalEndpoints.Map(app);
 TenantTaskEndpoints.Map(app);
+TenantWorkflowEndpoints.Map(app);
 TenantSessionContextEndpoints.Map(app);
 TenantActivityEndpoints.Map(app);
 TenantOperationPolicyEndpoints.Map(app);
@@ -316,6 +326,7 @@ static async Task InitializePersistenceAsync(IServiceProvider services)
 
     if (!string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
     {
+        await services.InitializeFormalWorkflowRuntimeAsync(freshDatabase: false);
         return;
     }
 
@@ -339,10 +350,15 @@ static async Task InitializePersistenceAsync(IServiceProvider services)
     }
 
     var store = services.GetRequiredService<IMemoryStore>();
+    var freshDatabase = false;
     if (store is SqliteMemoryStore sqlite)
     {
+        await using var db = await services.GetRequiredService<Microsoft.EntityFrameworkCore.IDbContextFactory<AgentCoreDbContext>>().CreateDbContextAsync();
+        freshDatabase = !(await Microsoft.EntityFrameworkCore.RelationalDatabaseFacadeExtensions.GetAppliedMigrationsAsync(db.Database)).Any();
         await sqlite.EnsureCreatedAsync().ConfigureAwait(false);
     }
+
+    await services.InitializeFormalWorkflowRuntimeAsync(freshDatabase);
 
     await store.RecoverCrashedSessionsAsync().ConfigureAwait(false);
 }

@@ -13,7 +13,7 @@ public sealed partial class InMemoryIamStore
     {
         var task = delegatedTasks.GetValueOrDefault((tenant, taskId)) ?? throw new AccessDeniedException("task_report_unavailable");
         var notice = taskNotifications.GetValueOrDefault((tenant, taskId)) ?? throw new AccessDeniedException("task_report_unavailable");
-        return new(task, notice, sessionBacking.ReadTenantSession(tenant, task.Source.SessionId),
+        return new(task, notice, sessionBacking.ReadTenantSession(tenant, task.Source.RequireSessionId()),
             task.TerminalRunId is { } run ? sessionBacking.ReadTenantRun(tenant, run) : null);
     }
     private void RequireTaskReport(TaskReportSource source, CancellationToken ct)

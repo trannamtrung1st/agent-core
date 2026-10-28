@@ -7,7 +7,8 @@ namespace AgentCore.Application.Ports;
 public sealed record TenantAutomationPage(IReadOnlyList<Automation> Items, int Total, int Page, int PageSize);
 public sealed record TenantAutomationAdmission(Automation Current, Automation Next, TriggerOccurrence Occurrence,
     TenantSessionRoot SessionOwner, SessionSnapshot Session, AgentRun Run, long ExpectedInstanceRevision, string ConfigurationHash, PreparedEventAdmissionSource? EventSource = null, long? ExpectedSessionRevision = null);
-public sealed record TenantAutomationAdmissionResult(bool Created, TriggerOccurrence Occurrence, Guid? SessionId, Guid? RunId, Guid? ApprovalRequestId = null);
+public sealed record TenantAutomationAdmissionResult(bool Created, TriggerOccurrence Occurrence, Guid? SessionId, Guid? RunId, Guid? ApprovalRequestId = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid? WorkflowExecutionId = null);
 
 // Facet of the existing IAM, Automation/occurrence and Session/Run transaction.
 // No caller may turn the legacy global-profile API into a tenant authority path.

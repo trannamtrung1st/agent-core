@@ -53,7 +53,7 @@ public static partial class TenantTaskConsentRules
     public static IEnumerable<(string Permission, AccessScope Scope)> Targets(PreparedTenantOperation operation)
     {
         var task = operation.TaskDelegation?.Task ?? throw new AccessDeniedException("task_review_unavailable");
-        yield return ("tasks.delegate", TenantSessionRules.Scope(task.Source.TenantId, task.Source.SessionId));
+        yield return ("tasks.delegate", TenantSessionRules.Scope(task.Source.TenantId, task.Source.RequireSessionId()));
         yield return ("sessions.create", AccessScope.ForTenant(task.Source.TenantId));
         yield return ("agent-runs.create", AccessScope.ForTenant(task.Source.TenantId));
     }
@@ -70,7 +70,7 @@ public static partial class TenantTaskConsentRules
         await TaskAuthority.RequireAsync(state, human, "models.read", AccessScope.ForTenant(request.TenantId), iam, ct);
         foreach (var id in new[] { task.Source.InstanceId, task.Assignment.InstanceId }.Distinct())
             await TaskAuthority.RequireAsync(state, human, "agents.read", AccessScope.ForResource(request.TenantId, "agent", id.ToString("D")), iam, ct);
-        await TaskAuthority.RequireAsync(state, human, "sessions.read", TenantSessionRules.Scope(request.TenantId, task.Source.SessionId), iam, ct);
+        await TaskAuthority.RequireAsync(state, human, "sessions.read", TenantSessionRules.Scope(request.TenantId, task.Source.RequireSessionId()), iam, ct);
         await TaskAuthority.RequireAsync(state, human, "spaces.read", TenantSpaceService.Scope(request.TenantId, task.Assignment.SpaceId), iam, ct);
         if (task.Assignment.EnvironmentId is not null)
             await TaskAuthority.RequireAsync(state, human, "environments.read", TenantSpaceService.Scope(request.TenantId, task.Assignment.SpaceId), iam, ct);

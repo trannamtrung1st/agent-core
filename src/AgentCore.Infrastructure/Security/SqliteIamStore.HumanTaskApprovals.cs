@@ -16,7 +16,7 @@ public sealed partial class SqliteIamStore : ITenantHumanTaskApprovalStore
     {
         TenantTaskConsentRules.RequireHumanShape(request); var task = request.Operation.TaskDelegation!.Task;
         var state = await ReadTenantAsync(db, request.TenantId, ct) ?? throw new AccessDeniedException("tenant_unavailable");
-        var source = await ReadSandboxSession(db, request.TenantId, task.Source.SessionId, ct) ?? throw new AccessDeniedException("task_source_unavailable");
+        var source = await ReadSandboxSession(db, request.TenantId, task.Source.RequireSessionId(), ct) ?? throw new AccessDeniedException("task_source_unavailable");
         var agentRow = await OwnedAgents(db, request.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == task.Source.InstanceId.ToString("D"), ct)
             ?? throw new AccessDeniedException("task_source_unavailable");
         await TenantTaskConsentRules.RequireHumanSourceAsync(request, source, Owned(agentRow), state, new(this), TaskNow, ct);
@@ -40,7 +40,7 @@ public sealed partial class SqliteIamStore : ITenantHumanTaskApprovalStore
         foreach (var id in task.Request.DependsOnTaskIds.Concat(task.Request.RetryOfTaskId is { } retry ? new[] { retry } : []))
         {
             var dependency = all.SingleOrDefault(t => t.TaskId == id);
-            if (dependency is null || !await OwnedSessions(db, request.TenantId).AnyAsync(s => s.SessionId == dependency.Source.SessionId.ToString("D"), ct)
+            if (dependency is null || !await OwnedSessions(db, request.TenantId).AnyAsync(s => s.SessionId == dependency.Source.RequireSessionId().ToString("D"), ct)
                 || !await TaskAuthority.CanReadHumanCommandAsync(state, task.Source.PrincipalId, dependency, new(this), ct))
                 throw new AccessDeniedException("task_dependency_unavailable");
         }

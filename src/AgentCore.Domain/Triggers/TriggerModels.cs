@@ -631,6 +631,9 @@ public sealed class Automation
         ModelPreference = modelPreference;
         RequiresVision = requiresVision;
         ExecutionTarget = executionTarget ?? AutomationExecutionTarget.Background;
+        if (ExecutionTarget.Kind == AutomationExecutionTargetKind.StartWorkflow && (owner.TenantId is null || modelPreference is not null
+            || requiresTools || requiresVision || pinnedSpaceId is not null || pinnedEnvironmentId is not null))
+            throw new ArgumentException("A Workflow destination obtains worker models and context from its published graph.");
         CompletionDelivery = completionDelivery ?? AutomationCompletionDelivery.None;
         CompletionDelivery.ValidateFor(ExecutionTarget);
 
@@ -818,7 +821,8 @@ public sealed class TriggerOccurrence
         Guid? liveSessionId = null,
         DateTimeOffset? liveEvaluationCompletedAtUtc = null,
         AutomationExecutionTarget? executionTarget = null, AutomationCompletionDelivery? completionDelivery = null, Guid? triggerId = null,
-        Guid? pinnedSpaceId = null, Guid? pinnedEnvironmentId = null)
+        Guid? pinnedSpaceId = null, Guid? pinnedEnvironmentId = null,
+        Guid? acceptedWorkflowExecutionId = null, Guid? workflowInitiatorPrincipalId = null)
     {
         AutomationContextPins.Validate(owner, pinnedSpaceId, pinnedEnvironmentId);
         PinnedSpaceId = pinnedSpaceId; PinnedEnvironmentId = pinnedEnvironmentId;
@@ -852,6 +856,16 @@ public sealed class TriggerOccurrence
         RequireOptionalId(claimId, "Claim");
         RequireOptionalId(executionSessionId, "Execution Session");
         RequireOptionalId(acceptedAgentRunId, "Accepted AgentRun");
+        RequireOptionalId(acceptedWorkflowExecutionId, "Accepted Workflow");
+        RequireOptionalId(workflowInitiatorPrincipalId, "Workflow initiator");
+        var workflowTarget = executionTarget?.Kind == AutomationExecutionTargetKind.StartWorkflow;
+        if (workflowTarget && (owner.TenantId is null || automationId is null || modelPin is not null || executionSessionId is not null
+            || acceptedAgentRunId is not null || liveSessionId is not null || pinnedSpaceId is not null || pinnedEnvironmentId is not null)
+            || !workflowTarget && (acceptedWorkflowExecutionId is not null || workflowInitiatorPrincipalId is not null)
+            || workflowInitiatorPrincipalId is not null && sourceKind != TriggerSourceKind.ManualInvocation
+            || acceptedWorkflowExecutionId is not null && disposition != OccurrenceRoutingDisposition.AcceptedDurable)
+            throw new ArgumentException("Workflow occurrences have their own honest admission link.");
+        AcceptedWorkflowExecutionId = acceptedWorkflowExecutionId; WorkflowInitiatorPrincipalId = workflowInitiatorPrincipalId;
         RequireOptionalId(liveSessionId, "Live Session");
         RequireUtc(liveEvaluationCompletedAtUtc, "Live evaluation completion");
         if (executionSessionId is not null && (acceptedAgentRunId is null || liveSessionId is not null)
@@ -859,7 +873,7 @@ public sealed class TriggerOccurrence
             throw new ArgumentException("An occurrence must have exactly one complete execution admission link.");
         if (disposition == OccurrenceRoutingDisposition.AcceptedDurable)
         {
-            if (executionSessionId is null || acceptedAgentRunId is null)
+            if (workflowTarget ? acceptedWorkflowExecutionId is null : executionSessionId is null || acceptedAgentRunId is null)
             {
                 throw new ArgumentException("Accepted background work requires its Session and AgentRun.", nameof(acceptedAgentRunId));
             }
@@ -958,6 +972,10 @@ public sealed class TriggerOccurrence
 
     public ExecutionModelPin? ModelPin { get; }
 
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? AcceptedWorkflowExecutionId { get; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? WorkflowInitiatorPrincipalId { get; }
     public Guid? ExecutionSessionId { get; }
     public Guid? AcceptedAgentRunId { get; }
     public Guid? LiveSessionId { get; }
@@ -970,7 +988,24 @@ public sealed class TriggerOccurrence
         return new(OccurrenceId, DedupeKey, AutomationId, Owner, SourceKind, ScheduledAtUtc, ObservedAtUtc, AdmittedAtUtc,
             evidence, SourceEventId, TriggerRevision, Disposition, DispositionReason, RoutingRevision, RoutingUpdatedAtUtc,
             ClaimId, ClaimLeaseExpiresAtUtc, ModelPin, ExecutionSessionId, AcceptedAgentRunId, LiveSessionId, LiveEvaluationCompletedAtUtc,
-            ExecutionTarget, CompletionDelivery, TriggerId, PinnedSpaceId, PinnedEnvironmentId);
+            ExecutionTarget, CompletionDelivery, TriggerId, PinnedSpaceId, PinnedEnvironmentId, AcceptedWorkflowExecutionId, WorkflowInitiatorPrincipalId);
+    }
+
+    public TriggerOccurrence WithWorkflowInitiator(Guid? principal)
+    {
+        if (ExecutionTarget.Kind != AutomationExecutionTargetKind.StartWorkflow || Disposition != OccurrenceRoutingDisposition.Pending || RoutingRevision != 0
+            || (SourceKind == TriggerSourceKind.ManualInvocation) != (principal is not null)) throw new ArgumentException("Use the actual manual invoker only.");
+        return new(OccurrenceId, DedupeKey, AutomationId, Owner, SourceKind, ScheduledAtUtc, ObservedAtUtc, AdmittedAtUtc,
+            EvidenceJson, SourceEventId, TriggerRevision, Disposition, DispositionReason, RoutingRevision, RoutingUpdatedAtUtc, ClaimId, ClaimLeaseExpiresAtUtc,
+            executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId, workflowInitiatorPrincipalId: principal);
+    }
+    public TriggerOccurrence WithWorkflowAcceptance(Guid executionId, DateTimeOffset at)
+    {
+        if (ExecutionTarget.Kind != AutomationExecutionTargetKind.StartWorkflow || Disposition != OccurrenceRoutingDisposition.Pending || RoutingRevision != 0)
+            throw new ArgumentException("Only the original owned pending occurrence can accept a Workflow.");
+        return new(OccurrenceId, DedupeKey, AutomationId, Owner, SourceKind, ScheduledAtUtc, ObservedAtUtc, AdmittedAtUtc, EvidenceJson, SourceEventId, TriggerRevision,
+            OccurrenceRoutingDisposition.AcceptedDurable, null, 1, at, null, null, executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId,
+            acceptedWorkflowExecutionId: executionId, workflowInitiatorPrincipalId: WorkflowInitiatorPrincipalId);
     }
 
     public TriggerOccurrence WithModelPin(ExecutionModelPin pin) =>
@@ -1019,17 +1054,17 @@ public sealed class TriggerOccurrence
             RoutingRevision + 1, atUtc, disposition == OccurrenceRoutingDisposition.LivePrepared ? ClaimId : null,
             disposition == OccurrenceRoutingDisposition.LivePrepared ? ClaimLeaseExpiresAtUtc : null,
             modelPin: ModelPin, acceptedAgentRunId: runId, liveSessionId: sessionId,
-            liveEvaluationCompletedAtUtc: completedAt, executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId, pinnedSpaceId: PinnedSpaceId, pinnedEnvironmentId: PinnedEnvironmentId);
+            liveEvaluationCompletedAtUtc: completedAt, executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId, pinnedSpaceId: PinnedSpaceId, pinnedEnvironmentId: PinnedEnvironmentId, acceptedWorkflowExecutionId: AcceptedWorkflowExecutionId, workflowInitiatorPrincipalId: WorkflowInitiatorPrincipalId);
 
     public TriggerOccurrence WithExecutionAcceptance(Guid sessionId, Guid agentRunId, long expectedRevision,
         DateTimeOffset acceptedAtUtc)
     {
-        if (Disposition != OccurrenceRoutingDisposition.AwaitingDurableWork || RoutingRevision != expectedRevision)
+        if (ExecutionTarget.Kind == AutomationExecutionTargetKind.StartWorkflow || Disposition != OccurrenceRoutingDisposition.AwaitingDurableWork || RoutingRevision != expectedRevision)
             throw new ArgumentException("Occurrence admission requires its current awaiting routing revision.");
         return new TriggerOccurrence(OccurrenceId, DedupeKey, AutomationId, Owner, SourceKind, ScheduledAtUtc,
             ObservedAtUtc, AdmittedAtUtc, EvidenceJson, SourceEventId, TriggerRevision,
             OccurrenceRoutingDisposition.AcceptedDurable, null, RoutingRevision + 1, acceptedAtUtc, null, null,
-            ModelPin, sessionId, agentRunId, executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId, pinnedSpaceId: PinnedSpaceId, pinnedEnvironmentId: PinnedEnvironmentId);
+            ModelPin, sessionId, agentRunId, executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId, pinnedSpaceId: PinnedSpaceId, pinnedEnvironmentId: PinnedEnvironmentId, acceptedWorkflowExecutionId: AcceptedWorkflowExecutionId, workflowInitiatorPrincipalId: WorkflowInitiatorPrincipalId);
     }
 
     public TriggerOccurrence WithRouting(
@@ -1061,7 +1096,7 @@ public sealed class TriggerOccurrence
             acceptedAgentRunId: disposition == OccurrenceRoutingDisposition.AcceptedLive ? AcceptedAgentRunId : null,
             liveSessionId: disposition == OccurrenceRoutingDisposition.AcceptedLive ? LiveSessionId : null,
             liveEvaluationCompletedAtUtc: disposition == OccurrenceRoutingDisposition.AcceptedLive ? LiveEvaluationCompletedAtUtc : null,
-            executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId, pinnedSpaceId: PinnedSpaceId, pinnedEnvironmentId: PinnedEnvironmentId);
+            executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId, pinnedSpaceId: PinnedSpaceId, pinnedEnvironmentId: PinnedEnvironmentId, acceptedWorkflowExecutionId: AcceptedWorkflowExecutionId, workflowInitiatorPrincipalId: WorkflowInitiatorPrincipalId);
 
     private static void RequireUtc(DateTimeOffset value, string name)
     {

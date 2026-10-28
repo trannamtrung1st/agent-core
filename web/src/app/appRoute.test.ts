@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { canonicalAppUrl, lastChatUrl, parseAppRoute, rememberChatUrl } from './appRoute';
+import { approveAppNavigation, registerNavigationGuard, canonicalAppUrl, lastChatUrl, parseAppRoute, rememberChatUrl } from './appRoute';
 const tenant = '019944af-00d1-7000-8000-000000000001';
 const session = '22222222-2222-2222-2222-222222222222';
 beforeEach(() => { sessionStorage.clear(); window.history.replaceState(null, '', '/'); });
@@ -30,5 +30,20 @@ describe('authenticated app entry routes', () => {
     expect(lastChatUrl()).toBe(`/t/${tenant}/c/${session}?source=activity#saved`);
     window.history.replaceState(null, '', `/t/${session}`);
     expect(lastChatUrl()).toBe(`/t/${session}/c/${tenant}`);
+  });
+});
+
+describe('nested editing navigation guards', () => {
+  it('restores an outer draft guard when its evidence drawer closes', async () => {
+    const outer = registerNavigationGuard(() => false); const inner = registerNavigationGuard(() => true);
+    try { expect(await approveAppNavigation('/other')).toBe(false); inner(); expect(await approveAppNavigation('/other')).toBe(false); }
+    finally { inner(); outer(); }
+    expect(await approveAppNavigation('/other')).toBe(true);
+  });
+  it('checks the active drawer first and does not discard an outer draft after refusal', async () => {
+    const called: string[] = [];
+    const outer = registerNavigationGuard(() => { called.push('outer'); return true; });
+    const inner = registerNavigationGuard(async () => { called.push('inner'); return false; });
+    try { expect(await approveAppNavigation('/other')).toBe(false); expect(called).toEqual(['inner']); } finally { outer(); inner(); }
   });
 });

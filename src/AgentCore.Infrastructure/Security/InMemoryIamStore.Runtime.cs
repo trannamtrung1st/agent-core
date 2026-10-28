@@ -53,7 +53,7 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
                 {
                     var task = delegatedTasks.GetValueOrDefault((owner.TenantId!.Value, taskWork.TaskId));
                     if (task is null || task.DeadlineAt <= TaskNow || task.CancellationRequested || AgentCore.Domain.Tasks.TaskLimits.Terminal(task.State)
-                        || sessionBacking.ReadTenantSession(owner.TenantId.Value, task.Source.SessionId) is null)
+                        || !TaskSourceAvailable(task, ct))
                     {
                         var stopped = TenantRunCancellationRules.Cancel(run, TaskNow); sessionBacking.SaveRetainedTenantOperationRun(stopped, run.Revision);
                         return ValueTask.FromResult(stopped);

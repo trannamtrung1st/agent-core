@@ -10,9 +10,12 @@ public sealed partial class InMemoryIamStore
     public ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (instances.CredentialGate) lock (definitions.TenantGate)
-            return ValueTask.FromResult(AgentCore.Application.Tasks.TaskAuthority.TryScope(scope, out var taskScope)
+            return ValueTask.FromResult(AgentCore.Application.Workflows.WorkflowCatalogAuthority.TryScope(scope, out var workflow)
+                ? workflowDefinitions.ContainsKey((scope.TenantId!.Value, workflow))
+                : AgentCore.Application.Tasks.TaskAuthority.TryScope(scope, out var taskScope)
                 ? scope.ResourceType == "task" ? delegatedTasks.GetValueOrDefault((scope.TenantId!.Value, taskScope)) is { } ownedTask
-                    && sessionBacking.ReadTenantSession(scope.TenantId.Value, ownedTask.Source.SessionId) is not null
+                    && (ownedTask.Source.Workflow is { } process ? workflowExecutions.ContainsKey((scope.TenantId.Value, process.ExecutionId))
+                        : sessionBacking.ReadTenantSession(scope.TenantId.Value, ownedTask.Source.RequireSessionId()) is not null)
                     : agentThreads.ContainsKey((scope.TenantId!.Value, taskScope))
                 : AgentCore.Application.Evaluations.EvaluationStoreRules.TryScope(scope, out _) ? OwnsEvaluation(scope)
                 : AgentCore.Application.Models.TenantModelRules.TryId(scope, out _) ? OwnsModelResource(scope)

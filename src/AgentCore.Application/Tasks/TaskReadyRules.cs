@@ -28,9 +28,9 @@ public static class TaskReadyRules
         }
         if (consent is not null && consent.TaskId != task.TaskId) throw new AccessDeniedException("task_consent_unavailable");
         foreach (var key in task.Source.ActorKind == TaskActorKind.Human ? new[] { "sessions.read", "sessions.manage", "tasks.delegate" } : new[] { "sessions.read", "tasks.delegate" })
-            if (key != "tasks.delegate" || consent?.Exceptional != true) await TaskAuthority.RequireAsync(state, task.Source.PrincipalId, key, TenantSessionRules.Scope(task.Source.TenantId, task.Source.SessionId), iam, ct);
+            if (key != "tasks.delegate" || consent?.Exceptional != true) await TaskAuthority.RequireAsync(state, task.Source.PrincipalId, key, TenantSessionRules.Scope(task.Source.TenantId, task.Source.RequireSessionId()), iam, ct);
         if (task.Source.OriginalInitiatorPrincipalId is { } requester && requester != task.Source.PrincipalId)
-            await TaskAuthority.RequireAsync(state, requester, "sessions.read", TenantSessionRules.Scope(task.Source.TenantId, task.Source.SessionId), iam, ct);
+            await TaskAuthority.RequireAsync(state, requester, "sessions.read", TenantSessionRules.Scope(task.Source.TenantId, task.Source.RequireSessionId()), iam, ct);
         if (consent is null) await TaskAuthority.RequireDelegationReviewAsync(state, task, iam, ct);
     }
     public static DelegatedTask Graph(ReadyTaskAdmission admission, DelegatedTask task, IReadOnlyList<DelegatedTask> dependencies, TenantAgent target, DateTimeOffset at)

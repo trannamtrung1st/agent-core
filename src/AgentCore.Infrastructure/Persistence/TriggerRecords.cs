@@ -8,6 +8,7 @@ public sealed class AutomationRecord
     public int? PresetVersion { get; set; }
     public int ExecutionTargetKind { get; set; }
     public string? TargetSessionId { get; set; }
+    public string? WorkflowTargetJson { get; set; }
     public string? ReportToSessionId { get; set; }
     public string AutomationId { get; set; } = "";
     public string AgentInstanceId { get; set; } = "";
@@ -39,6 +40,7 @@ public sealed class TriggerOccurrenceRecord
     public string? TriggerId { get; set; }
     public int ExecutionTargetKind { get; set; }
     public string? TargetSessionId { get; set; }
+    public string? WorkflowTargetJson { get; set; }
     public string? ReportToSessionId { get; set; }
     public string OccurrenceId { get; set; } = "";
     public string DedupeKey { get; set; } = "";
@@ -64,6 +66,8 @@ public sealed class TriggerOccurrenceRecord
     public long? ClaimLeaseExpiresAtUtc { get; set; }
     public string? ExecutionSessionId { get; set; }
     public string? AcceptedAgentRunId { get; set; }
+    public Guid? AcceptedWorkflowExecutionId { get; set; }
+    public Guid? WorkflowInitiatorPrincipalId { get; set; }
     public string? LiveSessionId { get; set; }
     public long? LiveEvaluationCompletedAtUtc { get; set; }
     public string? ModelOfferingId { get; set; }

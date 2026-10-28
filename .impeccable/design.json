@@ -965,6 +965,86 @@
           "addedEvidence": "docs/reports/dynamic-model-management-delivery-2026-10-25.md",
           "preserved": "Original refreshedAt, all source/capture/log fingerprints, original finish disposition and every pre-existing inspection record remain unchanged."
         }
+      },
+      "formalWorkflowsDelivery": {
+        "inspectedAt": "2026-10-28T19:45:45.165905+00:00",
+        "snapshotKind": "scoped-implemented-surface-confirmation",
+        "baselineCommit": "f8449f7566e55f90aa0fe963bdfbf19281277861",
+        "scope": "Closed Formal Workflow designer/outline, progress and exact source evidence; compact Chat entry and typed Automation destination. Ant Design v6 dark Operate extension. No normative token/component preview replacement or unrelated drift repair.",
+        "sourceSha256": {
+          "web/src/app.css": "540981bd07d7fe494626fd11b69f4afc86fd755bc445a4f174dbc28a0f1da5be",
+          "web/src/app/AppShell.tsx": "35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1",
+          "web/src/app/appRoute.ts": "15a154904512312d36e7a63abfeefae91fb493eab78704c9b02dc6a76d7fe011",
+          "web/src/features/access/AccessApp.tsx": "75fdeeb757579f9ce2ba9ac62cc16e05cd847120f025898e733538c90c4a9b58",
+          "web/src/features/access/TenantAgentAutomations.tsx": "fb33e0876ef4b799a797b1623ec53eb7cdb3e5bfbf72d350ba64a30b496abe2c",
+          "web/src/features/access/useAccessDraftGuard.tsx": "e2aa247ba8226f903cd0476300eaf5a88287978cf31db4210e6a950907f99e7b",
+          "web/src/features/chat/ChatApp.tsx": "bc93f1f83816d392385ef44ea25f0e6569320d8e2c8959201bcfd9b542298a6a",
+          "web/src/features/chat/SessionSandboxFrame.tsx": "4c7fe8c2832b799d1748dd9d574859e7f8fc4333d7505311180ba416c3ee82ba",
+          "web/src/features/chat/TaskCenterDrawer.tsx": "a711720e381f5aaa3e6d7e100b2d6f54da2a4141479aa51d5ff777600a7818a3",
+          "web/src/features/chat/SessionGoalsDrawer.tsx": "a2492b1ec37ebb45a4e1bc999dcb4c028a4fd138aaf8f875dae06cbceb493383",
+          "web/src/services/tenantWorkflows.ts": "dadd3530603e86590d15fa77d91daa12f19f93e292c3ea7bcaf26eaa45a62d5e",
+          "web/src/services/tenantAutomations.ts": "769a846a57cfbc571a4a3fdccbf288ec1fb9260094e5c8eebf0d853bb4d2fa4e",
+          ".agents/context/DESIGN.md": "cc79d920d6fcd998c744ece60595ecadbe047b489389086e609adb12cda41715",
+          ".impeccable/surfaces/formal-workflows.md": "bdb1d1502ff4eb74e7f8309f6959e3f5597cc5bb43deea6fc925142cb8f7d295",
+          "web/src/features/workflows/SessionWorkflowsDrawer.tsx": "81ca60b6aba43072d42e21fb2ad5f5c43b9e603bdef92071fca62ce64e18c6b0",
+          "web/src/features/workflows/TenantWorkflows.tsx": "3aad2acc7882ffea03d8276dbdfe9ac5cef3f8e13829fbe340a57a12a702ddfa",
+          "web/src/features/workflows/WorkflowAutomationDestination.tsx": "41a2d2b5648ee8ccfbc9c9cb9112fc60aabb9c962846816ab72ffdccab64c1fe",
+          "web/src/features/workflows/WorkflowDiagram.tsx": "6f87ac17fd10a815bded2eae26512c7a80effd1f2584906f8795c8e71ec3a42c",
+          "web/src/features/workflows/WorkflowDraftComparison.tsx": "c4a7dfabca3f174ee69d7b9e378d5e55de06d1eff7ed39cb1ae49eca3290d9ff",
+          "web/src/features/workflows/WorkflowEditor.tsx": "d258c1603373b24da087202423937ef8c8402c026b38c4b3049bab034b030cac",
+          "web/src/features/workflows/WorkflowExecutionInspector.tsx": "58280284df60842b31e03cb771ab7ed5319f0c4ec3fd9aa3ae429cf37c490f31",
+          "web/src/features/workflows/WorkflowGraphSettings.tsx": "1bee2996e22ae87456c2d5a6e438319e67688d0ef5def10fe1240a8305a86192",
+          "web/src/features/workflows/WorkflowLauncher.tsx": "722ef6703f9c5adbef02da23bc31234884b11f1358d68b0807cbd192f594568c",
+          "web/src/features/workflows/WorkflowNodeProperties.tsx": "f47bde0d39c14be8c9d1813fc73b58739a8064551697e9812259ecb5812eaab1",
+          "web/src/features/workflows/WorkflowOutline.tsx": "a9b1c082970bce662d0f1469f067648561471c61a4832af102a2b5e37fb589d1",
+          "web/src/features/workflows/useWorkflowCatalogCommand.ts": "1f56f18290360461280bfa3eb63995fa0aa3de3f9838f37cb44e2de402151708"
+        },
+        "components": [
+          "WorkflowDiagram",
+          "WorkflowOutline",
+          "WorkflowNodeProperties",
+          "WorkflowGraphSettings",
+          "WorkflowLauncher",
+          "WorkflowExecutionInspector",
+          "SessionWorkflowsDrawer",
+          "WorkflowAutomationDestination",
+          "WorkflowDraftComparison",
+          "AdminCollectionToolbar",
+          "SessionSandboxFrame"
+        ],
+        "verificationReport": "docs/reports/formal-workflows-delivery-2026-10-28.md",
+        "viewports": [
+          320,
+          390,
+          768,
+          1024,
+          1440
+        ],
+        "zoomEvidence": "720x450 CSS viewport at deviceScaleFactor 2 as a 200% layout equivalent; native browser zoom was not measured.",
+        "localCaptures": [
+          ".playwright-mcp/formal-workflow-editor-final-320.png",
+          ".playwright-mcp/formal-workflow-editor-final-390.png",
+          ".playwright-mcp/formal-workflow-editor-final-768.png",
+          ".playwright-mcp/formal-workflow-editor-final-1024.png",
+          ".playwright-mcp/formal-workflow-editor-final-1440.png",
+          ".playwright-mcp/formal-workflow-failed-320.png",
+          ".playwright-mcp/formal-workflow-failed-1440.png",
+          ".playwright-mcp/formal-workflow-readonly-200-percent-equivalent.png",
+          ".playwright-mcp/formal-workflow-revoked.png"
+        ],
+        "interactionEvidence": [
+          "Visible author/validate/publish/start/real worker/Evaluation/sign-off/branch completion and rejection",
+          "SQLite restart at human wait retained one Task/Evaluation/bookmark",
+          "Manual Automation and real Session Chat entry",
+          "Stale comparison, lost save/start replies and deliberate same-key catalog resumption",
+          "Nested Escape/opener focus, native keyboard, reduced motion and read-only/revoked membership"
+        ],
+        "limits": [
+          "Synthetic local single-host evidence only",
+          "No native screen-reader, physical-device, live-provider, load/multi-host or production deployment qualification",
+          "Local ignored captures are evidence aids, not portable artifact deliverables",
+          "Historical inspection metadata and unrelated sidecar debt remain unchanged"
+        ]
       }
     }
   },

@@ -1,5 +1,11 @@
 # Technology Decisions
 
+## Decision: bounded embedded Formal Workflows
+
+The owner-authorized Formal Workflows implementation permits an embedded Elsa runtime solely for a validated, immutable, closed workflow DAG and durable bookmarks. This is a bounded exception to the generic workflow-engine exclusion below. Session → Activation → AgentRun remains the only agent execution path; existing Task, Goal, Evaluation, Automation and IAM owners retain their authority. Elsa cannot execute models/tools, grant permissions, schedule work, expose vendor endpoints or accept user-authored expressions/definitions. Infrastructure owns vendor dependencies; Domain and Application remain vendor-free. React Flow supplies diagram interaction inside the existing Ant Design v6 UI, with equivalent keyboard-operable outline editing.
+
+Elsa 3.9.0 and its SQLite persistence adapter are pinned in Infrastructure alongside EF SQLite 10.0.12. The real SQLite suspension/reopen/resume proof and genuine Task continuation prerequisites were qualified before agent-step delivery. React Flow is pinned at `@xyflow/react` 12.12.0 and adds no product UI kit. Focused local implementation evidence is recorded in the [delivery ledger](reports/formal-workflows-delivery-2026-10-28.md); it does not establish live-provider, multi-host or production deployment qualification. The [implementation plan](18-implementation-plan.md#formal-workflows) owns progress and gates.
+
 ## Space ownership and Definition execution policy (2026-10-25)
 
 The approved breaking successor reserves Environment for Space-owned typed variable profiles. Rename the existing Definition policy to `DefinitionExecutionPolicy` / `ExecutionPolicy` / serialized `executionPolicy`, retaining its existing behavior and version pins. No deserialization alias, dual-write or automatic data reset is added. Space/Membership persistence extends the existing IAM transaction owner; it adds no service process or authorization engine. Full cutover status and qualification belong to the [implementation evidence](reports/space-environment-implementation-2026-10-25.md). Historical reports retain their original terminology and evidence.

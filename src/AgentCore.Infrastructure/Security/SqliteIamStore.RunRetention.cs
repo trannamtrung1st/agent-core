@@ -24,5 +24,6 @@ public sealed partial class SqliteIamStore
         // transaction before the guarded payload minimization observes it.
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         await RetireTaskContent(db, tenant, at, ct).ConfigureAwait(false);
+        await RetireWorkflowContent(db, tenant, at, ct).ConfigureAwait(false);
     }
 }

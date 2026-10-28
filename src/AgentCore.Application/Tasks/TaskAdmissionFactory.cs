@@ -45,11 +45,15 @@ public static class TaskAdmissionFactory
             || configuration.SpaceContext is not { } space || space.SpaceId != task.Assignment.SpaceId || space.EnvironmentId != task.Assignment.EnvironmentId)
             throw new ArgumentException("Worker configuration must match the exact task assignment.");
         var text = task.Request.Objective;
-        var entry = new ConversationEntry(entryId, 1, source.ActivationId ?? source.HumanCommandId, ConversationRole.User,
+        var evidence = source.Workflow?.Causation is { } cause
+            ? System.Text.Json.JsonSerializer.Serialize(new { taskId = task.TaskId, assignmentHash = TaskLimits.Hash(task.Assignment),
+                triggerContext = new { causation = new { rootAgentRunId = cause.RootAgentRunId, triggerDepth = cause.TriggerDepth, visitedAutomationIds = cause.VisitedAutomationIds } } })
+            : System.Text.Json.JsonSerializer.Serialize(new { taskId = task.TaskId, assignmentHash = TaskLimits.Hash(task.Assignment) });
+        var entry = new ConversationEntry(entryId, 1, source.ActivationId ?? source.HumanCommandId ?? source.Workflow?.OperationId, ConversationRole.User,
             text, null, EntryStatus.Completed, SessionMode.Text, 0, text.Length, at);
         var activation = new Activation(activationId, sessionId, ActivationKind.DelegatedTask, [entryId], entry.SourceEventId,
             null, source.RunId is null ? null : source.SessionId, source.RunId, $"task:{task.TaskId:D}", at,
-            source.RootActivationId, source.ActivationId, System.Text.Json.JsonSerializer.Serialize(new { taskId = task.TaskId, assignmentHash = TaskLimits.Hash(task.Assignment) }));
+            source.RootActivationId, source.ActivationId, evidence);
         var context = new TrustedExecutionContext(source.TenantId, worker.PrincipalId, source.OriginalInitiatorPrincipalId,
             sessionId, runId, activationId, source.RootActivationId, source.RunId, source.ActivationId, ExecutionOrigin.DelegatedTask);
         var run = AgentRun.Create(runId, AgentRunOwner.ForTenant(source.TenantId, worker.Instance.InstanceId, worker.PrincipalId),
@@ -58,8 +62,9 @@ public static class TaskAdmissionFactory
                 taskIntent: new(text, AgentRunTaskSource.DelegatedTask, task.TaskId.ToString("D")), executionContext: context,
                 delegatedTask: new(task.TaskId, task.Revision, TaskLimits.Hash(task.Assignment))), model, AgentRunLimits.DefaultMaxAttempts, at,
             resolved.Skills, resolved.Skills.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray());
-        var origin = new SessionOrigin(SessionOriginKind.DelegatedTask, source.SessionId, source.RunId, runId,
-            reportCompletionToOrigin: false, initialTitle: task.Request.Title);
+        var origin = new SessionOrigin(SessionOriginKind.DelegatedTask, source.SessionId ?? source.Workflow?.OriginalSessionId, source.RunId, runId,
+            reportCompletionToOrigin: false, initialTitle: task.Request.Title,
+            workflowExecutionId: source.Workflow?.ExecutionId, workflowOperationId: source.Workflow?.OperationId);
         var session = new SessionSnapshot(1, sessionId, 1, configuration.Definition, SessionMode.Text, null, SessionStatus.Created,
             [entry], "", 0, null, null, at, at, worker.Instance.InstanceId, Title: task.Request.Title, LastEntrySequence: 1,
             PinnedPersona: resolved.Persona, PinnedPersonaRevision: configuration.PersonaRevision,

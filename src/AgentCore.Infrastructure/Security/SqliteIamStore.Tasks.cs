@@ -25,10 +25,13 @@ public sealed partial class SqliteIamStore : ITenantTaskStore
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         var row = await db.Set<DelegatedTaskRow>().AsNoTracking().SingleOrDefaultAsync(t => t.TenantId == tenant && t.TaskId == task, ct);
-        return row is null || !await OwnedSessions(db, tenant).AnyAsync(s => s.SessionId == row.SourceSessionId, ct) ? null : TaskPersistence.Value(row);
+        if (row is null) return null;
+        if (row.WorkflowExecutionId is { } execution) return await db.Set<WorkflowExecutionRow>().AnyAsync(e => e.TenantId == tenant && e.ExecutionId == execution, ct) ? TaskPersistence.Value(row) : null;
+        return !await OwnedSessions(db, tenant).AnyAsync(s => s.SessionId == row.SourceSessionId, ct) ? null : TaskPersistence.Value(row);
     }
     private async ValueTask<bool> CanReadTaskAsync(AgentCoreDbContext db, TenantSecurityState state, TaskActor actor, DelegatedTask task, CancellationToken ct) =>
-        await TaskAuthority.CanReadAsync(state, actor, task, new(this), ct, actor.Agent is { } frame
+        (task.Source.Workflow is null || await TaskSourceAvailable(db, task, ct, dispatch: false))
+        && await TaskAuthority.CanReadAsync(state, actor, task, new(this), ct, actor.Agent is { } frame
             ? await CompletionRun(db, state.Tenant.TenantId, frame.RunId, ct) : null);
     private async Task RequireTaskReader(AgentCoreDbContext db, Guid tenant, TaskActor actor, CancellationToken ct)
     {
@@ -144,8 +147,7 @@ public sealed partial class SqliteIamStore : ITenantTaskStore
             foreach (var row in batch)
             {
                 var task = TaskPersistence.Value(row); after = row.TaskId;
-                var source = await ReadSandboxSession(db, query.TenantId, task.Source.SessionId, ct);
-                if (source is null || SessionRetention.IsDue(source.Snapshot, TaskNow) || query.Scope == "pending" && TaskLimits.Terminal(task.State)
+                if (!await TaskSourceAvailable(db, task, ct, dispatch: false) || query.Scope == "pending" && TaskLimits.Terminal(task.State)
                     || !await CanReadTaskAsync(db, state, query.Actor, task, ct)) continue;
                 result.Add(task); if (result.Count > query.Limit) break;
             }
@@ -162,7 +164,7 @@ public sealed partial class SqliteIamStore : ITenantTaskStore
             ?? throw new AccessDeniedException("resource_unavailable"); var task = TaskPersistence.Value(row);
         if (!await CanReadTaskAsync(db, state, command.Actor, task, ct)) throw new AccessDeniedException("resource_unavailable");
         if (command.Actor.Human is not null) await TaskAuthority.RequireAsync(state, command.Actor.PrincipalId, "sessions.manage",
-            TenantSessionRules.Scope(tenant, task.Source.SessionId), new(this), ct);
+            TenantSessionRules.Scope(tenant, task.Source.RequireSessionId()), new(this), ct);
         await TaskAuthority.RequireAsync(state, command.Actor.PrincipalId, "tasks.cancel", TaskAuthority.Scope(tenant, task.TaskId), new(this), ct);
         var requester = command.Actor.Agent is { } frame ? (await CompletionRun(db, tenant, frame.RunId, ct))?.Admission.ExecutionContext?.OriginalInitiatorPrincipalId : null;
         await TaskAuthority.RequireCurrentPolicyAsync(state, command.Actor, requester, "tasks.cancel", TaskAuthority.Scope(tenant, task.TaskId), new(this), ct);
@@ -187,10 +189,10 @@ public sealed partial class SqliteIamStore : ITenantTaskStore
         }
         db.Entry(row).CurrentValues.SetValues(TaskPersistence.Row(next));
         db.Add(new TaskCommandRow { TenantId = tenant, TaskId = task.TaskId, ActorId = command.Actor.PrincipalId, RequestKey = key, Hash = hash, Json = System.Text.Json.JsonSerializer.Serialize(next) });
-        if (TaskLimits.Terminal(next.State))
+        if (TaskLimits.Terminal(next.State) && task.Source.Workflow is null)
             db.Add(new TaskNotificationRow { TenantId = tenant, NotificationId = command.AuditId, TaskId = task.TaskId, TerminalRunId = next.TerminalRunId,
-                RecipientSessionId = task.Source.SessionId.ToString("D"), Revision = 1,
-                Json = System.Text.Json.JsonSerializer.Serialize(new TaskNotification(tenant, command.AuditId, task.TaskId, next.TerminalRunId, task.Source.SessionId, 1, at)) });
+                RecipientSessionId = task.Source.RequireSessionId().ToString("D"), Revision = 1,
+                Json = System.Text.Json.JsonSerializer.Serialize(new TaskNotification(tenant, command.AuditId, task.TaskId, next.TerminalRunId, task.Source.RequireSessionId(), 1, at)) });
         await BumpTaskSecurity(db, state, ct);
         db.Add(new AuthorizationAudit(command.AuditId, tenant, command.Actor.PrincipalId, "tasks.cancel", task.TaskId.ToString("D"), "allowed", "cancellation_requested", at));
         await SaveTaskChanges(db, ct); await tx.CommitAsync(ct);
@@ -216,7 +218,7 @@ public sealed partial class SqliteIamStore : ITenantTaskStore
         {
             var task = TaskPersistence.Value(row);
             var dependencies = await db.Set<DelegatedTaskRow>().AsNoTracking().Where(t => t.TenantId == row.TenantId && task.Request.DependsOnTaskIds.Contains(t.TaskId)).ToArrayAsync(ct);
-            result.Add(new(task, await ReadSandboxSession(db, row.TenantId, task.Source.SessionId, ct), task.InitialWorkerRunId is null ? null : await TaskFinalRun(db, task, ct), dependencies.Select(TaskPersistence.Value).ToArray()));
+            result.Add(new(task, task.Source.SessionId is { } sourceId ? await ReadSandboxSession(db, row.TenantId, sourceId, ct) : null, task.InitialWorkerRunId is null ? null : await TaskFinalRun(db, task, ct), dependencies.Select(TaskPersistence.Value).ToArray()));
         }
         return result;
     }
@@ -236,9 +238,8 @@ public sealed partial class SqliteIamStore : ITenantTaskStore
         else
         {
             var worker = await TaskFinalRun(db, task, ct);
-            var source = await ReadSandboxSession(db, tenant, task.Source.SessionId, ct);
             var target = await OwnedAgents(db, tenant).SingleOrDefaultAsync(a => a.Instance.InstanceId == task.Assignment.InstanceId.ToString("D"), ct);
-            var stop = TaskSettlement.StopReason(task, worker, source is not null && !SessionRetention.IsDue(source.Snapshot, at),
+            var stop = TaskSettlement.StopReason(task, worker, await TaskSourceAvailable(db, task, ct),
                 target is not null && Owned(target).Instance.Lifecycle == AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active && Owned(target).Instance.Cooperation?.AcceptTasks == true, at);
             if (stop is not null && !worker.IsTerminal)
             {
@@ -251,9 +252,9 @@ public sealed partial class SqliteIamStore : ITenantTaskStore
             next = TaskSettlement.Observe(task, worker, at, stop); if (ReferenceEquals(next, task)) return false;
         }
         db.Entry(row).CurrentValues.SetValues(TaskPersistence.Row(next));
-        if (TaskLimits.Terminal(next.State))
-            db.Add(new TaskNotificationRow { TenantId = tenant, NotificationId = auditId, TaskId = taskId, TerminalRunId = next.TerminalRunId, RecipientSessionId = task.Source.SessionId.ToString("D"), Revision = 1,
-                Json = System.Text.Json.JsonSerializer.Serialize(new TaskNotification(tenant, auditId, taskId, next.TerminalRunId, task.Source.SessionId, 1, at)) });
+        if (TaskLimits.Terminal(next.State) && task.Source.SessionId is not null)
+            db.Add(new TaskNotificationRow { TenantId = tenant, NotificationId = auditId, TaskId = taskId, TerminalRunId = next.TerminalRunId, RecipientSessionId = task.Source.RequireSessionId().ToString("D"), Revision = 1,
+                Json = System.Text.Json.JsonSerializer.Serialize(new TaskNotification(tenant, auditId, taskId, next.TerminalRunId, task.Source.RequireSessionId(), 1, at)) });
         db.Add(new AuthorizationAudit(auditId, tenant, task.Assignment.PrincipalId, "tasks.settle", taskId.ToString("D"), "allowed", next.State.ToString(), at));
         await SaveTaskChanges(db, ct); await tx.CommitAsync(ct);
         AgentCore.Application.Observability.TaskTelemetry.Task(AgentCore.Application.Observability.TaskCoordinationEvent.Settled, next, next.Reason); return true;

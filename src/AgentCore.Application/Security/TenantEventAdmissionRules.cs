@@ -98,10 +98,10 @@ public static class TenantEventAdmissionRules
     public static TriggerOccurrence Initial(TriggerOccurrence source) => new(source.OccurrenceId, source.DedupeKey, source.AutomationId, source.Owner,
         source.SourceKind, source.ScheduledAtUtc, source.ObservedAtUtc, source.AdmittedAtUtc, source.EvidenceJson, source.SourceEventId, source.TriggerRevision,
         OccurrenceRoutingDisposition.Pending, null, 0, null, null, null, modelPin: source.ModelPin, executionTarget: source.ExecutionTarget,
-        completionDelivery: source.CompletionDelivery, triggerId: source.TriggerId, pinnedSpaceId: source.PinnedSpaceId, pinnedEnvironmentId: source.PinnedEnvironmentId);
+        completionDelivery: source.CompletionDelivery, triggerId: source.TriggerId, pinnedSpaceId: source.PinnedSpaceId, pinnedEnvironmentId: source.PinnedEnvironmentId, workflowInitiatorPrincipalId: source.WorkflowInitiatorPrincipalId);
     public static Automation Next(Automation current, DateTimeOffset at) => current.WithScheduleAdvance(current.Status, null,
         checked(current.OccurrenceCount + 1), checked(current.Revision + 1), at, null);
-    public static TriggerOccurrence Occurrence(Automation current, TenantEventDelivery delivery, ExecutionModelPin model, DateTimeOffset at,
+    public static TriggerOccurrence Occurrence(Automation current, TenantEventDelivery delivery, ExecutionModelPin? model, DateTimeOffset at,
         long? resourceRevision = null)
     {
         var witness = Freeze(delivery, resourceRevision); var child = Child(current, delivery.Subscription);
@@ -113,7 +113,7 @@ public static class TenantEventAdmissionRules
                 visitedAutomationIds = (core?.VisitedAutomationIds ?? []).Append(current.AutomationId).ToArray() } }, child);
         return Create(current, witness, child, delivery.OccurredAt, at, evidence, model);
     }
-    public static TriggerOccurrence Occurrence(Automation current, TenantEventBucket source, ExecutionModelPin model, DateTimeOffset at,
+    public static TriggerOccurrence Occurrence(Automation current, TenantEventBucket source, ExecutionModelPin? model, DateTimeOffset at,
         long? resourceRevision = null)
     {
         var witness = Freeze(source, resourceRevision); var bucket = source.Bucket; var child = Child(current, bucket.Subscription);
@@ -158,7 +158,7 @@ public static class TenantEventAdmissionRules
             || JsonSerializer.Serialize(source) != JsonSerializer.Serialize(pinned.Deserialize<PreparedEventAdmissionSource>())) throw new ArgumentException("Event admission source evidence differs.");
     }
     private static TriggerOccurrence Create(Automation current, PreparedEventAdmissionSource source, AutomationTriggerRecord child,
-        DateTimeOffset occurredAt, DateTimeOffset at, string evidence, ExecutionModelPin model)
+        DateTimeOffset occurredAt, DateTimeOffset at, string evidence, ExecutionModelPin? model)
         => new(TriggerScheduleAdmission.OccurrenceId(source.DedupeKey), source.DedupeKey, current.AutomationId, current.Owner, source.SourceKind,
             null, occurredAt, at, evidence, source.SourceId, child.Revision, OccurrenceRoutingDisposition.Pending, null, 0, null, null, null,
             modelPin: model, executionTarget: current.ExecutionTarget, completionDelivery: current.CompletionDelivery, triggerId: child.TriggerId, pinnedSpaceId: current.PinnedSpaceId, pinnedEnvironmentId: current.PinnedEnvironmentId);

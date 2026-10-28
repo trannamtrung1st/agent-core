@@ -1,3 +1,4 @@
+using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Security;
@@ -13,6 +14,15 @@ public sealed partial class SqliteIamStore
         Automation? current, Automation proposed, Guid? human, IamAuthorizer iam, CancellationToken ct, bool force = false)
     {
         if (!force && !TenantAutomationContextRules.CheckAuthoring(current, proposed)) return;
+        if (proposed.ExecutionTarget.Workflow is { } workflow)
+        {
+            var version = await db.Set<WorkflowVersionRow>().SingleOrDefaultAsync(v => v.TenantId == state.Tenant.TenantId && v.WorkflowId == workflow.WorkflowId && v.Version == workflow.Version, ct) ?? throw new AccessDeniedException("workflow_version_unavailable");
+            var definition = await db.Set<WorkflowDefinitionRow>().SingleOrDefaultAsync(v => v.TenantId == state.Tenant.TenantId && v.WorkflowId == workflow.WorkflowId, ct);
+            if (definition is null || WorkflowPersistence.Read<AgentCore.Domain.Workflows.WorkflowDefinition>(definition.Json).Retired) throw new AccessDeniedException("workflow_version_unavailable");
+            await AgentCore.Application.Workflows.WorkflowAutomationRules.DestinationAsync(state, proposed, WorkflowPersistence.Read<AgentCore.Domain.Workflows.WorkflowVersion>(version.Json), agent.PrincipalId, iam, ct);
+            await AgentCore.Application.Workflows.WorkflowAutomationRules.AuthorityAsync(state, proposed, agent, InstanceSettingsResolver.Resolve(await TenantAgentDefinitionBaseline(db, agent, ct), agent.Instance.SettingsOverrides), human, null, iam, ct);
+            return;
+        }
         var tenant = state.Tenant.TenantId; var instance = agent.Instance.InstanceId.ToString("D");
         var own = await db.Set<SpaceRecord>().AsNoTracking().SingleOrDefaultAsync(s => s.TenantId == tenant && s.OwnerInstanceId == instance && s.DeletedAt == null, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("private_space_unavailable");

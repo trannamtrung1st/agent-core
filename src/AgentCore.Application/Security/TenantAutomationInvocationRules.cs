@@ -18,6 +18,7 @@ public static class TenantAutomationInvocationRules
 
     public static void Validate(TenantAutomationMutationObservation source, PreparedAutomationMutation value)
     {
+        if (source.Current?.ExecutionTarget.Workflow is not null) throw new AccessDeniedException("automation_workflow_edit_in_designer");
         _ = Requester(source); var args = TenantAutomationMutationContract.Parse(value.ToolName, value.ArgumentsJson);
         var current = source.Current ?? throw new AccessDeniedException("automation_unavailable"); var plan = value.Invocation ?? throw new SecurityConflictException("automation_plan_changed");
         var ids = new[] { plan.SessionId, plan.EntryId, plan.ActivationId, plan.RunId, plan.ResponseId };

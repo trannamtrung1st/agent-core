@@ -37,7 +37,7 @@ public sealed partial class SqliteIamStore
         var state = await ReadTenantAsync(db, tenant, ct) ?? throw new AccessDeniedException("tenant_unavailable");
         var row = await db.Set<DelegatedTaskRow>().AsNoTracking().SingleOrDefaultAsync(t => t.TenantId == tenant && t.TaskId == taskId, ct) ?? throw new AccessDeniedException("resource_unavailable");
         var task = TaskPersistence.Value(row);
-        if (await ReadSandboxSession(db, tenant, task.Source.SessionId, ct) is not { } source || AgentCore.Domain.Conversation.SessionRetention.IsDue(source.Snapshot, TaskNow) || !await CanReadTaskAsync(db, state, actor, task, ct)) throw new AccessDeniedException("resource_unavailable");
+        if (!await TaskSourceAvailable(db, task, ct, dispatch: false) || !await CanReadTaskAsync(db, state, actor, task, ct)) throw new AccessDeniedException("resource_unavailable");
         var items = await db.Set<TaskNotificationRow>().AsNoTracking().Where(n => n.TenantId == tenant && n.TaskId == taskId).ToArrayAsync(ct);
         return new(items.Select(n => TaskPersistence.Value<TaskNotification>(n.Json)).ToArray(), null, false, state.Tenant.Revision);
     }
@@ -48,10 +48,10 @@ public sealed partial class SqliteIamStore
         var state = await ReadTenantAsync(db, tenant, ct) ?? throw new AccessDeniedException("tenant_unavailable");
         var taskRow = await db.Set<DelegatedTaskRow>().SingleOrDefaultAsync(t => t.TenantId == tenant && t.TaskId == command.TaskId, ct) ?? throw new AccessDeniedException("resource_unavailable");
         var task = TaskPersistence.Value(taskRow);
-        if (await ReadSandboxSession(db, tenant, task.Source.SessionId, ct) is not { } source || AgentCore.Domain.Conversation.SessionRetention.IsDue(source.Snapshot, TaskNow) || !await CanReadTaskAsync(db, state, command.Actor, task, ct)
+        if (await ReadSandboxSession(db, tenant, task.Source.RequireSessionId(), ct) is not { } source || AgentCore.Domain.Conversation.SessionRetention.IsDue(source.Snapshot, TaskNow) || !await CanReadTaskAsync(db, state, command.Actor, task, ct)
             || command.Actor.Agent is { } frame && frame.SessionId != task.Source.SessionId) throw new AccessDeniedException("resource_unavailable");
         if (command.Actor.Human is not null) await TaskAuthority.RequireAsync(state, command.Actor.PrincipalId, "sessions.manage",
-            TenantSessionRules.Scope(tenant, task.Source.SessionId), new(this), ct);
+            TenantSessionRules.Scope(tenant, task.Source.RequireSessionId()), new(this), ct);
         var row = await db.Set<TaskNotificationRow>().SingleOrDefaultAsync(n => n.TenantId == tenant && n.TaskId == task.TaskId && n.NotificationId == command.NotificationId, ct) ?? throw new AccessDeniedException("resource_unavailable");
         var notification = TaskPersistence.Value<TaskNotification>(row.Json);
         var key = "ack:" + TaskLimits.Key(command.RequestKey); var hash = TaskLimits.Hash(new { command.TaskId, command.NotificationId, command.ExpectedRevision });
@@ -76,7 +76,7 @@ public sealed partial class SqliteIamStore
         {
             var state = await ReadTenantAsync(db, tenant, ct) ?? throw new AccessDeniedException("tenant_unavailable");
             var row = await db.Set<DelegatedTaskRow>().AsNoTracking().SingleOrDefaultAsync(t => t.TenantId == tenant && t.TaskId == task, ct);
-            if (threadId is not null || row is null || await ReadSandboxSession(db, tenant, TaskPersistence.Value(row).Source.SessionId, ct) is null
+            if (threadId is not null || row is null || !await TaskSourceAvailable(db, TaskPersistence.Value(row), ct, dispatch: false)
                 || !await CanReadTaskAsync(db, state, actor, TaskPersistence.Value(row), ct)) throw new AccessDeniedException("resource_unavailable");
             threadId = await db.Set<AgentThreadRow>().Where(t => t.TenantId == tenant && t.TaskId == task).Select(t => (Guid?)t.ThreadId).SingleOrDefaultAsync(ct);
             if (threadId is null) return new([], null, false, state.Tenant.Revision);

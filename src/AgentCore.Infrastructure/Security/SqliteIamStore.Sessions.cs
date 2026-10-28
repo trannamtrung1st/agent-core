@@ -80,7 +80,11 @@ public sealed partial class SqliteIamStore
                 SELECT o.SessionId,s.SessionId,
                     CASE WHEN json_extract(s.OriginJson,'$.kind') IN (5,6) THEN json_extract(s.OriginJson,'$.originatingSessionId') END,
                     0, CASE WHEN s.DurablyDeletedAtUtc IS NULL AND (s.RetentionDueAtUtc IS NULL OR s.RetentionDueAtUtc>{at})
-                        AND (json_extract(s.OriginJson,'$.kind') NOT IN (5,6) OR json_extract(s.OriginJson,'$.originatingSessionId') IS NOT NULL)
+                        AND (json_extract(s.OriginJson,'$.kind') NOT IN (5,6) OR json_extract(s.OriginJson,'$.originatingSessionId') IS NOT NULL
+                            OR (json_extract(s.OriginJson,'$.kind')=5 AND EXISTS(SELECT 1 FROM TenantDelegatedTasks workflowTask
+                                WHERE workflowTask.TenantId={tenant} AND workflowTask.WorkerSessionId=s.SessionId
+                                    AND lower(workflowTask.WorkflowExecutionId)=json_extract(s.OriginJson,'$.workflowExecutionId')
+                                    AND json_extract(workflowTask.Json,'$.Source.Workflow.OperationId')=json_extract(s.OriginJson,'$.workflowOperationId'))))
                         THEN 1 ELSE 0 END
                 FROM TenantSessions o JOIN Sessions s ON s.SessionId=o.SessionId WHERE o.TenantId={tenant}
                     AND ({rootSession} IS NULL OR o.SessionId={rootSession})
@@ -89,7 +93,11 @@ public sealed partial class SqliteIamStore
                     CASE WHEN json_extract(p.OriginJson,'$.kind') IN (5,6) THEN json_extract(p.OriginJson,'$.originatingSessionId') END,
                     a.Depth+1, CASE WHEN po.SessionId IS NOT NULL AND p.DurablyDeletedAtUtc IS NULL
                         AND (p.RetentionDueAtUtc IS NULL OR p.RetentionDueAtUtc>{at})
-                        AND (json_extract(p.OriginJson,'$.kind') NOT IN (5,6) OR json_extract(p.OriginJson,'$.originatingSessionId') IS NOT NULL)
+                        AND (json_extract(p.OriginJson,'$.kind') NOT IN (5,6) OR json_extract(p.OriginJson,'$.originatingSessionId') IS NOT NULL
+                            OR (json_extract(p.OriginJson,'$.kind')=5 AND EXISTS(SELECT 1 FROM TenantDelegatedTasks workflowTask
+                                WHERE workflowTask.TenantId={tenant} AND workflowTask.WorkerSessionId=p.SessionId
+                                    AND lower(workflowTask.WorkflowExecutionId)=json_extract(p.OriginJson,'$.workflowExecutionId')
+                                    AND json_extract(workflowTask.Json,'$.Source.Workflow.OperationId')=json_extract(p.OriginJson,'$.workflowOperationId'))))
                         THEN 1 ELSE 0 END
                 FROM lifetime a LEFT JOIN Sessions p ON p.SessionId=a.ParentId
                     LEFT JOIN TenantSessions po ON po.SessionId=p.SessionId AND po.TenantId={tenant}

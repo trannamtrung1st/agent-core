@@ -15,7 +15,8 @@ public sealed partial class InMemoryIamStore
             var task = worker.Admission.DelegatedTask is { } work ? delegatedTasks.GetValueOrDefault((worker.Owner.TenantId!.Value, work.TaskId)) : null;
             if (task is null) throw new AccessDeniedException("task_source_unavailable");
             var tenant = task.Source.TenantId; var state = _tenants[tenant];
-            var source = sessionBacking.ReadTenantSession(tenant, task.Source.SessionId) ?? throw new AccessDeniedException("task_source_unavailable");
+            if (task.Source.Workflow is not null) { RequireWorkflowTaskSource(task, state, ct); return ValueTask.CompletedTask; }
+            var source = sessionBacking.ReadTenantSession(tenant, task.Source.RequireSessionId()) ?? throw new AccessDeniedException("task_source_unavailable");
             var sender = FindTenantAgentAsync(tenant, task.Source.InstanceId, ct).Result ?? throw new AccessDeniedException("task_source_unavailable");
             var target = FindTenantAgentAsync(tenant, task.Assignment.InstanceId, ct).Result ?? throw new AccessDeniedException("task_target_unavailable");
             TaskReadyRules.RequireSourceAsync(task, source, task.Source.RunId is { } id ? sessionBacking.ReadTenantRun(tenant, id) : null,
@@ -30,7 +31,7 @@ public sealed partial class InMemoryIamStore
         {
             var tenant = admission.TenantId; var task = delegatedTasks.GetValueOrDefault((tenant, admission.TaskId));
             if (task is null || task.State != DelegatedTaskState.PendingDependencies || task.Revision != admission.ExpectedRevision) return ValueTask.FromResult(false);
-            var state = _tenants[tenant]; var source = sessionBacking.ReadTenantSession(tenant, task.Source.SessionId) ?? throw new AccessDeniedException("task_source_unavailable");
+            var state = _tenants[tenant]; var source = sessionBacking.ReadTenantSession(tenant, task.Source.RequireSessionId()) ?? throw new AccessDeniedException("task_source_unavailable");
             var agent = FindTenantAgentAsync(tenant, task.Source.InstanceId, ct).Result ?? throw new AccessDeniedException("task_source_unavailable");
             var sourceRun = task.Source.RunId is { } sourceId ? sessionBacking.ReadTenantRun(tenant, sourceId) : null;
             TaskReadyRules.RequireSourceAsync(task, source, sourceRun, agent,

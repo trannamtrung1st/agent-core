@@ -17,7 +17,8 @@ public sealed partial class SqliteIamStore
         if (task is null) throw new AccessDeniedException("task_source_unavailable");
         await using var db = await contexts.CreateDbContextAsync(ct); var tenant = task.Source.TenantId;
         var state = await ReadTenantAsync(db, tenant, ct) ?? throw new AccessDeniedException("tenant_unavailable");
-        var source = await ReadSandboxSession(db, tenant, task.Source.SessionId, ct) ?? throw new AccessDeniedException("task_source_unavailable");
+        if (task.Source.Workflow is not null) { await RequireWorkflowTaskSource(db, task, state, ct); return; }
+        var source = await ReadSandboxSession(db, tenant, task.Source.RequireSessionId(), ct) ?? throw new AccessDeniedException("task_source_unavailable");
         var senderRow = await OwnedAgents(db, tenant).SingleOrDefaultAsync(a => a.Instance.InstanceId == task.Source.InstanceId.ToString("D"), ct) ?? throw new AccessDeniedException("task_source_unavailable");
         var targetRow = await OwnedAgents(db, tenant).SingleOrDefaultAsync(a => a.Instance.InstanceId == task.Assignment.InstanceId.ToString("D"), ct) ?? throw new AccessDeniedException("task_target_unavailable");
         var sender = Owned(senderRow);
@@ -33,7 +34,7 @@ public sealed partial class SqliteIamStore
         var row = await db.Set<DelegatedTaskRow>().SingleOrDefaultAsync(t => t.TenantId == tenant && t.TaskId == admission.TaskId, ct);
         if (row is null || row.State != (int)DelegatedTaskState.PendingDependencies || row.Revision != admission.ExpectedRevision) return false;
         var task = TaskPersistence.Value(row); var state = await ReadTenantAsync(db, tenant, ct) ?? throw new AccessDeniedException("tenant_unavailable");
-        var source = await ReadSandboxSession(db, tenant, task.Source.SessionId, ct) ?? throw new AccessDeniedException("task_source_unavailable");
+        var source = await ReadSandboxSession(db, tenant, task.Source.RequireSessionId(), ct) ?? throw new AccessDeniedException("task_source_unavailable");
         var agentRow = await OwnedAgents(db, tenant).SingleOrDefaultAsync(a => a.Instance.InstanceId == task.Source.InstanceId.ToString("D"), ct) ?? throw new AccessDeniedException("task_source_unavailable");
         var agent = Owned(agentRow);
         var sourceRow = task.Source.RunId is { } sourceId ? await OwnedRuns(db, tenant).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == sourceId.ToString("D"), ct) : null;

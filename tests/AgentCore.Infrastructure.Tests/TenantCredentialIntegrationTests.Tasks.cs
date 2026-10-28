@@ -230,6 +230,9 @@ public sealed partial class TenantCredentialIntegrationTests
             var rollback = await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>().MigrateAsync("20261027040000_SessionGoals"));
             Assert.Contains("restore_coordinated_task_backup_required", rollback.Message);
             Assert.Equal("20261027060000_TaskDelegation", (await db.Database.GetAppliedMigrationsAsync()).Last());
+            // A refused rollback can already have removed later additive migrations.
+            // Restore the current schema before exercising current retention adapters below.
+            await db.Database.MigrateAsync();
         }
         if (temporary)
         {

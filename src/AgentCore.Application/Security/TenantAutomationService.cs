@@ -6,6 +6,8 @@ using AgentCore.Application.Triggers;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
 using AgentCore.Domain.Triggers;
+using AgentCore.Application.Workflows;
+using AgentCore.Domain.Workflows;
 
 namespace AgentCore.Application.Security;
 
@@ -13,10 +15,10 @@ public sealed record TenantAutomationTriggerChange(Guid? TriggerId, AutomationTr
 public sealed record TenantAutomationChange(bool Enabled, string Name, string Instructions, TriggerSchedule? Schedule,
     AgentCore.Domain.Models.ModelPreference? ModelPreference = null, bool RequiresTools = true, bool RequiresVision = false,
     IReadOnlyList<TenantAutomationTriggerChange>? Events = null, Guid? ReportToSessionId = null, Guid? TargetSessionId = null,
-    string? PresetId = null, int? PresetVersion = null, Guid? PinnedSpaceId = null, Guid? PinnedEnvironmentId = null);
+    string? PresetId = null, int? PresetVersion = null, Guid? PinnedSpaceId = null, Guid? PinnedEnvironmentId = null, AutomationWorkflowStart? StartWorkflow = null);
 
 public sealed partial class TenantAutomationService(IIamStore security, ITenantAutomationStore store, ITenantAgentStore agents,
-    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer iam, ITenantModelCatalogReader modelCatalogs, IIdGenerator ids, TimeProvider time, IEventFilterEvaluator? filters = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null, ITenantSessionStore? sessions = null, AutoModelRouter? routing = null)
+    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer iam, ITenantModelCatalogReader modelCatalogs, IIdGenerator ids, TimeProvider time, IEventFilterEvaluator? filters = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null, ITenantSessionStore? sessions = null, AutoModelRouter? routing = null, TenantWorkflowCatalogService? workflows = null, IFormalWorkflowRuntime? workflowRuntime = null)
 {
     private readonly SemaphoreSlim dueGate = new(1, 1);
     private string? dueCursor;
@@ -55,15 +57,27 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
         if (current is not null) TenantAutomationRules.Owner(current, agent);
         var at = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
         var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
+        if (change.StartWorkflow is { } workflowInput)
+        {
+            if (change.TargetSessionId is not null || change.ReportToSessionId is not null) throw new ArgumentException("Choose exactly one Automation destination.");
+            var version = workflows is null ? throw new AccessDeniedException("workflow_runtime_unavailable") : await workflows.EligibleVersionAsync(tenant, workflowInput.WorkflowId, workflowInput.Version, human, ct);
+            using var input = System.Text.Json.JsonDocument.Parse(workflowInput.InputsJson);
+            change = change with { StartWorkflow = new(workflowInput.WorkflowId, workflowInput.Version, workflowInput.GraphHash, WorkflowExecutionRules.Inputs(version.Graph.Read(), input.RootElement)) };
+        }
         var proposed = TenantAutomationAuthoring.Build(agent, policy, current, change, TenantAutomationPresetRules.Provenance(current, change, at), at, models, ids, filters);
         await TenantAutomationRules.HumanSourcesAsync(state, human.PrincipalId, proposed, iam, ct);
+        if (proposed.ExecutionTarget.Workflow is { } destination)
+        {
+            var version = workflows is null ? throw new AccessDeniedException("workflow_runtime_unavailable") : await workflows.EligibleVersionAsync(tenant, destination.WorkflowId, destination.Version, human, ct);
+            await WorkflowAutomationRules.DestinationAsync(state, proposed, version, human.PrincipalId, iam, ct);
+        }
         await TenantCompletionDestinationRules.AuthoringAsync(state, human.PrincipalId, proposed,
             proposed.CompletionDelivery.SessionId is { } reportTo && sessions is not null ? await sessions.FindTenantSessionAsync(tenant, reportTo, ct) : null, iam, ct);
         var conversation = TenantAutomationConversationRules.Existing(proposed)
             ? TenantAutomationConversationRules.Require(proposed, sessions is null ? null : await sessions.FindTenantSessionAsync(tenant, proposed.ExecutionTarget.SessionId!.Value, ct)) : null;
         await TenantAutomationConversationRules.AuthoringAsync(state, human.PrincipalId, proposed, conversation, iam, ct);
         if (conversation is not null) TenantAutomationConversationRules.RequireSelectable(proposed, conversation, policy, models);
-        if (proposed.Status == AutomationStatus.Active && (proposed.IsSchedule && proposed.NextOccurrenceAtUtc is null || conversation is null && !ExecutionModelPolicy.Selectable(models, policy, agent.Instance, proposed)))
+        if (proposed.Status == AutomationStatus.Active && (proposed.IsSchedule && proposed.NextOccurrenceAtUtc is null || proposed.ExecutionTarget.Workflow is null && conversation is null && !ExecutionModelPolicy.Selectable(models, policy, agent.Instance, proposed)))
             throw new AccessDeniedException("automation_model_unavailable");
         var audit = new AuthorizationAudit(ids.NewId(), tenant, human.PrincipalId, permission, proposed.AutomationId.ToString("D"), "allowed", "automation_saved", at);
         if (!await store.TrySaveTenantAutomationAsync(Next(state), securityRevision, proposed, automationRevision, instanceRevision, human, permission, audit, ct)) throw new SecurityConflictException("stale_revision");
@@ -121,7 +135,11 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
         var tenant = current.Owner.TenantId!.Value; var at = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
         var conversation = TenantAutomationConversationRules.Existing(current)
             ? TenantAutomationConversationRules.Require(current, sessions is null ? null : await sessions.FindTenantSessionAsync(tenant, current.ExecutionTarget.SessionId!.Value, ct)) : null;
-        var (agent, resolved) = await configurations.ResolveForAutomationAsync(current, conversation, at, ct);
+        var workflowDestination = current.ExecutionTarget.Workflow is not null;
+        var agentPolicy = workflowDestination ? await configurations.CurrentPolicyAsync(tenant, current.Owner.AgentInstanceId, ct) : default;
+        var resolution = workflowDestination ? default : await configurations.ResolveForAutomationAsync(current, conversation, at, ct);
+        var agent = workflowDestination ? agentPolicy.Item1 : resolution.Item1;
+        var resolved = resolution.Item2;
         if (instanceRevision is { } expected && agent.Instance.Revision != expected) throw new SecurityConflictException("stale_revision");
         PreparedEventAdmissionSource? eventSource = null;
         long? sourceRevision = null;
@@ -157,6 +175,7 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
             await TenantEventAdmissionRules.RawReadAsync(state, agent.PrincipalId, subscription, eventSource.EventIds, iam, ct, eventDelivery is not null ? TenantEventAdmissionRules.EmailAccounts(eventDelivery) : TenantEventAdmissionRules.EmailAccounts(eventBucket!));
         }
         var sourceKind = manual ? TriggerSourceKind.ManualInvocation : eventSource?.SourceKind ?? TriggerSourceKind.Schedule;
+        if (workflowDestination) return await AdmitWorkflow(current, state, agent, agentPolicy.Item2, human, manual, eventSource, eventDelivery, eventBucket, sourceRevision, at, ct);
         var admissionDecision = await TenantAutomationAdmissionApprovalRules.EvaluateAsync(state, current, agent, resolved.Configuration.Definition, human?.PrincipalId, iam, ct, sourceKind, eventSource, eventDelivery is not null ? TenantEventAdmissionRules.EmailAccounts(eventDelivery) : eventBucket is not null ? TenantEventAdmissionRules.EmailAccounts(eventBucket) : []);
         var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         var model = conversation is null ? routing is null ? ExecutionModelPolicy.Resolve(models, resolved.Configuration.Definition, agent.Instance, current) : await ExecutionModelPolicy.ResolveAsync(routing, models, resolved.Configuration.Definition, agent.Instance, current, ct)

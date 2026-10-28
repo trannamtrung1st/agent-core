@@ -11,7 +11,7 @@ public sealed partial class InMemoryIamStore
     public ValueTask<bool> IsTenantAutomationBusyAsync(Guid tenant, Guid automation, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate) lock (automationBacking.AdmissionGate)
-            return ValueTask.FromResult(automationBacking.ReadTenantAutomation(tenant, automation) is not null && automationBacking.TenantBusy(automation));
+            return ValueTask.FromResult(automationBacking.ReadTenantAutomation(tenant, automation) is not null && (automationBacking.TenantBusy(automation) || WorkflowAutomationBusy(tenant, automation)));
     }
 
     public ValueTask<TenantAutomationAdmissionResult?> TryPrepareTenantAutomationApprovalAsync(TenantSecurityState next, long expectedSecurityRevision,

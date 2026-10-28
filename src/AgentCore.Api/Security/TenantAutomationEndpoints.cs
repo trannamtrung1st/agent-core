@@ -9,8 +9,10 @@ namespace AgentCore.Api.Security;
 public static class TenantAutomationEndpoints
 {
     [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
+    public sealed record WorkflowDestination(Guid WorkflowId, int Version, string GraphHash, System.Text.Json.JsonElement Inputs);
+    [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
     public sealed record SaveRequest(bool Enabled, string Name, string Instructions, AutomationTiming? Schedule, long ExpectedRevision,
-        long ExpectedInstanceRevision, long ExpectedAutomationRevision = 0, ModelPreferenceDto? ModelPreference = null, bool RequiresTools = true, bool RequiresVision = false, IReadOnlyList<AutomationTriggerDto>? Triggers = null, Guid? ReportToSessionId = null, Guid? TargetSessionId = null, string? PresetId = null, int? PresetVersion = null, Guid? PinnedSpaceId = null, Guid? PinnedEnvironmentId = null);
+        long ExpectedInstanceRevision, long ExpectedAutomationRevision = 0, ModelPreferenceDto? ModelPreference = null, bool RequiresTools = true, bool RequiresVision = false, IReadOnlyList<AutomationTriggerDto>? Triggers = null, Guid? ReportToSessionId = null, Guid? TargetSessionId = null, string? PresetId = null, int? PresetVersion = null, Guid? PinnedSpaceId = null, Guid? PinnedEnvironmentId = null, WorkflowDestination? StartWorkflow = null);
     public sealed record Witness(long ExpectedRevision, long ExpectedInstanceRevision, long ExpectedAutomationRevision);
     public static void Map(WebApplication app)
     {
@@ -63,13 +65,13 @@ public static class TenantAutomationEndpoints
             var actor = IdentityHttp.TenantContext(http); var human = Human(http, actor.AccountId, actor.PrincipalId);
             Route(await service.ReadAsync(actor.TenantId, automationId, human, ct), instanceId);
             var result = await service.RunAsync(actor.TenantId, automationId, human, body.ExpectedRevision, body.ExpectedInstanceRevision, body.ExpectedAutomationRevision, ct);
-            return Results.Json(new { result.Created, occurrenceId = result.Occurrence.OccurrenceId, result.SessionId, result.RunId, result.ApprovalRequestId }, statusCode: result.ApprovalRequestId is not null ? 202 : result.Created ? 201 : 200);
+            return Results.Json(new { result.Created, occurrenceId = result.Occurrence.OccurrenceId, result.SessionId, result.RunId, result.ApprovalRequestId, result.WorkflowExecutionId }, statusCode: result.ApprovalRequestId is not null ? 202 : result.Created ? 201 : 200);
         }));
     }
     private static HumanSessionReference Human(HttpContext http, Guid account, Guid principal) => new(account, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), principal);
-    private static TenantAutomationChange Change(SaveRequest value) => new(value.Enabled, value.Name, value.Instructions, value.Schedule is null ? null : AutomationHttpMapping.Parse(value.Schedule), ModelManagementMapping.Input(value.ModelPreference), value.RequiresTools, value.RequiresVision,
+    private static TenantAutomationChange Change(SaveRequest value) => new(value.Enabled, value.Name, value.Instructions, value.Schedule is null ? null : AutomationHttpMapping.Parse(value.Schedule), value.StartWorkflow is not null && value.ModelPreference is null ? null : ModelManagementMapping.Input(value.ModelPreference), value.RequiresTools, value.RequiresVision,
         value.Triggers?.Select(t => new TenantAutomationTriggerChange(t.TriggerId is null ? null : Guid.Parse(t.TriggerId),
-            AutomationHttpMapping.ParseTrigger(t), t.Enabled, t.TriggerId is null ? 0 : t.Revision)).ToArray(), value.ReportToSessionId, value.TargetSessionId, value.PresetId, value.PresetVersion, value.PinnedSpaceId, value.PinnedEnvironmentId);
+            AutomationHttpMapping.ParseTrigger(t), t.Enabled, t.TriggerId is null ? 0 : t.Revision)).ToArray(), value.ReportToSessionId, value.TargetSessionId, value.PresetId, value.PresetVersion, value.PinnedSpaceId, value.PinnedEnvironmentId, value.StartWorkflow is { } workflow ? new(workflow.WorkflowId, workflow.Version, workflow.GraphHash, workflow.Inputs.GetRawText()) : null);
     private static void Route(Automation value, Guid instance) { if (value.Owner.AgentInstanceId != instance) throw new AccessDeniedException("resource_unavailable"); }
     private static object Editor(TenantAutomationEditor view) => new { agent = new { view.Agent.PrincipalId, view.Agent.SystemIdentityId, instance = AgentCore.Api.Mapping.AdminHttpMapping.ToAgentInstance(view.Agent.Instance) }, view.Policy, view.Total, view.Page, view.PageSize, view.SecurityRevision, view.CanCreate, view.CanSchedule, view.CanCoreEvents, view.CanWebhookEvents,
         presets = (view.Presets ?? []).Select(p => new { p.Template.PresetId, p.Template.PresetVersion, p.Template.Name, p.Template.Description, p.Template.Instructions,
@@ -79,7 +81,7 @@ public static class TenantAutomationEndpoints
     private static object Safe(Automation value) => new {
         value.AutomationId, value.PinnedSpaceId, value.PinnedEnvironmentId, agentInstanceId = value.Owner.AgentInstanceId, value.Name, value.Instructions, value.Provenance.PresetId, value.Provenance.PresetVersion, status = value.Status.ToString().ToLowerInvariant(),
         value.Revision, value.TriggerRevision, value.NextOccurrenceAtUtc, value.OccurrenceCount, value.ExpiresAtUtc, value.ModelPreference,
-        value.RequiresTools, value.RequiresVision, executionTarget = value.ExecutionTarget.Kind == AutomationExecutionTargetKind.ExistingSession ? "existingSession" : "backgroundSession", targetSessionId = value.ExecutionTarget.SessionId, completionDelivery = value.CompletionDelivery.SessionId is null ? "none" : "toSession", reportToSessionId = value.CompletionDelivery.SessionId, value.SuspensionReason,
+        value.RequiresTools, value.RequiresVision, executionTarget = value.ExecutionTarget.Kind switch { AutomationExecutionTargetKind.ExistingSession => "existingSession", AutomationExecutionTargetKind.StartWorkflow => "startWorkflow", _ => "backgroundSession" }, targetSessionId = value.ExecutionTarget.SessionId, startWorkflow = value.ExecutionTarget.Workflow, completionDelivery = value.CompletionDelivery.SessionId is null ? "none" : "toSession", reportToSessionId = value.CompletionDelivery.SessionId, value.SuspensionReason,
         createdAt = value.Provenance.CreatedAt, updatedAt = value.Provenance.UpdatedAt, triggers = value.Triggers.Select(AutomationHttpMapping.TriggerRecord)
     };
 }

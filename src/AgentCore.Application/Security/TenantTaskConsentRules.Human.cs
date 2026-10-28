@@ -45,7 +45,7 @@ public static partial class TenantTaskConsentRules
             || !state.Users.Any(u => u.PrincipalId == task.Source.PrincipalId && u.Status == IdentityStatus.Active))
             throw new AccessDeniedException("task_source_unavailable");
         foreach (var key in new[] { "sessions.read", "sessions.manage", "tasks.delegate" })
-            await TaskAuthority.RequireAsync(state, task.Source.PrincipalId, key, TenantSessionRules.Scope(request.TenantId, task.Source.SessionId), iam, ct);
+            await TaskAuthority.RequireAsync(state, task.Source.PrincipalId, key, TenantSessionRules.Scope(request.TenantId, task.Source.RequireSessionId()), iam, ct);
     }
     public static async ValueTask<bool> HumanNeedsReviewAsync(TenantSecurityState state, DelegatedTask task, IamAuthorizer iam, CancellationToken ct)
     {

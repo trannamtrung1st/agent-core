@@ -24,10 +24,11 @@ public sealed partial class InMemoryIamStore : ITenantTaskStore
     public ValueTask<DelegatedTask?> FindTaskAsync(Guid tenant, Guid task, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(delegatedTasks.GetValueOrDefault((tenant, task)) is { } value
-            && sessionBacking.ReadTenantSession(tenant, value.Source.SessionId) is not null ? value : null);
+            && (value.Source.Workflow is { } source ? workflowExecutions.ContainsKey((tenant, source.ExecutionId))
+                : sessionBacking.ReadTenantSession(tenant, value.Source.RequireSessionId()) is not null) ? value : null);
     }
     private bool CanReadTask(TenantSecurityState state, TaskActor actor, DelegatedTask task, CancellationToken ct) =>
-        TaskAuthority.CanReadAsync(state, actor, task, new(this), ct, actor.Agent is { } frame
+        (task.Source.Workflow is null || TaskSourceAvailable(task, ct, dispatch: false)) && TaskAuthority.CanReadAsync(state, actor, task, new(this), ct, actor.Agent is { } frame
             ? sessionBacking.ReadRetainedTenantOperationRun(state.Tenant.TenantId, frame.RunId) : null).Result;
     private void RequireTaskReader(Guid tenant, TaskActor actor, CancellationToken ct)
     {
@@ -132,7 +133,7 @@ public sealed partial class InMemoryIamStore : ITenantTaskStore
                 if (query.Cursor is { } cursor && task.TaskId.CompareTo(cursor) <= 0 || query.SessionId is { } session && (query.Scope == "assigned" ? task.WorkerSessionId != session : task.Source.SessionId != session)
                     || query.InstanceId is { } instance && (query.Scope == "created" ? task.Source.InstanceId != instance : task.Assignment.InstanceId != instance)
                     || query.Scope == "pending" && TaskLimits.Terminal(task.State)
-                    || sessionBacking.ReadTenantSession(query.TenantId, task.Source.SessionId) is not { } source || SessionRetention.IsDue(source.Snapshot, TaskNow)
+                    || !TaskSourceAvailable(task, ct, dispatch: false)
                     || !CanReadTask(state, query.Actor, task, ct)) continue;
                 result.Add(task); if (result.Count > query.Limit) break;
             }
@@ -147,8 +148,8 @@ public sealed partial class InMemoryIamStore : ITenantTaskStore
             var tenant = command.TenantId; RequireTaskReader(tenant, command.Actor, ct); var state = _tenants[tenant];
             var task = delegatedTasks.GetValueOrDefault((tenant, command.TaskId)) ?? throw new AccessDeniedException("resource_unavailable");
             if (!CanReadTask(state, command.Actor, task, ct)) throw new AccessDeniedException("resource_unavailable");
-            if (command.Actor.Human is not null) TaskAuthority.RequireAsync(state, command.Actor.PrincipalId, "sessions.manage",
-                TenantSessionRules.Scope(tenant, task.Source.SessionId), new(this), ct).AsTask().GetAwaiter().GetResult();
+            if (command.Actor.Human is not null) TaskAuthority.RequireAsync(state, command.Actor.PrincipalId, task.Source.Workflow is null ? "sessions.manage" : "workflows.cancel",
+                task.Source.Workflow is { } process ? AgentCore.Application.Workflows.WorkflowCatalogAuthority.Scope(tenant, process.WorkflowId) : TenantSessionRules.Scope(tenant, task.Source.RequireSessionId()), new(this), ct).AsTask().GetAwaiter().GetResult();
             TaskAuthority.RequireAsync(state, command.Actor.PrincipalId, "tasks.cancel", TaskAuthority.Scope(tenant, task.TaskId), new(this), ct).AsTask().GetAwaiter().GetResult();
             var requester = command.Actor.Agent is { } frame ? sessionBacking.ReadTenantRun(tenant, frame.RunId)?.Admission.ExecutionContext?.OriginalInitiatorPrincipalId : null;
             TaskAuthority.RequireCurrentPolicyAsync(state, command.Actor, requester, "tasks.cancel", TaskAuthority.Scope(tenant, task.TaskId), new(this), ct).AsTask().GetAwaiter().GetResult();
@@ -167,8 +168,8 @@ public sealed partial class InMemoryIamStore : ITenantTaskStore
                 if (!worker.IsTerminal) sessionBacking.AgentRuns.Runs[worker.AgentRunId] = worker.RequestCancellation(worker.Revision, worker.KnownEffectSummary, at);
             }
             delegatedTasks[(tenant, task.TaskId)] = next; taskCommands.Add(key, (hash, next)); BumpTaskSecurity(state);
-            if (TaskLimits.Terminal(next.State))
-                taskNotifications.TryAdd((tenant, task.TaskId), new(tenant, command.AuditId, task.TaskId, next.TerminalRunId, task.Source.SessionId, 1, at));
+            if (TaskLimits.Terminal(next.State) && task.Source.Workflow is null)
+                taskNotifications.TryAdd((tenant, task.TaskId), new(tenant, command.AuditId, task.TaskId, next.TerminalRunId, task.Source.RequireSessionId(), 1, at));
             _audit.Add(new(command.AuditId, tenant, command.Actor.PrincipalId, "tasks.cancel", task.TaskId.ToString("D"), "allowed", "cancellation_requested", at));
             AgentCore.Application.Observability.TaskTelemetry.Task(AgentCore.Application.Observability.TaskCoordinationEvent.CancellationRequested, next);
             return ValueTask.FromResult(new TaskMutationResult(next, state.Tenant.Revision + 1));
@@ -182,7 +183,7 @@ public sealed partial class InMemoryIamStore : ITenantTaskStore
             var candidates = delegatedTasks.Values.Where(t => !TaskLimits.Terminal(t.State)).OrderBy(t => t.TaskId).ToArray();
             var offset = candidates.Length == 0 ? 0 : taskReconciliationOffset % candidates.Length;
             taskReconciliationOffset = checked(offset + Math.Clamp(limit, 1, 32));
-            return ValueTask.FromResult<IReadOnlyList<TaskReconciliation>>(candidates.Skip(offset).Concat(candidates.Take(offset)).Take(Math.Clamp(limit, 1, 32)).Select(t => new TaskReconciliation(t, sessionBacking.ReadTenantSession(t.Source.TenantId, t.Source.SessionId),
+            return ValueTask.FromResult<IReadOnlyList<TaskReconciliation>>(candidates.Skip(offset).Concat(candidates.Take(offset)).Take(Math.Clamp(limit, 1, 32)).Select(t => new TaskReconciliation(t, t.Source.SessionId is { } sourceId ? sessionBacking.ReadTenantSession(t.Source.TenantId, sourceId) : null,
                     t.InitialWorkerRunId is null ? null : TaskSettlement.FinalRun(t, id => sessionBacking.ReadRetainedTenantOperationRun(t.Source.TenantId, id)),
                     t.Request.DependsOnTaskIds.Select(id => delegatedTasks[(t.Source.TenantId, id)]).ToArray())).ToArray());
         }
@@ -203,9 +204,8 @@ public sealed partial class InMemoryIamStore : ITenantTaskStore
             else
             {
                 var run = TaskSettlement.FinalRun(task, id => sessionBacking.ReadRetainedTenantOperationRun(tenant, id));
-                var source = sessionBacking.ReadTenantSession(tenant, task.Source.SessionId);
                 var target = FindTenantAgentAsync(tenant, task.Assignment.InstanceId, ct).Result;
-                var stop = TaskSettlement.StopReason(task, run, source is not null && !SessionRetention.IsDue(source.Snapshot, at),
+                var stop = TaskSettlement.StopReason(task, run, TaskSourceAvailable(task, ct),
                     target?.Instance.Lifecycle == AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active && target.Instance.Cooperation?.AcceptTasks == true, at);
                 if (stop is not null && !run.IsTerminal)
                 {
@@ -214,8 +214,8 @@ public sealed partial class InMemoryIamStore : ITenantTaskStore
                 next = TaskSettlement.Observe(task, run, at, stop); if (ReferenceEquals(task, next)) return ValueTask.FromResult(false);
             }
             delegatedTasks[(tenant, taskId)] = next;
-            if (TaskLimits.Terminal(next.State))
-                taskNotifications.TryAdd((tenant, taskId), new(tenant, auditId, taskId, next.TerminalRunId, task.Source.SessionId, 1, at));
+            if (TaskLimits.Terminal(next.State) && task.Source.SessionId is not null)
+                taskNotifications.TryAdd((tenant, taskId), new(tenant, auditId, taskId, next.TerminalRunId, task.Source.RequireSessionId(), 1, at));
             _audit.Add(new(auditId, tenant, task.Assignment.PrincipalId, "tasks.settle", taskId.ToString("D"), "allowed", next.State.ToString(), at));
             AgentCore.Application.Observability.TaskTelemetry.Task(AgentCore.Application.Observability.TaskCoordinationEvent.Settled, next, next.Reason);
             return ValueTask.FromResult(true);

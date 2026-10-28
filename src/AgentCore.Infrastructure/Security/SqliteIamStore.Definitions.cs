@@ -11,12 +11,18 @@ public sealed partial class SqliteIamStore
 {
     public async ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
+        if (AgentCore.Application.Workflows.WorkflowCatalogAuthority.TryScope(scope, out var workflow))
+        {
+            await using var db = await contexts.CreateDbContextAsync(ct);
+            return await db.Set<WorkflowDefinitionRow>().AnyAsync(w => w.TenantId == scope.TenantId && w.WorkflowId == workflow, ct);
+        }
         if (AgentCore.Application.Tasks.TaskAuthority.TryScope(scope, out var taskScope))
         {
             await using var db = await contexts.CreateDbContextAsync(ct);
             return scope.ResourceType == "task"
                 ? await db.Set<DelegatedTaskRow>().AnyAsync(t => t.TenantId == scope.TenantId && t.TaskId == taskScope
-                    && db.Set<TenantSessionRecord>().Any(s => s.TenantId == t.TenantId && s.SessionId == t.SourceSessionId), ct)
+                    && (t.WorkflowExecutionId != null ? db.Set<WorkflowExecutionRow>().Any(w => w.TenantId == t.TenantId && w.ExecutionId == t.WorkflowExecutionId)
+                        : db.Set<TenantSessionRecord>().Any(s => s.TenantId == t.TenantId && s.SessionId == t.SourceSessionId)), ct)
                 : await db.Set<AgentThreadRow>().AnyAsync(t => t.TenantId == scope.TenantId && t.ThreadId == taskScope, ct);
         }
         if (AgentCore.Application.Evaluations.EvaluationStoreRules.TryScope(scope, out _))

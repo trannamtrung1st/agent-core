@@ -17,7 +17,7 @@ public sealed partial class InMemoryIamStore
         {
             var task = delegatedTasks.GetValueOrDefault((tenant, witness.TaskId));
             var available = task is not null && (task.Source.SessionId == run.SessionId || task.WorkerSessionId == run.SessionId)
-                && sessionBacking.ReadTenantSession(tenant, task.Source.SessionId) is { } source && !SessionRetention.IsDue(source.Snapshot, TaskNow)
+                && sessionBacking.ReadTenantSession(tenant, task.Source.RequireSessionId()) is { } source && !SessionRetention.IsDue(source.Snapshot, TaskNow)
                 && CanReadTask(state, actor, task, default);
             long sequence = 0;
             if (available && TaskWaitRules.CanReadMessagesAsync(state, run.Owner.ExecutorPrincipalId!.Value, task!, new(this), CancellationToken.None, run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId).Result)

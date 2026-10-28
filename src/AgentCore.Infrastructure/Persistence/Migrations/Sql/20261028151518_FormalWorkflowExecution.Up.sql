@@ -1,0 +1,298 @@
+-- Frozen predecessor trigger/table inventory from f8449f75 plus the catalog migration.
+DROP TRIGGER HumanTaskApprovalOutcomeGuard;
+DROP TRIGGER TR_TenantCore_Fact_Insert;
+DROP TRIGGER TR_TenantCore_RunCausation_Insert;
+DROP TRIGGER TaskAdmissionReceiptGuard;
+DROP TRIGGER TaskAssignmentImmutable;
+CREATE TABLE __WorkflowTasksMigration(TenantId TEXT NOT NULL, TaskId TEXT NOT NULL, SourceSessionId TEXT NULL, WorkflowExecutionId TEXT NULL,
+    OperationScope TEXT NOT NULL, RequestKey TEXT NOT NULL, RequestHash TEXT NOT NULL CHECK(length(RequestHash)=64),
+    WorkerInstanceId TEXT NOT NULL, WorkerSessionId TEXT NULL, RootActivationId TEXT NOT NULL, ParentTaskId TEXT NULL,
+    State INTEGER NOT NULL, Revision INTEGER NOT NULL, UpdatedAt INTEGER NOT NULL, Json TEXT NOT NULL CHECK(json_valid(Json)),
+    CONSTRAINT CK_Task_State CHECK(State BETWEEN 0 AND 8 AND Revision>=1), PRIMARY KEY(TenantId,TaskId),
+    FOREIGN KEY(TenantId,SourceSessionId) REFERENCES TenantSessions(TenantId,SessionId) ON DELETE RESTRICT,
+    FOREIGN KEY(TenantId,WorkerSessionId) REFERENCES TenantSessions(TenantId,SessionId) ON DELETE RESTRICT,
+    FOREIGN KEY(TenantId,ParentTaskId) REFERENCES TenantDelegatedTasks(TenantId,TaskId) ON DELETE RESTRICT, CONSTRAINT FK_TenantDelegatedTasks_TenantWorkflowExecutions_TenantId_WorkflowExecutionId FOREIGN KEY(TenantId,WorkflowExecutionId) REFERENCES TenantWorkflowExecutions(TenantId,ExecutionId) ON DELETE RESTRICT);
+INSERT INTO __WorkflowTasksMigration(TenantId,TaskId,SourceSessionId,OperationScope,RequestKey,RequestHash,WorkerInstanceId,WorkerSessionId,RootActivationId,ParentTaskId,State,Revision,UpdatedAt,Json,WorkflowExecutionId) SELECT TenantId,TaskId,SourceSessionId,OperationScope,RequestKey,RequestHash,WorkerInstanceId,WorkerSessionId,RootActivationId,ParentTaskId,State,Revision,UpdatedAt,Json,NULL FROM TenantDelegatedTasks;
+DROP TABLE TenantDelegatedTasks;
+ALTER TABLE __WorkflowTasksMigration RENAME TO TenantDelegatedTasks;
+CREATE INDEX IX_TenantDelegatedTasks_State_UpdatedAt_TaskId ON TenantDelegatedTasks(State,UpdatedAt,TaskId);
+CREATE INDEX IX_TenantDelegatedTasks_TenantId_ParentTaskId ON TenantDelegatedTasks(TenantId,ParentTaskId);
+CREATE INDEX IX_TenantDelegatedTasks_TenantId_RootActivationId_TaskId ON TenantDelegatedTasks(TenantId,RootActivationId,TaskId);
+CREATE UNIQUE INDEX IX_TenantDelegatedTasks_TenantId_SourceSessionId_OperationScope_RequestKey ON TenantDelegatedTasks(TenantId,SourceSessionId,OperationScope,RequestKey);
+CREATE INDEX IX_TenantDelegatedTasks_TenantId_WorkerInstanceId_State_TaskId ON TenantDelegatedTasks(TenantId,WorkerInstanceId,State,TaskId);
+CREATE INDEX IX_TenantDelegatedTasks_TenantId_WorkerSessionId ON TenantDelegatedTasks(TenantId,WorkerSessionId);
+CREATE UNIQUE INDEX IX_TenantDelegatedTasks_TenantId_WorkflowExecutionId_OperationScope_RequestKey ON TenantDelegatedTasks(TenantId,WorkflowExecutionId,OperationScope,RequestKey) WHERE WorkflowExecutionId IS NOT NULL;
+CREATE TRIGGER HumanTaskApprovalOutcomeGuard BEFORE INSERT ON TenantTaskApprovalOutcomes BEGIN
+    SELECT RAISE(ABORT,'Human Task outcome requires its exact decided command') WHERE NOT COALESCE((
+        lower(NEW.TenantId)=json_extract(NEW.Json,'$.TenantId') AND lower(NEW.OperationId)=json_extract(NEW.Json,'$.OperationId')
+        AND lower(NEW.RequestId)=json_extract(NEW.Json,'$.RequestId')
+        AND json_extract(NEW.Json,'$.Admitted')=(NEW.TaskId IS NOT NULL)
+        AND EXISTS (SELECT 1 FROM TenantApprovalRequests a WHERE a.TenantId=NEW.TenantId AND a.RequestId=NEW.RequestId
+            AND a.OperationId=NEW.OperationId AND a.Status IN (1,2,3,4)
+            AND json_extract(a.PayloadJson,'$.Operation.TaskDelegation.Task.Source.ActorKind')=1
+            AND (NEW.TaskId IS NULL AND json_extract(NEW.Json,'$.TaskAdmission') IS NULL
+                OR (a.Status=1 AND NEW.RecordedAt<a.ExpiresAt AND json_extract(NEW.Json,'$.ReasonCode')='task_created'
+                    AND lower(NEW.TaskId)=json_extract(NEW.Json,'$.TaskAdmission.TaskId') AND json_extract(NEW.Json,'$.TaskAdmission.Revision')=1
+                    AND EXISTS (SELECT 1 FROM TenantDelegatedTasks t WHERE t.TenantId=NEW.TenantId AND t.TaskId=NEW.TaskId
+                        AND t.Revision=1 AND t.State IN (0,1)
+                        AND lower(t.TaskId)=json_extract(a.PayloadJson,'$.Operation.TaskDelegation.Task.TaskId')
+                        AND json_extract(t.Json,'$.Source')=json_extract(a.PayloadJson,'$.Operation.TaskDelegation.Task.Source')
+                        AND json_extract(t.Json,'$.Request')=json_extract(a.PayloadJson,'$.Operation.TaskDelegation.Task.Request')
+                        AND json_extract(t.Json,'$.Assignment')=json_extract(a.PayloadJson,'$.Operation.TaskDelegation.Task.Assignment')
+                        AND t.WorkerSessionId IS json_extract(NEW.Json,'$.TaskAdmission.WorkerSessionId')
+                        AND json_extract(t.Json,'$.InitialWorkerRunId') IS json_extract(NEW.Json,'$.TaskAdmission.InitialWorkerRunId')))))),0);
+END;
+CREATE TRIGGER TR_TenantCore_Fact_Insert BEFORE INSERT ON CoreEvents
+BEGIN
+SELECT RAISE(ABORT, 'Core facts require a closed actual source and frozen subscriptions') WHERE NOT COALESCE(((NEW.TenantId IS NULL AND NEW.ExecutorPrincipalId IS NULL AND NEW.SubscriptionsJson IS NULL AND NEW.EmailWatchEventId IS NULL AND NOT EXISTS (SELECT 1 FROM SystemIdentities i WHERE i.Kind = 0 AND i.AgentInstanceId = NEW.AgentInstanceId AND i.TenantId IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM json_tree(NEW.PayloadJson, '$') WHERE lower(key) IN ('tenantid','executorprincipalid')) AND NOT EXISTS (SELECT 1 FROM json_tree(NEW.PayloadJson) field JOIN SystemIdentities i ON i.AgentInstanceId = field.value WHERE lower(field.key) = 'agentinstanceid' AND i.Kind = 0 AND i.TenantId IS NOT NULL)) OR (NEW.TenantId IS NOT NULL AND (json_type(NEW.PayloadJson, '$') IS 'object' AND (SELECT count(*) FROM json_each(NEW.PayloadJson, '$')) = 9 AND (SELECT count(DISTINCT key) FROM json_each(NEW.PayloadJson, '$') WHERE key IN ('EventId','DedupeKey','Owner','Key','OccurredAtUtc','DataJson','RootAgentRunId','TriggerDepth','VisitedAutomationIds')) = 9) AND (json_type(NEW.PayloadJson, '$.Owner') IS 'object' AND (SELECT count(*) FROM json_each(NEW.PayloadJson, '$.Owner')) = 4 AND (SELECT count(DISTINCT key) FROM json_each(NEW.PayloadJson, '$.Owner') WHERE key IN ('AgentInstanceId','profileId','TenantId','ExecutorPrincipalId')) = 4) AND json_extract(NEW.PayloadJson, '$.Owner.AgentInstanceId') IS NEW.AgentInstanceId AND lower(json_extract(NEW.PayloadJson, '$.Owner.TenantId')) IS lower(NEW.TenantId) AND lower(json_extract(NEW.PayloadJson, '$.Owner.ExecutorPrincipalId')) IS lower(NEW.ExecutorPrincipalId) AND json_type(NEW.PayloadJson, '$.Owner.profileId') IS 'null' AND NEW.Snapshotted = 1 AND json_type(NEW.PayloadJson, '$.TriggerDepth') IS 'integer' AND json_extract(NEW.PayloadJson, '$.TriggerDepth') BETWEEN 0 AND 4 AND json_type(NEW.PayloadJson, '$.VisitedAutomationIds') IS 'array' AND json_array_length(NEW.PayloadJson, '$.VisitedAutomationIds') <= 4 AND (SELECT count(DISTINCT value) FROM json_each(NEW.PayloadJson, '$.VisitedAutomationIds')) = json_array_length(NEW.PayloadJson, '$.VisitedAutomationIds') AND NOT EXISTS (SELECT 1 FROM json_each(NEW.PayloadJson,'$.VisitedAutomationIds') v WHERE NOT EXISTS(
+ SELECT 1 FROM Automations a WHERE a.TenantId=NEW.TenantId AND a.AutomationId=v.value
+ AND ((a.AgentInstanceId=NEW.AgentInstanceId AND lower(a.ExecutorPrincipalId)=lower(NEW.ExecutorPrincipalId))
+ OR (json_extract(NEW.PayloadJson,'$.Key') IN ('run.completed','run.failed') AND EXISTS(
+ SELECT 1 FROM AgentRuns producer
+ JOIN TenantDelegatedTasks task ON task.TenantId=producer.TenantId AND task.WorkerSessionId=producer.SessionId
+   AND lower(task.TaskId)=lower(json_extract(producer.PayloadJson,'$.admission.delegatedTask.taskId'))
+   AND task.WorkerInstanceId=producer.AgentInstanceId AND lower(json_extract(task.Json,'$.Assignment.PrincipalId'))=lower(producer.ExecutorPrincipalId)
+ JOIN TenantWorkflowExecutions process ON process.TenantId=task.TenantId AND process.ExecutionId=task.WorkflowExecutionId
+ JOIN TenantWorkflowSteps step ON step.TenantId=task.TenantId AND step.ExecutionId=process.ExecutionId
+   AND lower(step.OperationId)=lower(json_extract(task.Json,'$.Source.Workflow.OperationId'))
+   AND lower(json_extract(step.Json,'$.TaskId'))=lower(task.TaskId) AND json_extract(step.Json,'$.Status')>=1
+ WHERE producer.TenantId=NEW.TenantId AND producer.AgentInstanceId=NEW.AgentInstanceId AND producer.ExecutorPrincipalId=NEW.ExecutorPrincipalId
+   AND producer.AgentRunId=json_extract(json_extract(NEW.PayloadJson,'$.DataJson'),'$.agentRunId')
+   AND json_extract(task.Json,'$.Source.ActorKind')=2
+   AND json_extract(task.Json,'$.Source.Workflow.Causation') IS json_extract(process.Json,'$.Source.Causation')
+   AND EXISTS(SELECT 1 FROM json_each(process.Json,'$.Source.Causation.VisitedAutomationIds') visited WHERE visited.value=v.value)))))) AND (json_type(NEW.PayloadJson,'$.RootAgentRunId') IS 'null' OR EXISTS(
+ SELECT 1 FROM AgentRuns r WHERE r.TenantId=NEW.TenantId AND r.AgentRunId=json_extract(NEW.PayloadJson,'$.RootAgentRunId')
+ AND ((r.AgentInstanceId=NEW.AgentInstanceId AND r.ExecutorPrincipalId=NEW.ExecutorPrincipalId)
+ OR (json_extract(NEW.PayloadJson,'$.Key') IN ('run.completed','run.failed') AND EXISTS(
+   SELECT 1 FROM AgentRuns producer JOIN TenantDelegatedTasks task ON task.TenantId=producer.TenantId
+     AND lower(task.TaskId)=lower(coalesce(json_extract(producer.PayloadJson,'$.admission.delegatedTask.taskId'),json_extract(producer.PayloadJson,'$.admission.taskReport.taskId')))
+     AND lower(task.RootActivationId)=lower(r.ActivationId)
+   WHERE producer.TenantId=NEW.TenantId AND producer.AgentInstanceId=NEW.AgentInstanceId AND producer.ExecutorPrincipalId=NEW.ExecutorPrincipalId
+     AND producer.AgentRunId=json_extract(json_extract(NEW.PayloadJson,'$.DataJson'),'$.agentRunId') AND lower(producer.RootActivationId)=lower(r.ActivationId)))
+ OR (json_extract(NEW.PayloadJson,'$.Key') IN ('run.completed','run.failed') AND EXISTS(
+ SELECT 1 FROM AgentRuns producer
+ JOIN TenantDelegatedTasks task ON task.TenantId=producer.TenantId AND task.WorkerSessionId=producer.SessionId
+   AND lower(task.TaskId)=lower(json_extract(producer.PayloadJson,'$.admission.delegatedTask.taskId'))
+   AND task.WorkerInstanceId=producer.AgentInstanceId AND lower(json_extract(task.Json,'$.Assignment.PrincipalId'))=lower(producer.ExecutorPrincipalId)
+ JOIN TenantWorkflowExecutions process ON process.TenantId=task.TenantId AND process.ExecutionId=task.WorkflowExecutionId
+ JOIN TenantWorkflowSteps step ON step.TenantId=task.TenantId AND step.ExecutionId=process.ExecutionId
+   AND lower(step.OperationId)=lower(json_extract(task.Json,'$.Source.Workflow.OperationId'))
+   AND lower(json_extract(step.Json,'$.TaskId'))=lower(task.TaskId) AND json_extract(step.Json,'$.Status')>=1
+ WHERE producer.TenantId=NEW.TenantId AND producer.AgentInstanceId=NEW.AgentInstanceId AND producer.ExecutorPrincipalId=NEW.ExecutorPrincipalId
+   AND producer.AgentRunId=json_extract(json_extract(NEW.PayloadJson,'$.DataJson'),'$.agentRunId')
+   AND json_extract(task.Json,'$.Source.ActorKind')=2
+   AND json_extract(task.Json,'$.Source.Workflow.Causation') IS json_extract(process.Json,'$.Source.Causation')
+   AND json_extract(process.Json,'$.Source.Causation.RootAgentRunId') IS r.AgentRunId))))) AND CAST(round((julianday(json_extract(NEW.PayloadJson, '$.OccurredAtUtc')) - 2440587.5) * 86400000) AS INTEGER) = NEW.ReceivedAtUtc AND ((json_extract(NEW.PayloadJson, '$.Key') IN ('run.completed','run.failed') AND (json_type(json_extract(NEW.PayloadJson, '$.DataJson'), '$') IS 'object' AND (SELECT count(*) FROM json_each(json_extract(NEW.PayloadJson, '$.DataJson'), '$')) = 5 AND (SELECT count(DISTINCT key) FROM json_each(json_extract(NEW.PayloadJson, '$.DataJson'), '$') WHERE key IN ('agentRunId','sessionId','activationKind','outcomeKind','failureCode')) = 5) AND EXISTS (SELECT 1 FROM AgentRuns r WHERE r.TenantId = NEW.TenantId AND r.AgentInstanceId = NEW.AgentInstanceId AND r.ExecutorPrincipalId = NEW.ExecutorPrincipalId AND r.AgentRunId = json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.agentRunId') AND r.SessionId IS json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.sessionId') AND r.Status = CASE json_extract(NEW.PayloadJson, '$.Key') WHEN 'run.completed' THEN 4 ELSE 5 END AND r.UpdatedAtUtc = NEW.ReceivedAtUtc AND NEW.DedupeKey IS json_extract(NEW.PayloadJson, '$.Key') || ':' || r.AgentRunId AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.activationKind') IS CASE json_extract(r.PayloadJson, '$.admission.activation.kind') WHEN 0 THEN 'UserTurn' WHEN 1 THEN 'Initiative' WHEN 2 THEN 'ImmediateBackground' WHEN 3 THEN 'ScheduledWork' WHEN 4 THEN 'ApplicationEvent' WHEN 5 THEN 'ManualBackground' WHEN 6 THEN 'BackgroundCompleted' WHEN 7 THEN 'CoreEvent' WHEN 8 THEN 'ConfigurationContinuation' WHEN 9 THEN 'ApprovalContinuation' WHEN 10 THEN 'ContextContinuation' WHEN 11 THEN 'GoalContinuation' WHEN 12 THEN 'DelegatedTask' WHEN 13 THEN 'TaskCompletion' WHEN 14 THEN 'AgentMessage' END AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.outcomeKind') IS CASE json_extract(r.PayloadJson, '$.result.outcomeKind') WHEN 0 THEN 'Response' WHEN 1 THEN 'NoAction' WHEN 2 THEN 'NeedsAttention' WHEN 3 THEN 'Continued' END AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.failureCode') IS json_extract(r.PayloadJson, '$.failure.code'))) OR (json_extract(NEW.PayloadJson, '$.Key') IN ('session.completed','session.ended') AND (json_type(json_extract(NEW.PayloadJson, '$.DataJson'), '$') IS 'object' AND (SELECT count(*) FROM json_each(json_extract(NEW.PayloadJson, '$.DataJson'), '$')) = 3 AND (SELECT count(DISTINCT key) FROM json_each(json_extract(NEW.PayloadJson, '$.DataJson'), '$') WHERE key IN ('sessionId','previousLifecycle','lifecycle')) = 3) AND EXISTS (SELECT 1 FROM TenantSessions own JOIN Sessions s ON s.SessionId = own.SessionId JOIN SessionSnapshots ss ON ss.SessionId = s.SessionId WHERE own.TenantId = NEW.TenantId AND own.AgentInstanceId = NEW.AgentInstanceId AND own.ExecutorPrincipalId = NEW.ExecutorPrincipalId AND s.SessionId IS json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.sessionId') AND ss.LifecycleStatus IS CASE json_extract(NEW.PayloadJson, '$.Key') WHEN 'session.completed' THEN 'Completed' ELSE 'Ended' END AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.lifecycle') IS ss.LifecycleStatus AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.previousLifecycle') IN ('Active','Paused','Completed','Expired','Cancelled','Ended') AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.previousLifecycle') IS NOT ss.LifecycleStatus AND s.UpdatedAtUtc = NEW.ReceivedAtUtc AND NEW.DedupeKey IS json_extract(NEW.PayloadJson, '$.Key') || ':' || s.SessionId || ':' || s.Revision)) OR (EXISTS (SELECT 1 FROM AgentInstances i WHERE i.InstanceId = NEW.AgentInstanceId AND i.UpdatedAtUtc = NEW.ReceivedAtUtc AND NEW.DedupeKey IS json_extract(NEW.PayloadJson, '$.Key') || ':' || i.InstanceId || ':' || i.Revision AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.agentInstanceId') IS i.InstanceId AND ((json_extract(NEW.PayloadJson, '$.Key') IS 'instance.config_changed' AND (json_type(json_extract(NEW.PayloadJson, '$.DataJson'), '$') IS 'object' AND (SELECT count(*) FROM json_each(json_extract(NEW.PayloadJson, '$.DataJson'), '$')) = 4 AND (SELECT count(DISTINCT key) FROM json_each(json_extract(NEW.PayloadJson, '$.DataJson'), '$') WHERE key IN ('agentInstanceId','revision','changedSections','actor')) = 4) AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.revision') = i.Revision AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.actor') IS 'guardedWrite' AND json_type(json_extract(NEW.PayloadJson, '$.DataJson'), '$.changedSections') IS 'array' AND json_array_length(json_extract(NEW.PayloadJson, '$.DataJson'), '$.changedSections') BETWEEN 1 AND 4 AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(NEW.PayloadJson, '$.DataJson'), '$.changedSections') c WHERE c.value NOT IN ('persona','unattendedModel','executionBudgets','harnessPolicy'))) OR (json_extract(NEW.PayloadJson, '$.Key') IS 'harness.definition_adopted' AND (json_type(json_extract(NEW.PayloadJson, '$.DataJson'), '$') IS 'object' AND (SELECT count(*) FROM json_each(json_extract(NEW.PayloadJson, '$.DataJson'), '$')) = 4 AND (SELECT count(DISTINCT key) FROM json_each(json_extract(NEW.PayloadJson, '$.DataJson'), '$') WHERE key IN ('agentInstanceId','definitionId','previousVersion','activeVersion')) = 4) AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.definitionId') IS i.DefinitionId AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.activeVersion') = i.ActiveVersion AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.previousVersion') >= 1 AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.previousVersion') <> i.ActiveVersion)) AND json_type(NEW.PayloadJson, '$.RootAgentRunId') IS 'null' AND json_extract(NEW.PayloadJson, '$.TriggerDepth') = 0 AND json_array_length(NEW.PayloadJson, '$.VisitedAutomationIds') = 0)) OR (json_extract(NEW.PayloadJson, '$.Key') IS 'email.message.received' AND (json_type(json_extract(NEW.PayloadJson, '$.DataJson'), '$') IS 'object' AND (SELECT count(*) FROM json_each(json_extract(NEW.PayloadJson, '$.DataJson'), '$')) = 4 AND (SELECT count(DISTINCT key) FROM json_each(json_extract(NEW.PayloadJson, '$.DataJson'), '$') WHERE key IN ('accountId','accountRef','messageRef','provider')) = 4) AND length(json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.accountId')) = 36 AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.accountId') = lower(json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.accountId')) AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.accountId') NOT GLOB '*[^0-9a-f-]*' AND substr(json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.accountId'),9,1) = '-' AND substr(json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.accountId'),14,1) = '-' AND substr(json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.accountId'),19,1) = '-' AND substr(json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.accountId'),24,1) = '-' AND replace(json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.accountId'),'-','') <> '00000000000000000000000000000000' AND json_type(json_extract(NEW.PayloadJson, '$.DataJson'), '$.accountRef') IS 'text' AND length(json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.accountRef')) BETWEEN 1 AND 64 AND json_type(json_extract(NEW.PayloadJson, '$.DataJson'), '$.messageRef') IS 'text' AND length(json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.messageRef')) BETWEEN 1 AND 512 AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(NEW.PayloadJson, '$.DataJson')) field WHERE instr(field.value,char(0)) > 0 OR instr(field.value,char(10)) > 0 OR instr(field.value,char(13)) > 0) AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.provider') IN ('Gmail','Custom') AND NEW.EmailWatchEventId IS NEW.EventId AND json_type(NEW.PayloadJson, '$.RootAgentRunId') IS 'null' AND json_extract(NEW.PayloadJson, '$.TriggerDepth') = 0 AND json_array_length(NEW.PayloadJson, '$.VisitedAutomationIds') = 0 AND EXISTS (SELECT 1 FROM EmailWatches w JOIN TenantCredentials own ON own.CredentialId = w.AccountId AND own.TenantId = w.TenantId JOIN Credentials c ON c.CredentialId = own.CredentialId JOIN EmailAccountProfiles p ON p.CredentialId = c.CredentialId AND p.TenantId = own.TenantId JOIN Tenants tenant ON tenant.TenantId = own.TenantId JOIN AgentCredentialBindings b ON b.TenantId = own.TenantId AND b.CredentialId = own.CredentialId JOIN AgentInstances i ON i.InstanceId = b.AgentInstanceId JOIN SystemIdentities identity ON identity.TenantId = own.TenantId AND identity.AgentInstanceId = i.InstanceId WHERE w.TenantId = NEW.TenantId AND w.AccountId IS json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.accountId') AND own.DeletedAt IS NULL AND c.Purpose = 'EmailAccount' AND c.Status = 'Active' AND length(c.ProtectedPayload) > 0 AND tenant.Status = 0 AND w.Enabled = 1 AND json_extract(w.StateJson, '$.Paused') = 0 AND json_type(w.StateJson, '$.Cursor') IS 'object' AND json_extract(w.StateJson, '$.LastCommitHadCursor') = 1 AND json_extract(w.StateJson, '$.LastCommitRuntimeRevision') + 1 = w.RuntimeRevision AND json_extract(w.StateJson, '$.AuthorizationRevision') = c.Revision AND CAST(round((julianday(json_extract(w.StateJson, '$.LastSuccessAtUtc'))-2440587.5)*86400000) AS INTEGER) = NEW.ReceivedAtUtc AND b.AgentInstanceId IS NEW.AgentInstanceId AND b.Reference IS json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.accountRef') AND i.Lifecycle = 'Active' AND identity.Kind = 0 AND identity.PrincipalId = NEW.ExecutorPrincipalId AND json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.provider') IS CASE json_extract(p.ProfileJson, '$.Preset') WHEN 0 THEN 'Gmail' WHEN 1 THEN 'Custom' END AND (json_extract(p.ProfileJson, '$.AuthMethod') = 0 OR json_extract(p.ProfileJson, '$.ConnectionStatus') = 1) AND NEW.DedupeKey IS 'email.message.received:' || replace(lower(NEW.TenantId),'-','') || ':' || replace(w.AccountId,'-','') || ':' || json_extract(w.StateJson, '$.Generation') || ':' || json_extract(json_extract(NEW.PayloadJson, '$.DataJson'), '$.messageRef') || ':' || replace(NEW.AgentInstanceId,'-','')))) AND json_type(NEW.SubscriptionsJson) IS 'array' AND json_array_length(NEW.SubscriptionsJson) <= 1024 AND json_array_length(NEW.SubscriptionsJson) = (SELECT count(*) FROM Automations a JOIN AutomationTriggers t ON t.AutomationId = a.AutomationId WHERE a.TenantId = NEW.TenantId AND a.Status = 0 AND (a.ExpiresAtUtc IS NULL OR a.ExpiresAtUtc > NEW.ReceivedAtUtc) AND t.Enabled = 1 AND t.Kind = 2 AND a.AgentInstanceId = NEW.AgentInstanceId AND a.ExecutorPrincipalId = NEW.ExecutorPrincipalId AND t.CoreEventKey = json_extract(NEW.PayloadJson, '$.Key')) AND (SELECT count(DISTINCT json_extract(value, '$.TriggerId')) FROM json_each(NEW.SubscriptionsJson)) = json_array_length(NEW.SubscriptionsJson) AND NOT EXISTS (SELECT 1 FROM json_each(NEW.SubscriptionsJson) f WHERE NOT COALESCE(((json_type(f.value, '$') IS 'object' AND (SELECT count(*) FROM json_each(f.value, '$')) = (10 + CASE WHEN json_type(f.value, '$.PinnedSpaceId') IS NULL THEN 0 ELSE 1 END + CASE WHEN json_type(f.value, '$.PinnedEnvironmentId') IS NULL THEN 0 ELSE 1 END) AND (SELECT count(DISTINCT key) FROM json_each(f.value, '$') WHERE key IN ('AutomationId','Owner','TriggerRevision','FilterExpression','Dispatch','SourceKind','ResourceId','TriggerId','ExpressionVersion','FilterHash')) = 10 AND ((json_type(f.value, '$.PinnedSpaceId') IS NULL AND json_type(f.value, '$.PinnedEnvironmentId') IS NULL) OR (json_type(f.value, '$.PinnedSpaceId')='text' AND length(json_extract(f.value, '$.PinnedSpaceId'))=36 AND json_extract(f.value, '$.PinnedSpaceId') NOT GLOB '*[^0-9a-f-]*' AND json_extract(f.value, '$.PinnedSpaceId')<>'00000000-0000-0000-0000-000000000000' AND substr(json_extract(f.value, '$.PinnedSpaceId'),9,1)='-' AND substr(json_extract(f.value, '$.PinnedSpaceId'),14,1)='-' AND substr(json_extract(f.value, '$.PinnedSpaceId'),19,1)='-' AND substr(json_extract(f.value, '$.PinnedSpaceId'),24,1)='-' AND EXISTS(SELECT 1 FROM Spaces ps WHERE lower(ps.TenantId)=lower(json_extract(f.value, '$.Owner.TenantId')) AND lower(ps.SpaceId)=json_extract(f.value, '$.PinnedSpaceId') AND (ps.Kind=1 OR ps.OwnerInstanceId=json_extract(f.value, '$.Owner.AgentInstanceId'))) AND (json_type(f.value, '$.PinnedEnvironmentId') IS NULL OR (json_type(f.value, '$.PinnedEnvironmentId')='text' AND length(json_extract(f.value, '$.PinnedEnvironmentId'))=36 AND json_extract(f.value, '$.PinnedEnvironmentId') NOT GLOB '*[^0-9a-f-]*' AND json_extract(f.value, '$.PinnedEnvironmentId')<>'00000000-0000-0000-0000-000000000000' AND substr(json_extract(f.value, '$.PinnedEnvironmentId'),9,1)='-' AND substr(json_extract(f.value, '$.PinnedEnvironmentId'),14,1)='-' AND substr(json_extract(f.value, '$.PinnedEnvironmentId'),19,1)='-' AND substr(json_extract(f.value, '$.PinnedEnvironmentId'),24,1)='-' AND EXISTS(SELECT 1 FROM SpaceEnvironments pe WHERE lower(pe.TenantId)=lower(json_extract(f.value, '$.Owner.TenantId')) AND lower(pe.SpaceId)=json_extract(f.value, '$.PinnedSpaceId') AND lower(pe.EnvironmentId)=json_extract(f.value, '$.PinnedEnvironmentId'))))))) AND (json_type(f.value, '$.Owner') IS 'object' AND (SELECT count(*) FROM json_each(f.value, '$.Owner')) = 4 AND (SELECT count(DISTINCT key) FROM json_each(f.value, '$.Owner') WHERE key IN ('AgentInstanceId','profileId','TenantId','ExecutorPrincipalId')) = 4) AND json_extract(f.value, '$.Owner.AgentInstanceId') IS json_extract(f.value, '$.Owner.AgentInstanceId') AND lower(json_extract(f.value, '$.Owner.TenantId')) IS lower(NEW.TenantId) AND lower(json_extract(f.value, '$.Owner.ExecutorPrincipalId')) IS lower(json_extract(f.value, '$.Owner.ExecutorPrincipalId')) AND json_type(f.value, '$.Owner.profileId') IS 'null' AND (json_type(f.value, '$.Dispatch') IS 'object' AND (SELECT count(*) FROM json_each(f.value, '$.Dispatch')) = 2 AND (SELECT count(DISTINCT key) FROM json_each(f.value, '$.Dispatch') WHERE key IN ('Mode','WindowSeconds')) = 2) AND json_extract(f.value, '$.ExpressionVersion') IS 'js-expression-v1' AND json_extract(f.value, '$.TriggerRevision') >= 1 AND (json_type(f.value, '$.FilterExpression') IS 'null' OR (json_type(f.value, '$.FilterExpression') IS 'text' AND length(json_extract(f.value, '$.FilterExpression')) <= 1024)) AND ((json_extract(f.value, '$.Dispatch.Mode') = 0 AND json_type(f.value, '$.Dispatch.WindowSeconds') IS 'null') OR (json_extract(f.value, '$.Dispatch.Mode') = 1 AND json_extract(f.value, '$.Dispatch.WindowSeconds') BETWEEN 60 AND 3600)) AND json_extract(f.value, '$.SourceKind') = 3 AND json_extract(f.value, '$.ResourceId') IS NULL AND EXISTS (SELECT 1 FROM Automations a JOIN AutomationTriggers t ON t.AutomationId = a.AutomationId WHERE a.TenantId = NEW.TenantId AND a.Status = 0 AND (a.ExpiresAtUtc IS NULL OR a.ExpiresAtUtc > NEW.ReceivedAtUtc) AND t.Enabled = 1 AND t.Kind = 2 AND a.AgentInstanceId = NEW.AgentInstanceId AND a.ExecutorPrincipalId = NEW.ExecutorPrincipalId AND t.CoreEventKey = json_extract(NEW.PayloadJson, '$.Key') AND a.AutomationId IS json_extract(f.value, '$.AutomationId') AND a.AgentInstanceId IS json_extract(f.value, '$.Owner.AgentInstanceId') AND lower(a.ExecutorPrincipalId) IS json_extract(f.value, '$.Owner.ExecutorPrincipalId') AND t.TriggerId IS json_extract(f.value, '$.TriggerId') AND t.Revision = json_extract(f.value, '$.TriggerRevision') AND t.FilterExpression IS json_extract(f.value, '$.FilterExpression') AND t.DispatchMode = json_extract(f.value, '$.Dispatch.Mode') AND t.DispatchWindowSeconds IS json_extract(f.value, '$.Dispatch.WindowSeconds'))),0)))),0);
+END;
+CREATE TRIGGER TR_TenantCore_RunCausation_Insert BEFORE INSERT ON CoreEvents WHEN NEW.TenantId IS NOT NULL AND json_extract(NEW.PayloadJson,'$.Key') IN ('run.completed','run.failed') BEGIN SELECT RAISE(ABORT,'Core Run causation requires its actual accepted root') WHERE NOT COALESCE((EXISTS (SELECT 1 FROM AgentRuns source JOIN AgentRuns root ON root.ActivationId=source.RootActivationId
+    AND root.TenantId=source.TenantId AND root.AgentInstanceId=source.AgentInstanceId AND root.ExecutorPrincipalId=source.ExecutorPrincipalId
+    LEFT JOIN TriggerOccurrences o ON o.AcceptedAgentRunId=root.AgentRunId AND o.ExecutionSessionId=root.SessionId AND o.TenantId=root.TenantId
+        AND o.AgentInstanceId=root.AgentInstanceId AND o.ExecutorPrincipalId=root.ExecutorPrincipalId AND o.Disposition=6
+    WHERE source.TenantId=NEW.TenantId AND source.AgentRunId=json_extract(json_extract(NEW.PayloadJson,'$.DataJson'),'$.agentRunId')
+        AND root.RootActivationId=root.ActivationId
+        AND ((json_extract(root.PayloadJson,'$.admission.executionContext.origin')=0 AND json_extract(root.PayloadJson,'$.admission.activation.kind')=0)
+            OR (o.SourceKind IN (0,1,2,3) AND json_extract(root.PayloadJson,'$.admission.executionContext.origin')=CASE o.SourceKind WHEN 0 THEN 4 WHEN 1 THEN 5 WHEN 2 THEN 7 WHEN 3 THEN 6 END
+                AND json_extract(root.PayloadJson,'$.admission.activation.triggerOccurrenceId') IS o.OccurrenceId))
+        AND json_extract(NEW.PayloadJson,'$.RootAgentRunId') IS coalesce(json_extract(o.EvidenceJson,'$.triggerContext.causation.rootAgentRunId'),root.AgentRunId)
+        AND json_extract(NEW.PayloadJson,'$.TriggerDepth')=coalesce(json_extract(o.EvidenceJson,'$.triggerContext.causation.triggerDepth'),0)
+        AND json_extract(NEW.PayloadJson,'$.VisitedAutomationIds') IS coalesce(json_extract(o.EvidenceJson,'$.triggerContext.causation.visitedAutomationIds'),'[]')) OR EXISTS (SELECT 1 FROM AgentRuns source
+    JOIN TenantDelegatedTasks task ON task.TenantId=source.TenantId AND lower(task.TaskId)=lower(json_extract(source.PayloadJson,'$.admission.delegatedTask.taskId'))
+        AND task.WorkerSessionId=source.SessionId AND task.WorkerInstanceId=source.AgentInstanceId
+        AND lower(json_extract(task.Json,'$.Assignment.PrincipalId'))=lower(source.ExecutorPrincipalId)
+        AND lower(task.RootActivationId)=lower(source.RootActivationId)
+    JOIN AgentRuns initial ON initial.AgentRunId=json_extract(task.Json,'$.InitialWorkerRunId') AND initial.TenantId=task.TenantId
+        AND initial.SessionId=source.SessionId AND initial.AgentInstanceId=source.AgentInstanceId AND initial.ExecutorPrincipalId=source.ExecutorPrincipalId
+        AND json_extract(initial.PayloadJson,'$.admission.activation.kind')=12 AND json_extract(initial.PayloadJson,'$.admission.executionContext.origin')=12
+        AND json_extract(initial.PayloadJson,'$.admission.delegatedTask.assignmentHash')=json_extract(source.PayloadJson,'$.admission.delegatedTask.assignmentHash')
+    JOIN AgentRuns root ON root.TenantId=task.TenantId AND lower(root.ActivationId)=lower(task.RootActivationId) AND root.RootActivationId=root.ActivationId
+    LEFT JOIN TriggerOccurrences o ON o.AcceptedAgentRunId=root.AgentRunId AND o.ExecutionSessionId=root.SessionId AND o.TenantId=root.TenantId
+        AND o.AgentInstanceId=root.AgentInstanceId AND o.ExecutorPrincipalId=root.ExecutorPrincipalId AND o.Disposition=6
+    WHERE source.TenantId=NEW.TenantId AND source.AgentRunId=json_extract(json_extract(NEW.PayloadJson,'$.DataJson'),'$.agentRunId')
+        AND ((json_extract(root.PayloadJson,'$.admission.executionContext.origin')=0 AND json_extract(root.PayloadJson,'$.admission.activation.kind')=0)
+            OR (o.SourceKind IN (0,1,2,3) AND json_extract(root.PayloadJson,'$.admission.executionContext.origin')=CASE o.SourceKind WHEN 0 THEN 4 WHEN 1 THEN 5 WHEN 2 THEN 7 WHEN 3 THEN 6 END)
+            OR (json_extract(root.PayloadJson,'$.admission.executionContext.origin')=12 AND json_extract(root.PayloadJson,'$.admission.activation.kind')=12
+                AND EXISTS(SELECT 1 FROM TenantDelegatedTasks humanTask WHERE humanTask.TenantId=root.TenantId
+                    AND json_extract(humanTask.Json,'$.InitialWorkerRunId')=root.AgentRunId AND json_extract(humanTask.Json,'$.Source.ActorKind')=1
+                    AND json_type(humanTask.Json,'$.Source.RunId')='null' AND json_type(humanTask.Json,'$.Source.HumanCommandId')='text')))
+        AND json_extract(NEW.PayloadJson,'$.RootAgentRunId') IS coalesce(json_extract(o.EvidenceJson,'$.triggerContext.causation.rootAgentRunId'),root.AgentRunId)
+        AND json_extract(NEW.PayloadJson,'$.TriggerDepth')=coalesce(json_extract(o.EvidenceJson,'$.triggerContext.causation.triggerDepth'),0)
+        AND json_extract(NEW.PayloadJson,'$.VisitedAutomationIds') IS coalesce(json_extract(o.EvidenceJson,'$.triggerContext.causation.visitedAutomationIds'),'[]')) OR EXISTS (SELECT 1 FROM AgentRuns source
+    JOIN TenantTaskNotifications notice ON notice.TenantId=source.TenantId
+        AND lower(notice.NotificationId)=lower(json_extract(source.PayloadJson,'$.admission.taskReport.notificationId'))
+    JOIN TenantDelegatedTasks task ON task.TenantId=notice.TenantId AND task.TaskId=notice.TaskId
+        AND lower(task.TaskId)=lower(json_extract(source.PayloadJson,'$.admission.taskReport.taskId'))
+        AND task.Revision=json_extract(source.PayloadJson,'$.admission.taskReport.taskRevision')
+        AND lower(task.RootActivationId)=lower(source.RootActivationId)
+        AND task.SourceSessionId=source.SessionId
+        AND lower(json_extract(task.Json,'$.Source.InstanceId'))=lower(source.AgentInstanceId)
+        AND json_extract(task.Json,'$.Request.ReportOnCompletion')=1
+        AND lower(notice.TerminalRunId)=lower(json_extract(source.PayloadJson,'$.admission.taskReport.terminalRunId'))
+    JOIN TenantSessions parentOwner ON parentOwner.TenantId=source.TenantId
+        AND parentOwner.SessionId=source.SessionId AND parentOwner.AgentInstanceId=source.AgentInstanceId AND parentOwner.ExecutorPrincipalId=source.ExecutorPrincipalId
+    JOIN AgentRuns report ON report.AgentRunId=json_extract(notice.Json,'$.HandlingRunId')
+        AND report.TenantId=source.TenantId AND report.SessionId=source.SessionId AND report.AgentInstanceId=source.AgentInstanceId
+        AND report.ExecutorPrincipalId=source.ExecutorPrincipalId AND json_extract(report.PayloadJson,'$.admission.activation.kind')=13
+        AND json_extract(report.PayloadJson,'$.admission.taskReport')=json_extract(source.PayloadJson,'$.admission.taskReport')
+    JOIN AgentRuns root ON root.TenantId=task.TenantId AND lower(root.ActivationId)=lower(task.RootActivationId) AND root.RootActivationId=root.ActivationId
+    LEFT JOIN TriggerOccurrences o ON o.AcceptedAgentRunId=root.AgentRunId AND o.TenantId=root.TenantId AND o.Disposition=6
+    WHERE source.TenantId=NEW.TenantId AND source.AgentRunId=json_extract(json_extract(NEW.PayloadJson,'$.DataJson'),'$.agentRunId')
+        AND (json_extract(root.PayloadJson,'$.admission.activation.kind')=0
+            OR o.SourceKind IN (0,1,2,3)
+            OR (json_extract(root.PayloadJson,'$.admission.activation.kind')=12
+                AND EXISTS(SELECT 1 FROM TenantDelegatedTasks humanTask WHERE humanTask.TenantId=root.TenantId
+                    AND json_extract(humanTask.Json,'$.InitialWorkerRunId')=root.AgentRunId AND json_extract(humanTask.Json,'$.Source.ActorKind')=1
+                    AND json_type(humanTask.Json,'$.Source.RunId')='null' AND json_type(humanTask.Json,'$.Source.HumanCommandId')='text')))
+        AND json_extract(NEW.PayloadJson,'$.RootAgentRunId') IS coalesce(json_extract(o.EvidenceJson,'$.triggerContext.causation.rootAgentRunId'),root.AgentRunId)
+        AND json_extract(NEW.PayloadJson,'$.TriggerDepth')=coalesce(json_extract(o.EvidenceJson,'$.triggerContext.causation.triggerDepth'),0)
+        AND json_extract(NEW.PayloadJson,'$.VisitedAutomationIds') IS coalesce(json_extract(o.EvidenceJson,'$.triggerContext.causation.visitedAutomationIds'),'[]')) OR EXISTS(SELECT 1 FROM AgentRuns source
+    JOIN AgentRuns root ON root.TenantId=source.TenantId AND root.ActivationId=source.RootActivationId
+        AND root.AgentInstanceId=source.AgentInstanceId AND root.ExecutorPrincipalId=source.ExecutorPrincipalId AND root.SessionId=source.SessionId
+        AND root.RootActivationId=root.ActivationId AND json_extract(root.PayloadJson,'$.admission.activation.kind')=14
+        AND json_extract(root.PayloadJson,'$.admission.executionContext.origin')=14
+    JOIN TenantAgentMessages message ON message.TenantId=root.TenantId
+        AND lower(message.MessageId)=lower(json_extract(root.PayloadJson,'$.admission.agentMessage.messageId'))
+        AND lower(message.RecipientInstanceId)=lower(root.AgentInstanceId)
+        AND json_extract(message.ReceiptJson,'$.WakeRunId')=root.AgentRunId AND json_extract(message.ReceiptJson,'$.WakeSessionId')=root.SessionId
+        AND json_extract(message.ReceiptJson,'$.WakeHops') BETWEEN 1 AND 2
+        AND json_extract(root.PayloadJson,'$.admission.agentMessage')=json_extract(source.PayloadJson,'$.admission.agentMessage')
+    JOIN TenantAgentThreads thread ON thread.TenantId=message.TenantId AND thread.ThreadId=message.ThreadId AND thread.TaskId IS NULL
+    WHERE source.TenantId=NEW.TenantId AND source.AgentRunId=json_extract(json_extract(NEW.PayloadJson,'$.DataJson'),'$.agentRunId')
+        AND json_extract(NEW.PayloadJson,'$.RootAgentRunId') IS root.AgentRunId
+        AND json_extract(NEW.PayloadJson,'$.TriggerDepth')=0 AND json_extract(NEW.PayloadJson,'$.VisitedAutomationIds')='[]') OR EXISTS(SELECT 1 FROM AgentRuns source
+ JOIN TenantDelegatedTasks task ON task.TenantId=source.TenantId AND lower(task.TaskId)=lower(json_extract(source.PayloadJson,'$.admission.delegatedTask.taskId'))
+   AND task.WorkerSessionId=source.SessionId AND task.WorkerInstanceId=source.AgentInstanceId
+   AND lower(json_extract(task.Json,'$.Assignment.PrincipalId'))=lower(source.ExecutorPrincipalId)
+ JOIN AgentRuns initial ON initial.TenantId=task.TenantId AND initial.AgentRunId=json_extract(task.Json,'$.InitialWorkerRunId')
+   AND initial.SessionId=source.SessionId AND initial.AgentInstanceId=source.AgentInstanceId AND initial.ExecutorPrincipalId=source.ExecutorPrincipalId
+   AND initial.ActivationId=initial.RootActivationId AND source.RootActivationId=initial.ActivationId
+   AND lower(task.RootActivationId)=lower(initial.ActivationId)
+ JOIN TenantWorkflowExecutions process ON process.TenantId=task.TenantId AND process.ExecutionId=task.WorkflowExecutionId
+ JOIN TenantWorkflowSteps step ON step.TenantId=process.TenantId AND step.ExecutionId=process.ExecutionId
+   AND lower(step.OperationId)=lower(json_extract(task.Json,'$.Source.Workflow.OperationId'))
+   AND step.NodeId=json_extract(task.Json,'$.Source.Workflow.NodeId') AND json_extract(step.Json,'$.Status')>=1
+   AND lower(json_extract(step.Json,'$.TaskId'))=lower(task.TaskId)
+ WHERE source.TenantId=NEW.TenantId AND source.AgentRunId=json_extract(json_extract(NEW.PayloadJson,'$.DataJson'),'$.agentRunId')
+   AND json_extract(initial.PayloadJson,'$.admission.activation.kind')=12 AND json_extract(initial.PayloadJson,'$.admission.executionContext.origin')=12
+   AND lower(json_extract(initial.PayloadJson,'$.admission.activation.sourceEventId'))=lower(step.OperationId)
+   AND json_extract(source.PayloadJson,'$.admission.delegatedTask.assignmentHash')=json_extract(initial.PayloadJson,'$.admission.delegatedTask.assignmentHash')
+   AND json_extract(task.Json,'$.Source.ActorKind')=2 AND json_type(task.Json,'$.Source.SessionId')='null'
+   AND json_type(task.Json,'$.Source.RunId')='null' AND json_type(task.Json,'$.Source.HumanCommandId')='null'
+   AND json_extract(task.Json,'$.Source.Workflow.GraphHash')=json_extract(process.Json,'$.GraphHash')
+   AND json_extract(task.Json,'$.Source.Workflow.Version')=process.Version
+   AND json_extract(process.Json,'$.Source.Kind') IN (0,1)
+   AND json_extract(task.Json,'$.Source.Workflow.Causation') IS json_extract(process.Json,'$.Source.Causation')
+   AND json_extract(NEW.PayloadJson,'$.RootAgentRunId') IS coalesce(json_extract(process.Json,'$.Source.Causation.RootAgentRunId'),initial.AgentRunId)
+   AND json_extract(NEW.PayloadJson,'$.TriggerDepth')=coalesce(json_extract(process.Json,'$.Source.Causation.TriggerDepth'),0)
+   AND json_extract(NEW.PayloadJson,'$.VisitedAutomationIds') IS coalesce(json_extract(process.Json,'$.Source.Causation.VisitedAutomationIds'),'[]'))),0); END;
+CREATE TRIGGER TaskAdmissionReceiptGuard BEFORE INSERT ON TenantOperationReceipts WHEN NEW.TaskAdmissionJson IS NOT NULL BEGIN
+    SELECT RAISE(ABORT,'Task receipt requires its exact admitted assignment') WHERE NOT COALESCE((
+        NEW.RequestId IS NOT NULL AND NEW.Outcome=0 AND NEW.ReasonCode='task_created'
+        AND length(CAST(NEW.TaskAdmissionJson AS BLOB)) BETWEEN 2 AND 1024 AND json_valid(NEW.TaskAdmissionJson)
+        AND json_extract(NEW.TaskAdmissionJson,'$.Revision')=1
+        AND EXISTS (SELECT 1 FROM TenantDelegatedTasks t JOIN TenantApprovalRequests a ON a.TenantId=t.TenantId
+            WHERE a.RequestId=NEW.RequestId AND t.TenantId=NEW.TenantId AND lower(t.TaskId)=lower(json_extract(NEW.TaskAdmissionJson,'$.TaskId'))
+                AND lower(t.TaskId)=lower(json_extract(a.PayloadJson,'$.Operation.TaskDelegation.Task.TaskId'))
+                AND t.Revision=1 AND t.State IN (0,1)
+                AND t.WorkerSessionId IS json_extract(NEW.TaskAdmissionJson,'$.WorkerSessionId')
+                AND json_extract(t.Json,'$.InitialWorkerRunId') IS json_extract(NEW.TaskAdmissionJson,'$.InitialWorkerRunId')
+                AND json_extract(t.Json,'$.Source')=json_extract(a.PayloadJson,'$.Operation.TaskDelegation.Task.Source')
+                AND json_extract(t.Json,'$.Request')=json_extract(a.PayloadJson,'$.Operation.TaskDelegation.Task.Request')
+                AND json_extract(t.Json,'$.Assignment')=json_extract(a.PayloadJson,'$.Operation.TaskDelegation.Task.Assignment'))),0);
+END;
+CREATE TRIGGER TaskAssignmentImmutable BEFORE UPDATE ON TenantDelegatedTasks WHEN (
+    NEW.TenantId<>OLD.TenantId OR NEW.TaskId<>OLD.TaskId OR NEW.SourceSessionId IS NOT OLD.SourceSessionId OR NEW.WorkflowExecutionId IS NOT OLD.WorkflowExecutionId OR NEW.OperationScope<>OLD.OperationScope
+    OR NEW.RequestKey<>OLD.RequestKey OR NEW.RequestHash<>OLD.RequestHash OR NEW.WorkerInstanceId<>OLD.WorkerInstanceId
+    OR NEW.RootActivationId<>OLD.RootActivationId OR NEW.ParentTaskId IS NOT OLD.ParentTaskId OR NEW.Revision<>OLD.Revision+1
+    OR OLD.State>=4 OR (OLD.WorkerSessionId IS NOT NULL AND NEW.WorkerSessionId IS NOT OLD.WorkerSessionId)
+    OR json_extract(NEW.Json,'$.Assignment')<>json_extract(OLD.Json,'$.Assignment')
+    OR json_extract(NEW.Json,'$.Source')<>json_extract(OLD.Json,'$.Source') OR json_extract(NEW.Json,'$.Request')<>json_extract(OLD.Json,'$.Request')
+    ) AND NOT COALESCE((
+        OLD.State>=4 AND NEW.State=OLD.State AND NEW.TenantId=OLD.TenantId AND NEW.TaskId=OLD.TaskId
+        AND NEW.SourceSessionId IS OLD.SourceSessionId AND NEW.WorkflowExecutionId IS OLD.WorkflowExecutionId AND NEW.OperationScope=OLD.OperationScope AND NEW.RequestKey=OLD.RequestKey
+        AND NEW.RequestHash=OLD.RequestHash AND NEW.WorkerInstanceId=OLD.WorkerInstanceId AND NEW.RootActivationId=OLD.RootActivationId
+        AND NEW.ParentTaskId IS OLD.ParentTaskId AND NEW.WorkerSessionId IS OLD.WorkerSessionId AND NEW.UpdatedAt=OLD.UpdatedAt AND NEW.Revision=OLD.Revision+1
+        AND json_extract(OLD.Json,'$.ContentRetiredAt') IS NULL AND json_type(NEW.Json,'$.ContentRetiredAt')='text'
+        AND json_extract(NEW.Json,'$.Request.Objective')='[retired]' AND json_extract(NEW.Json,'$.Request.Title')='[retired]'
+        AND json_extract(NEW.Json,'$.Request.RetiredFingerprint')=OLD.RequestHash
+        AND json_extract(NEW.Json,'$.Result') IS CASE WHEN json_extract(OLD.Json,'$.Result') IS NULL THEN NULL ELSE '[retired]' END
+        AND json_remove(NEW.Json,'$.Revision','$.Request','$.Result','$.ContentRetiredAt')=json_remove(OLD.Json,'$.Revision','$.Request','$.Result','$.ContentRetiredAt')
+        AND json_remove(json_extract(NEW.Json,'$.Request'),'$.Objective','$.Title','$.RetiredFingerprint')=json_remove(json_extract(OLD.Json,'$.Request'),'$.Objective','$.Title','$.RetiredFingerprint')
+        AND EXISTS(SELECT 1 FROM Sessions s WHERE s.SessionId=OLD.SourceSessionId AND s.DurablyDeletedAtUtc IS NOT NULL)
+        AND NOT EXISTS(SELECT 1 FROM AgentRuns r WHERE r.TenantId=OLD.TenantId AND (r.SessionId=OLD.SourceSessionId OR lower(r.RootActivationId)=lower(OLD.RootActivationId)) AND (r.Status NOT IN (4,5,6) OR json_extract(r.PayloadJson,'$.sideEffect.disposition') IN (1,2,5)))
+    ),0) BEGIN SELECT RAISE(ABORT,'Task assignment and terminal facts are immutable'); END;
+CREATE TRIGGER WorkflowTaskSourceGuard BEFORE INSERT ON TenantDelegatedTasks BEGIN
+ SELECT RAISE(ABORT,'Task requires one genuine Session or workflow source') WHERE NOT COALESCE((
+   (NEW.SourceSessionId IS NOT NULL AND NEW.WorkflowExecutionId IS NULL AND json_extract(NEW.Json,'$.Source.ActorKind') IN (0,1))
+   OR (NEW.SourceSessionId IS NULL AND NEW.WorkflowExecutionId IS NOT NULL AND json_extract(NEW.Json,'$.Source.ActorKind')=2
+     AND json_type(NEW.Json,'$.Source.SessionId')='null' AND json_type(NEW.Json,'$.Source.RunId')='null'
+     AND json_type(NEW.Json,'$.Source.ActivationId')='null' AND json_type(NEW.Json,'$.Source.HumanCommandId')='null'
+     AND EXISTS(SELECT 1 FROM TenantWorkflowExecutions process JOIN TenantWorkflowSteps step
+       ON step.TenantId=process.TenantId AND step.ExecutionId=process.ExecutionId
+       WHERE process.TenantId=NEW.TenantId AND process.ExecutionId=NEW.WorkflowExecutionId
+         AND lower(process.WorkflowId)=lower(json_extract(NEW.Json,'$.Source.Workflow.WorkflowId'))
+         AND lower(process.ExecutionId)=lower(json_extract(NEW.Json,'$.Source.Workflow.ExecutionId'))
+         AND process.Version=json_extract(NEW.Json,'$.Source.Workflow.Version')
+         AND json_extract(process.Json,'$.GraphHash')=json_extract(NEW.Json,'$.Source.Workflow.GraphHash')
+         AND lower(json_extract(process.Json,'$.CoordinatorInstanceId'))=lower(json_extract(NEW.Json,'$.Source.InstanceId'))
+         AND json_extract(process.Json,'$.Source.OriginalHumanPrincipalId') IS json_extract(NEW.Json,'$.Source.OriginalInitiatorPrincipalId')
+         AND json_extract(process.Json,'$.Source.SessionId') IS json_extract(NEW.Json,'$.Source.Workflow.OriginalSessionId')
+         AND json_extract(process.Json,'$.Source.Causation') IS json_extract(NEW.Json,'$.Source.Workflow.Causation')
+         AND process.Status<8 AND json_extract(process.Json,'$.CancellationRequested')=0
+         AND step.NodeId=json_extract(NEW.Json,'$.Source.Workflow.NodeId')
+         AND lower(step.OperationId)=lower(json_extract(NEW.Json,'$.Source.Workflow.OperationId'))
+         AND json_extract(step.Json,'$.GraphHash')=json_extract(process.Json,'$.GraphHash')
+         AND json_extract(step.Json,'$.Kind')=1 AND json_extract(step.Json,'$.Status') IN (0,1)
+         AND lower(json_extract(step.Json,'$.TaskId'))=lower(NEW.TaskId)
+         AND json_extract(step.Json,'$.WorkerRunId') IS json_extract(NEW.Json,'$.InitialWorkerRunId')))),0);
+ END;
+
+CREATE TRIGGER WorkflowExecutionSourceGuard BEFORE INSERT ON TenantWorkflowExecutions BEGIN
+ SELECT RAISE(ABORT,'Workflow requires its genuine human command or currently claimed Run') WHERE NOT COALESCE((
+   NEW.Revision=1 AND NEW.Status=0 AND json_valid(NEW.Json)
+   AND lower(json_extract(NEW.Json,'$.TenantId'))=lower(NEW.TenantId)
+   AND lower(json_extract(NEW.Json,'$.ExecutionId'))=lower(NEW.ExecutionId)
+   AND lower(json_extract(NEW.Json,'$.WorkflowId'))=lower(NEW.WorkflowId)
+   AND json_extract(NEW.Json,'$.Version')=NEW.Version AND json_extract(NEW.Json,'$.Revision')=NEW.Revision
+   AND json_extract(NEW.Json,'$.Status')=NEW.Status AND json_extract(NEW.Json,'$.RequestKey')=NEW.RequestKey
+   AND json_extract(NEW.Json,'$.Source.RequestScope')=NEW.SourceScope
+   AND json_extract(NEW.Json,'$.CancellationRequested')=0 AND json_extract(NEW.Json,'$.TerminalAt') IS NULL
+   AND EXISTS(SELECT 1 FROM TenantWorkflowVersions version WHERE version.TenantId=NEW.TenantId AND version.WorkflowId=NEW.WorkflowId AND version.Version=NEW.Version
+     AND json_extract(version.Json,'$.Graph.Hash')=json_extract(NEW.Json,'$.GraphHash')
+     AND EXISTS(SELECT 1 FROM json_each(json_extract(version.Json,'$.Graph.CanonicalJson'),'$.allowedOrigins') origin WHERE origin.value=json_extract(NEW.Json,'$.Source.Kind')))
+   AND ((json_extract(NEW.Json,'$.Source.Kind')=0
+     AND lower(json_extract(NEW.Json,'$.Source.SourceId'))=lower(NEW.ExecutionId)
+     AND json_extract(NEW.Json,'$.Source.OriginalHumanPrincipalId') IS json_extract(NEW.Json,'$.Source.PrincipalId')
+     AND json_extract(NEW.Json,'$.Source.RunId') IS NULL AND json_extract(NEW.Json,'$.Source.InvokingInstanceId') IS NULL
+     AND json_extract(NEW.Json,'$.Source.AutomationId') IS NULL AND json_extract(NEW.Json,'$.Source.RootActivationId') IS NULL
+     AND json_extract(NEW.Json,'$.Source.Causation') IS NULL AND json_extract(NEW.Json,'$.SourceBudget') IS NULL
+     AND EXISTS(SELECT 1 FROM TenantUsers user JOIN Accounts account ON account.AccountId=user.AccountId
+       WHERE user.TenantId=NEW.TenantId AND lower(user.PrincipalId)=lower(json_extract(NEW.Json,'$.Source.PrincipalId'))
+         AND lower(user.AccountId)=lower(json_extract(NEW.Json,'$.Source.AccountId')) AND user.Status=0 AND account.Status=0))
+   OR (json_extract(NEW.Json,'$.Source.Kind')=1 AND json_extract(NEW.Json,'$.Source.AccountId') IS NULL
+     AND json_extract(NEW.Json,'$.Source.AutomationId') IS NULL
+     AND EXISTS(SELECT 1 FROM AgentRuns source WHERE source.TenantId=NEW.TenantId
+       AND source.AgentRunId=json_extract(NEW.Json,'$.Source.RunId') AND source.AgentRunId=json_extract(NEW.Json,'$.Source.SourceId')
+       AND source.SessionId=json_extract(NEW.Json,'$.Source.SessionId') AND source.AgentInstanceId=json_extract(NEW.Json,'$.Source.InvokingInstanceId')
+       AND lower(source.ExecutorPrincipalId)=lower(json_extract(NEW.Json,'$.Source.PrincipalId'))
+       AND lower(source.OriginalInitiatorPrincipalId) IS json_extract(NEW.Json,'$.Source.OriginalHumanPrincipalId')
+       AND source.RootActivationId=json_extract(NEW.Json,'$.Source.RootActivationId')
+       AND source.Status=1 AND source.LeaseExpiresAtUtc>NEW.CreatedAt AND json_type(source.PayloadJson,'$.claim.generation')='text'
+       AND json_extract(source.PayloadJson,'$.cancellationRequested')=0)))) ,0);
+END;
+CREATE TRIGGER WorkflowExecutionImmutable BEFORE UPDATE ON TenantWorkflowExecutions BEGIN
+ SELECT RAISE(ABORT,'Workflow business source is immutable and terminal state is monotonic') WHERE NOT COALESCE((
+   NEW.TenantId=OLD.TenantId AND NEW.ExecutionId=OLD.ExecutionId AND NEW.WorkflowId=OLD.WorkflowId AND NEW.Version=OLD.Version
+   AND NEW.SourceScope=OLD.SourceScope AND NEW.RequestKey=OLD.RequestKey AND NEW.CreatedAt=OLD.CreatedAt
+   AND NEW.Revision=OLD.Revision+1 AND OLD.Status<8 AND NEW.Status BETWEEN 0 AND 11
+   AND json_extract(NEW.Json,'$.Revision')=NEW.Revision AND json_extract(NEW.Json,'$.Status')=NEW.Status
+   AND (OLD.Status<8 AND (NEW.Status<8 AND json_extract(NEW.Json,'$.TerminalAt') IS NULL OR NEW.Status>=8 AND json_type(NEW.Json,'$.TerminalAt')='text'))
+   AND json_remove(NEW.Json,'$.Revision','$.Status','$.CancellationRequested','$.Cancellation','$.ReasonCode','$.TerminalAt')
+     IS json_remove(OLD.Json,'$.Revision','$.Status','$.CancellationRequested','$.Cancellation','$.ReasonCode','$.TerminalAt')
+   AND (json_extract(OLD.Json,'$.CancellationRequested')=0 OR json_extract(NEW.Json,'$.CancellationRequested')=1)
+   AND (json_extract(OLD.Json,'$.Cancellation') IS NULL OR json_extract(NEW.Json,'$.Cancellation') IS json_extract(OLD.Json,'$.Cancellation'))
+   AND (NEW.Status<>8 OR EXISTS(SELECT 1 FROM TenantWorkflowSteps step WHERE step.TenantId=NEW.TenantId AND step.ExecutionId=NEW.ExecutionId
+     AND json_extract(step.Json,'$.Kind')=5 AND json_extract(step.Json,'$.Status')=3 AND json_extract(step.Json,'$.ProofAccepted')=1))
+   AND (NEW.Status<>10 OR json_extract(NEW.Json,'$.CancellationRequested')=1)),0);
+END;
+CREATE TRIGGER WorkflowVersionImmutable BEFORE UPDATE ON TenantWorkflowVersions BEGIN SELECT RAISE(ABORT,'Published workflow versions are immutable'); END;
+CREATE TRIGGER WorkflowVersionRetained BEFORE DELETE ON TenantWorkflowVersions BEGIN SELECT RAISE(ABORT,'Published workflow versions are retained; retire the definition'); END;

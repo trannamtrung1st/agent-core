@@ -17,6 +17,7 @@ public sealed class TenantAutomationMutationService(ITenantAutomationMutationSto
         CancellationToken ct, PreparedAutomationMutation? expected = null, Guid? human = null)
     {
         var source = await store.ObserveTenantAutomationMutationAsync(reference, generation, tool, arguments, expected, human, ct).ConfigureAwait(false);
+        if (source.Current?.ExecutionTarget.Workflow is not null && tool != ToolCatalog.AutomationDelete) throw new AccessDeniedException("automation_workflow_edit_in_designer");
         var models = await modelCatalogs.ReadAsync(source.Reader.Security, ct).ConfigureAwait(false);
         var args = TenantAutomationMutationContract.Parse(tool, arguments); var at = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
         if (generation is not null && source.Reader.Run.Claim?.LeaseExpiresAtUtc <= time.GetUtcNow()) throw new SecurityConflictException("execution_claim_expired");

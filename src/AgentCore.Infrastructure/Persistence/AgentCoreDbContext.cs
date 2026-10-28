@@ -253,6 +253,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         WorkspaceEffectPersistence.Configure(modelBuilder);
         EvaluationPersistence.Configure(modelBuilder);
         GoalPersistence.Configure(modelBuilder);
+        WorkflowPersistence.Configure(modelBuilder);
         TaskPersistence.Configure(modelBuilder);
         HumanTaskApprovalPersistence.Configure(modelBuilder);
         EvaluationSandboxPersistence.Configure(modelBuilder);
@@ -564,7 +565,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         {
             entity.ToTable("Automations", table => {
                 table.HasCheckConstraint("CK_Automations_Mode", "TriggerMode IN (0,1)");
-                table.HasCheckConstraint("CK_Automations_Destination", "(ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)");
+                table.HasCheckConstraint("CK_Automations_Destination", "((ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)) AND WorkflowTargetJson IS NULL OR COALESCE((ExecutionTargetKind = 2 AND TenantId IS NOT NULL AND TargetSessionId IS NULL AND ReportToSessionId IS NULL AND json_valid(WorkflowTargetJson) AND json_type(WorkflowTargetJson) = 'object' AND length(json_extract(WorkflowTargetJson,'$.WorkflowId')) = 36 AND json_extract(WorkflowTargetJson,'$.Version') >= 1 AND length(json_extract(WorkflowTargetJson,'$.GraphHash')) = 64 AND json_type(WorkflowTargetJson,'$.InputsJson') = 'text' AND json_valid(json_extract(WorkflowTargetJson,'$.InputsJson')) AND length(CAST(WorkflowTargetJson AS BLOB)) <= 32768),0)");
                 table.HasCheckConstraint("CK_Automations_Preset", "(PresetId IS NULL AND PresetVersion IS NULL) OR (PresetId IS NOT NULL AND PresetVersion >= 1)");
             });
             entity.ToTable("Automations", table => table.HasCheckConstraint("CK_Automations_TenantOwner",
@@ -656,8 +657,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<TriggerOccurrenceRecord>(entity =>
         {
-            entity.ToTable("TriggerOccurrences", table => { table.HasCheckConstraint("CK_TriggerOccurrences_Destination", "(ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)"); table.HasCheckConstraint("CK_TriggerOccurrences_ExecutionLink",
-                "(ExecutionSessionId IS NULL AND AcceptedAgentRunId IS NULL) OR (ExecutionSessionId IS NOT NULL AND LiveSessionId IS NULL AND AcceptedAgentRunId IS NOT NULL) OR (ExecutionSessionId IS NULL AND LiveSessionId IS NOT NULL AND AcceptedAgentRunId IS NOT NULL AND LiveEvaluationCompletedAtUtc IS NOT NULL)"); });
+            entity.ToTable("TriggerOccurrences", table => { table.HasCheckConstraint("CK_TriggerOccurrences_Destination", "((ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)) AND WorkflowTargetJson IS NULL OR COALESCE((ExecutionTargetKind = 2 AND TenantId IS NOT NULL AND TargetSessionId IS NULL AND ReportToSessionId IS NULL AND json_valid(WorkflowTargetJson) AND json_type(WorkflowTargetJson) = 'object' AND length(json_extract(WorkflowTargetJson,'$.WorkflowId')) = 36 AND json_extract(WorkflowTargetJson,'$.Version') >= 1 AND length(json_extract(WorkflowTargetJson,'$.GraphHash')) = 64 AND json_type(WorkflowTargetJson,'$.InputsJson') = 'text' AND json_valid(json_extract(WorkflowTargetJson,'$.InputsJson')) AND length(CAST(WorkflowTargetJson AS BLOB)) <= 32768),0)"); table.HasCheckConstraint("CK_TriggerOccurrences_ExecutionLink",
+                "((ExecutionSessionId IS NULL AND AcceptedAgentRunId IS NULL) OR (ExecutionSessionId IS NOT NULL AND LiveSessionId IS NULL AND AcceptedAgentRunId IS NOT NULL) OR (ExecutionSessionId IS NULL AND LiveSessionId IS NOT NULL AND AcceptedAgentRunId IS NOT NULL AND LiveEvaluationCompletedAtUtc IS NOT NULL)) AND AcceptedWorkflowExecutionId IS NULL AND (ExecutionTargetKind <> 2 OR Disposition <> 6) OR (ExecutionTargetKind = 2 AND AcceptedWorkflowExecutionId IS NOT NULL AND Disposition = 6 AND ExecutionSessionId IS NULL AND AcceptedAgentRunId IS NULL AND LiveSessionId IS NULL AND ModelOfferingId IS NULL)"); });
             entity.ToTable("TriggerOccurrences", table => table.HasCheckConstraint("CK_TriggerOccurrences_TenantOwner",
                 "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND ProfileId IS NOT NULL) OR (TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND ProfileId IS NULL)"));
             entity.HasQueryFilter(row => row.TenantId == null);
@@ -685,6 +686,9 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.HasOne<SessionRecord>().WithMany().HasForeignKey(row => row.ExecutionSessionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<SessionRecord>().WithMany().HasForeignKey(row => row.LiveSessionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<AgentRunRecord>().WithMany().HasForeignKey(row => row.AcceptedAgentRunId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<WorkflowExecutionRow>().WithMany().HasForeignKey(row => new { row.TenantId, row.AcceptedWorkflowExecutionId })
+                .HasPrincipalKey(row => new { row.TenantId, row.ExecutionId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.TenantId, row.AcceptedWorkflowExecutionId }).IsUnique().HasFilter("AcceptedWorkflowExecutionId IS NOT NULL");
             entity.Property(row => row.ModelOfferingId).HasMaxLength(128);
             entity.Property(row => row.ModelConnectionId).HasMaxLength(128);
             entity.Property(row => row.ExternalModelId).HasMaxLength(255);

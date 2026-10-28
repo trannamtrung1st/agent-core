@@ -17,6 +17,7 @@ public sealed partial class InMemoryIamStore : ITenantAgentMessageStore
         {
             command.Actor.Validate(); var tenant = command.TenantId; var state = _tenants.GetValueOrDefault(tenant) ?? throw new AccessDeniedException("tenant_unavailable");
             var task = command.TaskId is { } taskId ? delegatedTasks.GetValueOrDefault((tenant, taskId)) ?? throw new AccessDeniedException("resource_unavailable") : null;
+            if (task?.Source.Workflow is not null) throw new AccessDeniedException("workflow_task_messages_unavailable");
             var sourceSession = command.Actor.Agent?.SessionId ?? task?.Source.SessionId ?? throw new AccessDeniedException("agent_sender_required");
             var (source, run, sender) = RequireTaskSource(tenant, sourceSession, command.Actor, "agent-messages.send", ct, task is not null ? TaskAuthority.Scope(tenant, task.TaskId) : command.ThreadId is { } selectedThread
                 ? AgentCore.Domain.Security.AccessScope.ForResource(tenant, "agent-thread", selectedThread.ToString("D"))
@@ -91,7 +92,7 @@ public sealed partial class InMemoryIamStore : ITenantAgentMessageStore
             ? sessionBacking.ReadRetainedTenantOperationRun(state.Tenant.TenantId, frame.RunId) : null).Result) return false;
         if (thread.TaskId is not { } taskId) return true;
         return delegatedTasks.GetValueOrDefault((thread.TenantId, taskId)) is { } task
-            && sessionBacking.ReadTenantSession(thread.TenantId, task.Source.SessionId) is { } source && !AgentCore.Domain.Conversation.SessionRetention.IsDue(source.Snapshot, TaskNow)
+            && sessionBacking.ReadTenantSession(thread.TenantId, task.Source.RequireSessionId()) is { } source && !AgentCore.Domain.Conversation.SessionRetention.IsDue(source.Snapshot, TaskNow)
             && CanReadTask(state, actor, task, ct);
     }
     public ValueTask<TaskPage<AgentThread>> ReadAgentThreadsAsync(TaskQuery query, CancellationToken ct = default)

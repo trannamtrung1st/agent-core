@@ -50,7 +50,7 @@ public sealed class TenantEventProcessor(ITenantEventStore events, IIamStore sec
                         { if (await events.TryCoalesceTenantEventAsync(current, ct)) coalesced++; continue; }
                         var result = await automations.AdmitEventAsync(current, ct);
                         if (result is { Created: true, ApprovalRequestId: not null }) review++;
-                        else if (result is { Created: true, RunId: not null }) admitted++;
+                        else if (result is { Created: true, RunId: not null } or { Created: true, WorkflowExecutionId: not null }) admitted++;
                     }
                     catch (AccessDeniedException error)
                     { await events.TryFinishTenantEventAsync(source, error.ReasonCode == "event_causal_loop" ? EventMatchStatus.LoopSkipped : EventMatchStatus.PolicySkipped, error.ReasonCode, ct); }
@@ -72,7 +72,7 @@ public sealed class TenantEventProcessor(ITenantEventStore events, IIamStore sec
                 {
                     var result = await automations.AdmitEventAsync(source, ct);
                     if (result is { Created: true, ApprovalRequestId: not null }) review++;
-                    else if (result is { Created: true, RunId: not null }) admitted++;
+                    else if (result is { Created: true, RunId: not null } or { Created: true, WorkflowExecutionId: not null }) admitted++;
                 }
                 catch (AccessDeniedException error) { await events.TryFinishTenantEventBucketAsync(source, error.ReasonCode, ct); }
                 catch (ArgumentException) { await events.TryFinishTenantEventBucketAsync(source, "event_evidence_invalid", ct); }

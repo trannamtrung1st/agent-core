@@ -24,7 +24,7 @@ public sealed partial class InMemoryIamStore
     {
         var p = request.Operation.TaskDelegation ?? throw new AccessDeniedException("task_review_unavailable"); p.Validate();
         var task = p.Task; var state = _tenants[request.TenantId];
-        var source = sessionBacking.ReadTenantSession(request.TenantId, task.Source.SessionId) ?? throw new AccessDeniedException("task_source_unavailable");
+        var source = sessionBacking.ReadTenantSession(request.TenantId, task.Source.RequireSessionId()) ?? throw new AccessDeniedException("task_source_unavailable");
         var original = task.Source.RunId is { } id ? sessionBacking.ReadTenantRun(request.TenantId, id) : null;
         if (original is null) throw new AccessDeniedException("task_source_unavailable");
         TenantTaskConsentRules.RequireModelSourceAsync(request, run, original, source, agent,

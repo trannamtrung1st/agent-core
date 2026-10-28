@@ -33,7 +33,7 @@ public sealed partial class SqliteIamStore
     {
         var p = request.Operation.TaskDelegation ?? throw new AccessDeniedException("task_review_unavailable"); p.Validate();
         var task = p.Task; var state = await ReadTenantAsync(db, request.TenantId, ct) ?? throw new AccessDeniedException("tenant_unavailable");
-        var source = await ReadSandboxSession(db, request.TenantId, task.Source.SessionId, ct) ?? throw new AccessDeniedException("task_source_unavailable");
+        var source = await ReadSandboxSession(db, request.TenantId, task.Source.RequireSessionId(), ct) ?? throw new AccessDeniedException("task_source_unavailable");
         var originalRow = task.Source.RunId is { } id ? await OwnedRuns(db, request.TenantId).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == id.ToString("D"), ct) : null;
         if (originalRow is null) throw new AccessDeniedException("task_source_unavailable");
         var original = AgentRunStoreMapping.ToDomain(originalRow);

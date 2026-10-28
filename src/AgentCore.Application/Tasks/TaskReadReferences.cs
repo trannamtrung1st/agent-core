@@ -36,8 +36,9 @@ public static class TaskReadReferences
             {
                 var saved = runs is ITenantTaskStore tasks ? await tasks.FindTaskAsync(state.Tenant.TenantId, id, ct) : null;
                 if (saved is null || !await TaskAuthority.CanReadAsync(state, actor, saved, iam, ct, run)) throw new AccessDeniedException("task_source_unavailable");
-                if (runs is not ITenantSessionStore sessions || await sessions.FindTenantSessionAsync(state.Tenant.TenantId, saved.Source.SessionId, ct) is not { } source
-                    || SessionRetention.IsDue(source.Snapshot, run.UpdatedAtUtc)) throw new AccessDeniedException("task_source_unavailable");
+                if (runs is not ITenantSessionStore sessions) throw new AccessDeniedException("task_source_unavailable");
+                if (saved.Source.Workflow is null && (await sessions.FindTenantSessionAsync(state.Tenant.TenantId, saved.Source.RequireSessionId(), ct) is not { } source
+                    || SessionRetention.IsDue(source.Snapshot, run.UpdatedAtUtc))) throw new AccessDeniedException("task_source_unavailable");
                 _ = await ((ITenantTaskStore)runs).ReadTaskNotificationsAsync(state.Tenant.TenantId, actor, id, ct);
                 var projection = projections.GetValueOrDefault(id);
                 if (projection.ValueKind == JsonValueKind.Object)

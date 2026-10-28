@@ -5,7 +5,9 @@ import { tenantAgentApi } from './tenantAgentConfiguration';
 import { IdentityCompletionError, identityRequest, tenantApi } from './identity';
 import type { SessionPickerSource, SessionPickerItem } from './api';
 
+export type AutomationWorkflowDestination = { workflowId: string; version: number; graphHash: string; inputs: Record<string, unknown> };
 export type TenantAutomation = {
+  startWorkflow?: Omit<AutomationWorkflowDestination, "inputs"> & { inputsJson: string } | null;
   pinnedSpaceId?: string | null; pinnedEnvironmentId?: string | null;
   presetId?: string | null; presetVersion?: number | null;
   automationId: string; name: string; instructions: string; status: string; revision: number; triggerRevision: number;
@@ -23,15 +25,20 @@ export type TenantAutomationPreset = { presetId: string; presetVersion: number; 
   triggerKind: 'schedule' | 'coreEvent'; coreEventKey: string | null; filterExpression: string | null; dispatch: EventDispatch | null; eligible: boolean; prerequisites: string[] };
 export type TenantAutomationEvent = { localKey: string; triggerId?: string; revision: number; enabled: boolean; source?: EventSourceReference; filterExpression: string | null; dispatch: EventDispatch };
 export const newTenantAutomationEvent = (): TenantAutomationEvent => ({ localKey: crypto.randomUUID(), revision: 0, enabled: true, filterExpression: null, dispatch: { mode: 'everyMatch' } });
-export type TenantAutomationDraft = { pinnedSpaceId?: string | null; pinnedEnvironmentId?: string | null; presetId?: string | null; presetVersion?: number | null; targetSessionId?: string | null; reportToSessionId?: string | null; mode?: 'schedule' | 'events'; events?: TenantAutomationEvent[]; enabled: boolean; name: string; instructions: string; schedule: ScheduleTiming;
+export type TenantAutomationDraft = { destination?: 'session' | 'workflow'; startWorkflow?: AutomationWorkflowDestination | null; pinnedSpaceId?: string | null; pinnedEnvironmentId?: string | null; presetId?: string | null; presetVersion?: number | null; targetSessionId?: string | null; reportToSessionId?: string | null; mode?: 'schedule' | 'events'; events?: TenantAutomationEvent[]; enabled: boolean; name: string; instructions: string; schedule: ScheduleTiming;
   offeringId: string | null; reasoningEffort: string | null; requiresTools: boolean; requiresVision: boolean };
 export const tenantAutomationsApi = (tenant: string, instance: string, suffix = '') => tenantAgentApi(tenant, instance, '/automations' + suffix);
 export const automationDraft = (value?: TenantAutomation): TenantAutomationDraft | undefined => {
-  if (!value || !['backgroundSession', 'existingSession'].includes(value.executionTarget) || !['none', 'toSession'].includes(value.completionDelivery)
+  if (!value || !['backgroundSession', 'existingSession', 'startWorkflow'].includes(value.executionTarget) || !['none', 'toSession'].includes(value.completionDelivery)
     || value.completionDelivery === 'toSession' && !value.reportToSessionId
     || value.executionTarget === 'existingSession' && (!value.targetSessionId || value.completionDelivery !== 'none' || value.reportToSessionId != null)
     || value.executionTarget === 'backgroundSession' && value.targetSessionId != null) return undefined;
-  const base = { pinnedSpaceId: value.pinnedSpaceId ?? null, pinnedEnvironmentId: value.pinnedEnvironmentId ?? null, presetId: value.presetId ?? null, presetVersion: value.presetVersion ?? null, targetSessionId: value.executionTarget === 'existingSession' ? value.targetSessionId : null, reportToSessionId: value.completionDelivery === 'toSession' ? value.reportToSessionId : null, enabled: value.status === 'active', name: value.name, instructions: value.instructions, offeringId: preferenceFields(value.modelPreference).key || null,
+  let startWorkflow: AutomationWorkflowDestination | null = null;
+  if (value.executionTarget === 'startWorkflow') {
+    if (!value.startWorkflow || value.targetSessionId || value.reportToSessionId || value.pinnedSpaceId || value.pinnedEnvironmentId) return undefined;
+    try { startWorkflow = { workflowId: value.startWorkflow.workflowId, version: value.startWorkflow.version, graphHash: value.startWorkflow.graphHash, inputs: JSON.parse(value.startWorkflow.inputsJson) as Record<string, unknown> }; } catch { return undefined; }
+  }
+  const base = { destination: value.executionTarget === 'startWorkflow' ? 'workflow' as const : 'session' as const, startWorkflow, pinnedSpaceId: value.pinnedSpaceId ?? null, pinnedEnvironmentId: value.pinnedEnvironmentId ?? null, presetId: value.presetId ?? null, presetVersion: value.presetVersion ?? null, targetSessionId: value.executionTarget === 'existingSession' ? value.targetSessionId : null, reportToSessionId: value.completionDelivery === 'toSession' ? value.reportToSessionId : null, enabled: value.status === 'active', name: value.name, instructions: value.instructions, offeringId: preferenceFields(value.modelPreference).key || null,
     reasoningEffort: preferenceFields(value.modelPreference).effort || null, requiresTools: value.requiresTools, requiresVision: value.requiresVision };
   if (value.triggers.length === 1 && value.triggers[0].kind === 'schedule' && value.triggers[0].schedule)
     return { ...base, schedule: { ...value.triggers[0].schedule } };
@@ -55,14 +62,15 @@ export const automationWitness = (view: TenantAutomationEditor, value?: TenantAu
   expectedInstanceRevision: view.agent.instance.revision, expectedAutomationRevision: value?.revision ?? 0 });
 export async function saveTenantAutomation(tenant: string, instance: string, view: TenantAutomationEditor, draft: TenantAutomationDraft, value: TenantAutomation | undefined, signal: AbortSignal) {
   const result = await identityRequest<TenantAutomation>(tenantAutomationsApi(tenant, instance, value ? `/${encodeURIComponent(value.automationId)}` : ''), {
-    method: value ? 'PUT' : 'POST', signal, body: { pinnedSpaceId: draft.pinnedSpaceId ?? null, pinnedEnvironmentId: draft.pinnedEnvironmentId ?? null, enabled: draft.enabled, name: draft.name.trim(), instructions: draft.instructions.trim(), modelPreference: preferenceFromFields(draft.offeringId, draft.reasoningEffort),
+    method: value ? 'PUT' : 'POST', signal, body: { startWorkflow: draft.destination === 'workflow' ? draft.startWorkflow : null, pinnedSpaceId: draft.pinnedSpaceId ?? null, pinnedEnvironmentId: draft.pinnedEnvironmentId ?? null, enabled: draft.enabled, name: draft.name.trim(), instructions: draft.instructions.trim(), modelPreference: draft.destination === 'workflow' ? null : preferenceFromFields(draft.offeringId, draft.reasoningEffort),
       presetId: draft.presetId ?? null, presetVersion: draft.presetVersion ?? null,
       requiresTools: draft.requiresTools, requiresVision: draft.requiresVision, targetSessionId: draft.targetSessionId || null, reportToSessionId: draft.reportToSessionId || null,
       ...(draft.mode === 'events' ? { triggers: draft.events?.map(e => ({ kind: 'event', triggerId: e.triggerId, revision: e.revision, enabled: e.enabled,
         source: e.source, filterExpression: e.filterExpression, dispatch: e.dispatch })) } : { schedule: draft.schedule }), ...automationWitness(view, value) }
   }).catch(error => { if (error instanceof IdentityCompletionError) throw new IdentityCompletionError(false); throw error; });
   if (!result?.automationId || value && result.automationId !== value.automationId || !Number.isSafeInteger(result.revision) || result.revision < 1) throw new IdentityCompletionError(false);
-  if ((result.targetSessionId ?? null) !== (draft.targetSessionId || null) || result.executionTarget !== (draft.targetSessionId ? 'existingSession' : 'backgroundSession')) throw new IdentityCompletionError(false);
+  if ((result.targetSessionId ?? null) !== (draft.targetSessionId || null) || result.executionTarget !== (draft.destination === 'workflow' ? 'startWorkflow' : draft.targetSessionId ? 'existingSession' : 'backgroundSession')) throw new IdentityCompletionError(false);
+  if (draft.destination === 'workflow' && (!result.startWorkflow || result.startWorkflow.workflowId !== draft.startWorkflow?.workflowId || result.startWorkflow.version !== draft.startWorkflow.version || result.startWorkflow.graphHash !== draft.startWorkflow.graphHash)) throw new IdentityCompletionError(false);
   if ((result.reportToSessionId ?? null) !== (draft.reportToSessionId || null) || result.completionDelivery !== (draft.reportToSessionId ? 'toSession' : 'none')) throw new IdentityCompletionError(false);
   if ((result.presetId ?? null) !== (draft.presetId ?? null) || (result.presetVersion ?? null) !== (draft.presetVersion ?? null)) throw new IdentityCompletionError(false);
   if ((result.pinnedSpaceId ?? null) !== (draft.pinnedSpaceId ?? null) || (result.pinnedEnvironmentId ?? null) !== (draft.pinnedEnvironmentId ?? null)) throw new IdentityCompletionError(false);

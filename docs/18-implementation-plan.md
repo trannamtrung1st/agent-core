@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Formal Workflows
+
+Owner-authorized Formal Workflows implementation began on baseline `f8449f7566e55f90aa0fe963bdfbf19281277861`, 2026-10-28. The [architecture/source contract](formal-workflows-architecture.md), [bounded technology decision](10-technology-decisions.md#decision-bounded-embedded-formal-workflows) and [design direction](../.impeccable/surfaces/formal-workflows.md) own the delivered scope. Local qualification covers the pinned SQLite runtime proof, immutable catalog/publication recovery, genuine Task bridge, independent Evaluation/Goal proof, sign-off/branching, all invocation origins, designer/outline/Chat/Automation UI, source minimization and protected/uncertain-effect recovery. The [delivery ledger](reports/formal-workflows-delivery-2026-10-28.md) owns exact checks, source SHA, final review and external limits. This is scoped successor delivery; historical milestone acceptance is unchanged, and live-provider/device/deployment/hosted-CI qualification is not implied.
+
 The current post-delivery implementation sequence is maintained in [TODO.md](../TODO.md#prioritized-roadmap): after Initiative 9, prioritize the Built-in General Assistant, then Workflow. Group Chat follows self-hosting and owner manual validation; integrations follow scenario validation. Historical initiative IDs and milestone gates below retain their original scope and do not renumber that sequence.
 
 The [clean baseline delivery](reports/clean-baseline-delivery-2026-10-26.md) records the completed local stabilization scope and focused verification. Its external limits remain open; it neither accepts a new application milestone nor starts Decision Intelligence.
@@ -965,6 +969,6 @@ The [Initiative 9 targeted review corrections](reports/initiative-9-review-fixes
 
 ## Built-in General Assistant successor
 
-The protected tenant default uses immutable global v36, trusted idempotent provisioning, ordinary isolated IAM/private Space, universal Chat visibility, non-destructive reset and automatic safe adoption through existing Instance/Run owners. The [design brief](reports/general-assistant-design-2026-10-28.md), [delivery ledger](reports/general-assistant-delivery-2026-10-28.md) and [cutover runbook](general-assistant-cutover.md) own its scoped local implementation and verification. Historical milestone acceptance is unchanged; Workflow is the next unstarted roadmap initiative. CI, deployment and external provider/device/load qualification remain separate.
+The protected tenant default uses immutable global v36, trusted idempotent provisioning, ordinary isolated IAM/private Space, universal Chat visibility, non-destructive reset and automatic safe adoption through existing Instance/Run owners. The [design brief](reports/general-assistant-design-2026-10-28.md), [delivery ledger](reports/general-assistant-delivery-2026-10-28.md) and [cutover runbook](general-assistant-cutover.md) own its scoped local implementation and verification. Historical milestone acceptance is unchanged; Formal Workflows local delivery is tracked under its [scope and evidence](#formal-workflows). CI, deployment and external provider/device/load qualification remain separate.
 
 The [General Assistant review stabilization](reports/general-assistant-stabilization-2026-10-28.md) addresses discovery query count, failed setup recovery and historical-template creation. It preserves the local/external qualification boundary and does not start Workflow.

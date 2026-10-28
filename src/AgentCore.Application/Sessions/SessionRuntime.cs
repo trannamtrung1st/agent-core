@@ -3638,7 +3638,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     {
                                     if (!await AdmitToolActivityAsync(cause, request.ResponseId, OutputActivity.RunningTools, true, overallCts.Token).ConfigureAwait(false)) return;
                                     // Canonical local mutations and Artifact publication own their durable Run/effect receipts.
-                                    effectFenced = !(_runtimeOwner is not null && (TenantManagementMutationContract.IsTool(call.Name) || TenantAutomationMutationContract.IsTool(call.Name) || TenantWorkspaceMutationContract.IsMutation(call.Name) || TenantBrowserInspectionContract.IsInspection(call.Name) || call.Name is ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace))
+                                    effectFenced = !(_runtimeOwner is not null && (WorkflowToolContract.IsTool(call.Name) || TenantManagementMutationContract.IsTool(call.Name) || TenantAutomationMutationContract.IsTool(call.Name) || TenantWorkspaceMutationContract.IsMutation(call.Name) || TenantBrowserInspectionContract.IsInspection(call.Name) || call.Name is ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace))
                                         && ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe;
                                     effectHash = actionHash;
                                     var skipDispatch = false;

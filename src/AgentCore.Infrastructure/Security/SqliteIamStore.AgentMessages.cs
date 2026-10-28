@@ -17,6 +17,7 @@ public sealed partial class SqliteIamStore : ITenantAgentMessageStore
         var taskRow = command.TaskId is { } taskId ? await db.Set<DelegatedTaskRow>().SingleOrDefaultAsync(t => t.TenantId == tenant && t.TaskId == taskId, ct)
             ?? throw new AccessDeniedException("resource_unavailable") : null;
         var task = taskRow is null ? null : TaskPersistence.Value(taskRow);
+        if (task?.Source.Workflow is not null) throw new AccessDeniedException("workflow_task_messages_unavailable");
         var sourceSession = command.Actor.Agent?.SessionId ?? task?.Source.SessionId ?? throw new AccessDeniedException("agent_sender_required");
         var (source, run, sender, state) = await RequireTaskSource(db, tenant, sourceSession, command.Actor, "agent-messages.send", ct, permissionScope: task is not null ? TaskAuthority.Scope(tenant, task.TaskId) : command.ThreadId is { } selectedThread
                 ? AgentCore.Domain.Security.AccessScope.ForResource(tenant, "agent-thread", selectedThread.ToString("D"))
@@ -93,7 +94,7 @@ public sealed partial class SqliteIamStore : ITenantAgentMessageStore
         if (thread.TaskId is not { } taskId) return true;
         var row = await db.Set<DelegatedTaskRow>().AsNoTracking().SingleOrDefaultAsync(t => t.TenantId == thread.TenantId && t.TaskId == taskId, ct);
         if (row is null) return false; var task = TaskPersistence.Value(row);
-        var source = await ReadSandboxSession(db, thread.TenantId, task.Source.SessionId, ct);
+        var source = await ReadSandboxSession(db, thread.TenantId, task.Source.RequireSessionId(), ct);
         return source is not null && !AgentCore.Domain.Conversation.SessionRetention.IsDue(source.Snapshot, TaskNow)
             && await CanReadTaskAsync(db, state, actor, task, ct);
     }

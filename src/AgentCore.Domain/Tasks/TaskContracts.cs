@@ -6,7 +6,7 @@ using AgentCore.Domain.Conversation;
 namespace AgentCore.Domain.Tasks;
 
 public enum DelegatedTaskState { PendingDependencies, Queued, Running, Waiting, Blocked, Succeeded, Failed, Cancelled, NeedsAttention }
-public enum TaskActorKind { Agent, Human }
+public enum TaskActorKind { Agent, Human, WorkflowContinuation }
 public enum AgentMessageKind { Progress, Question, Answer, Note, HumanGuidance }
 public enum AgentMessageDelivery { NotificationPending, DeliveredToAuthorizedInbox, Acknowledged, Undeliverable, ActivationAdmitted }
 
@@ -97,21 +97,47 @@ public sealed record TaskRequest
 }
 
 /// <summary>Saved trusted provenance. A human command has no invented source Run.</summary>
-public sealed record TaskSource(Guid TenantId, Guid SessionId, Guid InstanceId, Guid PrincipalId, TaskActorKind ActorKind,
+public sealed record TaskSource(Guid TenantId, Guid? SessionId, Guid InstanceId, Guid PrincipalId, TaskActorKind ActorKind,
     Guid? RunId, Guid? ActivationId, Guid? HumanCommandId, Guid? OriginalInitiatorPrincipalId,
-    Guid RootActivationId, Guid? ParentTaskId, int Depth)
+    Guid RootActivationId, Guid? ParentTaskId, int Depth,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorkflowTaskContinuation? Workflow = null)
 {
     public void Validate()
     {
-        foreach (var id in new[] { TenantId, SessionId, InstanceId, PrincipalId, RootActivationId }) TaskLimits.Id(id, "Task source identity");
+        foreach (var id in new[] { TenantId, InstanceId, PrincipalId, RootActivationId }) TaskLimits.Id(id, "Task source identity");
         if (!Enum.IsDefined(ActorKind) || Depth is < 1 or > TaskLimits.MaxDepth || ParentTaskId == Guid.Empty
             || OriginalInitiatorPrincipalId == Guid.Empty || (Depth > 1) != (ParentTaskId is not null)
+            || ActorKind != TaskActorKind.WorkflowContinuation && (SessionId is null || SessionId == Guid.Empty || Workflow is not null)
+            || ActorKind == TaskActorKind.WorkflowContinuation && (SessionId is not null || RunId is not null || ActivationId is not null
+                || HumanCommandId is not null || ParentTaskId is not null || Depth != 1 || Workflow is null)
             || ActorKind == TaskActorKind.Agent && (RunId is null || RunId == Guid.Empty || ActivationId is null || ActivationId == Guid.Empty || HumanCommandId is not null)
             || ActorKind == TaskActorKind.Human && (RunId is not null || ActivationId is not null || HumanCommandId is null || HumanCommandId == Guid.Empty
                 || OriginalInitiatorPrincipalId != PrincipalId || ParentTaskId is not null))
             throw new ArgumentException("Task source requires real causal identity and bounded delegation depth.");
+        Workflow?.Validate();
     }
-    public string OperationScope => ActorKind == TaskActorKind.Agent ? $"run:{RunId:D}" : $"human:{PrincipalId:D}:session:{SessionId:D}";
+    public Guid RequireSessionId() => SessionId ?? throw new InvalidOperationException("Workflow continuation has no source Session.");
+    public string OperationScope => ActorKind switch {
+        TaskActorKind.Agent => $"run:{RunId:D}", TaskActorKind.Human => $"human:{PrincipalId:D}:session:{SessionId:D}",
+        TaskActorKind.WorkflowContinuation when Workflow is { } workflow => $"workflow:{workflow.ExecutionId:D}:{workflow.OperationId:D}",
+        _ => throw new ArgumentException("A valid Task source is required.")
+    };
+}
+
+/// <summary>Accepted process/step witness; it is neither a human command nor an invented claimed Run.</summary>
+public sealed record WorkflowTaskContinuation(Guid WorkflowId, Guid ExecutionId, int Version, string GraphHash,
+    string NodeId, int Attempt, Guid OperationId,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid? OriginalSessionId = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] AgentCore.Domain.Workflows.WorkflowEventCausation? Causation = null)
+{
+    public void Validate()
+    {
+        foreach (var id in new[] { WorkflowId, ExecutionId, OperationId }) TaskLimits.Id(id, "Workflow Task source");
+        if (Version < 1 || Attempt != 1 || OriginalSessionId == Guid.Empty || GraphHash is not { Length: 64 } || !GraphHash.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f')
+            || NodeId is not { Length: > 0 and <= 64 } || !NodeId.All(c => c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '-' or '_'))
+            throw new ArgumentException("Invalid immutable workflow Task source.");
+        Causation?.Validate();
+    }
 }
 
 public sealed record TaskBudgetReservation(int MaxSteps, int DurationSeconds, int RootMaxSteps, int RootDurationSeconds,

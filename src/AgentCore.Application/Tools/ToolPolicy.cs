@@ -16,6 +16,9 @@ public static class ToolPolicy
             return admission is { TenantId: not null, AgentRunId: not null, AgentRunGeneration: not null, OwnedSessionId: not null,
                 SupportsTools: true, Detached: false, TriggerKind: TriggerKind.UserTurn, ConfigurationContinuationTarget: null }
                 ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
+        if (WorkflowToolContract.IsTool(toolName))
+            return admission is { TenantId: not null, AgentRunId: not null, AgentRunGeneration: not null, SupportsTools: true }
+                && RolePermissions.AllowsTool(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (TenantTaskToolContract.IsTool(toolName))
             return admission is { TenantId: not null, AgentRunId: not null, AgentRunGeneration: not null, SupportsTools: true }
                 && RolePermissions.AllowsTool(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
@@ -207,6 +210,10 @@ public static class ToolPolicy
         if (descriptor.Name == ToolCatalog.SessionComplete)
             return context is { ModelSupportsTools: true, ExecutionContext: not null, DetachedExecution: false }
                 && context.CurrentContextTools.Contains(descriptor.Name, StringComparer.Ordinal);
+        if (WorkflowToolContract.IsTool(descriptor.Name))
+            return context is { ModelSupportsTools: true, ExecutionContext: not null }
+                && (descriptor.Name != "workflows.start" || context.OutputContract != AgentCore.Domain.Conversation.AgentRunOutputContract.CompletionReport)
+                && context.CurrentContextTools.Contains(descriptor.Name, StringComparer.Ordinal) && RolePermissions.AllowsTool(definition, descriptor.Name);
         if (TenantTaskToolContract.IsTool(descriptor.Name))
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null, ExecutionContext: { } execution }
                 && execution.SessionId == context.OwnedSessionId

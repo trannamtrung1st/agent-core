@@ -60,7 +60,7 @@ public static class TenantAutomationRules
                 throw new SecurityConflictException("operation_witness_changed");
             request = parsed;
         }
-        return new(false, occurrence, occurrence.ExecutionSessionId, occurrence.AcceptedAgentRunId, request);
+        return new(false, occurrence, occurrence.ExecutionSessionId, occurrence.AcceptedAgentRunId, request, occurrence.AcceptedWorkflowExecutionId);
     }
     public static Guid SourceAutomation(AgentRun run)
     {

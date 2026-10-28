@@ -1,5 +1,9 @@
 # System Architecture
 
+## Formal Workflows implementation
+
+The owner-authorized successor permits embedded Elsa solely for closed graph traversal/bookmarks while Core retains tenant catalog, Task/Run execution, IAM, Goal/Evaluation evidence and procedural decision ownership. The [architecture contract](formal-workflows-architecture.md) defines the trusted continuation and durable bridge; the [technology decision](10-technology-decisions.md#decision-bounded-embedded-formal-workflows) bounds the exception to generic workflow-engine exclusions. The bounded successor is implemented with [focused local evidence](reports/formal-workflows-delivery-2026-10-28.md); earlier Automation features retain their historical scope and their scheduler remains the occurrence owner.
+
 Host Sandbox readiness is infrastructure reachability and mount readiness only. It does not enumerate a global profile catalog or confer authority. Each tenant Run retains its admitted profile/Instance verification, captured Space mounts, current IAM and exact approval checks. Filesystem and retirement adapters ship together at contract 5. [Cutover](clean-baseline-cutover.md).
 
 ## Dynamic model management
@@ -199,7 +203,7 @@ Destination, report creation, source reads and recipient delivery have separate 
 
 Independent Automation/Event/Manual work remains rooted in its authentic occurrence, with its configured destination and separately authorized report source/creation/delivery. It acquires no parent by pretending to be immediate child work.
 
-Canonical delegation uses durable Task metadata and a distinct worker Session/Run under the selected Agent principal. It preserves the actual source Run/root and nullable original requester. Exact Task notifications and acknowledgment are separate from independent Automation completion accounting. Task waits release provider/claim resources and resume the same saved Run; they neither acknowledge nor cancel work. See [Task coordination](04-backend-interfaces.md#initiative-9--adopted-successor-implementation-in-progress).
+Canonical delegation uses durable Task metadata and a distinct worker Session/Run under the selected Agent principal. It preserves the actual source Run/root and nullable original requester. Exact Task notifications and acknowledgment are separate from independent Automation completion accounting. Task waits release provider/claim resources and resume the same saved Run; they neither acknowledge nor cancel work. See [Task coordination](04-backend-interfaces.md#initiative-9--task-delegation-and-communication).
 
 ## Files, private sources and publication
 

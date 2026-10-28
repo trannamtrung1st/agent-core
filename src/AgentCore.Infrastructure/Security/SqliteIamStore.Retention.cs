@@ -24,7 +24,7 @@ public sealed partial class SqliteIamStore
                 SELECT s.SessionId,o.TenantId,s.SessionId,
                     CASE WHEN json_extract(s.OriginJson,'$.kind') IN (5,6) THEN json_extract(s.OriginJson,'$.originatingSessionId') END,
                     0, CASE WHEN json_extract(s.OriginJson,'$.kind') IN (5,6)
-                        AND json_extract(s.OriginJson,'$.originatingSessionId') IS NULL THEN s.CreatedAtUtc ELSE s.RetentionDueAtUtc END,
+                        AND json_extract(s.OriginJson,'$.originatingSessionId') IS NULL AND json_extract(s.OriginJson,'$.workflowExecutionId') IS NULL THEN s.CreatedAtUtc ELSE s.RetentionDueAtUtc END,
                     s.CreatedAtUtc
                 FROM Sessions s JOIN TenantSessions o ON o.SessionId=s.SessionId
                 WHERE s.DurablyDeletedAtUtc IS NULL AND ({tenant} IS NULL OR o.TenantId={tenant}) AND ({id} IS NULL OR s.SessionId={id})
@@ -35,7 +35,7 @@ public sealed partial class SqliteIamStore
                         THEN json_extract(p.OriginJson,'$.originatingSessionId') END,
                     a.Depth+1,
                     CASE WHEN po.SessionId IS NULL OR a.Depth=63 AND json_extract(p.OriginJson,'$.kind') IN (5,6)
-                            OR json_extract(p.OriginJson,'$.kind') IN (5,6) AND json_extract(p.OriginJson,'$.originatingSessionId') IS NULL
+                            OR json_extract(p.OriginJson,'$.kind') IN (5,6) AND json_extract(p.OriginJson,'$.originatingSessionId') IS NULL AND json_extract(p.OriginJson,'$.workflowExecutionId') IS NULL
                         THEN a.FallbackAtUtc
                         WHEN p.DurablyDeletedAtUtc IS NULL THEN p.RetentionDueAtUtc
                         WHEN p.RetentionDueAtUtc IS NULL THEN p.DurablyDeletedAtUtc

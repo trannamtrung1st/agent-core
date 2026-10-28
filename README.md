@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+Formal Workflows adds a closed immutable process designer, real Task/Run workers, independent Evaluation/Goal proof, process sign-off and typed manual/claimed-Agent/Automation starts. Embedded Elsa owns graph/bookmarks only; Core retains execution, IAM and scheduling authority. [Local delivery evidence](docs/reports/formal-workflows-delivery-2026-10-28.md) records browser, SQLite restart, retention and recovery checks. Existing installations require the documented [stopped-writer migration](docs/15-persistence-and-configuration.md#formal-workflow-persistence-and-cutover); provider/device/deployment qualification remains separate.
+
 General Assistant v36 is a globally shipped system Definition with one protected, isolated default Instance per tenant. Chat visibility, non-destructive reset, subordinate additional instructions and automatic release adoption use the existing IAM/Session/Run owners. [Delivery evidence](docs/reports/general-assistant-delivery-2026-10-28.md) records focused local Synthetic verification; [cutover](docs/general-assistant-cutover.md) covers the additive migration and setup/recovery requirements.
 
 Unified evaluation now includes independently reviewed native Sandbox Scripts, immutable Suite/Script versions, guarded publication, trusted Run verification and attributable Manual assessment. [Native execution verification](docs/reports/native-evaluation-scripts-2026-10-27.md) records real local OpenSandbox execution, both-store recovery/security checks and the responsive UI workflow. Initiative 7 is locally complete, including the [settlement-concurrency follow-up](docs/reports/native-evaluation-settlement-2026-10-27.md), and Initiative 8 — Session Goals is now [closed locally](docs/reports/session-goals-delivery-2026-10-27.md#initiative-8-closure). Historical [foundation](docs/reports/unified-scripts-evaluation-2026-10-27.md) and [stabilization](docs/reports/unified-evaluation-stabilization-2026-10-27.md) reports retain their original scope; hosted CI and production/provider certification are separate.
@@ -47,7 +49,7 @@ The most important qualities are:
 5. restrained proactive behavior;
 6. conversation continuity.
 
-Complex tool orchestration, unbounded multi-Agent systems beyond the bounded Initiative 9 contract, workflow builders, marketplaces, and advanced long-term memory are intentionally outside the first MVP.
+Complex tool orchestration, unbounded multi-Agent systems beyond the bounded Initiative 9/Workflow contracts, general-purpose workflow scripting, marketplaces, and advanced long-term memory are intentionally outside the first MVP.
 
 ## License
 

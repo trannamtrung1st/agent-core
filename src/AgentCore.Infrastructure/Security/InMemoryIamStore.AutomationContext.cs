@@ -1,3 +1,4 @@
+using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Security;
@@ -10,6 +11,14 @@ public sealed partial class InMemoryIamStore
     private void RequireAutomationContextAuthoring(TenantSecurityState state, TenantAgent agent, Automation? current, Automation proposed, Guid? human, CancellationToken ct, bool force = false)
     {
         if (!force && !TenantAutomationContextRules.CheckAuthoring(current, proposed)) return;
+        if (proposed.ExecutionTarget.Workflow is { } workflow)
+        {
+            var version = workflowVersions.GetValueOrDefault((state.Tenant.TenantId, workflow.WorkflowId, workflow.Version)) ?? throw new AccessDeniedException("workflow_version_unavailable");
+            if (workflowDefinitions.GetValueOrDefault((state.Tenant.TenantId, workflow.WorkflowId)) is not { Retired: false }) throw new AccessDeniedException("workflow_version_unavailable");
+            AgentCore.Application.Workflows.WorkflowAutomationRules.DestinationAsync(state, proposed, version, agent.PrincipalId, new(this), ct).GetAwaiter().GetResult();
+            AgentCore.Application.Workflows.WorkflowAutomationRules.AuthorityAsync(state, proposed, agent, InstanceSettingsResolver.Resolve(TenantAgentDefinitionBaseline(agent), agent.Instance.SettingsOverrides), human, null, new(this), ct).GetAwaiter().GetResult();
+            return;
+        }
         var tenant = state.Tenant.TenantId;
         var own = FindPrivateSpaceAsync(tenant, agent.Instance.InstanceId, ct).Result ?? throw new AccessDeniedException("private_space_unavailable");
         var id = proposed.PinnedSpaceId ?? own.SpaceId;

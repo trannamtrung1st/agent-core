@@ -74,6 +74,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<AgentCore.Application.Decisions.IDecisionEngine, AgentCore.Infrastructure.Decisions.DecisionEngine>();
 
         persistence ??= new PersistenceOptions();
+        AgentCore.Infrastructure.Workflows.FormalWorkflowRuntimeRegistration.AddFormalWorkflowRuntime(services, persistence);
         persistence.WorkspaceRoot = Path.GetFullPath(persistence.WorkspaceRoot);
         browser ??= new BrowserOptions();
         services.TryAddSingleton(browser);

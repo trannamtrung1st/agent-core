@@ -59,6 +59,9 @@ public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbConte
         var migrations = db.Database.GetMigrations().ToArray();
         if (applied.Any(id => !migrations.Contains(id, StringComparer.Ordinal)))
             throw ResetRequired("data_reset_required: Installed schema predates the canonical filesystem baseline.");
+        if (applied.Contains("20261028030836_BuiltInGeneralAssistant", StringComparer.Ordinal)
+            && !applied.SequenceEqual(migrations, StringComparer.Ordinal))
+            throw new InvalidOperationException(AgentCore.Infrastructure.Workflows.FormalWorkflowCutover.Recovery);
         if (migrations.LastOrDefault() == "20261027010000_UnifiedEvaluations" && applied.Length > 0 && applied.Length < migrations.Length)
             throw new InvalidOperationException(EvaluationCutover.Recovery);
         if (applied.LastOrDefault() == "20261027020000_EvaluationSandboxExecutions" && !applied.Contains("20261027040000_SessionGoals", StringComparer.Ordinal))

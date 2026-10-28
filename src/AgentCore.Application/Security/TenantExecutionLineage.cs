@@ -13,6 +13,7 @@ public static class TenantExecutionLineage
     {
         var root = await RootAsync(run, runs, ct).ConfigureAwait(false);
         await AgentCore.Application.Tasks.TaskReadReferences.RequireAsync(run, state, iam, runs, ct).ConfigureAwait(false);
+        await AgentCore.Application.Workflows.WorkflowReadReferences.RequireAsync(run, state, iam, runs, ct).ConfigureAwait(false);
         if (run.Admission.AgentMessage is { } messageWork)
         {
             var message = runs is ITenantAgentMessageStore inbox ? await inbox.FindAgentMessageSourceAsync(state.Tenant.TenantId, messageWork.MessageId, ct) : null;
@@ -145,6 +146,16 @@ public static class TenantExecutionLineage
                 {
                     if (task.Source.HumanCommandId is null || context.ParentRunId is not null || task.Source.RootActivationId != run.ActivationId)
                         throw new AccessDeniedException("task_lineage_unavailable");
+                    return run;
+                }
+                if (task.Source.ActorKind == TaskActorKind.WorkflowContinuation)
+                {
+                    if (task.Source.Workflow is not { } process || task.Source.SessionId is not null || context.ParentRunId is not null
+                        || context.ParentActivationId is not null || task.Source.RootActivationId != run.ActivationId
+                        || run.Admission.Activation.SourceEventId != process.OperationId)
+                        throw new AccessDeniedException("workflow_task_lineage_unavailable");
+                    // This is the actual independently admitted worker root. Original process/source
+                    // lineage lives in its immutable workflow witness; no source Run is invented.
                     return run;
                 }
                 var source = await runReader(task.Source.RunId!.Value, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("task_lineage_unavailable");

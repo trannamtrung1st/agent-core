@@ -27,7 +27,7 @@ public sealed class TenantTaskDelegationTarget(ITenantSessionStore sessions, ITe
             throw new AccessDeniedException("task_review_detached_owner_required");
         var original = await runs.FindTenantRunAsync(request.TenantId, sourceRunId, ct) ?? throw new AccessDeniedException("task_source_unavailable");
         var (sourceAgent, current) = await configuration.CurrentPolicyAsync(request.TenantId, task.Source.InstanceId, ct);
-        var source = await sessions.FindTenantSessionAsync(request.TenantId, task.Source.SessionId, ct) ?? throw new AccessDeniedException("task_source_unavailable");
+        var source = await sessions.FindTenantSessionAsync(request.TenantId, task.Source.RequireSessionId(), ct) ?? throw new AccessDeniedException("task_source_unavailable");
         await TenantTaskConsentRules.RequireModelSourceAsync(request, run, original, source, sourceAgent, current, state, iam, time.GetUtcNow(), ct);
         var resolved = await RequireWorkerAsync(request, state, ct);
         return new(source, sourceAgent, original, resolved.Agent, resolved.Configuration);
@@ -49,7 +49,7 @@ public sealed class TenantTaskDelegationTarget(ITenantSessionStore sessions, ITe
     public async ValueTask<TenantHumanTaskConsentTarget> RequireHumanAsync(TenantApprovalRequest request, TenantSecurityState state, CancellationToken ct)
     {
         TenantTaskConsentRules.RequireHumanShape(request); var task = request.Operation.TaskDelegation!.Task;
-        var source = await sessions.FindTenantSessionAsync(request.TenantId, task.Source.SessionId, ct) ?? throw new AccessDeniedException("task_source_unavailable");
+        var source = await sessions.FindTenantSessionAsync(request.TenantId, task.Source.RequireSessionId(), ct) ?? throw new AccessDeniedException("task_source_unavailable");
         var (agent, _) = await configuration.CurrentPolicyAsync(request.TenantId, task.Source.InstanceId, ct);
         await TenantTaskConsentRules.RequireHumanSourceAsync(request, source, agent, state, iam, time.GetUtcNow(), ct);
         var worker = await RequireWorkerAsync(request, state, ct);
@@ -74,7 +74,7 @@ public sealed class TenantTaskDelegationTarget(ITenantSessionStore sessions, ITe
         var graph = task.State == DelegatedTaskState.PendingDependencies ? ((SessionSnapshot?)null, (AgentRun?)null)
             : TaskAdmissionFactory.Worker(task, current.Worker, current.Configuration, task.Assignment.Model!, task.WorkerSessionId!.Value,
                 p.WorkerEntryId!.Value, p.WorkerActivationId!.Value, task.InitialWorkerRunId!.Value, p.WorkerResponseId!.Value, task.CreatedAt);
-        var admission = new TaskAdmission(request.TenantId, task.Source.SessionId, actor, task.Request, task, graph.Item1, graph.Item2, securityRevision, auditId);
+        var admission = new TaskAdmission(request.TenantId, task.Source.RequireSessionId(), actor, task.Request, task, graph.Item1, graph.Item2, securityRevision, auditId);
         TaskAdmissionFactory.RequireGraph(admission, current.Source, current.OriginalSource, current.Worker, task.CreatedAt);
         return admission;
     }

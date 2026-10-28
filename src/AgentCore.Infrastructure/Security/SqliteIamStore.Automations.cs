@@ -74,6 +74,13 @@ public sealed partial class SqliteIamStore : ITenantAutomationStore
         }
         if (permission is "automations.create" or "automations.update")
             await RequireAutomationConversation(db, before, proposed, human.PrincipalId, null, ct);
+        if (proposed.ExecutionTarget.Workflow is { } workflow && permission is "automations.create" or "automations.update")
+        {
+            var version = await db.Set<WorkflowVersionRow>().SingleOrDefaultAsync(v => v.TenantId == before.Tenant.TenantId && v.WorkflowId == workflow.WorkflowId && v.Version == workflow.Version, ct) ?? throw new AccessDeniedException("workflow_version_unavailable");
+            var definition = await db.Set<WorkflowDefinitionRow>().SingleOrDefaultAsync(v => v.TenantId == before.Tenant.TenantId && v.WorkflowId == workflow.WorkflowId, ct);
+            if (definition is null || WorkflowPersistence.Read<AgentCore.Domain.Workflows.WorkflowDefinition>(definition.Json).Retired) throw new AccessDeniedException("workflow_version_unavailable");
+            await AgentCore.Application.Workflows.WorkflowAutomationRules.DestinationAsync(before, proposed, WorkflowPersistence.Read<AgentCore.Domain.Workflows.WorkflowVersion>(version.Json), human.PrincipalId, new(this), ct);
+        }
         ValidateAutomationTransaction(next, expectedSecurityRevision, proposed, human.PrincipalId, permission, audit);
         if (proposed.Status == AutomationStatus.Active && current?.Status != AutomationStatus.Active
             && await OwnedAutomations(db, next.Tenant.TenantId).CountAsync(a => a.AgentInstanceId == agent.Instance.InstanceId.ToString("D") && a.Status == (int)AutomationStatus.Active, ct) >= (policy.TriggerPolicy?.MaxActiveRegistrations ?? 0))

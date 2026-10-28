@@ -117,6 +117,11 @@ public sealed partial class ScriptedLanguageModel : ILanguageModel
             yield return new ModelCompleted(ModelStopReason.Completed);
             yield break;
         }
+        if (FormalWorkflowScript.Generate(request) is { } workflowEvents)
+        {
+            foreach (var item in workflowEvents) yield return item;
+            yield break;
+        }
         if ((AgentCooperationScript.Generate(request) ?? AgentCooperationScript.Receive(request)) is { } cooperationEvents)
         {
             foreach (var item in cooperationEvents) yield return item;

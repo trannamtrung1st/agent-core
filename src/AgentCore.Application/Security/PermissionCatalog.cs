@@ -7,7 +7,7 @@ public sealed record PermissionDefinition(string Key, string ResourceType, bool 
 {
     public IReadOnlyList<string> ResourceTypes => Key is "sandbox.read" or "sandbox.manage"
         ? [ResourceType, "sandbox-profile"] : Key is "artifacts.create" or "attachments.create" ? [ResourceType, "session"]
-        : Key.StartsWith("tasks.", StringComparison.Ordinal) ? [ResourceType, "session", "agent"]
+        : Key.StartsWith("tasks.", StringComparison.Ordinal) ? [ResourceType, "session", "agent", "workflow"]
         : Key.StartsWith("agent-messages.", StringComparison.Ordinal) ? [ResourceType, "task", "session", "agent"] : [ResourceType];
     // Access inspection/assignment and exact-action decisions govern the target resource itself.
     // Ordinary operation permissions apply only to their catalog-owned resource family.
@@ -41,6 +41,9 @@ public static class PermissionCatalog
         Add("system.model-presets", "model-preset", "read", PermissionApprovalClass.ReadOnly, true, true);
         Add("system.model-presets", "model-preset", "manage", PermissionApprovalClass.Mutation, true, true);
         Add("scripts", "script", "read", PermissionApprovalClass.ReadOnly);
+        Add("workflows", "workflow", "read monitor", PermissionApprovalClass.ReadOnly);
+        Add("workflows", "workflow", "create update publish decide", PermissionApprovalClass.Mutation, true);
+        Add("workflows", "workflow", "start cancel", PermissionApprovalClass.Mutation);
         Add("scripts", "script", "manage", PermissionApprovalClass.Mutation, true);
         Add("scripts", "script", "execute", PermissionApprovalClass.Mutation);
         Add("evaluations", "evaluation-suite", "read", PermissionApprovalClass.ReadOnly);

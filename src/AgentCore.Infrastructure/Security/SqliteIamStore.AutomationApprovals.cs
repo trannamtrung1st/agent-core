@@ -79,7 +79,7 @@ public sealed partial class SqliteIamStore
     }
     private static Task<bool> TenantAutomationBusy(AgentCoreDbContext db, Guid tenant, Guid automation, CancellationToken ct) => db.TriggerOccurrences.IgnoreQueryFilters().AnyAsync(o =>
         o.TenantId == tenant && o.AutomationId == automation.ToString("D") && (o.Disposition == (int)OccurrenceRoutingDisposition.AwaitingDurableWork
-            && o.DispositionReason == TenantAutomationAdmissionApprovalRules.PendingReason || db.AgentRuns.Any(r => r.AgentRunId == o.AcceptedAgentRunId
+            && o.DispositionReason == TenantAutomationAdmissionApprovalRules.PendingReason || db.Set<AgentCore.Infrastructure.Persistence.WorkflowExecutionRow>().Any(e => e.TenantId == tenant && e.ExecutionId == o.AcceptedWorkflowExecutionId && e.Status < 8) || db.AgentRuns.Any(r => r.AgentRunId == o.AcceptedAgentRunId
                 && r.Status != (int)AgentCore.Domain.Conversation.AgentRunStatus.Completed && r.Status != (int)AgentCore.Domain.Conversation.AgentRunStatus.Failed
                 && r.Status != (int)AgentCore.Domain.Conversation.AgentRunStatus.Cancelled)), ct);
 

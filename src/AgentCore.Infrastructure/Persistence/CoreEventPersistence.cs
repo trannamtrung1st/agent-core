@@ -87,8 +87,9 @@ internal static class CoreEventPersistence
     private static (Guid? Root, int Depth, Guid[] Visited)? Causation(AgentRun run)
     {
         var activation = run.Admission.Activation;
-        if (activation.Kind is not (ActivationKind.CoreEvent or ActivationKind.ScheduledWork or ActivationKind.ApplicationEvent or ActivationKind.ManualBackground)
-            || activation.TriggerOccurrenceId is null || activation.EvidenceJson is not { } evidence) return null;
+        var workflowRoot = activation.Kind == ActivationKind.DelegatedTask && run.Admission.DelegatedTask is not null && activation.RootActivationId == activation.ActivationId;
+        if (!workflowRoot && (activation.Kind is not (ActivationKind.CoreEvent or ActivationKind.ScheduledWork or ActivationKind.ApplicationEvent or ActivationKind.ManualBackground)
+            || activation.TriggerOccurrenceId is null) || activation.EvidenceJson is not { } evidence) return null;
         try
         {
             using var outer = JsonDocument.Parse(evidence);

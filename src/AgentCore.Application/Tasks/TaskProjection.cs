@@ -11,6 +11,8 @@ public sealed record TaskView(Guid TaskId, long Revision, string State, string T
     bool ReportOnCompletion, bool CanInspect, bool CanCancel, bool CanSend, long SecurityRevision, Guid? RetryOfTaskId, bool CanRetry,
     string SourceActorKind, Guid? SourceInstanceId, string? SourceAgentName, Guid? SourceRunId, bool CanAcknowledge)
 {
+    public Guid? WorkflowId { get; init; }
+    public Guid? WorkflowExecutionId { get; init; }
     public string? SpaceName { get; init; }
     public string? EnvironmentName { get; init; }
     public bool? EnvironmentConfigured { get; init; }
@@ -39,10 +41,12 @@ public static class TaskProjection
         async ValueTask<bool> SourceRead(string permission, string type, Guid id) => await Read(permission, type, id)
             && !await TenantSandboxReadOperationRules.NeedsReviewAsync(state, requester, permission,
                 AccessScope.ForResource(state.Tenant.TenantId, type, id.ToString("D")), iam, ct);
-        if (await sessions.FindTenantSessionAsync(state.Tenant.TenantId, task.Source.SessionId, ct) is not { } sourceSession
-            || AgentCore.Domain.Conversation.SessionRetention.IsDue(sourceSession.Snapshot, at)) throw new AccessDeniedException("resource_unavailable");
+        var sourceSession = task.Source.SessionId is { } sourceId ? await sessions.FindTenantSessionAsync(state.Tenant.TenantId, sourceId, ct) : null;
+        if (task.Source.Workflow is null && (sourceSession is null || AgentCore.Domain.Conversation.SessionRetention.IsDue(sourceSession.Snapshot, at)))
+            throw new AccessDeniedException("resource_unavailable");
         var target = await SourceRead("agents.read", "agent", task.Assignment.InstanceId);
-        var source = await SourceRead("sessions.read", "session", task.Source.SessionId);
+        var source = task.Source.Workflow is { } process ? await SourceRead("workflows.monitor", "workflow", process.WorkflowId) && await SourceRead("workflows.read", "workflow", process.WorkflowId)
+            : await SourceRead("sessions.read", "session", task.Source.RequireSessionId());
         var sourceAgentReadable = await SourceRead("agents.read", "agent", task.Source.InstanceId);
         var sourceAgent = sourceAgentReadable && sessions is ITenantAgentStore agents
             ? await agents.FindTenantAgentAsync(state.Tenant.TenantId, task.Source.InstanceId, ct) : null;
@@ -67,16 +71,17 @@ public static class TaskProjection
             }
             catch (AccessDeniedException) { outcome = false; }
         }
-        var mayManage = actor.Human is null || await Read("sessions.manage", "session", task.Source.SessionId);
+        var mayManage = actor.Human is null || (task.Source.Workflow is { } management ? await Read("workflows.cancel", "workflow", management.WorkflowId)
+            : await Read("sessions.manage", "session", task.Source.RequireSessionId()));
         Guid? retryOf = null;
         if (task.Request.RetryOfTaskId is { } prior && sessions is ITenantTaskStore retryTasks
             && await retryTasks.FindTaskAsync(state.Tenant.TenantId, prior, ct) is { } previous
             && await TaskAuthority.CanReadAsync(state, actor, previous, iam, ct, reader)) retryOf = prior;
-        var canRetry = actor.Human is not null && mayManage && source
+        var canRetry = task.Source.Workflow is null && actor.Human is not null && mayManage && source
             && task.State is DelegatedTaskState.Blocked or DelegatedTaskState.Failed or DelegatedTaskState.Cancelled
-            && sourceSession.Snapshot.ArchivedAt is null && sourceSession.Snapshot.LifecycleStatus == AgentCore.Domain.Conversation.SessionLifecycleStatus.Active
+            && sourceSession!.Snapshot.ArchivedAt is null && sourceSession.Snapshot.LifecycleStatus == AgentCore.Domain.Conversation.SessionLifecycleStatus.Active
             && sourceSession.Snapshot.Status is not (AgentCore.Domain.Conversation.SessionStatus.Ended or AgentCore.Domain.Conversation.SessionStatus.Ending)
-            && await Read("tasks.delegate", "session", task.Source.SessionId);
+            && await Read("tasks.delegate", "session", task.Source.RequireSessionId());
         var spaceReadable = await SourceRead("spaces.read", "space", task.Assignment.SpaceId);
         var environmentReadable = spaceReadable && await SourceRead("environments.read", "space", task.Assignment.SpaceId);
         var savedSpace = spaceReadable && sessions is ITenantSpaceStore spaceStore
@@ -90,9 +95,10 @@ public static class TaskProjection
             outcome ? task.Result : null, task.Reason, task.CancellationRequested, task.CreatedAt, task.UpdatedAt, task.DeadlineAt,
             task.Request.ReportOnCompletion, true,
             mayManage && !TaskLimits.Terminal(task.State) && await Read("tasks.cancel", "task", task.TaskId),
-            mayManage && !TaskLimits.Terminal(task.State) && task.WorkerSessionId is not null && await Read("agent-messages.send", "task", task.TaskId), state.Tenant.Revision, retryOf, canRetry,
+            task.Source.Workflow is null && mayManage && !TaskLimits.Terminal(task.State) && task.WorkerSessionId is not null && await Read("agent-messages.send", "task", task.TaskId), state.Tenant.Revision, retryOf, canRetry,
             task.Source.ActorKind.ToString(), sourceAgentReadable ? task.Source.InstanceId : null, sourceAgent?.Instance.Persona.Name,
-            sourceRunReadable ? task.Source.RunId : null, mayManage && (actor.Agent is null || actor.Agent.SessionId == task.Source.SessionId)) {
+            sourceRunReadable ? task.Source.RunId : null, task.Source.Workflow is null && mayManage && (actor.Agent is null || actor.Agent.SessionId == task.Source.SessionId)) {
+                WorkflowId = source ? task.Source.Workflow?.WorkflowId : null, WorkflowExecutionId = source ? task.Source.Workflow?.ExecutionId : null,
                 SpaceName = savedSpace is { DeletedAt: null } ? savedSpace.Name : null,
                 EnvironmentName = savedEnvironment is { DeletedAt: null } ? savedEnvironment.Name : null,
                 EnvironmentConfigured = environmentReadable ? task.Assignment.EnvironmentId is not null : null

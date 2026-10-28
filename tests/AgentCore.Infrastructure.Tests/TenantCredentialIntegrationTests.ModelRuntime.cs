@@ -97,7 +97,7 @@ public sealed partial class TenantCredentialIntegrationTests
             { if (IsEnabled(level)) records.Enqueue(category + ":" + formatter(state, error) + ":" + (error?.GetType().Name == "SafeException" ? error.Message + ":" + error.StackTrace : error?.GetType().Name)); }
         }
     }
-    private static ServiceProvider RuntimeServices(Fixture f, IHttpClientFactory http, GlobalModelProbe probe, string profile = "Real", AgentCore.Application.Models.ModelEndpointPolicy? modelEndpoints = null)
+    private static ServiceProvider RuntimeServices(Fixture f, IHttpClientFactory http, GlobalModelProbe probe, string profile = "Real", AgentCore.Application.Models.ModelEndpointPolicy? modelEndpoints = null, IFormalWorkflowRuntime? formalWorkflowRuntime = null, ILanguageModel? syntheticModel = null)
     {
         var services = new ServiceCollection(); services.AddLogging(b => b.AddProvider(probe)); services.AddSingleton<IIamStore>(f.Iam);
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
@@ -114,7 +114,9 @@ public sealed partial class TenantCredentialIntegrationTests
             Assert.DoesNotContain(services, d => d.ServiceType == typeof(ILanguageModel));
             services.AddSingleton<ILanguageModel>(_ => { probe.Resolutions++; throw new InvalidOperationException("A global model is never a tenant inference source."); });
         }
+        if (syntheticModel is not null) { Assert.Equal("Synthetic", profile); services.AddSingleton(syntheticModel); }
         if (modelEndpoints is not null) services.AddSingleton(modelEndpoints);
+        if (formalWorkflowRuntime is not null) services.AddSingleton(formalWorkflowRuntime);
         services.AddSingleton<IHttpClientFactory>(new RuntimeHttpClients(http));
         return services.BuildServiceProvider();
     }

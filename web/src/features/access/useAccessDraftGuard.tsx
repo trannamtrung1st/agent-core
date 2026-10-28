@@ -33,7 +33,7 @@ export function useAccessDraftGuard(dirty: boolean, busy: boolean, onClose: () =
     // close animation finishes; a single key must never stack discard dialogs behind one another.
     if (busy || pending.current) return;
     if (!dirty) { leave(); return; }
-    void ask().then(discard => { if (discard) leave(); });
+    void ask().then(discard => { if (discard) { released.current = true; leave(); } });
   };
   return { close: () => requestLeave(onClose), requestLeave, holder, release: () => { released.current = true; } };
 }

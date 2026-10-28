@@ -18,7 +18,7 @@ public static partial class TenantApprovalRules
         if (operation == Guid.Empty || instance != value.Task.Source.InstanceId || revision < 1 || personaRevision < 1)
             throw new ArgumentException("Task consent requires its actual source Agent and current source witnesses.");
         var json = JsonSerializer.Serialize(new { operation = "tasks.delegate", permission = "tasks.delegate", resourceType = "session",
-            resourceId = value.Task.Source.SessionId.ToString("D"), expectedInstanceRevision = revision, expectedPersonaRevision = personaRevision,
+            resourceId = value.Task.Source.RequireSessionId().ToString("D"), expectedInstanceRevision = revision, expectedPersonaRevision = personaRevision,
             delegation = value });
         if (Encoding.UTF8.GetByteCount(json) > 65_536) throw new ArgumentException("Task consent exceeds its bounded size.");
         return new(operation, instance, null, revision, personaRevision, json, Tools.TenantWorkspaceMutationContract.Hash(json), TaskDelegation: value);

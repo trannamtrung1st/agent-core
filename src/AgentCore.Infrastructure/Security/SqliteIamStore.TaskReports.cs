@@ -19,7 +19,7 @@ public sealed partial class SqliteIamStore
         var notice = await db.Set<TaskNotificationRow>().SingleOrDefaultAsync(r => r.TenantId == tenant && r.TaskId == taskId, ct) ?? throw new AccessDeniedException("task_report_unavailable");
         var worker = task.TerminalRunId is { } terminal
             ? await OwnedRuns(db, tenant).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == terminal.ToString("D"), ct) : null;
-        return new(task, TaskPersistence.Value<TaskNotification>(notice.Json), await ReadSandboxSession(db, tenant, task.Source.SessionId, ct), worker is null ? null : AgentRunStoreMapping.ToDomain(worker));
+        return new(task, TaskPersistence.Value<TaskNotification>(notice.Json), await ReadSandboxSession(db, tenant, task.Source.RequireSessionId(), ct), worker is null ? null : AgentRunStoreMapping.ToDomain(worker));
     }
     private async Task RequireTaskReport(AgentCoreDbContext db, TaskReportSource source, CancellationToken ct)
     {

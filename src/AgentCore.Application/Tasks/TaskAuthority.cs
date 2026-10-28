@@ -20,7 +20,7 @@ public static class TaskAuthority
             if (!state.SystemIdentities.Any(i => i.AgentInstanceId == id && i.Status == IdentityStatus.Active)
                 || !(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get("agents.read"), AccessScope.ForResource(task.Source.TenantId, "agent", id.ToString("D")), ct)).Allowed) return false;
         return (await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get("tasks.read"), Scope(task.Source.TenantId, task.TaskId), ct)).Allowed
-            && (await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get("sessions.read"), TenantSessionRules.Scope(task.Source.TenantId, task.Source.SessionId), ct)).Allowed;
+            && (await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get("sessions.read"), TenantSessionRules.Scope(task.Source.TenantId, task.Source.RequireSessionId()), ct)).Allowed;
     }
     public static string PreparationPermission(TaskActor actor, TaskPreparationPurpose purpose)
     {
@@ -125,7 +125,10 @@ public static class TaskAuthority
         // Worker Session/transcript/result source rights are checked separately in projections.
         if (actor.Human is not null)
         {
-            if (!(await iam.CheckTenantAsync(state, actor.PrincipalId, PermissionCatalog.Get("sessions.read"), TenantSessionRules.Scope(task.Source.TenantId, task.Source.SessionId), ct)).Allowed) return false;
+            var sourcePermission = task.Source.Workflow is not null ? "workflows.monitor" : "sessions.read";
+            var sourceScope = task.Source.Workflow is { } workflow ? AgentCore.Application.Workflows.WorkflowCatalogAuthority.Scope(task.Source.TenantId, workflow.WorkflowId)
+                : TenantSessionRules.Scope(task.Source.TenantId, task.Source.RequireSessionId());
+            if (!(await iam.CheckTenantAsync(state, actor.PrincipalId, PermissionCatalog.Get(sourcePermission), sourceScope, ct)).Allowed) return false;
             foreach (var id in new[] { task.Source.InstanceId, task.Assignment.InstanceId }.Distinct())
                 if (!(await iam.CheckTenantAsync(state, actor.PrincipalId, PermissionCatalog.Get("agents.read"), AccessScope.ForResource(task.Source.TenantId, "agent", id.ToString("D")), ct)).Allowed) return false;
         }
@@ -149,7 +152,9 @@ public static class TaskAuthority
                 AccessScope.ForTenant(task.Source.TenantId), iam, ct)) throw new AccessDeniedException("task_review_required");
         if (mode == OperationApprovalMode.Always || mode == OperationApprovalMode.WhenRequesterLacksPermission
             && task.Source.OriginalInitiatorPrincipalId is { } requester
-            && !(await iam.CheckOwnedTenantAsync(state, requester, PermissionCatalog.Get("tasks.delegate"), TenantSessionRules.Scope(task.Source.TenantId, task.Source.SessionId), ct)).Allowed)
+            && !(await iam.CheckOwnedTenantAsync(state, requester, PermissionCatalog.Get("tasks.delegate"), task.Source.Workflow is { } process
+                ? AgentCore.Application.Workflows.WorkflowCatalogAuthority.Scope(task.Source.TenantId, process.WorkflowId)
+                : TenantSessionRules.Scope(task.Source.TenantId, task.Source.RequireSessionId()), ct)).Allowed)
             throw new AccessDeniedException("task_review_required");
     }
     public static AgentCore.Application.Sessions.AgentCoreException CapacityExceeded() => new("TaskCapacityExceeded", "The current Task capacity is full. Read saved tasks before trying again.", 429)

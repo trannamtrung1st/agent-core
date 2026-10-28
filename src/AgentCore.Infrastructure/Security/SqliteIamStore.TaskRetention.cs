@@ -16,7 +16,8 @@ public sealed partial class SqliteIamStore
         // Each incumbent cleanup pass advances capped batches. Its durable deleted
         // Sessions remain eligible until all payloads have been minimized.
         var rows = await db.Set<DelegatedTaskRow>().FromSqlInterpolated($"""
-            SELECT t.* FROM TenantDelegatedTasks t JOIN Sessions s ON s.SessionId=t.SourceSessionId
+            SELECT t.* FROM TenantDelegatedTasks t JOIN Sessions s ON lower(s.SessionId)=lower(coalesce(t.SourceSessionId,json_extract(t.Json,'$.Source.Workflow.OriginalSessionId'),
+                CASE WHEN t.WorkflowExecutionId IS NOT NULL THEN t.WorkerSessionId END))
             WHERE t.TenantId={tenant} AND s.DurablyDeletedAtUtc IS NOT NULL AND t.State>=4
                 AND json_extract(t.Json,'$.ContentRetiredAt') IS NULL
                 AND NOT EXISTS(SELECT 1 FROM AgentRuns r WHERE r.TenantId=t.TenantId AND (r.SessionId=t.SourceSessionId OR lower(r.RootActivationId)=lower(t.RootActivationId))
@@ -34,7 +35,8 @@ public sealed partial class SqliteIamStore
         foreach (var row in rows)
         {
             var task = TaskPersistence.Value(row);
-            if (!await Quiescent(task.Source.SessionId, task.Source.RootActivationId)) continue;
+            var source = task.Source.SessionId ?? task.Source.Workflow?.OriginalSessionId ?? task.WorkerSessionId;
+            if (source is null || !await Quiescent(source.Value, task.Source.RootActivationId)) continue;
             var retired = task.RetireContent(at);
             db.Entry(row).CurrentValues.SetValues(TaskPersistence.Row(retired));
             foreach (var command in await db.Set<TaskCommandRow>().FromSqlInterpolated($"SELECT * FROM TenantTaskCommands WHERE TenantId={tenant} AND TaskId={task.TaskId} AND json_type(Json,'$.Request')='object'").ToArrayAsync(ct))
@@ -54,7 +56,7 @@ public sealed partial class SqliteIamStore
         foreach (var row in approvals)
         {
             var approval = row.Domain(); var task = approval.Operation.TaskDelegation!.Task;
-            if (!await Quiescent(task.Source.SessionId, task.Source.RootActivationId)
+            if (!await Quiescent(task.Source.RequireSessionId(), task.Source.RootActivationId)
                 || await db.Set<ApprovalProcessedSignal>().AnyAsync(s => s.RequestId == row.RequestId && s.ProcessedAt == null, ct)) continue;
             if (approval.Status == TenantApprovalStatus.Pending)
             {

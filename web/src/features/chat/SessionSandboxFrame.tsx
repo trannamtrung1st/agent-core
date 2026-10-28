@@ -14,7 +14,9 @@ export function SessionSandboxFrame({ open, narrow, openerRef, onClose, blocked 
     // Private scope replacement can unmount an open inspector instead of running
     // its close animation. Restore only when no new modal owns keyboard focus.
     if (wasOpen.current && openerRef) requestAnimationFrame(() => {
-      if (!document.querySelector('[role="dialog"][aria-modal="true"]') && openerRef.current?.isConnected)
+      const dialogs = [...document.querySelectorAll('[role="dialog"][aria-modal="true"]')];
+      const top = dialogs.at(-1);
+      if (openerRef.current?.isConnected && (!top || top.contains(openerRef.current)))
         openerRef.current.focus({ preventScroll: true });
     });
   }, [openerRef]);
@@ -24,7 +26,7 @@ export function SessionSandboxFrame({ open, narrow, openerRef, onClose, blocked 
     }}
     afterOpenChange={visible => { if (!visible && openerRef?.current?.isConnected) openerRef.current.focus({ preventScroll: true }); }}>
     <Flex vertical gap={token.padding} onKeyDown={event => {
-      if (event.key === 'Escape' && !event.defaultPrevented && !blocked) { event.preventDefault(); event.stopPropagation(); onClose(); }
+      if (event.currentTarget.contains(event.target as Node) && event.key === 'Escape' && !event.defaultPrevented && !blocked) { event.preventDefault(); event.stopPropagation(); onClose(); }
     }}>{children}</Flex>
   </Drawer>;
 }

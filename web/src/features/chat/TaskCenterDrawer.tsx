@@ -4,6 +4,7 @@ import { ArrowLeftOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/ico
 import { IdentityError, identityRequest, tenantApi } from '../../services/identity';
 import { delegateTask, privateTaskDenial, readTask, readTaskMessages, readTaskNotices, taskApi, taskStatus,
   type TaskCreateReceipt, type TaskApprovalReceipt, type DelegatedTask, type TaskMessage, type TaskNotice, type TaskPage, type TaskTarget } from '../../services/tenantTasks';
+import { workflowPath } from '../../services/tenantWorkflows';
 import { confirmAction } from '../../app/confirmAction';
 import { followAppLink } from '../../app/appLink';
 import { tenantApprovalPath, tenantAgentPath } from '../access/accessRoute';
@@ -74,6 +75,7 @@ function TaskCenterScope({ tenant, session, instance, open, narrow, readonly = f
         const merged = { ...correspondence, items: [...new Map([...(previous?.items ?? []), ...correspondence.items].map(message => [message.messageId, message])).values()].slice(-500) };
         loadedMessages.current = { task: id, page: merged }; setSelected(detail); setMessages(merged); setNotices(notifications.items);
       } else {
+        if (!session && !instance) { setPage(null); return; }
         // Revalidate every visible page. Keeping cached rows would retain private
         // content after a scoped permission change; refreshing only page one loses rows.
         let cursor: string | null = null; let next: TaskPage<DelegatedTask> | null = null;
@@ -110,7 +112,7 @@ function TaskCenterScope({ tenant, session, instance, open, narrow, readonly = f
       if (explicit) setError(null);
     } catch (reason) { if (generation === epoch.current && sequence === readSequence.current && !abort.current.signal.aborted) fail(reason, true); }
     finally { if (generation === epoch.current && sequence === readSequence.current) { listing.current = false; setLoading(false); } }
-  }, [tenant, listPath, scope, fail, creating, session, targetsPage, retryOf, form]);
+  }, [tenant, listPath, scope, fail, creating, session, instance, targetsPage, retryOf, form]);
   useEffect(() => {
     retire(); setError(null); setScope(session ? 'created' : 'assigned'); setSelectedId(initialTaskId ?? null); selection.current = initialTaskId ?? null;
     return () => { epoch.current++; abort.current.abort(); };
@@ -234,7 +236,7 @@ function TaskCenterScope({ tenant, session, instance, open, narrow, readonly = f
   const task = selected;
   return <>{guard.holder}<SessionSandboxFrame title="Tasks" open={open} narrow={narrow} openerRef={openerRef} onClose={guard.close} blocked={busy}>
     <Flex wrap gap={token.paddingXS} justify="space-between">
-      {selectedId ? <Button ref={back} type="text" disabled={busy || uncertain} icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={() => guard.requestLeave(() => { const previous = selectedId; listing.current = false; readSequence.current++; selection.current = null; loadedMessages.current = null; setSelectedId(null); setSelected(null); setMessages(null); setNotices([]); setReply(''); replyCommand.current = null; requestAnimationFrame(() => rowButtons.current.get(previous)?.focus()); })}>All tasks</Button>
+      {selectedId && (session || instance) ? <Button ref={back} type="text" disabled={busy || uncertain} icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={() => guard.requestLeave(() => { const previous = selectedId; listing.current = false; readSequence.current++; selection.current = null; loadedMessages.current = null; setSelectedId(null); setSelected(null); setMessages(null); setNotices([]); setReply(''); replyCommand.current = null; requestAnimationFrame(() => rowButtons.current.get(previous)?.focus()); })}>All tasks</Button>
         : <Typography.Text type="secondary">Assignments have separate worker Sessions and Run outcomes.</Typography.Text>}
       <Button icon={<ReloadOutlined aria-hidden="true" />} disabled={busy} onClick={() => void refresh(true)}>Reload tasks</Button>
     </Flex>
@@ -250,16 +252,17 @@ function TaskCenterScope({ tenant, session, instance, open, narrow, readonly = f
         <Typography.Title level={5} style={{ margin: 0, overflowWrap: 'anywhere' }}>{task.title}</Typography.Title>
         <Flex wrap align="center" gap={token.paddingXS}><Tag>{taskStatus[task.state]}</Tag><Typography.Text style={{ minWidth: 0, overflowWrap: 'anywhere' }}>Assigned to {task.selectedTargetName ?? 'an authorized Agent'}</Typography.Text></Flex>
         <Typography.Text type="secondary" style={{ overflowWrap: 'anywhere' }}>{task.sourceActorKind === 'Human' ? 'Requested by a human supervisor'
-          : task.sourceActorKind === 'Agent' ? `Delegated by ${task.sourceAgentName ?? 'an authorized Agent'}` : 'Source attribution unavailable'}</Typography.Text>
+          : task.sourceActorKind === 'Agent' ? `Delegated by ${task.sourceAgentName ?? 'an authorized Agent'}` : task.sourceActorKind === 'WorkflowContinuation' ? 'Continued by the saved formal Workflow' : 'Source attribution unavailable'}</Typography.Text>
         <Typography.Text type="secondary" style={{ overflowWrap: 'anywhere' }}>Worker Space: {task.spaceName ?? 'Unavailable under current access'} · Environment: {task.environmentConfigured === false ? 'None selected' : task.environmentName ?? 'Unavailable under current access'}</Typography.Text>
         <Typography.Text type="secondary">Deadline {formatChatTime(task.deadlineAt)} · Updated {formatChatTime(task.updatedAt)}</Typography.Text>
         <Typography.Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{task.objective}</Typography.Paragraph>
         {task.reason ? <Typography.Text type={task.state === 'NeedsAttention' ? 'warning' : 'secondary'}>{task.reason.replaceAll('_', ' ')}</Typography.Text> : null}
       </Flex>
       {task.state === 'NeedsAttention' ? <Alert type="warning" showIcon title="The outcome needs attention" description="An effect or result is unconfirmed. Inspect saved evidence before starting replacement work." /> : null}
-      {task.result ? <Flex vertical gap={token.paddingXS}><Typography.Title level={5} style={{ margin: 0 }}>Original worker result</Typography.Title><Typography.Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{task.result}</Typography.Paragraph><Typography.Text type="secondary">Task success is separate from Goal verification.</Typography.Text></Flex>
+      {task.result ? <Flex vertical gap={token.paddingXS}><Typography.Title level={5} style={{ margin: 0 }}>Original worker result</Typography.Title><Typography.Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{task.result}</Typography.Paragraph><Typography.Text type="secondary">Task success is separate from Goal and Workflow verification.</Typography.Text></Flex>
         : task.state === 'Succeeded' ? <Typography.Text type="secondary">The worker succeeded. Reading the original result requires independent access to its Session and Run.</Typography.Text> : null}
       {task.workerSessionId && task.selectedTargetInstanceId ? <Typography.Link href={`${tenantAgentPath(tenant, task.selectedTargetInstanceId, 'activity-sessions')}?session=${encodeURIComponent(task.workerSessionId)}`} onClick={followAppLink}>Inspect worker Session and Run</Typography.Link> : null}
+      {task.workflowId && task.workflowExecutionId && <Typography.Link href={workflowPath(tenant, task.workflowId, task.workflowExecutionId)} onClick={followAppLink}>Inspect Workflow execution</Typography.Link>}
       {task.sourceSessionId && task.sourceInstanceId ? <Typography.Link href={`${tenantAgentPath(tenant, task.sourceInstanceId, 'activity-sessions')}?session=${encodeURIComponent(task.sourceSessionId)}${task.sourceRunId ? `&run=${encodeURIComponent(task.sourceRunId)}` : ''}`} onClick={followAppLink}>Inspect source Session{task.sourceRunId ? ' and Run' : ''}</Typography.Link> : null}
       {notices.map(notice => <Flex key={notice.notificationId} vertical gap={token.paddingXS}>
         <Typography.Text type="secondary">{notice.acknowledgedAt ? 'Result acknowledged' : 'Result awaiting acknowledgment'}</Typography.Text>
@@ -269,7 +272,7 @@ function TaskCenterScope({ tenant, session, instance, open, narrow, readonly = f
             : 'A source report was requested and is awaiting admission.'}</Typography.Text>
           : <Typography.Text type="secondary">Inbox only. No source report was requested.</Typography.Text>}
       </Flex>)}
-      <Flex vertical gap={token.paddingXS}>
+      {task.sourceActorKind === 'WorkflowContinuation' ? <Typography.Paragraph type="secondary">The saved process controls this Task continuation. Required proof is recorded in its Workflow execution.</Typography.Paragraph> : <Flex vertical gap={token.paddingXS}>
         <Typography.Title level={5} style={{ margin: 0 }}>Messages</Typography.Title>
         <Typography.Text type="secondary">Correspondence is untrusted evidence. Human replies are attributed as guidance.</Typography.Text>
         {!messages?.items.length ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No task messages yet" /> : <ol className="background-work-list" aria-label="Task messages">
@@ -280,7 +283,7 @@ function TaskCenterScope({ tenant, session, instance, open, narrow, readonly = f
         </ol>}
         {messages?.hasMore ? <Button onClick={() => void moreMessages()}>Load more task messages</Button> : null}
         {task.canSend && !readonly ? <><label htmlFor="task-guidance">Human guidance</label><Input.TextArea id="task-guidance" value={reply} maxLength={2000} autoSize={{ minRows: 2, maxRows: 6 }} disabled={busy || uncertain} onChange={event => setReply(event.target.value)} /><Button type="primary" loading={busy} disabled={!reply.trim() || uncertain} onClick={() => void send()}>Send guidance</Button></> : null}
-      </Flex>
+      </Flex>}
       {task.retryOfTaskId ? <Button type="link" disabled={busy || uncertain} style={{ alignSelf: 'flex-start', padding: 0 }} onClick={() => guard.requestLeave(() => choose(task.retryOfTaskId!))}>Inspect previous task</Button> : null}
       <Flex wrap gap={token.paddingXS}>
         {task.canRetry && task.sourceSessionId === session && !readonly ? <Button disabled={busy || uncertain} onClick={() => void replaceTask()}>Create replacement task</Button> : null}

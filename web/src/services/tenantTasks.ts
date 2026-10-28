@@ -7,7 +7,8 @@ export type DelegatedTask = { taskId: string; revision: number; state: TaskState
   workerSessionId: string | null; initialRunId: string | null; terminalRunId: string | null; result: string | null; reason: string | null;
   cancellationRequested: boolean; createdAt: string; updatedAt: string; deadlineAt: string; reportOnCompletion: boolean;
   canInspect: boolean; canCancel: boolean; canSend: boolean; securityRevision: number; retryOfTaskId: string | null; canRetry: boolean;
-  sourceActorKind?: 'Human' | 'Agent'; sourceInstanceId?: string | null; sourceAgentName?: string | null; sourceRunId?: string | null; canAcknowledge?: boolean };
+  workflowId?: string | null; workflowExecutionId?: string | null;
+  sourceActorKind?: 'Human' | 'Agent' | 'WorkflowContinuation'; sourceInstanceId?: string | null; sourceAgentName?: string | null; sourceRunId?: string | null; canAcknowledge?: boolean };
 export type TaskMutationReceipt = { task: Pick<DelegatedTask, 'taskId' | 'revision'>; replayed: boolean; securityRevision: number };
 export type TaskApprovalReceipt = { approvalRequestId: string; approvalStatus: string; canReadApproval: boolean; admissionState: 'pendingReview' | 'awaitingAdmission' | 'notAdmitted'; reasonCode: string | null; securityRevision: number; replayed: boolean };
 export type TaskCreateReceipt = TaskMutationReceipt | TaskApprovalReceipt;

@@ -15,7 +15,7 @@ public sealed partial class InMemoryIamStore : ITenantHumanTaskApprovalStore
     private (TenantSession Source, TenantAgent Worker) RequireHumanTaskConsentOperation(TenantApprovalRequest request, CancellationToken ct)
     {
         TenantTaskConsentRules.RequireHumanShape(request); var task = request.Operation.TaskDelegation!.Task; var state = _tenants[request.TenantId];
-        var source = sessionBacking.ReadTenantSession(request.TenantId, task.Source.SessionId) ?? throw new AccessDeniedException("task_source_unavailable");
+        var source = sessionBacking.ReadTenantSession(request.TenantId, task.Source.RequireSessionId()) ?? throw new AccessDeniedException("task_source_unavailable");
         var agent = FindTenantAgentAsync(request.TenantId, task.Source.InstanceId, ct).Result ?? throw new AccessDeniedException("task_source_unavailable");
         TenantTaskConsentRules.RequireHumanSourceAsync(request, source, agent, state, new(this), TaskNow, ct).AsTask().GetAwaiter().GetResult();
         return (source, RequireTaskConsentWorker(task, state, ct));
@@ -35,7 +35,7 @@ public sealed partial class InMemoryIamStore : ITenantHumanTaskApprovalStore
             throw new SecurityConflictException("task_budget_changed");
         foreach (var id in task.Request.DependsOnTaskIds.Concat(task.Request.RetryOfTaskId is { } retry ? new[] { retry } : []))
             if (!delegatedTasks.TryGetValue((request.TenantId, id), out var dependency)
-                || sessionBacking.ReadTenantSession(request.TenantId, dependency.Source.SessionId) is null
+                || sessionBacking.ReadTenantSession(request.TenantId, dependency.Source.RequireSessionId()) is null
                 || !TaskAuthority.CanReadHumanCommandAsync(state, task.Source.PrincipalId, dependency, new(this), ct).Result)
                 throw new AccessDeniedException("task_dependency_unavailable");
         if (admission.Run is { } run) RequireSpaceExecutionSource(run, state, new(this), ct, admission: true).AsTask().GetAwaiter().GetResult();

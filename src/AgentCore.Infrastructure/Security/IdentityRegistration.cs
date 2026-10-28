@@ -105,6 +105,14 @@ public static class IdentityRegistration
         services.TryAddSingleton<ITenantDefinitionStore>(provider => (ITenantDefinitionStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantDefinitionService>();
         services.TryAddSingleton<ITenantEvaluationStore>(p => (ITenantEvaluationStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<ITenantWorkflowCatalogStore>(p => (ITenantWorkflowCatalogStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<ITenantWorkflowExecutionStore>(p => (ITenantWorkflowExecutionStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<ITenantWorkflowTaskStore>(p => (ITenantWorkflowTaskStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<ITenantWorkflowInvocationStore>(p => (ITenantWorkflowInvocationStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<AgentCore.Application.Workflows.WorkflowEvidenceAuthority>();
+        services.TryAddSingleton<AgentCore.Application.Workflows.TenantWorkflowExecutionService>();
+        services.TryAddSingleton<AgentCore.Application.Workflows.TenantWorkflowToolService>();
+        services.TryAddSingleton<AgentCore.Application.Workflows.TenantWorkflowCatalogService>();
         services.TryAddSingleton<AgentCore.Application.Evaluations.EvaluationSandboxAuthority>();
         services.TryAddSingleton<AgentCore.Application.Evaluations.TenantEvaluationService>();
         services.TryAddSingleton<AgentCore.Application.Evaluations.EvaluationModelEvaluator>();

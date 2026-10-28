@@ -63,6 +63,12 @@ public sealed partial class InMemoryIamStore : ITenantAutomationStore
                     new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
             if (permission is "automations.create" or "automations.update")
                 RequireAutomationConversation(before, proposed, human.PrincipalId, null, ct);
+            if (proposed.ExecutionTarget.Workflow is { } workflow && permission is "automations.create" or "automations.update")
+            {
+                var version = workflowVersions.GetValueOrDefault((before.Tenant.TenantId, workflow.WorkflowId, workflow.Version)) ?? throw new AccessDeniedException("workflow_version_unavailable");
+                if (workflowDefinitions.GetValueOrDefault((before.Tenant.TenantId, workflow.WorkflowId)) is not { Retired: false }) throw new AccessDeniedException("workflow_version_unavailable");
+                AgentCore.Application.Workflows.WorkflowAutomationRules.DestinationAsync(before, proposed, version, human.PrincipalId, new(this), ct).GetAwaiter().GetResult();
+            }
             ValidateAutomationTransaction(next, expectedSecurityRevision, proposed, human.PrincipalId, permission, audit);
             if (proposed.Status == AutomationStatus.Active && current?.Status != AutomationStatus.Active
                 && automationBacking.TenantAutomations(before.Tenant.TenantId).Count(a => a.Owner == proposed.Owner && a.Status == AutomationStatus.Active) >= (policy.TriggerPolicy?.MaxActiveRegistrations ?? 0))

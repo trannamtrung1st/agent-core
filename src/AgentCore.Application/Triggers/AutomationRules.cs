@@ -71,7 +71,7 @@ public static class AutomationRules
         _ => throw new ArgumentException("Automation trigger is unavailable.")
     };
 
-    public static TriggerOccurrence ManualOccurrence(Automation automation, ExecutionModelPin pin, DateTimeOffset now)
+    public static TriggerOccurrence ManualOccurrence(Automation automation, ExecutionModelPin? pin, DateTimeOffset now)
     {
         now = TriggerScheduleCalculator.Truncate(now);
         var key = $"manual:{automation.AutomationId:D}:{automation.Revision}:{now.ToUnixTimeMilliseconds()}";

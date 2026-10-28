@@ -1,7 +1,7 @@
 import { modelPreferenceKey } from '../../services/modelPreference';
-import { AimOutlined, ApartmentOutlined, MenuOutlined, PlusOutlined } from "@ant-design/icons";
-import { Alert, App as AntApp, Button, Drawer, Flex, Layout, Segmented, Switch, Tooltip, Typography, theme } from "antd";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { BranchesOutlined, AimOutlined, ApartmentOutlined, MenuOutlined, PlusOutlined } from "@ant-design/icons";
+import { Alert, App as AntApp, Button, Drawer, Flex, Layout, Segmented, Spin, Switch, Tooltip, Typography, theme } from "antd";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { appMessageConfig } from "../../app/appFeedback";
 import { followAppLink } from "../../app/appLink";
 import { newChatPath } from '../../app/sessionRoute';
@@ -36,6 +36,8 @@ import { TenantSessionContext } from './TenantSessionContext';
 import { TenantSessionFilesDrawer } from './TenantSessionFilesDrawer';
 import { TenantSessionSandboxDrawer } from './TenantSessionSandboxDrawer';
 import { useWorkReadState } from "./workReadState";
+
+const SessionWorkflowsDrawer = lazy(() => import('../workflows/SessionWorkflowsDrawer').then(module => ({ default: module.SessionWorkflowsDrawer })));
 
 const { Header, Sider, Content } = Layout;
 const NARROW_QUERY = "(max-width: 767px)";
@@ -96,6 +98,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
   const [bootstrapped, setBootstrapped] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
 
+  const [workflowsOpen, setWorkflowsOpen] = useState(false); const workflowsButtonRef = useRef<HTMLButtonElement>(null);
   const [tasksOpen, setTasksOpen] = useState(false); const tasksButtonRef = useRef<HTMLButtonElement>(null);
   const requestedTaskId = new URLSearchParams(window.location.search).get("task") ?? undefined;
   useEffect(() => { setTasksOpen(!expired && !!requestedTaskId); }, [state.sessionId, tenantContext.tenant.tenantId, expired, requestedTaskId]);
@@ -106,7 +109,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
   const [sandboxOpen, setSandboxOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const filesButtonRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { setFilesOpen(false); setSandboxOpen(false); setGoalsOpen(!expired && !!requestedGoalId); if (expired) setWorkOpen(false); }, [state.sessionId, tenantContext.tenant.tenantId, expired, requestedGoalId]);
+  useEffect(() => { setFilesOpen(false); setSandboxOpen(false); setWorkflowsOpen(false); setGoalsOpen(!expired && !!requestedGoalId); if (expired) setWorkOpen(false); }, [state.sessionId, tenantContext.tenant.tenantId, expired, requestedGoalId]);
   const sandboxButtonRef = useRef<HTMLButtonElement>(null);
   const [attentionItems, setAttentionItems] = useState<{ run: AgentRun; delivery?: string }[]>([]);
   const [backgroundInstanceId, setBackgroundInstanceId] = useState<string | null>(null);
@@ -363,7 +366,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
                   </Typography.Text></Tooltip>
                 </Flex>
               }
-              additionalActions={<>{state.sessionId && !expired && <Tooltip title="Tasks"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Tasks" ref={tasksButtonRef} icon={<ApartmentOutlined />} onClick={() => setTasksOpen(true)} /></Tooltip>}{state.sessionId && !expired && <Tooltip title="Session goals"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Session goals" ref={goalsButtonRef} icon={<AimOutlined />} onClick={() => setGoalsOpen(true)} /></Tooltip>}{tenantActions}</>}
+              additionalActions={<>{state.sessionId && !expired && <Tooltip title="Workflows"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Workflows" ref={workflowsButtonRef} icon={<BranchesOutlined />} onClick={() => setWorkflowsOpen(true)} /></Tooltip>}{state.sessionId && !expired && <Tooltip title="Tasks"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Tasks" ref={tasksButtonRef} icon={<ApartmentOutlined />} onClick={() => setTasksOpen(true)} /></Tooltip>}{state.sessionId && !expired && <Tooltip title="Session goals"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Session goals" ref={goalsButtonRef} icon={<AimOutlined />} onClick={() => setGoalsOpen(true)} /></Tooltip>}{tenantActions}</>}
 
               sessionsToggle={<Flex gap={8}>
                 {isNarrow ? (
@@ -562,6 +565,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
         </Layout>
         {!expired && backgroundInstanceId && activitySource ? <BackgroundWorkDrawer source={activitySource} instanceId={backgroundInstanceId} open={workOpen} wide={!isNarrow}
           onClose={() => setWorkOpen(false)} afterClose={() => workButtonRef.current?.focus()} /> : null}
+        {state.sessionId && !expired && workflowsOpen && <Suspense fallback={<Spin aria-label="Loading Workflow tools" />}><SessionWorkflowsDrawer context={tenantContext} session={state.sessionId} open narrow={isNarrow} openerRef={workflowsButtonRef} onClose={() => setWorkflowsOpen(false)} /></Suspense>}
         {state.sessionId && !expired && <TaskCenterDrawer key={`tasks:${tenantContext.tenant.tenantId}:${tenantContext.principalId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} session={state.sessionId} open={tasksOpen} narrow={isNarrow} readonly={readonly} openerRef={tasksButtonRef} initialTaskId={requestedTaskId} onClose={() => setTasksOpen(false)} />}
         {state.sessionId && !expired && <SessionGoalsDrawer key={`goals:${tenantContext.tenant.tenantId}:${tenantContext.principalId}:${state.sessionId}:${requestedGoalId ?? ''}`} tenant={tenantContext.tenant.tenantId} session={state.sessionId} instance={backgroundInstanceId ?? ''} source={activitySource} open={goalsOpen} narrow={isNarrow} readonly={readonly} refreshKey={`${state.agentRunId ?? ''}:${state.liveResponseId ?? ''}`} openerRef={goalsButtonRef} onClose={() => setGoalsOpen(false)} onWorked={() => { void openCatalogSession({ sessionId: state.sessionId!, status: "created", archived: false, ended: false }); }} />}
         {state.sessionId && !expired && <TenantSessionFilesDrawer key={`files:${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={filesOpen} narrow={isNarrow} openerRef={filesButtonRef} onClose={() => setFilesOpen(false)} />}

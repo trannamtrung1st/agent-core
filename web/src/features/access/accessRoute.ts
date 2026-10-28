@@ -1,6 +1,6 @@
 import { draftPages, type DraftPage } from '../admin/adminNavigation';
 export type ModelAdminPage = 'connections' | 'models' | 'defaults' | 'routing';
-export type AccessPage = 'my-profile' | 'governance' | 'access' | 'members' | 'roles' | 'audit' | 'definitions' | 'credentials' | 'events' | 'sandboxes' | 'approvals' | 'agents' | 'spaces' | 'secrets' | 'ai-models' | 'evaluations';
+export type AccessPage = 'my-profile' | 'governance' | 'access' | 'members' | 'roles' | 'audit' | 'definitions' | 'credentials' | 'events' | 'sandboxes' | 'approvals' | 'agents' | 'spaces' | 'secrets' | 'ai-models' | 'evaluations' | 'workflows';
 export type TenantInstancePage = 'memory' | 'profile' | 'version' | 'skills' | 'resources' | 'state' | 'state-isolation' | 'settings' | 'execution-budgets' | 'self-management' | 'unattended-model' | 'sandbox' | 'access' | 'connections' | 'lifecycle' | 'activity-sessions' | 'activity-runs' | 'automations';
 export type TenantSpacePage = 'overview' | 'members' | 'workspace' | 'environments' | 'access';
 export type AccessRoute = { area: 'access' } & (
@@ -43,7 +43,7 @@ export function parseAccessRoute(path: string): AccessRoute | null {
     if (definition[4] && !section) return { area: 'access', view: 'not-found' };
     return { area: 'access', view: 'tenant', page: 'definitions', tenantId: definition[1].toLowerCase(), definitionId: definition[2]?.toLowerCase(), draftId: definition[3]?.toLowerCase(), draftPage: section ?? 'overview' };
   }
-  const tenant = new RegExp(`^/t/(${uuid})/admin/(access|members|roles|audit|governance|evaluations)/?$`, 'i').exec(path);
+  const tenant = new RegExp(`^/t/(${uuid})/admin/(access|members|roles|audit|governance|evaluations|workflows)/?$`, 'i').exec(path);
   if (tenant) return { area: 'access', view: 'tenant', tenantId: tenant[1].toLowerCase(), page: tenant[2].toLowerCase() as AccessPage };
   const invitation = new RegExp(`^/invitations/(${uuid})$`, 'i').exec(path);
   if (invitation) return { area: 'access', view: 'invitation', invitationId: invitation[1].toLowerCase() };
