@@ -88,6 +88,11 @@ public sealed partial class TenantRunAdmissionTests
 
     private sealed class ChatInventoryGate(ITenantAgentStore inner) : ITenantAgentStore
     {
+        public ValueTask<IReadOnlyList<Guid>> ListAssistantTenantPageAsync(int page, int limit, CancellationToken ct = default) => inner.ListAssistantTenantPageAsync(page, limit, ct);
+        public ValueTask<AgentCore.Domain.Security.AuthorizationAudit?> FindAgentOperationAsync(Guid tenant, Guid operation, CancellationToken ct = default) => inner.FindAgentOperationAsync(tenant, operation, ct);
+        public ValueTask<bool> TryProvisionGeneralAssistantAsync(AgentCore.Domain.Security.TenantSecurityState next, long expected, AgentCore.Domain.Definitions.AgentInstance instance, IReadOnlyList<AgentCore.Domain.Definitions.SkillSpec> skills, AgentCore.Domain.Security.AuthorizationAudit audit, CancellationToken ct = default) => inner.TryProvisionGeneralAssistantAsync(next, expected, instance, skills, audit, ct);
+        public ValueTask<TenantAgent?> TryAdoptGeneralAssistantAsync(AgentCore.Domain.Security.TenantSecurityState next, long expected, TenantAgentConfigurationChange change, DateTimeOffset at, AgentCore.Domain.Security.AuthorizationAudit audit, CancellationToken ct = default) => inner.TryAdoptGeneralAssistantAsync(next, expected, change, at, audit, ct);
+
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Proceed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async ValueTask<TenantAgentPage> ListTenantAgentsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedInstanceIds, int page, int pageSize, CancellationToken ct = default)

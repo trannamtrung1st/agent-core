@@ -63,7 +63,7 @@ public static class TenantSessionContextRules
             || run.Admission.ExecutionContext is not { OriginalInitiatorPrincipalId: { } human, Origin: ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation }
             || request.Tool is not { } tool || !AgentCore.Application.Tools.TenantContextToolContract.IsSwitch(tool)
             || !AgentCore.Application.Tools.TenantContextToolContract.Allows(run.Admission.Configuration!.Definition, tool)
-            || !AgentCore.Application.Tools.TenantContextToolContract.Allows(InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), tool)
+            || !AgentCore.Application.Tools.TenantContextToolContract.Allows(InstanceSettingsResolver.ResolveForAgent(baseline, agent), tool)
             || tool != "spaces.activate" && request.SpaceId != run.Admission.Configuration.SpaceContext!.SpaceId
             || tool == "environments.activate" && request.EnvironmentId is null
             || tool == "environments.deactivate" && request.EnvironmentId is not null)

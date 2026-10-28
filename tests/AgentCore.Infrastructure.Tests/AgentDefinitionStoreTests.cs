@@ -29,7 +29,7 @@ public sealed class AgentDefinitionStoreTests
     {
         var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         var old = RetiredDefinition(33);
-        var latest = (await store.GetAsync("general-assistant"))!;
+        var latest = (await store.GetAsync("general-assistant", 35))!;
         Assert.Equal(35, latest.Version);
         Assert.All(await store.ListAsync(), definition => Assert.DoesNotContain(DefinitionExecutionPolicies.Of(definition).ToolList,
             name => name.StartsWith("background.", StringComparison.Ordinal)));
@@ -40,6 +40,28 @@ public sealed class AgentDefinitionStoreTests
         Assert.DoesNotContain(latest.ExecutionPolicy!.ToolList, name => name.StartsWith("background.", StringComparison.Ordinal));
         Assert.Contains("captured Space", latest.AgentInstructions);
         Assert.DoesNotContain("durable Agent Workspace", latest.AgentInstructions);
+    }
+
+    [Fact]
+    public async Task Production_default_is_current_demo_free_text_first_and_loads_without_optional_speech_aliases()
+    {
+        var directory = Directory.CreateTempSubdirectory("agent-core-production-default-");
+        try
+        {
+            File.Copy(Path.Combine(FindAgents(), "general-assistant-v36.json"), Path.Combine(directory.FullName, "general-assistant-v36.json"));
+            var standalone = new FileAgentDefinitionStore(directory.FullName, new ProviderAliasSet(new HashSet<string>(), new HashSet<string>()));
+            var current = (await standalone.GetAsync("general-assistant"))!;
+            Assert.Equal(36, current.Version); Assert.Equal("General Assistant", current.Identity.Name);
+            Assert.Empty(current.SkillList); Assert.Empty(DefinitionExecutionPolicies.Of(current).KnowledgeList);
+            Assert.False(current.Voice.Enabled); Assert.Null(current.SandboxPolicy); Assert.Null(current.ModelDefaults);
+            Assert.DoesNotContain("Riley", current.AgentInstructions); Assert.DoesNotContain("fixture", current.Identity.Description);
+            Assert.True(current.ExecutionPolicy!.Projection!.AlwaysCapabilities.Count <= 8);
+            var catalog = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+            var templates = AgentCore.Application.Security.ManagedGeneralAssistant.ProductTemplates(await catalog.ListAsync());
+            Assert.Equal(36, Assert.Single(templates, d => d.Id == "general-assistant").Version);
+            Assert.NotNull(await catalog.GetAsync("general-assistant", 35));
+        }
+        finally { directory.Delete(true); }
     }
 
     [Fact]
@@ -57,7 +79,7 @@ public sealed class AgentDefinitionStoreTests
         Assert.NotNull(compliance);
         Assert.NotNull(general);
         Assert.Equal("Riley", general!.Identity.Name);
-        var latest = await store.GetAsync("general-assistant");
+        var latest = await store.GetAsync("general-assistant", 35);
         Assert.Equal(35, latest!.Version);
         for (var version = 21; version <= 34; version++) Assert.Null(await store.GetAsync("general-assistant", version));
         // Retired browser instructions are absent from the executable catalog.

@@ -9,7 +9,7 @@ export const chatTenantId = new RegExp(`^/t/(${uuid})(?:/?$|/c/${uuid}/?$)`, 'i'
 type Metadata = { tenantId: string; sessionId: string; agentInstanceId: string; title: string; mode: string; status: string; lifecycleStatus: string;
   agentCompletion: string; revision: number; createdAt: string; updatedAt: string; archivedAt: string | null; agentId: string; agentVersion: number; agentName: string; agentRole: string; canManage: boolean };
 export type TenantChatCandidate = ChatAgentInstance & { revision: number; description: string };
-export type TenantChatCandidates = { items: TenantChatCandidate[]; total: number; page: number; pageSize: number; securityRevision: number; canCreateSessions: boolean };
+export type TenantChatCandidates = { items: TenantChatCandidate[]; total: number; page: number; pageSize: number; securityRevision: number; canCreateSessions: boolean; emptyReason?: string | null; canManageSetup?: boolean };
 let requests = new AbortController();
 async function request<T>(url: string, options: { method?: string; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
   const controller = requests;
@@ -17,7 +17,7 @@ async function request<T>(url: string, options: { method?: string; body?: unknow
   controller.signal.throwIfAborted(); return value;
 }
 export function retireTenantChatRequests() {
-  requests.abort(); requests = new AbortController(); candidates.clear(); manageHints.clear(); createAllowed = false;
+  requests.abort(); requests = new AbortController(); candidates.clear(); manageHints.clear(); createAllowed = false; emptyReason = null; canManageSetup = false;
 }
 const candidates = new Map<string, TenantChatCandidate>();
 let createAllowed = false;
@@ -45,16 +45,23 @@ export async function tenantChatCandidates(page = 0, query = ''): Promise<Tenant
   for (const candidate of result.items) candidates.set(candidate.instanceId, candidate);
   while (candidates.size > 128) candidates.delete(candidates.keys().next().value!);
   createAllowed = result.canCreateSessions;
+  emptyReason = result.emptyReason ?? null; canManageSetup = result.canManageSetup === true;
   return result;
 }
+let emptyReason: string | null = null; let canManageSetup = false;
+export function tenantChatCanManageSetup() { return canManageSetup; }
+export function tenantChatEmptyReason() { return emptyReason; }
 export function tenantCanCreateChat() { return createAllowed; }
 export async function tenantSessionView(id: string): Promise<SessionResponse> {
   const [view] = await Promise.all([request<SessionResponse>(path(`/sessions/${encodeURIComponent(id)}/conversation`)), tenantSessionMetadata(id)]);
   return view;
 }
 export async function createTenantChat(instanceId: string, model?: SessionModelChoice | null, retentionKind: 'saved' | 'temporary' = 'saved'): Promise<SessionResponse> {
-  const selected = candidates.get(instanceId);
-  if (!selected || !createAllowed) throw new Error('Select an available agent before starting a conversation.');
+  if (!candidates.has(instanceId) || !createAllowed) throw new Error('Select an available agent before starting a conversation.');
+  const current = await request<TenantChatCandidates>(path(`/chat/agents?instanceId=${encodeURIComponent(instanceId)}&pageSize=1`));
+  const selected = current.items.find(item => item.instanceId === instanceId);
+  createAllowed = current.canCreateSessions;
+  if (!selected || !createAllowed) throw new Error('Selected agent became unavailable. Reload agents and choose a visible agent before starting a conversation.');
   const access = await tenantChatAccess();
   const created = await request<Metadata>(path('/sessions'), { method: 'POST', body: { agentInstanceId: instanceId,
     expectedRevision: access.revision, expectedInstanceRevision: selected.revision, retentionKind, mode: 'text', modelPreference: preferenceFromFields(model?.offeringId, model?.reasoningEffort) } });

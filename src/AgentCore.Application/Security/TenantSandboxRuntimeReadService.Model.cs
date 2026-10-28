@@ -72,7 +72,7 @@ public sealed partial class TenantSandboxRuntimeReadService
         var (run, state) = await operations.ResolveAsync(reference, ct, retained: retained).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(reference.TenantId, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         var (agent, baseline) = await runConfiguration.BaselineAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
-        var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
+        var current = InstanceSettingsResolver.ResolveForAgent(baseline, agent);
         if (run.Admission.Configuration is null || !TenantTaskExecutionContract.Allows(run, current) || !TenantSandboxInspectionContract.Allows(run.Admission.Configuration.Definition, tool)
             || !TenantSandboxInspectionContract.Allows(current, tool)) throw new AccessDeniedException("sandbox_policy_changed");
         if (session.Snapshot.ArchivedAt is not null || session.Snapshot.DurablyDeletedAt is not null || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active

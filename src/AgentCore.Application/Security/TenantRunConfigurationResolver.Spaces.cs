@@ -18,6 +18,9 @@ public sealed partial class TenantRunConfigurationResolver
         SessionContextSelection selection, CancellationToken ct)
     {
         var baseline = await ResolveAsync(tenant, instance, ct).ConfigureAwait(false);
+        // New work adopts the current mandatory release; current-resource checks for
+        // an already admitted Run keep its pin and independent live authority fences.
+        await ManagedGeneralAssistant.RequireCurrentAsync(builtIns, baseline.Agent, ct);
         var pin = await SpaceContexts.CaptureAsync(tenant, instance, selection, ct).ConfigureAwait(false);
         var original = baseline.Configuration.Configuration;
         var membership = (await ((ITenantSpaceStore)agents).ReadMembershipsAsync(tenant, pin.SpaceId, ct).ConfigureAwait(false)).Single(m => m.InstanceId == instance);

@@ -24,7 +24,7 @@ const numerics = new Set(['cpu','memoryMiB','maxCommandSeconds','idleTtlSeconds'
 
 
 export type InstanceSandboxContext = { profiles: readonly Pick<SandboxProfile, 'id' | 'name' | 'availability'>[] | null; summary: (state: { dirty: boolean; busy: boolean; revision?: number }) => ReactNode };
-export function InstanceSettingsSection({ instanceId, archived, active = true, page, onDirtyChange, onBusyChange, onUpdated, transport, confirmationContext, sandboxContext, saveBlocked = false, externalBusy = false, refreshKey }: { instanceId: string; archived: boolean; active?: boolean; page?: InstancePage; onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void; onUpdated: () => void; transport: InstanceSettingsTransport; confirmationContext?: string; sandboxContext?: InstanceSandboxContext; saveBlocked?: boolean; externalBusy?: boolean; refreshKey?: number }) {
+export function InstanceSettingsSection({ instanceId, archived, active = true, page, onDirtyChange, onBusyChange, onUpdated, transport, confirmationContext, sandboxContext, saveBlocked = false, externalBusy = false, refreshKey, systemManaged = false }: { systemManaged?: boolean; instanceId: string; archived: boolean; active?: boolean; page?: InstancePage; onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void; onUpdated: () => void; transport: InstanceSettingsTransport; confirmationContext?: string; sandboxContext?: InstanceSandboxContext; saveBlocked?: boolean; externalBusy?: boolean; refreshKey?: number }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const [expanded, setExpanded] = useState<string[]>([]);
   const formId = useId();
@@ -55,7 +55,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
     {sections && <Collapse styles={{ header: { alignItems: 'center' } }} activeKey={expanded} onChange={keys => setExpanded(Array.isArray(keys) ? keys : [keys])} items={sections.filter(section => !requested || requested.includes(section.section)).map(section => {
       const draft = drafts[section.section] ?? emptyDraft();
       const changed = Object.keys(draft.set).length + draft.clear.length > 0;
-      const title = titles[section.section];
+      const title = systemManaged && section.section === 'instructions' ? 'Additional instructions' : titles[section.section];
       const hasOverrides = Object.keys(draft.set).some(field => field !== 'allowUnreadUnsupportedTypes') || Object.keys(section.overrides).some(field => field !== 'allowUnreadUnsupportedTypes' && !draft.clear.includes(field));
       return { key: section.section, label: <Flex wrap align="center" gap={token.paddingXS}>
         <span id={section.section === "triggerPolicy" ? "restrictions" : section.section} tabIndex={-1} className="admin-settings-anchor">{title}</span>
@@ -63,7 +63,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
         {hasOverrides && <Tooltip trigger={['hover', 'focus', 'click']} title={changed ? 'Unsaved Instance overrides' : 'This section has Instance overrides.'}><InfoCircleOutlined tabIndex={0} aria-label={`${title}: Instance override`} /></Tooltip>}
       </Flex>, children: <Flex vertical gap={token.padding} role="group" aria-label={`${title} settings`}>
         {section.section === 'evaluationPolicy' && <Typography.Paragraph type="secondary">Select optional hooks from the adopted Definition, or reset to inherit. Required policies, exact versions and organization defaults remain enforced. Configured model judges may incur bounded charges; current executor permissions still apply.</Typography.Paragraph>}
-        {section.section === 'instructions' && <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Saving replaces the complete agent instructions for this Instance. Review the inherited instructions before editing. Configures agent behavior at Runtime. Agent Core rules, permissions and approvals cannot be overridden.</Typography.Paragraph>}
+        {section.section === 'instructions' && <Typography.Paragraph type="secondary" style={{ margin: 0 }}>{systemManaged ? 'Additional instructions supplement the system instructions, which always remain effective. Permissions and approvals remain independent.' : 'Saving replaces the complete agent instructions for this Instance. Review the inherited instructions before editing. Agent Core rules, permissions and approvals cannot be overridden.'}</Typography.Paragraph>}
         {section.section === 'sandboxPolicy' && <Typography.Paragraph type="secondary" style={{margin:0}}>Allowed profiles inherit the Definition list unless narrowed here. Each Session chooses independently from that set; the default is its initial choice. The Profile script runs first, then the optional Instance script for every chosen profile. Limits are capped by each Profile. Setup scripts run once per generation and never become agent instructions.</Typography.Paragraph>}
         <Form layout="vertical" className={`admin-config-form admin-settings-form admin-settings-field-grid instance-settings-form${section.section === 'instructions' ? ' admin-settings-instructions' : section.section === 'sandboxPolicy' ? ' sandbox-settings-fields' : ''}`}>
           {(fieldOrder[section.section] ?? Object.keys(section.effective)).filter(field => field in section.effective && field !== 'allowUnreadUnsupportedTypes').map(field => {
@@ -72,7 +72,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
             const constraint = section.constraints?.[field];
             const locked = typeof constraint?.requiredBoolean === 'boolean';
             const disabled = archived || busy || draft.clear.includes(field) || locked;
-            const label = (section.section === 'stateIsolationPolicy' ? isolationLabels[field] : labels[field]) ?? field[0].toUpperCase() + field.slice(1);
+            const label = systemManaged && field === 'agentInstructions' ? 'Additional instructions' : (section.section === 'stateIsolationPolicy' ? isolationLabels[field] : labels[field]) ?? field[0].toUpperCase() + field.slice(1);
             const id = `${formId}-${section.section}-${field}`;
             const boolean = typeof inherited === 'boolean';
             const wide = field === 'profileId' || Array.isArray(inherited) || field === 'agentInstructions' || field === 'initializationScript' || field === 'enabled';

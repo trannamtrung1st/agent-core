@@ -74,7 +74,7 @@ public static class TenantBrowserCredentialRules
         bound.Credential.Value.SecretRevision, origin, bound.Credential.Value.DisplayName);
     public static void RequireBinding(AgentRun run, TenantAgent agent, TenantCredentialBinding bound, AgentDefinition baseline)
     {
-        var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
+        var current = InstanceSettingsResolver.ResolveForAgent(baseline, agent);
         var b = bound.Binding; var c = bound.Credential;
         if (run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is null || run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
             || run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation))

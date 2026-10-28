@@ -11,17 +11,18 @@ namespace AgentCore.Infrastructure.Persistence.Migrations;
 
 [DbContext(typeof(AgentCoreDbContext))]
 [Migration("20261023180000_TenantPublicDownloads")]
-public class TenantPublicDownloads : RetireEmbeddedRunApproval
+public class TenantPublicDownloads : Migration
 {
     // Extend the frozen predecessor target rather than duplicating its unchanged model.
     internal const string ReceiptConstraint = "PublicDownloadJson IS NULL OR COALESCE(length(PublicDownloadJson)<=32768 AND json_valid(PublicDownloadJson) AND Outcome=0 AND json_type(PublicDownloadJson,'$.RequestedUrl')='text' AND length(json_extract(PublicDownloadJson,'$.RequestedUrl')) BETWEEN 1 AND 4096 AND json_type(PublicDownloadJson,'$.FinalUrl')='text' AND length(json_extract(PublicDownloadJson,'$.FinalUrl')) BETWEEN 1 AND 4096 AND json_type(PublicDownloadJson,'$.Path')='text' AND (json_extract(PublicDownloadJson,'$.Path') LIKE '/home/%' OR json_extract(PublicDownloadJson,'$.Path') LIKE '/working/%') AND json_type(PublicDownloadJson,'$.ContentType')='text' AND length(json_extract(PublicDownloadJson,'$.ContentType')) BETWEEN 1 AND 200 AND json_type(PublicDownloadJson,'$.ByteCount')='integer' AND json_extract(PublicDownloadJson,'$.ByteCount') BETWEEN 0 AND 2147483647 AND json_type(PublicDownloadJson,'$.Sha256')='text' AND length(json_extract(PublicDownloadJson,'$.Sha256'))=64 AND json_extract(PublicDownloadJson,'$.Sha256') NOT GLOB '*[^0-9a-f]*',0)";
     private const string PriorTools = "'workspace.write','workspace.patch','workspace.mkdir','workspace.copy','workspace.move','workspace.delete','workspace.batch','office.document.create','office.document.edit','office.spreadsheet.create','office.spreadsheet.edit'";
-    internal new static string ValuesConstraint => Extend(TenantConfigurationRemedyAuthoring.ValuesConstraint);
+    internal static string ValuesConstraint => Extend(TenantConfigurationRemedyAuthoring.ValuesConstraint);
     internal static string Extend(string sql) => sql.Replace(PriorTools, PriorTools + ",'web.download'", StringComparison.Ordinal)
         .Replace("WHEN 'workspace.copy' THEN", "WHEN 'web.download' THEN coalesce(json_extract(json_extract(PayloadJson, '$.Operation.WorkspaceMutation.ArgumentsJson'), '$.path'), '/home/downloads')\n        WHEN 'workspace.copy' THEN", StringComparison.Ordinal);
+    internal void BuildFrozenTarget(ModelBuilder model) => BuildTargetModel(model);
     protected override void BuildTargetModel(ModelBuilder modelBuilder)
     {
-        base.BuildTargetModel(modelBuilder);
+        new RetireEmbeddedRunApproval().BuildFrozenTarget(modelBuilder);
         modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantApprovalRecord", entity => entity.ToTable("TenantApprovalRequests", table => table.HasCheckConstraint("CK_TenantApprovalRequest_Values", ValuesConstraint)));
         modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantOperationReceiptRecord", entity => {
             entity.Property<string>("PublicDownloadJson").HasColumnType("TEXT");

@@ -57,7 +57,7 @@ public static class TenantSpaceResourceReadRules
         AgentDefinition baseline, IamAuthorizer iam, Func<string, long, ValueTask> requireCurrent,
         TenantApprovalRequest? request, TenantOperationReceipt? receipt, TenantApprovalDecision? decision, bool grantPresent, CancellationToken ct)
     {
-        var pin = run.Admission.Configuration!; var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
+        var pin = run.Admission.Configuration!; var current = InstanceSettingsResolver.ResolveForAgent(baseline, agent);
         if (!TenantTaskExecutionContract.Allows(run, current) || !TenantWorkspaceReadContract.Allows(pin.Definition, source.Tool)
             || !TenantWorkspaceReadContract.Allows(current, source.Tool) || agent.PrincipalId != run.Owner.ExecutorPrincipalId)
             throw new AccessDeniedException("resource_source_changed");

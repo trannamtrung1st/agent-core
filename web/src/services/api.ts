@@ -185,6 +185,8 @@ export class CatalogRevisionConflictError extends Error {
 }
 
 export type ChatAgentInstance = {
+  systemManaged?: boolean;
+  setupState?: string | null;
   instanceId: string;
   definitionId: string;
   activeVersion: number;

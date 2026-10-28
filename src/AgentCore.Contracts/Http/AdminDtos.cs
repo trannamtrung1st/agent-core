@@ -301,7 +301,7 @@ public sealed record AdminAgentInstanceResponse(
     AdminPersonaResponse Persona,
     ModelPreferenceDto? UnattendedModel = null,
     AdminBrowserConfigurationResponse? Browser = null,
-    System.Text.Json.JsonElement? ExecutionBudgets = null, AgentCooperationResponse? Cooperation = null);
+    System.Text.Json.JsonElement? ExecutionBudgets = null, AgentCooperationResponse? Cooperation = null, bool ShowInChat = true);
 
 
 public sealed record AdminSetUnattendedModelRequest(

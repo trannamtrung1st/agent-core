@@ -36,7 +36,7 @@ public sealed partial class TenantRunConfigurationResolver(ITenantAgentStore age
     public async ValueTask<(TenantAgent Agent, AgentDefinition Definition)> CurrentPolicyAsync(Guid tenant, Guid instance, CancellationToken ct = default)
     {
         var (agent, baseline) = await BaselineAsync(tenant, instance, ct).ConfigureAwait(false);
-        var effective = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides) with {
+        var effective = InstanceSettingsResolver.ResolveForAgent(baseline, agent) with {
             SelfManagement = ManagementPolicyResolver.Resolve(baseline, agent.Instance)
         };
         return (agent, effective);
@@ -59,7 +59,7 @@ public sealed partial class TenantRunConfigurationResolver(ITenantAgentStore age
                 ?? throw new AccessDeniedException("definition_unavailable");
             published = await inheritedResources.ListAsync(baseline, ct).ConfigureAwait(false);
         }
-        var effective = InstanceSettingsResolver.Resolve(baseline, owner.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, owner) };
+        var effective = InstanceSettingsResolver.ResolveForAgent(baseline, state.Agent) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, owner) };
         var manifest = InstanceResourceRules.Resolve(effective, published, state.Resources, state.Skills);
         var environment = DefinitionExecutionPolicies.Of(effective);
         var disabled = published.Where(p => !manifest.Any(r => r.Key == "definition:" + p.ResourceId.ToString("D"))).Select(p => p.LogicalPath).ToHashSet(StringComparer.Ordinal);

@@ -116,7 +116,7 @@ public sealed partial class TenantCredentialRuntimeReadService(TenantOperationAu
             ?? throw new AccessDeniedException("resource_unavailable");
         if (snapshot.Agent.PrincipalId != run.Owner.ExecutorPrincipalId || snapshot.Agent.Instance.Revision != agent.Instance.Revision)
             throw new SecurityConflictException("credential_source_changed");
-        return new(run, state, session, agent, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), snapshot.Bindings);
+        return new(run, state, session, agent, InstanceSettingsResolver.ResolveForAgent(baseline, agent), snapshot.Bindings);
     }
     private static bool Eligible(Read read, TenantCredentialBinding bound, string? family = null) => TenantCredentialReadOperationRules.Eligible(read.Run, read.Agent, read.Current, bound)
         && TenantCredentialDiscoveryContract.Matches(family, bound.Credential.Value.Purpose);

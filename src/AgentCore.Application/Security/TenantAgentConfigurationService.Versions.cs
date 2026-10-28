@@ -59,7 +59,7 @@ public sealed partial class TenantAgentConfigurationService
     }
 
     private async ValueTask<bool> CanAdopt(TenantSecurityState state, Guid actor, AgentInstance instance, CancellationToken ct) =>
-        instance.Lifecycle == AgentInstanceLifecycle.Active && (await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("agents.update"), Scope(state.Tenant.TenantId, instance.InstanceId), ct).ConfigureAwait(false)).Allowed;
+        instance.Lifecycle == AgentInstanceLifecycle.Active && !state.SystemIdentities.Any(i => i.AgentInstanceId == instance.InstanceId && i.ManagedKind is not null) && (await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("agents.update"), Scope(state.Tenant.TenantId, instance.InstanceId), ct).ConfigureAwait(false)).Allowed;
 
     private async ValueTask RequireVersionSourceRead(Guid actor, Guid tenant, AgentInstance instance, CancellationToken ct)
     {
@@ -76,14 +76,28 @@ public sealed partial class TenantAgentConfigurationService
         var (target, metadataRevision, status) = await Definition(tenant, current.DefinitionId, version, ct).ConfigureAwait(false);
         if (status != "Active") throw new AccessDeniedException("definition_unavailable");
         if (current.Lifecycle != AgentInstanceLifecycle.Active) throw new ArgumentException("Archived Instances are read-only.");
-        var effective = InstanceSettingsResolver.Resolve(target, current.SettingsOverrides);
         var models = await ModelCatalogForAgentAsync(actor, tenant, current.InstanceId, ct).ConfigureAwait(false);
-        ExecutionModelPolicy.RequireSelectable(models, effective.ModelDefaults);
+        return await PrepareVersionCompatibilityAsync(tenant, snapshot, target, metadataRevision, models, ct);
+    }
+
+    private async ValueTask<PreparedVersion> PrepareVersionCompatibilityAsync(Guid tenant, TenantAgentConfigurationSnapshot snapshot,
+        AgentDefinition target, long? metadataRevision, IModelCatalog models, CancellationToken ct, bool managedUpgrade = false)
+    {
+        T Check<T>(Func<T> prepare, string field)
+        {
+            try { return prepare(); }
+            catch (Exception error) when (managedUpgrade && (error is AgentCoreException or ArgumentException))
+            { throw new SecurityConflictException($"assistant_upgrade_{field}_incompatible"); }
+        }
+        var current = snapshot.Agent.Instance;
+        var effective = Check(() => InstanceSettingsResolver.ResolveForAgent(target, snapshot.Agent), "settings");
+        Check(() => { ExecutionModelPolicy.RequireSelectable(models, effective.ModelDefaults); return true; }, "model");
         var skills = new InstanceSkillSnapshot(snapshot.Skills.DefinitionStates.Concat(target.SkillList
             .Where(s => !snapshot.Skills.DefinitionStates.Any(old => old.DefinitionSkillId == s.Id))
             .Select(s => new AgentDefinitionSkillState(current.InstanceId, s.Id, null, 1, time.GetUtcNow()))).ToArray(), snapshot.Skills.InstanceSkills);
-        _ = EffectiveSkillCatalogResolver.Resolve(effective, skills);
-        _ = InstanceResourceRules.Resolve(effective, await Resources(tenant, target, ct).ConfigureAwait(false), snapshot.Resources, skills);
+        _ = Check(() => EffectiveSkillCatalogResolver.Resolve(effective, skills), "skills");
+        var published = await Resources(tenant, target, ct).ConfigureAwait(false);
+        _ = Check(() => InstanceResourceRules.Resolve(effective, published, snapshot.Resources, skills), "resources");
         var policy = await automationPolicy.PlanTenantAsync(tenant, security as ITenantAutomationStore ?? throw new InvalidOperationException("Canonical Automation store is unavailable."), current, effective, time.GetUtcNow(), ct).ConfigureAwait(false);
         return new(target, metadataRevision, policy);
     }

@@ -68,7 +68,7 @@ public static partial class TenantSandboxControlRules
     public static void RequireSelectionSource(TenantSandboxProfileSwitchPreparation prepared, TenantAgent agent, AgentDefinition baseline,
         SandboxProfile source, SandboxVerificationEvidence evidence)
     {
-        var effective = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
+        var effective = InstanceSettingsResolver.ResolveForAgent(baseline, agent);
         if (!RolePermissions.AllowsTool(effective, ToolCatalog.SandboxExec) || effective.SandboxPolicy?.AllowedProfileIds.Contains(source.Id, StringComparer.Ordinal) != true)
             throw new AccessDeniedException("sandbox_policy_changed");
         TenantSandboxVerificationRules.RequireCurrent(prepared.Target, SandboxSetupResolver.Resolve(source, agent.Instance.SettingsOverrides, agent.Instance.Revision, rejectExpansion: true));

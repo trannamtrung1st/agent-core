@@ -4,7 +4,7 @@ import { IdentityCompletionError, identityRequest, tenantApi } from './identity'
 import type { InstanceSkill } from './instanceSkills';
 import type { InstanceResource } from './instanceConfiguration';
 
-export type TenantAgentEditor = { agent: { principalId: string; systemIdentityId: string; instance: AdminAgentInstance & { persona: { name: string; role: string; description: string; tone: string } } }; settings: SettingsSection[]; securityRevision: number; canUpdate: boolean; unavailableSettings: string[] };
+export type TenantAgentEditor = { agent: { managedKind?: string | null; canResetDefaults?: boolean; principalId: string; systemIdentityId: string; instance: AdminAgentInstance & { persona: { name: string; role: string; description: string; tone: string } } }; settings: SettingsSection[]; securityRevision: number; canUpdate: boolean; unavailableSettings: string[] };
 export type TenantAgentControlsView = Pick<TenantAgentEditor, 'agent' | 'securityRevision' | 'canUpdate'> & {
   budgets: { instanceRevision: number; securityRevision: number; overrides: ExecutionBudgetPolicy | null; definitionDefaults: ExecutionBudgetPolicy | null; hostLimits: ExecutionBudgetLimits };
   management: { policy: SelfManagementView; securityRevision: number };

@@ -19,7 +19,15 @@ public sealed partial class InMemoryIamStore
     }
 
     public ValueTask<TenantAgent?> TryChangeTenantAgentConfigurationAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
+        TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) =>
+        ChangeAgentConfigurationCoreAsync(next, expectedSecurityRevision, change, at, audit, false, ct);
+
+    public ValueTask<TenantAgent?> TryAdoptGeneralAssistantAsync(TenantSecurityState next, long expectedSecurityRevision,
+        TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) =>
+        ChangeAgentConfigurationCoreAsync(next, expectedSecurityRevision, change, at, audit, true, ct);
+
+    private ValueTask<TenantAgent?> ChangeAgentConfigurationCoreAsync(TenantSecurityState next, long expectedSecurityRevision,
+        TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, bool system, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
         IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, change.InstanceId, AgentInstanceLifecycle.Active, audit);
@@ -27,13 +35,19 @@ public sealed partial class InMemoryIamStore
         {
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult<TenantAgent?>(null);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next);
-            ValidateAgentActor(before, audit.ActorPrincipalId); EnsureReferences(next, audit, ct: ct);
+            ManagedGeneralAssistant.ValidateMarkerAdditions(before, next);
+            var managed = before.SystemIdentities.SingleOrDefault(i => i.AgentInstanceId == change.InstanceId)?.ManagedKind == ManagedGeneralAssistant.Kind;
+            if (system && (!managed || !change.SystemAdoption || audit.ActorPrincipalId != Guid.Empty || audit.Action != ManagedGeneralAssistant.AdoptAction || audit.Target != change.InstanceId.ToString("D") || change.ResetDefaults || change.Initiator is not null)
+                || !system && change.SystemAdoption) throw new ArgumentException("Invalid system adoption.");
+            if (change.ResetDefaults && (audit.Action != ManagedGeneralAssistant.ResetAction || audit.Target != change.InstanceId.ToString("D") || audit.ActorPrincipalId == Guid.Empty))
+                throw new ArgumentException("Use an exact human-attributed reset audit.");
+            if (!system) ValidateAgentActor(before, audit.ActorPrincipalId); EnsureReferences(next, audit, ct: ct);
             var current = FindTenantAgentAsync(next.Tenant.TenantId, change.InstanceId, ct).Result;
             if (current is null || current.Instance.Revision != change.ExpectedInstanceRevision) return ValueTask.FromResult<TenantAgent?>(null);
             if (change.Isolation is { } isolation && Isolation(change.InstanceId) is var expectedMetadata
                 && (expectedMetadata.ExperienceRevision != isolation.Expected.Experience || expectedMetadata.MaintenanceRevision != isolation.Expected.Maintenance))
                 return ValueTask.FromResult<TenantAgent?>(null);
-            _ = TenantAgentConfigurationRules.Apply(current.Instance, change, at);
+            _ = TenantAgentConfigurationRules.Apply(current.Instance, change, at, managed);
             if (next.Assignments.Any(a => TenantAgentChildScopes.BelongsTo(a.Scope, change.InstanceId)))
             {
                 var available = ChildCatalog(next.Tenant.TenantId, change.InstanceId, change, ct);
@@ -70,7 +84,8 @@ public sealed partial class InMemoryIamStore
                 DefinitionSkills: change.DefinitionSkills, AutomationPolicyChanges: change.AutomationPolicyChanges,
                 SetSettingsOverrides: change.SetSettingsOverrides, SettingsOverrides: change.SettingsOverrides,
                 SetExecutionBudgets: change.SetExecutionBudgets, ExecutionBudgets: change.ExecutionBudgets,
-                SetUnattendedModel: change.SetUnattendedModel, UnattendedModel: change.UnattendedModel, HarnessManagement: change.HarnessManagement, Cooperation: change.Cooperation), at, ct).Result;
+                SetUnattendedModel: change.SetUnattendedModel, UnattendedModel: change.UnattendedModel, HarnessManagement: change.HarnessManagement, Cooperation: change.Cooperation, ShowInChat: change.ShowInChat,
+                PersonaCustomized: change.ResetDefaults ? false : change.SystemAdoption ? current.Instance.PersonaCustomized : change.Persona is not null ? true : null, ResetDefinitionState: change.ResetDefaults), at, ct).Result;
             if (change.Isolation is { } mutation)
             {
                 var metadata = Isolation(change.InstanceId);

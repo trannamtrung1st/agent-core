@@ -142,6 +142,11 @@ public sealed partial class TenantSessionAccessTests
     }
     private sealed class FileFinalReadAgentStore(ITenantAgentStore inner, FileFinalReadRace race) : ITenantAgentStore
     {
+        public ValueTask<IReadOnlyList<Guid>> ListAssistantTenantPageAsync(int page, int limit, CancellationToken ct = default) => inner.ListAssistantTenantPageAsync(page, limit, ct);
+        public ValueTask<AgentCore.Domain.Security.AuthorizationAudit?> FindAgentOperationAsync(Guid tenant, Guid operation, CancellationToken ct = default) => inner.FindAgentOperationAsync(tenant, operation, ct);
+        public ValueTask<bool> TryProvisionGeneralAssistantAsync(AgentCore.Domain.Security.TenantSecurityState next, long expected, AgentCore.Domain.Definitions.AgentInstance instance, IReadOnlyList<AgentCore.Domain.Definitions.SkillSpec> skills, AgentCore.Domain.Security.AuthorizationAudit audit, CancellationToken ct = default) => inner.TryProvisionGeneralAssistantAsync(next, expected, instance, skills, audit, ct);
+        public ValueTask<TenantAgent?> TryAdoptGeneralAssistantAsync(AgentCore.Domain.Security.TenantSecurityState next, long expected, TenantAgentConfigurationChange change, DateTimeOffset at, AgentCore.Domain.Security.AuthorizationAudit audit, CancellationToken ct = default) => inner.TryAdoptGeneralAssistantAsync(next, expected, change, at, audit, ct);
+
         public async ValueTask<TenantAgent?> FindTenantAgentAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default)
         { var value = await inner.FindTenantAgentAsync(tenantId, instanceId, ct); await race.After(true); return value; }
         public ValueTask<TenantAgentConfigurationSnapshot?> ReadTenantAgentConfigurationAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default) => inner.ReadTenantAgentConfigurationAsync(tenantId, instanceId, ct);

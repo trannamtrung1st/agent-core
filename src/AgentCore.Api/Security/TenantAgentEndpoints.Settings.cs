@@ -15,6 +15,7 @@ public static partial class TenantAgentEndpoints
     public sealed record FreezeRequest(long ExpectedRevision, long ExpectedInstanceRevision);
     private static void MapSettings(RouteGroupBuilder group)
     {
+        MapGeneralAssistant(group);
         MapSandboxVerification(group);
         MapIsolation(group);
         MapRuntimeState(group);

@@ -4,7 +4,7 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed class SystemAdministrationService(IIamStore security, ISystemAdministrationStore store, IdentityService identity,
-    IamAuthorizer authorizer, IIdentityTokens tokens, IIdGenerator ids, TimeProvider time)
+    IamAuthorizer authorizer, IIdentityTokens tokens, IIdGenerator ids, TimeProvider time, ManagedGeneralAssistantService? assistant = null)
 {
     private ValueTask Require(HumanSessionReference human, string permission, CancellationToken ct) => SystemHumanSessionAuthority.RequireAsync(security, identity, authorizer, human, permission, ct);
     public async ValueTask<SystemAccountPage> AccountsAsync(HumanSessionReference human, SystemCollectionQuery query, CancellationToken ct = default)
@@ -23,6 +23,7 @@ public sealed class SystemAdministrationService(IIamStore security, ISystemAdmin
         var account = await security.ReadAccountAsync(human.AccountId, ct) ?? throw new AccessDeniedException("initiator_unavailable");
         var tenant = identity.CreateTenant(account, name, slug);
         if (!await store.TryCreateSystemTenantAsync(human, tenant, Audit(human, "system.tenants.create", tenant.Tenant.TenantId, tenant.Tenant.TenantId), ct)) throw new SecurityConflictException("tenant_exists");
+        if (assistant is not null) { await assistant.ReconcileAsync(tenant.Tenant.TenantId, ct); return (await security.ReadTenantAsync(tenant.Tenant.TenantId, ct))!.Tenant; }
         return tenant.Tenant;
     }
     public async ValueTask SetAccountStatusAsync(HumanSessionReference human, Guid accountId, string expectedVersion, IdentityStatus status, CancellationToken ct = default)

@@ -14,11 +14,11 @@ export function isNewChatIdentityReady(input: {
   chatAgentInstancesLoading: boolean; newChatIdentityKey: string; chatAgentInstances: ChatAgentInstance[];
 }): boolean {
   const parsed = parseChatIdentityKey(input.newChatIdentityKey);
-  return !input.chatAgentInstancesLoading && parsed !== null && input.chatAgentInstances.some(item => item.instanceId === parsed.instanceId);
+  return !input.chatAgentInstancesLoading && parsed !== null && input.chatAgentInstances.some(item => item.instanceId === parsed.instanceId && item.setupState !== "upgrade_requires_attention" && item.setupState !== "no_model_configured");
 }
 export function shortInstanceId(instanceId: string): string { return instanceId.replace(/-/g, "").toLowerCase().slice(-8); }
 export function managedInstancePickerLabel(item: ChatAgentInstance): string {
-  return `${item.name} — ${item.role} · v${item.activeVersion} · ${shortInstanceId(item.instanceId)}`;
+  return `${item.name}${item.systemManaged ? " · System-managed" : ""} — ${item.role} · v${item.activeVersion} · ${shortInstanceId(item.instanceId)}`;
 }
 export type NewChatIdentityPresentation = { displayName: string; voiceAvailable: boolean; language: string };
 export function resolveNewChatIdentityPresentation(identityKey: string, instances: ChatAgentInstance[]): NewChatIdentityPresentation | null {

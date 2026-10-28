@@ -138,5 +138,5 @@ public sealed partial class TenantAgentConfigurationService
         InstanceResourceRules.Verify(view.ContentSha256, view.ByteLength, bytes); return bytes;
     }
     private static AgentDefinition EffectiveChildDefinition(TenantAgentConfigurationSnapshot snapshot, AgentDefinition baseline) =>
-        InstanceSettingsResolver.Resolve(baseline, snapshot.Agent.Instance.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, snapshot.Agent.Instance) };
+        InstanceSettingsResolver.ResolveForAgent(baseline, snapshot.Agent) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, snapshot.Agent.Instance) };
 }

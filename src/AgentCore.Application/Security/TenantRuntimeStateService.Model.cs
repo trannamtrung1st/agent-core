@@ -56,7 +56,7 @@ public sealed partial class TenantRuntimeStateService
         var session = await sessions.FindTenantSessionAsync(tenant, frame.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
         var (agent, baseline) = await configuration.BaselineAsync(tenant, frame.Owner.AgentInstanceId, ct).ConfigureAwait(false);
-        var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
+        var current = InstanceSettingsResolver.ResolveForAgent(baseline, agent);
         var admitted = run.Admission.Configuration?.Definition;
         if (admitted is null || !TenantTaskExecutionContract.Allows(run, current)
             || !RolePermissions.AllowsTool(admitted, ToolCatalog.AgentStateInspect) || !RolePermissions.AllowsTool(current, ToolCatalog.AgentStateInspect))

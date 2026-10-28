@@ -74,7 +74,7 @@ public sealed record AgentInstanceRevisionUpdate(
     AdminEventAppend? History = null, IReadOnlyList<SkillSpec>? DefinitionSkills = null,
     bool SetExecutionBudgets = false, ExecutionBudgetPolicy? ExecutionBudgets = null,
     bool SetSettingsOverrides = false, InstanceSettingsOverrides? SettingsOverrides = null,
-    IReadOnlyList<InstanceAutomationPolicyChange>? AutomationPolicyChanges = null, AgentCore.Domain.Tasks.AgentCooperationPolicy? Cooperation = null);
+    IReadOnlyList<InstanceAutomationPolicyChange>? AutomationPolicyChanges = null, AgentCore.Domain.Tasks.AgentCooperationPolicy? Cooperation = null, bool? ShowInChat = null, bool? PersonaCustomized = null, bool ResetDefinitionState = false);
 
 
 

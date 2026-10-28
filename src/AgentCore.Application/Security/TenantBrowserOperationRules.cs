@@ -72,7 +72,7 @@ public static class TenantBrowserOperationRules
     {
         RequireSource(value.SessionId, value.ToolName, run, agent, baseline, session);
         var admitted = run.Admission.Configuration!.Definition;
-        var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
+        var current = InstanceSettingsResolver.ResolveForAgent(baseline, agent);
         var target = TenantApprovalRules.BrowserTarget(value);
         RequireProfile(agent, target.ProfileMode);
         if (Isolation(admitted, current) == BrowserIsolation.EphemeralSession && target.ProfileMode != BrowserProfileMode.EphemeralSession)
@@ -81,7 +81,7 @@ public static class TenantBrowserOperationRules
     public static void RequireSource(Guid sessionId, string tool, AgentRun run, TenantAgent agent, AgentDefinition baseline, TenantSession session)
     {
         var admitted = run.Admission.Configuration?.Definition ?? throw new AccessDeniedException("tenant_context_required");
-        var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
+        var current = InstanceSettingsResolver.ResolveForAgent(baseline, agent);
         if (!TenantTaskExecutionContract.Allows(run, current) || !RolePermissions.AllowsTool(admitted, tool) || !RolePermissions.AllowsTool(current, tool))
             throw new AccessDeniedException("browser_policy_changed");
         if (session.Owner.TenantId != run.Owner.TenantId || session.Owner.SessionId != sessionId || run.SessionId != sessionId

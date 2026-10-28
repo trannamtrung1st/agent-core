@@ -153,6 +153,13 @@ describe("AgentPicker", () => {
     );
 
     expect(screen.getByRole("combobox", { name: "Identity" })).toBeDisabled();
-    expect(screen.getByText("No agents are available. Try another search or ask an organization owner for Chat access.")).toBeInTheDocument();
+    expect(screen.getByText("No matching agents. Try another search or reload the list.")).toBeInTheDocument();
   });
+});
+
+it('explains an unavailable model without inventing a provider or credential', () => {
+  const item = { ...instances[0], name: 'General Assistant', systemManaged: true, setupState: 'no_model_configured' };
+  render(<AgentPicker managedInstances={[item]} identityKey={`managed:${item.instanceId}`} error={null} managedInstancesError={null} managedInstancesLoading={false} onIdentityChange={vi.fn()} onRetryManagedInstances={vi.fn()} />);
+  expect(screen.getByText('No model configured')).toBeVisible();
+  expect(screen.getByText(/configure an available model before starting Chat/)).toBeVisible();
 });

@@ -10,13 +10,14 @@ namespace AgentCore.Infrastructure.Persistence.Migrations;
 
 [DbContext(typeof(AgentCoreDbContext))]
 [Migration("20261023160000_RetireEmbeddedRunApproval")]
-public class RetireEmbeddedRunApproval : TenantConfigurationRemedyAuthoring
+public class RetireEmbeddedRunApproval : Migration
 {
     // The predecessor's generated target is frozen migration metadata, not the live model.
     // Reuse it here instead of duplicating the entire unchanged target model.
+    internal void BuildFrozenTarget(ModelBuilder model) => BuildTargetModel(model);
     protected override void BuildTargetModel(ModelBuilder modelBuilder)
     {
-        base.BuildTargetModel(modelBuilder);
+        new TenantConfigurationRemedyAuthoring().BuildFrozenTarget(modelBuilder);
         modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentRunRecord", entity =>
         {
             entity.Ignore("ApprovalExpiresAtUtc");

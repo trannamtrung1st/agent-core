@@ -50,7 +50,7 @@ public sealed partial class TenantAgentConfigurationService
         }
         if (aliases is null) throw Sessions.AgentCoreErrors.Validation("Configured provider choices are unavailable.");
         var models = await ModelCatalogForAgentAsync(actor, tenant, current.InstanceId, ct).ConfigureAwait(false);
-        var (next, effective) = InstanceSettingsRules.ResolvePatch(definition, current.SettingsOverrides ?? new(), section, set, clear, models, aliases);
+        var (next, effective) = InstanceSettingsRules.ResolvePatch(definition, current.SettingsOverrides ?? new(), section, set, clear, models, aliases, snapshot.Agent.ManagedKind is not null);
         if (section == "evaluationPolicy" && security is ITenantEvaluationStore evaluations)
             foreach (var binding in (effective.EvaluationBindings ?? []).Where(b => b.Hook != AgentCore.Domain.Evaluations.EvaluationHook.Publication))
             {

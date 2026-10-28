@@ -621,11 +621,12 @@ public sealed partial class SqliteAgentInstanceStore(
             row.ExecutionBudgetsJson is null ? null : JsonSerializer.Deserialize<ExecutionBudgetPolicy>(row.ExecutionBudgetsJson, Json),
             row.SettingsOverridesJson is null ? null : JsonSerializer.Deserialize<InstanceSettingsOverrides>(row.SettingsOverridesJson, Json),
             row.BrowserProfileResetJson is null ? null : JsonSerializer.Deserialize<AgentBrowserProfileReset>(row.BrowserProfileResetJson, Json),
-            row.CooperationJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Tasks.AgentCooperationPolicy>(row.CooperationJson, Json));
+            row.CooperationJson is null ? null : JsonSerializer.Deserialize<AgentCore.Domain.Tasks.AgentCooperationPolicy>(row.CooperationJson, Json), row.ShowInChat, row.PersonaCustomized);
 
     internal static AgentInstanceRecord Map(AgentInstance instance) =>
         new()
         {
+            ShowInChat = instance.ShowInChat, PersonaCustomized = instance.PersonaCustomized,
             InstanceId = instance.InstanceId.ToString("D"),
             DefinitionId = instance.DefinitionId,
             ActiveVersion = instance.ActiveVersion,

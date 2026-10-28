@@ -507,6 +507,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         modelBuilder.Entity<AgentInstanceRecord>(entity =>
         {
             entity.ToTable("AgentInstances");
+            entity.Property(r => r.ShowInChat).HasDefaultValue(true);
             entity.HasKey(row => row.InstanceId);
             entity.Property(row => row.InstanceId).HasMaxLength(36);
             entity.Property(row => row.DefinitionId).HasMaxLength(128).IsRequired();

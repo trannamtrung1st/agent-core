@@ -9,6 +9,8 @@ public sealed record InstanceSettingConstraint(string Reason, bool? RequiredBool
 
 public static class InstanceSettingsResolver
 {
+    public static AgentDefinition ResolveForAgent(AgentDefinition baseline, AgentCore.Application.Ports.TenantAgent agent) =>
+        Resolve(baseline, agent.Instance.SettingsOverrides, agent.ManagedKind == AgentCore.Application.Security.ManagedGeneralAssistant.Kind);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.Strict };
     public static IReadOnlyList<string> Sections { get; } = ["instructions", "conversationPolicy", "behaviorPolicy", "initiativePolicy", "voice", "modelDefaults", "memoryPolicy", "capabilities", "triggerPolicy", "providerPreferences", "sandboxPolicy", "stateIsolationPolicy", "evaluationPolicy"];
     public static IReadOnlyList<string> Fields(string section) => section switch
@@ -221,7 +223,7 @@ public static class InstanceSettingsResolver
         try { return EvaluationRules.ResolveInstance(baseline.EvaluationBindings, o.EvaluationBindings?.Value); }
         catch (ArgumentException error) { throw AgentCoreErrors.Validation(error.Message); }
     }
-    public static AgentDefinition Resolve(AgentDefinition baseline, InstanceSettingsOverrides? overrides)
+    public static AgentDefinition Resolve(AgentDefinition baseline, InstanceSettingsOverrides? overrides, bool managed = false)
     {
         if (overrides is null) return baseline;
         var o = overrides;
@@ -234,7 +236,9 @@ public static class InstanceSettingsResolver
             EvaluationBindings = ResolveEvaluationBindings(baseline, o),
             SandboxPolicy = SandboxSetupResolver.ResolvePolicy(baseline.SandboxPolicy, o),
             ExecutionSandboxProfile = baseline.ExecutionSandboxProfile is { } sandbox ? SandboxSetupResolver.Resolve(sandbox, o, sandbox.InstanceRevision) : null,
-            AgentInstructions = o.AgentInstructions is { } instructions ? instructions.Value : baseline.AgentInstructions,
+            AgentInstructions = o.AgentInstructions is { } instructions
+                ? managed ? baseline.AgentInstructions + "\n\nAdditional tenant instructions (subordinate to the system instructions above):\n" + instructions.Value : instructions.Value
+                : baseline.AgentInstructions,
             ConversationPolicy = baseline.ConversationPolicy with
             {
                 ResponseLength = o.ResponseLength is { } responseLength ? responseLength.Value : baseline.ConversationPolicy.ResponseLength,

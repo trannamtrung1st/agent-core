@@ -20,7 +20,7 @@ public sealed partial class TenantAgentConfigurationService
     {
         var (snapshot, definition) = await BoundForRead(actor, tenant, id, ct).ConfigureAwait(false);
         var sections = InstanceSettingsResolver.Sections.Select(section => InstanceSettingsRules.WithHostConstraints(
-            InstanceSettingsRules.View(snapshot.Agent.Instance, definition, section), browser)).ToArray();
+            InstanceSettingsRules.View(snapshot.Agent.Instance, definition, section, snapshot.Agent.ManagedKind is not null), browser)).ToArray();
         return new(sections, await ReadRevision(actor, tenant, id, ct).ConfigureAwait(false));
     }
 

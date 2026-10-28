@@ -62,7 +62,7 @@ public static class TenantAccountReadRules
     public static void Require(PreparedAccountRead read, AgentRun run, TenantAgent agent, TenantSession session, AgentDefinition baseline,
         TenantCredentialBinding bound, bool exactSecret = true)
     {
-        var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
+        var current = InstanceSettingsResolver.ResolveForAgent(baseline, agent);
         var args = TenantAccountReadContract.Parse(read.ToolName, read.ArgumentsJson);
         TenantAccountOperationReadRules.Validate(read);
         if (!TenantTaskExecutionContract.Allows(run, current) || !RolePermissions.AllowsTool(run.Admission.Configuration!.Definition, read.ToolName)

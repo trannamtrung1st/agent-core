@@ -162,6 +162,7 @@ if (identityBootstrapCommand)
     return;
 }
 await InitializeIdentityAsync(app.Services, app.Configuration).ConfigureAwait(false);
+await GeneralAssistantInitialization.ReconcileAsync(app.Services, app.Lifetime.ApplicationStopping);
 app.UseIdentityHttp();
 IdentityEndpoints.Map(app);
 TenantAccessEndpoints.Map(app);

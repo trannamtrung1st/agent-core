@@ -11,7 +11,7 @@ public sealed record IamAssignmentRow(Guid AssignmentId, Guid? TenantId, Guid Pr
     AccessScopeKind ScopeKind, string ResourceType, string ResourceId, Guid CreatedByPrincipalId, DateTimeOffset CreatedAt);
 public sealed record IamBootstrapRow(int Id, DateTimeOffset CompletedAt);
 public sealed record IamSystemIdentityRow(Guid SystemIdentityId, Guid? TenantId, Guid PrincipalId,
-    SystemIdentityKind Kind, string? AgentInstanceId, IdentityStatus Status);
+    SystemIdentityKind Kind, string? AgentInstanceId, IdentityStatus Status, string? ManagedKind = null);
 
 internal static class IamPersistenceModel
 {
@@ -57,7 +57,8 @@ internal static class IamPersistenceModel
         users.HasOne<Principal>().WithMany().HasForeignKey(x => x.PrincipalId).OnDelete(DeleteBehavior.Restrict);
         users.HasAlternateKey(x => new { x.TenantId, x.PrincipalId, x.AccountId });
         var identities = model.Entity<IamSystemIdentityRow>();
-        identities.ToTable("SystemIdentities"); identities.HasKey(x => x.SystemIdentityId);
+        identities.ToTable("SystemIdentities");
+        identities.HasIndex(x => new { x.TenantId, x.ManagedKind }).IsUnique().HasFilter("ManagedKind IS NOT NULL"); identities.HasKey(x => x.SystemIdentityId);
         identities.HasIndex(x => x.AgentInstanceId).IsUnique(); identities.HasIndex(x => x.PrincipalId).IsUnique();
         identities.HasAlternateKey(x => new { x.TenantId, x.AgentInstanceId });
         identities.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
@@ -118,7 +119,7 @@ internal static class IamPersistenceModel
         new(a.ScopeKind, a.TenantId, a.ResourceType.Length == 0 ? null : a.ResourceType, a.ResourceId.Length == 0 ? null : a.ResourceId), a.CreatedByPrincipalId, a.CreatedAt);
     public static IamRoleRow Row(AccessRole role) => new(role.RoleId, role.TenantId, role.Key, role.Name, role.IsBuiltin, role.HumanOnly);
     public static IamSystemIdentityRow Row(SystemIdentity identity) => new(identity.SystemIdentityId, identity.TenantId,
-        identity.PrincipalId, identity.Kind, identity.AgentInstanceId?.ToString("D"), identity.Status);
+        identity.PrincipalId, identity.Kind, identity.AgentInstanceId?.ToString("D"), identity.Status, identity.ManagedKind);
     public static SystemIdentity Domain(IamSystemIdentityRow row) => new(row.SystemIdentityId, row.TenantId,
-        row.PrincipalId, row.Kind, row.AgentInstanceId is null ? null : Guid.Parse(row.AgentInstanceId), row.Status);
+        row.PrincipalId, row.Kind, row.AgentInstanceId is null ? null : Guid.Parse(row.AgentInstanceId), row.Status, row.ManagedKind);
 }

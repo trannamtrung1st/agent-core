@@ -70,7 +70,7 @@ public static class TenantSandboxReadOperationRules
     public static void Require(PreparedSandboxRead value, AgentRun run, TenantAgent agent, AgentDefinition baseline, TenantSession session,
         TenantSandboxRuntimeSnapshot snapshot, IReadOnlyList<SandboxProfile> sources)
     {
-        var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
+        var current = InstanceSettingsResolver.ResolveForAgent(baseline, agent);
         if (run.Admission.Configuration is null || !TenantTaskExecutionContract.Allows(run, current) || !TenantSandboxInspectionContract.Allows(run.Admission.Configuration.Definition, Tool(value.Kind))
             || !TenantSandboxInspectionContract.Allows(current, Tool(value.Kind))) throw new AccessDeniedException("sandbox_policy_changed");
         if (session.Owner.SessionId != value.SessionId || value.SessionId != run.SessionId || session.Owner.TenantId != run.Owner.TenantId

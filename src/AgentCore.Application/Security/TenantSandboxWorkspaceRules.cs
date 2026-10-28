@@ -31,7 +31,7 @@ public static class TenantSandboxWorkspaceRules
     public static async ValueTask RequireCurrentAsync(TenantSecurityState state, AgentRun run, TenantAgent agent, AgentDefinition baseline,
         SandboxWorkspaceAccess expected, IamAuthorizer iam, CancellationToken ct)
     {
-        var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
+        var current = InstanceSettingsResolver.ResolveForAgent(baseline, agent);
         var policy = StateIsolationPolicy.Restrict(run.Admission.Configuration!.Definition.StateIsolationPolicy ?? StateIsolationPolicy.Default,
             current.StateIsolationPolicy ?? StateIsolationPolicy.Default).HomeAccess;
         Require(expected, await ResolveAsync(state, run, policy, iam, ct).ConfigureAwait(false));

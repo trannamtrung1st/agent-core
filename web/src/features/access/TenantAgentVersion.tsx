@@ -61,8 +61,9 @@ export function TenantAgentVersion({ context, id }: { context: TenantContext; id
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}
     {committed && <Alert type="info" showIcon title="Version adoption was saved" description="Read the current configuration before another change. Reload never replays adoption." />}
     {denied ? <AccessError error={denied} retry={reload} /> : catalog.loading ? <AccessLoading /> : catalog.error ? <AccessError error={catalog.error} retry={reload} /> : view && <>
-      <TenantAgentHeading view={{ agent: view.agent, canUpdate: view.canAdopt }} />
-      <AgentConfigurationPanel title="Choose a version" label="Definition version selection" description="Choose from this Instance’s Definition only. Previewing makes no change." bodyGap="section">
+      {view.agent.managedKind && <Alert type="info" showIcon title="System-managed instance" description={`Updates are automatic. Applied Definition v${view.agent.instance.activeVersion}; manual version selection is unavailable.`} />}
+      <TenantAgentHeading view={{ agent: view.agent, canUpdate: view.canAdopt }} configuration={!view.agent.managedKind} />
+      <AgentConfigurationPanel title={view.agent.managedKind ? "System release history" : "Choose a version"} label="Definition version selection" description={view.agent.managedKind ? "Inspect release differences. System releases are applied automatically; previewing makes no change." : "Choose from this Instance’s Definition only. Previewing makes no change."} bodyGap="section">
         <Collapse items={[{ key: 'source', label: 'Definition source', children: <Typography.Text className="admin-instance-id">{view.agent.instance.definitionId}</Typography.Text> }]} />
         {view.items.length ? <Form layout="vertical" className="admin-config-form"><Form.Item label="Target Definition version"><Select aria-label="Target Definition version" placeholder="Choose an active version" value={choice?.version} disabled={busy || committed || !active} onChange={version => { retire(); setChoice(view.items.find(item => item.version === version)); }} options={view.items.map(item => ({ value: item.version, label: `v${item.version} · ${item.status}${item.version === view.agent.instance.activeVersion ? ' · Current' : ''}`, disabled: item.status !== 'Active' || item.version === view.agent.instance.activeVersion }))} /></Form.Item></Form> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No versions are available on this page." />}
         {view.total > 10 && <Pagination size="small" aria-label="Definition version pages" current={page + 1} total={view.total} pageSize={10} showSizeChanger={false} disabled={busy || committed} onChange={value => { retire(); setChoice(undefined); setPage(value - 1); }} />}
@@ -75,7 +76,7 @@ export function TenantAgentVersion({ context, id }: { context: TenantContext; id
           <Typography.Text strong>Definition v{preview.preview.currentVersion} → v{preview.preview.targetVersion}</Typography.Text>
           {(!preview.childAccess.allSkills || !preview.childAccess.allResources) && <Alert type="info" showIcon title="Child details follow your read access" description="Only readable inherited items are listed. This view does not report hidden items or counts." />}
           <InstanceVersionChanges preview={preview.preview} />
-          <Button type="primary" disabled={!view.canAdopt || !preview.canAdopt || command.busy || committed || command.requiresReload} loading={command.busy} onClick={adopt}>Adopt Definition v{preview.preview.targetVersion}</Button>
+          {!view.agent.managedKind && <Button type="primary" disabled={!view.canAdopt || !preview.canAdopt || command.busy || committed || command.requiresReload} loading={command.busy} onClick={adopt}>Adopt Definition v{preview.preview.targetVersion}</Button>}
         </>}
       </AgentConfigurationPanel>}
     </>}

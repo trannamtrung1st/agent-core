@@ -55,7 +55,7 @@ public sealed partial class TenantAgentConfigurationService
         if (preview.Plan.Changes.Count == 0) return snapshot.Agent;
         var (definition, _, _) = await Definition(tenant, snapshot.Agent.Instance.DefinitionId, snapshot.Agent.Instance.ActiveVersion, token).ConfigureAwait(false);
         var next = IsolationConfigurationPlanner.Patch(snapshot.Agent.Instance.SettingsOverrides ?? new(), draft);
-        var effective = InstanceSettingsResolver.Resolve(definition, next);
+        var effective = InstanceSettingsResolver.Resolve(definition, next, snapshot.Agent.ManagedKind is not null);
         _ = EffectiveSkillCatalogResolver.Resolve(effective, snapshot.Skills);
         _ = InstanceResourceRules.Resolve(effective, await Resources(tenant, definition, token).ConfigureAwait(false), snapshot.Resources, snapshot.Skills);
         var automations = await automationPolicy.PlanTenantAsync(tenant, security as ITenantAutomationStore

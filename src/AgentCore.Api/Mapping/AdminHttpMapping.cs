@@ -25,7 +25,7 @@ internal static class AdminHttpMapping
             instance.PersonaRevision,
             ToPersona(instance.Persona),
             ModelManagementMapping.Map(instance.UnattendedModel), ExecutionBudgets: instance.ExecutionBudgets is null ? null : JsonSerializer.SerializeToElement(instance.ExecutionBudgets, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-            Cooperation: instance.Cooperation is { } cooperation ? new(cooperation.AcceptTasks, cooperation.AcceptDirectMessages, cooperation.AllowDirectMessageWake, cooperation.MaxConcurrentTasks) : new(false, false, false, 2));
+            Cooperation: instance.Cooperation is { } cooperation ? new(cooperation.AcceptTasks, cooperation.AcceptDirectMessages, cooperation.AllowDirectMessageWake, cooperation.MaxConcurrentTasks) : new(false, false, false, 2), ShowInChat: instance.ShowInChat);
 
     private static AdminPersonaResponse ToPersona(AgentIdentity persona) =>
         new(persona.Name, persona.Role, persona.Description, persona.Tone);

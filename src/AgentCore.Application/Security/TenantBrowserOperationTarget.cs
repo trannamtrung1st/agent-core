@@ -43,7 +43,7 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
                 .CaptureAsync(tenant, run.SessionId, intent.Command, ct).ConfigureAwait(false) };
             _ = TenantBrowserUploadRules.Sources(command);
         }
-        var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
+        var current = InstanceSettingsResolver.ResolveForAgent(baseline, agent);
         var mode = TenantBrowserOperationRules.Isolation(run.Admission.Configuration!.Definition, current) switch {
             BrowserIsolation.EphemeralSession => BrowserProfileMode.EphemeralSession,
             BrowserIsolation.PersistentAgent => BrowserProfileMode.PersistentAgent, _ => browser.HostPolicy.ProfileMode };

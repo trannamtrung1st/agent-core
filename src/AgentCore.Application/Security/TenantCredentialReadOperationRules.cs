@@ -34,7 +34,7 @@ public static class TenantCredentialReadOperationRules
             || session.Snapshot.DurablyDeletedAt is not null || session.Snapshot.ArchivedAt is not null
             || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active || session.Snapshot.Status is SessionStatus.Ending or SessionStatus.Ended)
             throw new AccessDeniedException("credential_source_changed");
-        var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
+        var current = InstanceSettingsResolver.ResolveForAgent(baseline, agent);
         var family = TenantCredentialDiscoveryContract.Parse(read.ArgumentsJson).Family;
         if (family is not null && (!TenantTaskExecutionContract.Allows(run, current) || !TenantCredentialDiscoveryContract.Allows(current, family) || !TenantCredentialDiscoveryContract.Allows(run.Admission.Configuration!.Definition, family))) throw new AccessDeniedException("capability_unavailable");
         foreach (var reference in TenantApprovalRules.CredentialReadReferences(read))

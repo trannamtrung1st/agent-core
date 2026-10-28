@@ -13,6 +13,20 @@ namespace AgentCore.Application.Tests;
 
 public sealed class InstanceSettingsResolverTests
 {
+    [Fact]
+    public void Managed_instructions_append_tenant_supplement_while_an_ordinary_clone_keeps_replacement_semantics()
+    {
+        var definition = SampleDefinitions.Examiner with { Id = "general-assistant", AgentInstructions = "Canonical system instructions." };
+        var now = DateTimeOffset.UnixEpoch;
+        var instance = new AgentInstance(Guid.NewGuid(), definition.Id, definition.Version, definition.Identity, AgentInstanceLifecycle.Active, now, now,
+            SettingsOverrides: new(AgentInstructions: new("Tenant supplement.")));
+        var ordinary = new TenantAgent(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), instance);
+        var managed = ordinary with { ManagedKind = AgentCore.Application.Security.ManagedGeneralAssistant.Kind };
+        Assert.Equal("Tenant supplement.", InstanceSettingsResolver.ResolveForAgent(definition, ordinary).AgentInstructions);
+        var resolved = InstanceSettingsResolver.ResolveForAgent(definition, managed).AgentInstructions;
+        Assert.StartsWith(definition.AgentInstructions, resolved); Assert.Contains("subordinate", resolved); Assert.EndsWith("Tenant supplement.", resolved);
+        Assert.Equal(definition.AgentInstructions, InstanceSettingsResolver.ResolveForAgent(definition, managed with { Instance = instance with { SettingsOverrides = null } }).AgentInstructions);
+    }
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value);
     [Fact]
     public void Canonical_model_inheritance_preserves_lower_choice_and_separate_reasoning_intent()

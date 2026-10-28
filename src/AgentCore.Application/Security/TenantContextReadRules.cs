@@ -26,7 +26,7 @@ public static class TenantContextReadRules
             var pin = run.Admission.Configuration!; var location = pin.SpaceContext!;
             if (!location.EnvironmentsEnabled || location.EnvironmentId is null || witness.GetProperty("tool").GetString() != message.Name
                 || witness.GetProperty("spaceId").GetGuid() != location.SpaceId || witness.GetProperty("environmentId").GetGuid() != location.EnvironmentId
-                || !TenantContextToolContract.Allows(pin.Definition, message.Name!) || !TenantContextToolContract.Allows(InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), message.Name!))
+                || !TenantContextToolContract.Allows(pin.Definition, message.Name!) || !TenantContextToolContract.Allows(InstanceSettingsResolver.ResolveForAgent(baseline, agent), message.Name!))
                 throw new AccessDeniedException("context_source_changed");
             var scope = TenantSpaceService.Scope(state.Tenant.TenantId, location.SpaceId);
             await Permission("environments.read", scope).ConfigureAwait(false);

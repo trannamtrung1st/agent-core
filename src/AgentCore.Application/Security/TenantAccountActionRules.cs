@@ -82,7 +82,7 @@ public static class TenantAccountActionRules
     public static void Require(PreparedAccountAction action, AgentRun run, TenantAgent agent, TenantSession session, AgentDefinition baseline,
         TenantCredentialBinding bound, bool exactSecret = true)
     {
-        var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides); var args = Arguments(action);
+        var current = InstanceSettingsResolver.ResolveForAgent(baseline, agent); var args = Arguments(action);
         if (!TenantTaskExecutionContract.Allows(run, current) || !RolePermissions.AllowsTool(run.Admission.Configuration!.Definition, action.ToolName)
             || !RolePermissions.AllowsTool(current, action.ToolName) || action.SessionId != run.SessionId || args.Json != action.ArgumentsJson
             || action.Credential.Reference != args.Reference || args.Purpose != action.Purpose || args.Permission != action.Permission

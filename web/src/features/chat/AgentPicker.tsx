@@ -1,3 +1,6 @@
+import { tenantChatEmptyReason, tenantChatCanManageSetup, chatTenantId } from '../../services/tenantChat';
+import { tenantAccessPath, tenantModelsPath } from '../access/accessRoute';
+import { followAppLink } from '../../app/appLink';
 import { Alert, Button, Flex, Select, Spin, Typography } from "antd";
 import { useEffect, useRef } from 'react';
 import type { ChatAgentInstance } from "../../services/api";
@@ -25,7 +28,13 @@ export function AgentPicker({
 }) {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(searchTimer.current), []);
+  const empty = tenantChatEmptyReason();
+  const emptyText = empty === 'no_visible_agents' ? 'No visible agents. Ask an organization owner to make an agent visible in Chat.'
+    : empty === 'setup_pending' ? 'Default assistant setup pending. An organization owner can check Agent Management and model setup.'
+    : empty === 'no_chat_permission' ? 'No Chat permission. Ask an organization owner for access to an agent.'
+    : 'No matching agents. Try another search or reload the list.';
   const hasOptions = managedInstances.length > 0;
+  const selected = managedInstances.find(item => managedChatIdentityKey(item.instanceId) === identityKey);
   const options = managedInstances.map(item => ({ value: managedChatIdentityKey(item.instanceId), label: managedInstancePickerLabel(item) }));
 
   return (
@@ -44,17 +53,20 @@ export function AgentPicker({
           }
         />
       ) : null}
+      {selected?.setupState === 'upgrade_requires_attention' && <Alert type="warning" showIcon title="Upgrade requires attention" description="An organization owner must resolve the saved configuration before this system-managed agent can start new work." />}
+      {selected?.setupState === 'no_model_configured' && <Alert type="info" showIcon title="No model configured" description="An organization owner must configure an available model before starting Chat." />}
+      {tenantChatCanManageSetup() && chatTenantId && (!hasOptions || selected?.setupState) && <Flex wrap gap="var(--ac-space-default)"><Typography.Link href={tenantAccessPath(chatTenantId, 'agents')} onClick={followAppLink}>Agent Management</Typography.Link><Typography.Link href={tenantModelsPath(chatTenantId, 'models')} onClick={followAppLink}>Models</Typography.Link></Flex>}
       <Typography.Text>Identity</Typography.Text>
       {managedInstancesLoading ? (
         <Flex align="center" gap={8} aria-label="Loading managed instances">
           <Spin size="small" />
-          <Typography.Text type="secondary">Loading managed instances…</Typography.Text>
+          <Typography.Text type="secondary">Loading agents…</Typography.Text>
         </Flex>
       ) : null}
       <Select
         aria-label="Identity"
         value={!managedInstancesLoading && hasOptions && identityKey ? identityKey : undefined}
-        placeholder={managedInstancesLoading ? "Loading managed instances…" : "Select identity"}
+        placeholder={managedInstancesLoading ? "Loading agents…" : "Select identity"}
         disabled={!onSearch && (managedInstancesLoading || !hasOptions)}
         loading={managedInstancesLoading}
         filterOption={onSearch ? false : undefined}
@@ -66,7 +78,7 @@ export function AgentPicker({
         style={{ width: "100%" }}
       />
       {!managedInstancesLoading && !managedInstancesError && !hasOptions ? (
-        <Typography.Text type="secondary">No agents are available. Try another search or ask an organization owner for Chat access.</Typography.Text>
+        <Typography.Text type="secondary">{emptyText}</Typography.Text>
       ) : null}
       {hasMore && <Button onClick={onLoadMore} loading={managedInstancesLoading}>More agents</Button>}
     </Flex>

@@ -28,14 +28,23 @@ public sealed partial class SqliteIamStore
             query = query.Where(x => allowed.Contains(x.Instance.InstanceId));
         }
         var total = await query.CountAsync(ct).ConfigureAwait(false);
-        var rows = await query.OrderBy(x => x.Instance.InstanceId).Skip(page * pageSize).Take(pageSize).ToArrayAsync(ct).ConfigureAwait(false);
+        var rows = await query.OrderByDescending(x => x.Identity.ManagedKind != null).ThenBy(x => x.Instance.InstanceId).Skip(page * pageSize).Take(pageSize).ToArrayAsync(ct).ConfigureAwait(false);
         return new(rows.Select(Owned).ToArray(), total, page, pageSize);
     }
 
-    public async ValueTask<bool> TryCreateTenantAgentAsync(TenantSecurityState next, long expectedSecurityRevision,
-        AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
+    public ValueTask<bool> TryCreateTenantAgentAsync(TenantSecurityState next, long expectedSecurityRevision,
+        AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
+        CreateTenantAgentCoreAsync(next, expectedSecurityRevision, instance, skills, audit, false, ct, initiator);
+
+    public ValueTask<bool> TryProvisionGeneralAssistantAsync(TenantSecurityState next, long expectedSecurityRevision,
+        AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, CancellationToken ct = default) =>
+        CreateTenantAgentCoreAsync(next, expectedSecurityRevision, instance, skills, audit, true, ct);
+
+    private async ValueTask<bool> CreateTenantAgentCoreAsync(TenantSecurityState next, long expectedSecurityRevision,
+        AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, bool managedProvision, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         next = IamStateRules.Freeze(next); IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, instance.InstanceId, instance.Lifecycle, audit);
+        ManagedGeneralAssistant.ValidateProvision(next, instance, audit, managedProvision);
         if (instance.Revision != 1 || instance.Lifecycle != AgentInstanceLifecycle.Active || instance.BrowserProfileReset is not null) throw new ArgumentException("A new active Instance is required.");
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
@@ -43,11 +52,21 @@ public sealed partial class SqliteIamStore
         if (current is null || current.Revision != expectedSecurityRevision) return false;
         var before = (await ReadTenantAsync(db, current.TenantId, ct).ConfigureAwait(false))!;
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next);
-        await ValidateTenantActorAsync(db, before, audit.ActorPrincipalId, ct).ConfigureAwait(false);
+        ManagedGeneralAssistant.ValidateMarkerAdditions(before, next, managedProvision ? instance.InstanceId : null);
+        if (!managedProvision) await ValidateTenantActorAsync(db, before, audit.ActorPrincipalId, ct).ConfigureAwait(false);
         await EnsureActiveAccountOwnerAsync(db, next, null, ct).ConfigureAwait(false);
         await EnsureResourceOwnershipAsync(db, next, ct, instance.InstanceId).ConfigureAwait(false);
         db.AgentInstances.Add(SqliteAgentInstanceStore.Map(instance));
         ProvisionPrivateSpace(db, next.Tenant.TenantId, instance);
+        if (managedProvision)
+        {
+            var owner = next.SystemIdentities.Single(i => i.AgentInstanceId == instance.InstanceId);
+            var space = db.ChangeTracker.Entries<SpaceRecord>().Single(e => e.Entity.OwnerInstanceId == instance.InstanceId.ToString("D")).Entity.SpaceId;
+            var role = next.Roles.Single(r => r.Key == ManagedGeneralAssistant.FilesRole);
+            next = IamStateRules.Freeze(next with { Assignments = next.Assignments.Append(new RoleAssignment(Guid.NewGuid(), next.Tenant.TenantId,
+                owner.PrincipalId, role.RoleId, TenantWorkspaceRules.Home(next.Tenant.TenantId, space), Guid.Empty, instance.CreatedAt)).Append(new RoleAssignment(Guid.NewGuid(), next.Tenant.TenantId,
+                owner.PrincipalId, role.RoleId, AccessScope.ForResource(next.Tenant.TenantId, "space", space.ToString("D")), Guid.Empty, instance.CreatedAt)).ToArray() });
+        }
         await SqliteAgentInstanceStore.InitializeSkillsAsync(db, instance.InstanceId, skills, instance.UpdatedAt, ct).ConfigureAwait(false);
         db.Entry(current).CurrentValues.SetValues(next.Tenant);
         await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
@@ -67,6 +86,7 @@ public sealed partial class SqliteIamStore
         if (current is null || current.Revision != expectedSecurityRevision) return null;
         var before = (await ReadTenantAsync(db, current.TenantId, ct).ConfigureAwait(false))!;
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next);
+        if (before.SystemIdentities.Any(i => i.AgentInstanceId == instanceId && i.ManagedKind is not null)) throw new SecurityConflictException("system_managed_instance");
         await ValidateTenantActorAsync(db, before, audit.ActorPrincipalId, ct).ConfigureAwait(false);
         await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
         var id = instanceId.ToString("D");
@@ -85,7 +105,7 @@ public sealed partial class SqliteIamStore
         catch (DbUpdateConcurrencyException) { return null; }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return null; }
         var identity = next.SystemIdentities.Single(i => i.AgentInstanceId == instanceId);
-        return new(next.Tenant.TenantId, identity.SystemIdentityId, identity.PrincipalId, updated);
+        return new(next.Tenant.TenantId, identity.SystemIdentityId, identity.PrincipalId, updated, identity.ManagedKind);
     }
 
     private sealed class AgentJoin
@@ -101,7 +121,7 @@ public sealed partial class SqliteIamStore
             where identity.TenantId == tenantId && identity.Kind == SystemIdentityKind.Agent && (includeRemoved || identity.Status != IdentityStatus.Removed)
             select new AgentJoin { Identity = identity, Instance = instance };
     }
-    private static TenantAgent Owned(AgentJoin row) => new(row.Identity.TenantId!.Value, row.Identity.SystemIdentityId, row.Identity.PrincipalId, SqliteAgentInstanceStore.Map(row.Instance));
+    private static TenantAgent Owned(AgentJoin row) => new(row.Identity.TenantId!.Value, row.Identity.SystemIdentityId, row.Identity.PrincipalId, SqliteAgentInstanceStore.Map(row.Instance), row.Identity.ManagedKind);
     private static async Task ValidateTenantActorAsync(AgentCoreDbContext db, TenantSecurityState before, Guid actorId, CancellationToken ct)
     {
         var actor = before.Principals.SingleOrDefault(p => p.PrincipalId == actorId && p.Status == IdentityStatus.Active)

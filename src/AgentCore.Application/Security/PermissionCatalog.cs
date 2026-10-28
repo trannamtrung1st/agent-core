@@ -146,6 +146,9 @@ public static class BuiltinAccessRoles
             new(id(), tenantId, key, name, true, human, permissions.Select(p => p.Key).ToArray());
         return [
             Role(Owner, "Owner", true, tenant),
+            Role(ManagedGeneralAssistant.StarterRole, "Assistant conversation", false, ManagedGeneralAssistant.ConversationPermissions.Select(PermissionCatalog.Get)),
+            Role(ManagedGeneralAssistant.ContextRole, "Assistant own context", false, ManagedGeneralAssistant.ContextPermissions.Select(PermissionCatalog.Get)),
+            Role(ManagedGeneralAssistant.FilesRole, "Assistant private files", false, ManagedGeneralAssistant.FilePermissions.Select(PermissionCatalog.Get)),
             Role("access-administrator", "Access Administrator", true, tenant.Where(p => p.Key.StartsWith("members.", StringComparison.Ordinal) || p.Key.StartsWith("iam.roles.", StringComparison.Ordinal) || p.Key == "security.audit.read")),
             Role("contributor", "Contributor", false, ordinary.Where(p => !p.HumanOnly && !p.Key.StartsWith("secrets.", StringComparison.Ordinal) && p.Key != "http.request" && p.Key != "evaluations.run" && p.Key != "scripts.execute" && !p.Key.StartsWith("approvals.", StringComparison.Ordinal) && !p.Key.StartsWith("tenant.governance.", StringComparison.Ordinal))),
             Role("reader", "Reader", false, ordinary.Where(p => !p.HumanOnly && p.Key.EndsWith(".read", StringComparison.Ordinal))),

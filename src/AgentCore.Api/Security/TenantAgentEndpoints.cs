@@ -35,11 +35,11 @@ public static partial class TenantAgentEndpoints
             var catalog = await service.ModelsAsync(actor.TenantId, new(actor.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId), instanceId, ct).ConfigureAwait(false);
             return Results.Json(HttpMapping.ToCatalog(catalog));
         }));
-        group.MapGet("/chat/agents", (int? page, int? pageSize, string? q, HttpContext http, TenantChatService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("/chat/agents", (int? page, int? pageSize, string? q, Guid? instanceId, HttpContext http, TenantChatService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
             var human = new TenantSessionInitiator(actor.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
-            return Results.Json(await service.ListAgentsAsync(actor.TenantId, human, page ?? 0, pageSize ?? 30, ct, q).ConfigureAwait(false));
+            return Results.Json(await service.ListAgentsAsync(actor.TenantId, human, page ?? 0, pageSize ?? 30, ct, q, instanceId).ConfigureAwait(false));
         }));
         group.MapGet("/agent-templates", (HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
@@ -77,6 +77,6 @@ public static partial class TenantAgentEndpoints
                 body.Lifecycle, body.ExpectedRevision, body.ExpectedInstanceRevision, ct, Human(http)).ConfigureAwait(false)));
         }));
     }
-    private static object Safe(TenantAgent agent) => new { agent.TenantId, agent.SystemIdentityId, agent.PrincipalId,
+    private static object Safe(TenantAgent agent) => new { agent.TenantId, agent.SystemIdentityId, agent.PrincipalId, agent.ManagedKind, agent.CanResetDefaults,
         instance = AdminHttpMapping.ToAgentInstance(agent.Instance) };
 }

@@ -24,13 +24,13 @@ public sealed partial class TenantAgentAccessTests
         var initial = await owner.PostAsJsonAsync($"/api/v2/tenants/{a}/access/check", new { principalId = agentPrincipal, permission = "agents.read", resourceType = "agent", resourceId = id });
         Assert.False((await Json(initial)).GetProperty("allowed").GetBoolean());
         var b = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Other organization", slug = "other-organization" }))).GetProperty("tenantId").GetGuid();
-        Assert.Equal(0, (await Json(await owner.GetAsync($"/api/v2/tenants/{b}/agents"))).GetProperty("total").GetInt32());
+        Assert.Equal(1, (await Json(await owner.GetAsync($"/api/v2/tenants/{b}/agents"))).GetProperty("total").GetInt32());
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{b}/agents/{id}")).StatusCode);
         var second = await owner.PostAsJsonAsync($"/api/v2/tenants/{a}/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, a) });
         Assert.Equal(HttpStatusCode.Created, second.StatusCode);
         var secondId = (await Json(second)).GetProperty("instance").GetProperty("instanceId").GetGuid();
         var paged = await Json(await owner.GetAsync($"/api/v2/tenants/{a}/agents?pageSize=1"));
-        Assert.Equal(2, paged.GetProperty("total").GetInt32()); Assert.Single(paged.GetProperty("items").EnumerateArray());
+        Assert.Equal(3, paged.GetProperty("total").GetInt32()); Assert.Single(paged.GetProperty("items").EnumerateArray());
         var role = await Json(await owner.PostAsJsonAsync($"/api/v2/tenants/{a}/roles", new { name = "Chat only", permissions = new[] { "agents.chat" }, expectedRevision = await Revision(owner, a) }));
         var invitation = await Json(await owner.PostAsJsonAsync($"/api/v2/tenants/{a}/members/invite", new { login = "agent-reader@example.test", roleId = role.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(owner, a) }));
         using var member = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });

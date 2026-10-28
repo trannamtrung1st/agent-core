@@ -15,7 +15,7 @@ public sealed record TenantUser(Guid UserId, Guid TenantId, Guid AccountId, Guid
     IdentityStatus Status, DateTimeOffset CreatedAt);
 
 public sealed record SystemIdentity(Guid SystemIdentityId, Guid? TenantId, Guid PrincipalId,
-    SystemIdentityKind Kind, Guid? AgentInstanceId, IdentityStatus Status);
+    SystemIdentityKind Kind, Guid? AgentInstanceId, IdentityStatus Status, string? ManagedKind = null);
 
 public sealed record Principal(Guid PrincipalId, PrincipalKind Kind, Guid? TenantId,
     Guid? AccountId, Guid? UserId, Guid? SystemIdentityId, IdentityStatus Status);

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace AgentCore.Infrastructure.Persistence.Migrations;
 public partial class TenantConfigurationRemedyAuthoring : Migration
 {
+    internal void BuildFrozenTarget(Microsoft.EntityFrameworkCore.ModelBuilder model) => BuildTargetModel(model);
     internal static string ValuesConstraint => Read("Check.sql");
     protected override void Up(MigrationBuilder migrationBuilder) => Rebuild(migrationBuilder, true);
     protected override void Down(MigrationBuilder migrationBuilder) => Rebuild(migrationBuilder, false);

@@ -618,6 +618,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
             var next = instance with
             {
                 ActiveVersion = update.ActiveVersion ?? instance.ActiveVersion,
+                ShowInChat = update.ShowInChat ?? instance.ShowInChat, PersonaCustomized = update.PersonaCustomized ?? (update.Persona is not null || instance.PersonaCustomized),
                 Persona = persona,
                 Lifecycle = update.Lifecycle ?? instance.Lifecycle,
                 UpdatedAt = updatedAt,
@@ -635,6 +636,13 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
             {
                 if (EventStore is null) throw AgentCoreErrors.Persistence("Admin history is unavailable.");
                 EventStore.AppendWithinLock(update.History);
+            }
+            if (update.ResetDefinitionState)
+            {
+                if (_definitionSkillStates.TryGetValue(update.InstanceId, out var skillStates))
+                    foreach (var (id, state) in skillStates.ToArray()) skillStates[id] = state with { EnabledOverride = null, Revision = state.Revision + 1, UpdatedAt = updatedAt };
+                if (_resourceStates.TryGetValue(update.InstanceId, out var resourceStates))
+                    foreach (var (id, state) in resourceStates.ToArray()) resourceStates[id] = state with { EnabledOverride = null, Revision = state.Revision + 1, UpdatedAt = updatedAt };
             }
             InitializeSkills(update.InstanceId, update.DefinitionSkills, updatedAt);
             _instances[update.InstanceId] = next;

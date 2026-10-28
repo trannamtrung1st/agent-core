@@ -25,10 +25,10 @@ internal static class InstanceSettingsRules
     }
 
     internal static (InstanceSettingsOverrides Next, AgentDefinition Effective) ResolvePatch(AgentDefinition definition,
-        InstanceSettingsOverrides current, string section, IReadOnlyDictionary<string, JsonElement> set, IReadOnlyList<string> clear, IModelCatalog? models, ProviderAliasSet? aliases)
+        InstanceSettingsOverrides current, string section, IReadOnlyDictionary<string, JsonElement> set, IReadOnlyList<string> clear, IModelCatalog? models, ProviderAliasSet? aliases, bool managed = false)
     {
         var next = InstanceSettingsResolver.Patch(current, section, set, clear);
-        var effective = InstanceSettingsResolver.Resolve(definition, next);
+        var effective = InstanceSettingsResolver.Resolve(definition, next, managed);
         if (models is not null && effective.ModelDefaults is not { Mode: "auto" }
             && effective.ModelDefaults?.Reasoning?.Mode != "auto") _ = SessionModelBinder.BindPreference(models, effective.ModelDefaults ?? AgentCore.Domain.Models.ModelPreference.Inherit);
         if (aliases is not null && (effective.ProviderPreferences.SpeechRecognizer is { } stt && !aliases.SpeechRecognizers.Contains(stt)
@@ -46,10 +46,15 @@ internal static class InstanceSettingsRules
             Choices = profile.Choices?.Where(c => c != "PersistentAgent").ToArray() };
         return view with { Constraints = constraints };
     }
-    internal static InstanceSettingsSection View(AgentInstance owner, AgentDefinition definition, string section)
+    internal static InstanceSettingsSection View(AgentInstance owner, AgentDefinition definition, string section, bool managed = false)
     {
         var overrides = InstanceSettingsResolver.Overrides(owner.SettingsOverrides ?? new(), section);
-        var effective = InstanceSettingsResolver.Resolve(definition, owner.SettingsOverrides);
+        var effective = InstanceSettingsResolver.Resolve(definition, owner.SettingsOverrides, managed);
+        if (managed && section == "instructions")
+        {
+            effective = effective with { AgentInstructions = owner.SettingsOverrides?.AgentInstructions?.Value ?? "" };
+            definition = definition with { AgentInstructions = "" };
+        }
         return new(section, owner.Revision, definition.Id, definition.Version, overrides,
             InstanceSettingsResolver.Values(effective, section), InstanceSettingsResolver.Fields(section).ToDictionary(
                 f => f, f => overrides.ContainsKey(f) ? "instance" : section == "sandboxPolicy" && f is not ("profileId" or "allowedProfileIds") ? "profile" : "definition", StringComparer.Ordinal),

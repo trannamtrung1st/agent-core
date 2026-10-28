@@ -34,6 +34,7 @@ public sealed partial class SqliteIamStore : ITenantAgentDecommissionStore
         if (await db.Set<AuthorizationAudit>().AsNoTracking().SingleOrDefaultAsync(a => a.AuditId == audit.AuditId, ct) is { } receipt)
             return row.Identity.Status == IdentityStatus.Removed && receipt.TenantId == tenant && receipt.Action == TenantAgentDecommissionRules.Action
                 && receipt.Target == key && receipt.ActorPrincipalId == human.PrincipalId && row.Instance.Revision == expectedInstanceRevision + 1;
+        if (state.SystemIdentities.Any(i => i.AgentInstanceId == instance && i.ManagedKind is not null)) throw new SecurityConflictException("system_managed_instance");
         if (state.Tenant.Revision != expectedSecurityRevision || row.Instance.Revision != expectedInstanceRevision || row.Identity.Status == IdentityStatus.Removed) return false;
         if (row.Instance.Lifecycle != nameof(AgentInstanceLifecycle.Archived)) throw new SecurityConflictException("archive_required");
         if ((await TenantDeletionReferenceQueries.CountInstanceAsync(db, key, ct, tenant)).HasReferences) throw new SecurityConflictException("agent_in_use");

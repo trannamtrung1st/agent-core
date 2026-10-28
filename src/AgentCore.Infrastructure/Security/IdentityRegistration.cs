@@ -36,6 +36,8 @@ public static class IdentityRegistration
             _ => throw new InvalidOperationException("Identity storage must explicitly select Sqlite or InMemory.")
         });
         services.TryAddSingleton<IdentityService>();
+        services.TryAddSingleton<ManagedGeneralAssistantService>();
+        services.TryAddSingleton<Func<TenantAgentConfigurationService>>(p => () => p.GetRequiredService<TenantAgentConfigurationService>());
         services.TryAddSingleton<IamAuthorizer>();
         services.TryAddSingleton<IAuthorizationAuditQueryStore>(p => (IAuthorizationAuditQueryStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<AuthorizationAuditQueryService>();

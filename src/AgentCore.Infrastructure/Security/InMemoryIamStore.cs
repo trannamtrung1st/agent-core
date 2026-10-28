@@ -102,6 +102,7 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
             if (tenant.Tenant.Revision != checked(expectedRevision + 1) || !_tenants.TryGetValue(tenant.Tenant.TenantId, out var old)
                 || old.Tenant.Revision != expectedRevision || _tenants.Values.Any(t => t.Tenant.TenantId != tenant.Tenant.TenantId && t.Tenant.Slug == tenant.Tenant.Slug)) return ValueTask.FromResult(false);
             IamStateRules.ValidateAgentContinuity(old.SystemIdentities, tenant);
+            ManagedGeneralAssistant.ValidateMarkerAdditions(old, tenant);
             foreach (var actor in IamStateRules.SecurityWriteActors(old, tenant, audit)) ValidateAgentActor(actor.State, actor.Principal);
             RequireSecurityWriteHuman(tenant, audit, initiator);
             EnsureReferences(tenant, audit, ct: ct); _tenants[tenant.Tenant.TenantId] = tenant; MarkOwnedAgents(tenant); _audit.Add(audit); return ValueTask.FromResult(true);

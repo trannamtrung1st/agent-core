@@ -34,7 +34,8 @@ public sealed partial class TenantSessionService(IIamStore security, ITenantAgen
             ? (await definitions.FindDefinitionPublicationAsync(tenant, definitionId, parent.Instance.ActiveVersion, ct).ConfigureAwait(false))?.Payload
             : await builtIns.GetAsync(parent.Instance.DefinitionId, parent.Instance.ActiveVersion, ct).ConfigureAwait(false);
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
-        var definition = InstanceSettingsResolver.Resolve(baseline, parent.Instance.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, parent.Instance) };
+        await ManagedGeneralAssistant.RequireCurrentAsync(builtIns, parent, ct);
+        var definition = InstanceSettingsResolver.ResolveForAgent(baseline, parent) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, parent.Instance) };
         if (mode == SessionMode.Voice && !voice.IsAvailable(definition, definition.ConversationPolicy.Language)) throw AgentCoreErrors.VoiceUnavailable();
         var models = await modelCatalogs.ReadAsync(state, ct).ConfigureAwait(false);
         preference ??= AgentCore.Domain.Models.ModelPreference.Inherit;

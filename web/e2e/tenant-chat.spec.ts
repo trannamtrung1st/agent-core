@@ -20,6 +20,13 @@ async function fixture() {
   const revision = async () => (await call<{ revision: number }>(api, `${prefix}/access/me`)).revision;
   const agent = await call<{ instance: { instanceId: string } }>(api, `${prefix}/agents`, { templateId: 'examiner', version: 1, expectedRevision: await revision() });
   await grantPrivateSpaceRead(api, tenant.tenantId, agent.instance.instanceId);
+  // These regressions deliberately exercise an ordinary configurable agent. The
+  // managed-default journey has its own complete browser scenario.
+  const candidates = await call<{ items: { instanceId: string; systemManaged: boolean }[] }>(api, `${prefix}/chat/agents`);
+  for (const managed of candidates.items.filter(item => item.systemManaged)) {
+    const editor = await call<{ securityRevision: number; agent: { instance: { revision: number } } }>(api, `${prefix}/agents/${managed.instanceId}/editor`);
+    await call(api, `${prefix}/agents/${managed.instanceId}/chat-visibility`, { showInChat: false, expectedRevision: editor.securityRevision, expectedInstanceRevision: editor.agent.instance.revision }, 'PUT');
+  }
   return { api, tenant: tenant.tenantId, name: `Chat ${nonce}`, prefix, revision, agent: agent.instance.instanceId, path: `/t/${tenant.tenantId}` };
 }
 async function send(page: Page, text: string) {

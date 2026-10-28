@@ -281,7 +281,10 @@ public sealed class TenantAgentDecommissionTests
     [Fact]
     public async Task Decommission_empty_schema_down_up_keeps_model_parity()
     {
-        await using var f=await Fixture.Create(true,builtInAuthority:true);await using var db=f.Contexts!.CreateDbContext();await db.GetService<IMigrator>().MigrateAsync("20261020080000_SystemBrowserPrivacyAuthority");await db.Database.MigrateAsync();Assert.False(db.Database.HasPendingModelChanges());
+        await using var f=await Fixture.Create(true,builtInAuthority:true);
+        await using var db=new AgentCoreDbContext(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={Path.Combine(f.Root, "decommission-roundtrip.db")}").Options);
+        await db.GetService<IMigrator>().MigrateAsync("20261020090000_TenantAgentDecommission");
+        await db.GetService<IMigrator>().MigrateAsync("20261020080000_SystemBrowserPrivacyAuthority");await db.Database.MigrateAsync();Assert.False(db.Database.HasPendingModelChanges());
     }
 
     [Fact]

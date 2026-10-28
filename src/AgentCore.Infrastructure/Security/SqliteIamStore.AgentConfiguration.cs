@@ -22,8 +22,16 @@ public sealed partial class SqliteIamStore
             await ReadIsolationMetadataAsync(db, key, ct).ConfigureAwait(false));
     }
 
-    public async ValueTask<TenantAgent?> TryChangeTenantAgentConfigurationAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
+    public ValueTask<TenantAgent?> TryChangeTenantAgentConfigurationAsync(TenantSecurityState next, long expectedSecurityRevision,
+        TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) =>
+        ChangeAgentConfigurationCoreAsync(next, expectedSecurityRevision, change, at, audit, false, ct);
+
+    public ValueTask<TenantAgent?> TryAdoptGeneralAssistantAsync(TenantSecurityState next, long expectedSecurityRevision,
+        TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) =>
+        ChangeAgentConfigurationCoreAsync(next, expectedSecurityRevision, change, at, audit, true, ct);
+
+    private async ValueTask<TenantAgent?> ChangeAgentConfigurationCoreAsync(TenantSecurityState next, long expectedSecurityRevision,
+        TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, bool system, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next);
         IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, change.InstanceId, AgentInstanceLifecycle.Active, audit);
@@ -33,7 +41,13 @@ public sealed partial class SqliteIamStore
         if (tenant is null || tenant.Revision != expectedSecurityRevision) return null;
         var before = (await ReadTenantAsync(db, tenant.TenantId, ct).ConfigureAwait(false))!;
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next);
-        await ValidateTenantActorAsync(db, before, audit.ActorPrincipalId, ct).ConfigureAwait(false);
+        ManagedGeneralAssistant.ValidateMarkerAdditions(before, next);
+        var managed = before.SystemIdentities.SingleOrDefault(i => i.AgentInstanceId == change.InstanceId)?.ManagedKind == ManagedGeneralAssistant.Kind;
+        if (system && (!managed || !change.SystemAdoption || audit.ActorPrincipalId != Guid.Empty || audit.Action != ManagedGeneralAssistant.AdoptAction || audit.Target != change.InstanceId.ToString("D") || change.ResetDefaults || change.Initiator is not null)
+            || !system && change.SystemAdoption) throw new ArgumentException("Invalid system adoption.");
+        if (change.ResetDefaults && (audit.Action != ManagedGeneralAssistant.ResetAction || audit.Target != change.InstanceId.ToString("D") || audit.ActorPrincipalId == Guid.Empty))
+            throw new ArgumentException("Use an exact human-attributed reset audit.");
+        if (!system) await ValidateTenantActorAsync(db, before, audit.ActorPrincipalId, ct).ConfigureAwait(false);
         await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
         var identity = before.SystemIdentities.SingleOrDefault(i => i.AgentInstanceId == change.InstanceId);
         if (identity is null) return null;
@@ -41,7 +55,7 @@ public sealed partial class SqliteIamStore
         var row = await db.AgentInstances.SingleOrDefaultAsync(i => i.InstanceId == key, ct).ConfigureAwait(false);
         if (row is null || row.Revision != change.ExpectedInstanceRevision) return null;
         var current = SqliteAgentInstanceStore.Map(row);
-        var updated = TenantAgentConfigurationRules.Apply(current, change, at);
+        var updated = TenantAgentConfigurationRules.Apply(current, change, at, managed);
         if (next.Assignments.Any(a => TenantAgentChildScopes.BelongsTo(a.Scope, change.InstanceId)))
         {
             var available = await ChildCatalogAsync(db, next.Tenant.TenantId, change.InstanceId, change, ct).ConfigureAwait(false);
@@ -84,6 +98,7 @@ public sealed partial class SqliteIamStore
         }
         if (change.Skill is { } skill) await SqliteAgentInstanceStore.StageSkillsAsync(db, skill, null, ct).ConfigureAwait(false);
         if (change.Resource is { } resource) await SqliteAgentInstanceStore.StageResourcesAsync(db, resource, null, ct).ConfigureAwait(false);
+        row.ShowInChat = updated.ShowInChat; row.PersonaCustomized = updated.PersonaCustomized;
         row.PersonaRevision = updated.PersonaRevision; row.ActiveVersion = updated.ActiveVersion;
         var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         row.SettingsOverridesJson = updated.SettingsOverrides is null ? null : JsonSerializer.Serialize(updated.SettingsOverrides, json);
@@ -92,6 +107,13 @@ public sealed partial class SqliteIamStore
         row.HarnessManagementJson = updated.HarnessManagement is null ? null : JsonSerializer.Serialize(updated.HarnessManagement, json);
         row.UnattendedModelJson = System.Text.Json.JsonSerializer.Serialize(updated.UnattendedModel, json);
         row.Revision = updated.Revision; row.UpdatedAtUtc = at.ToUnixTimeMilliseconds();
+        if (change.ResetDefaults)
+        {
+            foreach (var child in await db.AgentDefinitionSkillStates.Where(s => s.AgentInstanceId == key).ToArrayAsync(ct))
+            { child.EnabledOverride = null; child.Revision++; child.UpdatedAtUtc = at.ToUnixTimeMilliseconds(); }
+            foreach (var child in await db.AgentDefinitionResourceStates.Where(s => s.InstanceId == key).ToArrayAsync(ct))
+            { child.EnabledOverride = null; child.Revision++; child.UpdatedAtUtc = at.ToUnixTimeMilliseconds(); }
+        }
         await SqliteAgentInstanceStore.InitializeSkillsAsync(db, change.InstanceId, change.DefinitionSkills, at, ct).ConfigureAwait(false);
         await SqliteAgentInstanceStore.StageAutomationPolicyAsync(db, new(change.InstanceId, change.ExpectedInstanceRevision,
             AutomationPolicyChanges: change.AutomationPolicyChanges), at, ct, next.Tenant.TenantId).ConfigureAwait(false);
@@ -104,7 +126,7 @@ public sealed partial class SqliteIamStore
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); }
         catch (DbUpdateConcurrencyException) { return null; }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return null; }
-        return new(next.Tenant.TenantId, identity.SystemIdentityId, identity.PrincipalId, SqliteAgentInstanceStore.Map(row));
+        return new(next.Tenant.TenantId, identity.SystemIdentityId, identity.PrincipalId, SqliteAgentInstanceStore.Map(row), identity.ManagedKind);
     }
     private static async ValueTask<TenantIsolationMetadata> ReadIsolationMetadataAsync(AgentCoreDbContext db, string key, CancellationToken ct)
     {

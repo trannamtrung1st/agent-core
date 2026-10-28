@@ -8,7 +8,7 @@ public sealed record ResourceAccessSnapshot(AccessScope Scope, long Revision, IR
     int Total, int Page, int PageSize);
 
 public sealed class TenantAccessService(IIamStore store, IamAuthorizer authorizer, IdentityService identities,
-    IIdentityTokens tokens, IIdGenerator ids, TimeProvider time)
+    IIdentityTokens tokens, IIdGenerator ids, TimeProvider time, ManagedGeneralAssistantService? assistant = null)
 {
     public async ValueTask<TenantSecurityState> CreateTenantAsync(Guid systemActorId, Guid accountId,
         string name, string slug, CancellationToken ct = default)
@@ -22,6 +22,7 @@ public sealed class TenantAccessService(IIamStore store, IamAuthorizer authorize
         var state = identities.CreateTenant(account, name, slug);
         if (!await store.TryCreateTenantAsync(state, Audit(state, systemActorId, "system.tenants.create", state.Tenant.TenantId.ToString("D")), ct).ConfigureAwait(false))
             throw new SecurityConflictException("tenant_exists");
+        if (assistant is not null) { await assistant.ReconcileAsync(state.Tenant.TenantId, ct); return (await store.ReadTenantAsync(state.Tenant.TenantId, ct))!; }
         return state;
     }
 

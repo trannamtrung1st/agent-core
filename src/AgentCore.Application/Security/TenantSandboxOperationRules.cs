@@ -28,7 +28,7 @@ public static class TenantSandboxOperationRules
         AgentDefinition baseline, SandboxProfile source, SandboxLease? lease, DateTimeOffset at, SandboxExecution? reserved = null)
     {
         var command = TenantApprovalRules.SandboxCommand(value); var profile = Profile(run, value.ProfileId);
-        var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
+        var current = InstanceSettingsResolver.ResolveForAgent(baseline, agent);
         var home = StateIsolationPolicy.Restrict(run.Admission.Configuration!.Definition.StateIsolationPolicy ?? StateIsolationPolicy.Default,
             current.StateIsolationPolicy ?? StateIsolationPolicy.Default).HomeAccess;
         if (value.SessionId != run.SessionId || session.Owner.TenantId != run.Owner.TenantId || session.Owner.AgentInstanceId != run.AgentInstanceId

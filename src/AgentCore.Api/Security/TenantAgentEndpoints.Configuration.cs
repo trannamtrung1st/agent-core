@@ -12,7 +12,7 @@ public static partial class TenantAgentEndpoints
     public sealed record CooperationRequest(AgentCore.Domain.Tasks.AgentCooperationPolicy Cooperation, long ExpectedRevision, long ExpectedInstanceRevision);
     public sealed record VersionRequest(int Version, long ExpectedRevision, long ExpectedInstanceRevision);
     private static object Safe(AgentCore.Application.Ports.TenantAgent agent, long securityRevision) => new
-        { agent.TenantId, agent.SystemIdentityId, agent.PrincipalId, instance = AdminHttpMapping.ToAgentInstance(agent.Instance), securityRevision };
+        { agent.TenantId, agent.SystemIdentityId, agent.PrincipalId, agent.ManagedKind, agent.CanResetDefaults, instance = AdminHttpMapping.ToAgentInstance(agent.Instance), securityRevision };
     private static void MapConfiguration(RouteGroupBuilder group)
     {
         MapSettings(group);

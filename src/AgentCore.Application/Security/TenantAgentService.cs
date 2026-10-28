@@ -12,7 +12,7 @@ public sealed class TenantAgentService(IIamStore security, ITenantAgentStore age
     public async ValueTask<IReadOnlyList<AgentDefinition>> ListTemplatesAsync(Guid actorId, Guid tenantId, CancellationToken ct = default)
     {
         await authorizer.RequireAsync(actorId, "agents.create", AccessScope.ForTenant(tenantId), ct).ConfigureAwait(false);
-        return await templates.ListAsync(ct).ConfigureAwait(false);
+        return ManagedGeneralAssistant.ProductTemplates(await templates.ListAsync(ct).ConfigureAwait(false));
     }
 
     public async ValueTask<TenantAgent> CreateAsync(Guid actorId, Guid tenantId, string templateId, int version,
@@ -88,6 +88,7 @@ public sealed class TenantAgentService(IIamStore security, ITenantAgentStore age
         if (!Enum.IsDefined(lifecycle)) throw new ArgumentException("Unknown agent lifecycle.");
         var state = await ReadForChangeAsync(actorId, tenantId, "agents.update", Scope(tenantId, instanceId), expectedRevision, ct).ConfigureAwait(false);
         var owned = state.SystemIdentities.Single(i => i.AgentInstanceId == instanceId);
+        if (owned.ManagedKind is not null) throw new SecurityConflictException("system_managed_instance");
         var status = lifecycle == AgentInstanceLifecycle.Active ? IdentityStatus.Active : IdentityStatus.Suspended;
         var next = Advance(state with
         {

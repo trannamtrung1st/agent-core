@@ -28,7 +28,7 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
         var snapshot = await Snapshot(tenant, id, ct).ConfigureAwait(false);
         var (baseline, _, status) = await Definition(tenant, snapshot.Agent.Instance.DefinitionId, snapshot.Agent.Instance.ActiveVersion, ct).ConfigureAwait(false);
         var resources = await Resources(tenant, baseline, ct).ConfigureAwait(false);
-        var effective = InstanceSettingsResolver.Resolve(baseline, snapshot.Agent.Instance.SettingsOverrides) with
+        var effective = InstanceSettingsResolver.ResolveForAgent(baseline, snapshot.Agent) with
             { SelfManagement = ManagementPolicyResolver.Resolve(baseline, snapshot.Agent.Instance) };
         var manifest = InstanceResourceRules.Resolve(effective, resources, snapshot.Resources, snapshot.Skills);
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
@@ -71,6 +71,7 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
     {
         var state = await ChangeState(actor, tenant, id, securityRevision, token).ConfigureAwait(false);
         var snapshot = await Snapshot(tenant, id, token).ConfigureAwait(false); var current = snapshot.Agent.Instance;
+        ManagedGeneralAssistant.Protect(snapshot.Agent);
         if (current.Revision != instanceRevision) throw new SecurityConflictException("stale_revision");
         var prepared = await PrepareVersionAsync(actor, tenant, snapshot, version, token).ConfigureAwait(false);
 
@@ -137,7 +138,7 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
         : await inheritedResources.ListAsync(definition, ct).ConfigureAwait(false);
     private async ValueTask<TenantAgentConfigurationSnapshot> Snapshot(Guid tenant, Guid id, CancellationToken ct) =>
         await agents.ReadTenantAgentConfigurationAsync(tenant, id, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-    private ValueTask<TenantAgent> WithGate(Guid id, Func<CancellationToken, ValueTask<TenantAgent>> action, CancellationToken ct) =>
+    private ValueTask<T> WithGate<T>(Guid id, Func<CancellationToken, ValueTask<T>> action, CancellationToken ct) =>
         lifecycleGate is null ? action(ct) : lifecycleGate.WithInstanceAsync(id, action, ct);
     private static AccessScope Scope(Guid tenant, Guid id) => AccessScope.ForResource(tenant, "agent", id.ToString("D"));
 }

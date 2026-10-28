@@ -63,3 +63,10 @@ it('aborts an inflight owner command and suppresses a late successful completion
   const mounted=render(<App><TenantAgentLifecycle context={context} id="agent" /></App>);await screen.findByRole('region',{name:'Agent lifecycle'});fireEvent.click(screen.getByRole('button',{name:'Archive instance'}));const dialog=await screen.findByRole('dialog');fireEvent.click(within(dialog).getByRole('button',{name:'Archive instance'}));await waitFor(()=>expect(writes()).toHaveLength(1));const signal=writes()[0][1]?.signal as AbortSignal;const reads=fetchMock.mock.calls.length;mounted.unmount();expect(signal.aborted).toBe(true);
   await act(async()=>{finish(response({instance:{instanceId:'agent',lifecycle:'Archived',revision:3}}));});expect(fetchMock.mock.calls.length).toBe(reads);expect(screen.queryByText('Instance archived.')).not.toBeInTheDocument();
 });
+
+it('explains managed ownership without presenting archive or a misleading permission denial', async () => {
+  current = { ...current, blocker: 'system_managed_instance', canUpdate: false, canDecommission: false };
+  await open(); expect(screen.getByText('System-managed instance', { exact: true })).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Archive instance' })).not.toBeInTheDocument();
+  expect(screen.queryByText(/Changing active status requires update access/)).not.toBeInTheDocument(); expect(writes()).toHaveLength(0);
+});

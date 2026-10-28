@@ -7,7 +7,7 @@ public sealed record BootstrapIdentityResult(Guid AccountId, Guid TenantId, Guid
 public sealed record SignedInAccount(Account Account, AuthenticationSession Session);
 
 public sealed class IdentityService(IIamStore store, IAccountPasswordHasher passwords, IIdentityTokens tokens,
-    IIdGenerator ids, TimeProvider time)
+    IIdGenerator ids, TimeProvider time, ManagedGeneralAssistantService? assistant = null)
 {
     public async ValueTask<BootstrapIdentityResult> BootstrapAsync(string login, string displayName, string password,
         string tenantName, string tenantSlug, CancellationToken ct = default)
@@ -21,6 +21,7 @@ public sealed class IdentityService(IIamStore store, IAccountPasswordHasher pass
         var tenant = CreateTenant(account, tenantName, tenantSlug);
         var audit = new AuthorizationAudit(ids.NewId(), null, systemPrincipal.PrincipalId, "identity.bootstrap", account.AccountId.ToString("D"), "allowed", "explicit_cli_bootstrap", time.GetUtcNow());
         if (!await store.TryBootstrapAsync(account, system, tenant, audit, ct).ConfigureAwait(false)) throw new SecurityConflictException("bootstrap_complete");
+        if (assistant is not null) await assistant.ReconcileAsync(tenant.Tenant.TenantId, ct);
         return new(account.AccountId, tenant.Tenant.TenantId, tenant.Users.Single().PrincipalId);
     }
 

@@ -238,6 +238,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             {
                 owned.Instance.PersonaJson = JsonSerializer.Serialize(updated.Persona, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                 owned.Instance.PersonaRevision = updated.PersonaRevision;
+                owned.Instance.PersonaCustomized = updated.PersonaCustomized;
             }
             else owned.Instance.SettingsOverridesJson = JsonSerializer.Serialize(updated.SettingsOverrides, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             if (managementChange is not null)

@@ -16,5 +16,7 @@ public sealed class AgentInstanceRecord
     public string? SettingsOverridesJson { get; set; }
     public string? ExecutionBudgetsJson { get; set; }
     public string? CooperationJson { get; set; }
+    public bool ShowInChat { get; set; } = true;
+    public bool PersonaCustomized { get; set; }
     public string? HarnessManagementJson { get; set; }
 }

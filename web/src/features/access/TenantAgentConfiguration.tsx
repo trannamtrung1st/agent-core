@@ -12,6 +12,7 @@ import { InstancePersonaFields } from '../admin/InstancePersonaFields';
 import { InstanceSettingsSection } from '../admin/InstanceSettingsSection';
 import type { InstanceSettingsTransport } from '../admin/useInstanceSettingsController';
 import { isPersonaDraftDirty, parsePersonaJson, personaFieldsToJson, syncPersonaOnTabChange, type PersonaFields } from '../admin/instanceManagedControls';
+import { TenantAgentPresentation } from './TenantAgentPresentation';
 import { TenantAgentHeading } from './TenantAgentHeading';
 import { AccessError, AccessLoading } from './AccessFeedback';
 import { tenantSpacePath, tenantAccessPath, tenantAgentPath } from './accessRoute';
@@ -57,8 +58,16 @@ function TenantAgentProfile({ context, id }: { context: TenantContext; id: strin
 }
 function TenantAgentSettings({ context, id }: { context: TenantContext; id: string }) {
   const tenant = context.tenant.tenantId; const [view, setView] = useState<TenantAgentEditor>(); const [dirty, setDirty] = useState(false); const [busy, setBusy] = useState(false);
+  const [presentationBusy, setPresentationBusy] = useState(false);
+  const presentationFocus = useRef<'visibility' | 'reset' | 'reload' | null>(null);
+  useEffect(() => {
+    if (!view || !presentationFocus.current) return;
+    const selector = presentationFocus.current === 'visibility' ? '[role="switch"][aria-label="Visible in Chat"]' : presentationFocus.current === 'reset' ? '[data-agent-reset-defaults]' : '[data-agent-presentation-reload]';
+    presentationFocus.current = null;
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true }));
+  }, [view]);
   const [cooperationDirty, setCooperationDirty] = useState(false); const [cooperationBusy, setCooperationBusy] = useState(false); const [settingsEpoch, setSettingsEpoch] = useState(0);
-  const guard = useAccessDraftGuard(dirty || cooperationDirty, busy || cooperationBusy, () => {});
+  const guard = useAccessDraftGuard(dirty || cooperationDirty, busy || cooperationBusy || presentationBusy, () => {});
   const transport = useMemo<InstanceSettingsTransport>(() => ({
     list: async (_, signal) => { signal?.throwIfAborted(); setView(undefined); const current = await readTenantAgentEditor(tenant, id, signal); if (!signal?.aborted) setView(current); return current.settings.map(section => ({ ...section, securityRevision: current.securityRevision })); },
     patch: (_, section, set, clear, signal) => patchTenantAgentSettings(tenant, id, section, set, clear, signal),
@@ -69,8 +78,9 @@ function TenantAgentSettings({ context, id }: { context: TenantContext; id: stri
     {view && <TenantAgentHeading view={view} />}
     <Typography.Paragraph type="secondary">Settings define behavior and capability eligibility. The agent’s own roles and approval policy still control execution.</Typography.Paragraph>
     <Typography.Link href={tenantAgentPath(tenant, id, 'state-isolation')} onClick={followAppLink}>State, Memory and Voice enablement share the coordinated State & Isolation editor</Typography.Link>
-    <InstanceSettingsSection confirmationContext={view ? `Agent: ${view.agent.instance.persona.name}. Organization: ${context.tenant.name}.` : undefined} refreshKey={settingsEpoch} saveBlocked={cooperationDirty} externalBusy={cooperationBusy} instanceId={id} archived={!view?.canUpdate || view.agent.instance.lifecycle !== 'Active'} transport={transport} onUpdated={() => {}} onDirtyChange={setDirty} onBusyChange={setBusy} />
-    {view && <InstanceCooperationSettings key={`${tenant}:${id}`} tenant={tenant} instance={id} view={view} disabled={dirty || busy} onDirtyChange={setCooperationDirty} onBusyChange={setCooperationBusy} onSaved={() => setSettingsEpoch(value => value + 1)} />}
+    <InstanceSettingsSection systemManaged={!!view?.agent.managedKind} confirmationContext={view ? `Agent: ${view.agent.instance.persona.name}. Organization: ${context.tenant.name}.` : undefined} refreshKey={settingsEpoch} saveBlocked={cooperationDirty} externalBusy={cooperationBusy || presentationBusy} instanceId={id} archived={!view?.canUpdate || view.agent.instance.lifecycle !== 'Active'} transport={transport} onUpdated={() => {}} onDirtyChange={setDirty} onBusyChange={setBusy} />
+    {view && <TenantAgentPresentation context={context} id={id} view={view} disabled={dirty || busy || cooperationDirty || cooperationBusy} onBusyChange={setPresentationBusy} onSaved={focus => { presentationFocus.current = focus; setSettingsEpoch(value => value + 1); }} />}
+    {view && <InstanceCooperationSettings key={`${tenant}:${id}`} tenant={tenant} instance={id} view={view} disabled={dirty || busy || presentationBusy} onDirtyChange={setCooperationDirty} onBusyChange={setCooperationBusy} onSaved={() => setSettingsEpoch(value => value + 1)} />}
     <InstanceEvaluationBindings key={view?.agent.instance.revision ?? 'loading'} tenant={tenant} instance={id} />
     {view?.unavailableSettings.includes('sandboxPolicy') && <Alert type="info" showIcon title="Sandbox has a separate settings page" description={<Typography.Link href={tenantAgentPath(tenant, id, 'sandbox')} onClick={followAppLink}>Open Sandbox configuration and saved setup verification. Independent Sandbox and profile access is required.</Typography.Link>} />}
   </Flex>;

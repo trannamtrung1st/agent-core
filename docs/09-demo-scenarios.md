@@ -214,7 +214,7 @@ P9.5/P9.6 scenarios above are historical evidence at their recorded freeze SHAs.
 
 ## Background Session cutover journey
 
-Create current General Assistant v35 workers in a disposable Synthetic tenant. In the target's settings, explicitly enable Accept delegated tasks and grant its independent execution permissions. Open a source Chat → Tasks → Delegate task. Choose the exact target and worker Space/optional Environment; assign `synthetic-task-worker synthetic-task-question: inspect the approved local evidence` with inbox-only reporting.
+Create ordinary General Assistant v36 workers in a disposable Synthetic tenant. The protected default is a separate Instance; its starter rights do not grant delegation. In the target's settings, explicitly enable Accept delegated tasks and grant its independent execution permissions. Open a source Chat → Tasks → Delegate task. Choose the exact target and worker Space/optional Environment; assign `synthetic-task-worker synthetic-task-question: inspect the approved local evidence` with inbox-only reporting.
 
 Inspect its real worker question, send explicitly attributed Human guidance, read the original saved result and acknowledge its notice separately. Verify that Task success does not verify a Goal. If Task delegation requires Review, preparation opens the exact existing approval inspector without admitting a worker; approve and inspect the eventual admission receipt. The worker owns a distinct Session/Run; the Human command has no source Run. Independent configured Automation destinations remain the separate demo below.
 
@@ -246,7 +246,7 @@ Optional email delivery uses existing independently connected Email Account, Cor
 
 ## Real local Workbench demo
 
-Use the [trusted-local runner](17-observability-and-operations.md#trusted-local-opensandbox), then in Platform → Sandboxes inspect readiness and explicitly Verify the General Workbench. Create an Instance of current General Assistant v35, inspect its approved Execution sandbox selection and start a text Session. Synthetic mode performs real commands for these exact fixture messages:
+Use the [trusted-local runner](17-observability-and-operations.md#trusted-local-opensandbox), then in Platform → Sandboxes inspect readiness and explicitly Verify the General Workbench. Create an ordinary General Assistant v36 Instance, explicitly select its approved Execution sandbox profile and grant the required execution permissions before starting a text Session. v36 has no default Sandbox profile, and the protected default's starter rights do not grant Sandbox access. Synthetic mode performs real commands for these exact fixture messages:
 
 - `synthetic-sandbox:demo`: print Python/Node versions, run an intentionally failing Python test, fix and pass it, run a Node test, generate/validate XLSX and DOCX, then publish both through authenticated Artifacts. Open the shared previews or download the files.
 - `synthetic-sandbox:retain`: verify same-Session Python/Office files after reconnect, Core/server restart or approved sandbox reset/expiry.

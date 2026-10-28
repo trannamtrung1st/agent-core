@@ -1,6 +1,6 @@
 # Development Roadmap
 
-The current implementation sequence and remaining work are maintained in [TODO.md](../TODO.md#prioritized-roadmap). After Initiative 9, the next priority is the Built-in General Assistant, then Workflow. Group Chat follows self-hosting and owner manual validation; application integrations follow scenario validation. The milestone and initiative records below retain their historical identities and evidence.
+The current implementation sequence and remaining work are maintained in [TODO.md](../TODO.md#prioritized-roadmap). Initiative 9 and the Built-in General Assistant successor have focused local implementation evidence; [General Assistant delivery](reports/general-assistant-delivery-2026-10-28.md) records its qualification limits. Workflow is the next unstarted priority. Group Chat follows self-hosting and owner manual validation; application integrations follow scenario validation. The milestone and initiative records below retain their historical identities and evidence.
 
 The OpenSandbox cutover is synchronized with main snapshot `aef7ffe5` (application
 behavior through `d279abfe`, followed by its documentation review).

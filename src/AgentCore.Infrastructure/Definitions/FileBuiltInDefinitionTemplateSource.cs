@@ -11,7 +11,8 @@ public sealed class FileBuiltInDefinitionTemplateSource(IBuiltInAgentDefinitionS
 {
     private readonly CanonicalWorkspaceFilesystem _knowledge = new(Path.Combine(agentDirectory, "knowledge"), "/home");
     private readonly CanonicalWorkspaceFilesystem _templates = new(templateRoot, "/working");
-    public ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken ct = default) => definitions.ListAsync(ct);
+    public async ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken ct = default) =>
+        AgentCore.Application.Security.ManagedGeneralAssistant.ProductTemplates(await definitions.ListAsync(ct).ConfigureAwait(false));
 
     public async ValueTask<BuiltInDefinitionTemplate?> ReadAsync(string templateId, int version, CancellationToken ct = default)
     {

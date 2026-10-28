@@ -120,6 +120,7 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
         if (current is null || current.Revision != expectedRevision) return false;
         var before = (await ReadTenantAsync(db, tenant.Tenant.TenantId, ct).ConfigureAwait(false))!;
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, tenant);
+            ManagedGeneralAssistant.ValidateMarkerAdditions(before, tenant);
         foreach (var actor in IamStateRules.SecurityWriteActors(before, tenant, audit))
             await ValidateTenantActorAsync(db, actor.State, actor.Principal, ct).ConfigureAwait(false);
         await EnsureActiveAccountOwnerAsync(db, tenant, null, ct).ConfigureAwait(false);

@@ -18,7 +18,7 @@ public sealed partial class InMemoryIamStore : ITenantAgentDecommissionStore
         var runs = definitionReferences.AgentRuns.Runs.Values.Where(r => r.AgentInstanceId == instance).ToArray();
         var references = new AdminDeletionReferenceCounts(definitionReferences.CountLiveByInstance(instance), (structuredMemories?.CountActiveIdentityUser(instance) ?? 0) + learnedMemories.Values.Count(i => i.TenantId == tenant && i.AgentInstanceId == instance && i.Status != AgentCore.Domain.Memory.MemoryItemStatus.Deleted),
             triggers.Registrations, triggers.Occurrences, runs.Length, runs.Count(r => r.Status == AgentCore.Domain.Conversation.AgentRunStatus.WaitingForApproval), runs.Length, 0);
-        return new(new(tenant, identity.SystemIdentityId, identity.PrincipalId, row), identity.Status, references,
+        return new(new(tenant, identity.SystemIdentityId, identity.PrincipalId, row, identity.ManagedKind), identity.Status, references,
             _audit.SingleOrDefault(a => a.TenantId == tenant && a.Action == TenantAgentDecommissionRules.Action && a.Target == instance.ToString("D")));
     }
     public ValueTask<TenantAgentDecommissionSnapshot?> ReadAgentDecommissionAsync(Guid tenant, Guid instance, CancellationToken ct = default)
@@ -39,7 +39,8 @@ public sealed partial class InMemoryIamStore : ITenantAgentDecommissionStore
             if (_audit.SingleOrDefault(a => a.AuditId == audit.AuditId) is { } receipt)
                 return ValueTask.FromResult(snapshot.Status == IdentityStatus.Removed && snapshot.Receipt == receipt && receipt.ActorPrincipalId == human.PrincipalId
                     && snapshot.Agent.Instance.Revision == expectedInstanceRevision + 1);
-            if (state.Tenant.Revision != expectedSecurityRevision || snapshot.Agent.Instance.Revision != expectedInstanceRevision || snapshot.Status == IdentityStatus.Removed) return ValueTask.FromResult(false);
+            if (state.SystemIdentities.Any(i => i.AgentInstanceId == instance && i.ManagedKind is not null)) throw new SecurityConflictException("system_managed_instance");
+        if (state.Tenant.Revision != expectedSecurityRevision || snapshot.Agent.Instance.Revision != expectedInstanceRevision || snapshot.Status == IdentityStatus.Removed) return ValueTask.FromResult(false);
             if (snapshot.Agent.Instance.Lifecycle != AgentInstanceLifecycle.Archived) throw new SecurityConflictException("archive_required");
             if (snapshot.References.HasReferences) throw new SecurityConflictException("agent_in_use");
             if (snapshot.Agent.Instance.BrowserProfileReset?.Status == "pending") throw new SecurityConflictException("browser_profile_busy");
