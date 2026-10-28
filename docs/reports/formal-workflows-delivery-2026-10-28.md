@@ -1,6 +1,6 @@
 # Formal Workflows implementation ledger
 
-Status: **implemented and locally qualified**, 2026-10-29. Proposal baseline `f8449f7566e55f90aa0fe963bdfbf19281277861`; integration base `c556e3bd62e577ae0e3025b96befb4d69470a09d` preserves the intervening roadmap update. The final source commit is recorded below after committing the verified tree. This is focused feature delivery, without a claim of platform milestone acceptance or production deployment.
+Status: **implemented and locally qualified**, 2026-10-29. Proposal baseline `f8449f7566e55f90aa0fe963bdfbf19281277861`; integration base `c556e3bd62e577ae0e3025b96befb4d69470a09d` preserves the intervening roadmap update. Tested source commit: [`fcdcbba59675ae6e61342022ee16b70f8c03b85d`](https://github.com/trannamtrung1st/agent-core/commit/fcdcbba59675ae6e61342022ee16b70f8c03b85d). This follow-up documentation revision pins that exact verified source; it changes no runtime code. This is focused feature delivery, without a claim of platform milestone acceptance or production deployment.
 
 ## Final qualification and self-review
 
