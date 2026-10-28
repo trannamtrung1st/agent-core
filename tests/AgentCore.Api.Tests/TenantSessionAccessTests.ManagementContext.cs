@@ -69,7 +69,7 @@ public sealed partial class TenantSessionAccessTests
             using var human = host.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
             await Login(human, "owner@example.test", "explicit-synthetic-test-password");
             var tenant = (await Json(await human.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
-            var created = await Json(await human.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 35, expectedRevision = await Revision(human, tenant) }));
+            var created = await Json(await human.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(human, tenant) }));
             var instance = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); model.Instance = instance;
             async Task ChangePolicy(string mode, string[] scopes, bool harness = true)
             {

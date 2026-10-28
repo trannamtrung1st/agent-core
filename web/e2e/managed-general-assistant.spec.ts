@@ -7,6 +7,37 @@ async function call<T>(api: APIRequestContext, path: string, body?: unknown, met
   expect(response.ok(), `${path}: ${response.status()} ${await response.text()}`).toBeTruthy(); return response.json();
 }
 type Editor = { securityRevision: number; canUpdate: boolean; agent: { managedKind: string; instance: { revision: number; instanceId: string; showInChat: boolean; persona: { name: string } } } };
+test('owner setup retry refreshes the ordinary picker and starts a real conversation', async ({ page }) => {
+  const api = await requests.newContext({ baseURL: process.env.TENANT_CHAT_TEST_BASE_URL }); const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await call(api, '/api/v2/auth/login', { login, password });
+    const nonce = crypto.randomUUID().slice(0, 8);
+    const tenant = (await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Recovery ${nonce}`, slug: `recovery-${nonce}` })).tenantId;
+    // The API failure-injection tests own missing-default recovery. This browser fixture
+    // presents that pending read state, then exercises the real authorized retry endpoint.
+    let pending = true; let writes = 0;
+    await page.route(`**/api/v2/tenants/${tenant}/chat/agents?*`, async route => {
+      const response = await route.fetch(); const body = await response.json();
+      await route.fulfill({ response, json: pending ? { ...body, items: [], total: 0, emptyReason: 'setup_pending' } : body });
+    });
+    await page.route(`**/api/v2/tenants/${tenant}/general-assistant/reconcile`, async route => {
+      writes++; const response = await route.fetch(); expect(response.ok()).toBe(true);
+      expect((await response.json()).status).toBe('ready'); pending = false; await route.fulfill({ response });
+    });
+    await signInTenant(page, login, password); await page.goto(`/t/${tenant}`);
+    const retry = page.getByRole('button', { name: 'Retry assistant setup' }); await expect(retry).toBeVisible();
+    for (const width of [320, 1440]) {
+      await page.setViewportSize({ width, height: 900 }); await expect(retry).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    }
+    await retry.click(); await expect(page.getByTitle(/^General Assistant · System-managed —/)).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Identity' })).toBeFocused(); expect(writes).toBe(1);
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Hello after setup retry');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByText('Hello from synthetic.', { exact: true })).toHaveCount(1); expect(errors).toEqual([]);
+  } finally { await api.dispose(); }
+});
 test('managed default ordinary Chat, hide, retained conversation, non-destructive reset and responsive management', async ({ page }) => {
   const api = await requests.newContext({ baseURL: process.env.TENANT_CHAT_TEST_BASE_URL }); const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));

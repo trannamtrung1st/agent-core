@@ -9,7 +9,7 @@ export const chatTenantId = new RegExp(`^/t/(${uuid})(?:/?$|/c/${uuid}/?$)`, 'i'
 type Metadata = { tenantId: string; sessionId: string; agentInstanceId: string; title: string; mode: string; status: string; lifecycleStatus: string;
   agentCompletion: string; revision: number; createdAt: string; updatedAt: string; archivedAt: string | null; agentId: string; agentVersion: number; agentName: string; agentRole: string; canManage: boolean };
 export type TenantChatCandidate = ChatAgentInstance & { revision: number; description: string };
-export type TenantChatCandidates = { items: TenantChatCandidate[]; total: number; page: number; pageSize: number; securityRevision: number; canCreateSessions: boolean; emptyReason?: string | null; canManageSetup?: boolean };
+export type TenantChatCandidates = { items: TenantChatCandidate[]; total: number; page: number; pageSize: number; securityRevision: number; canCreateSessions: boolean; emptyReason?: string | null; canManageSetup?: boolean; assistantSetupPending?: boolean };
 let requests = new AbortController();
 async function request<T>(url: string, options: { method?: string; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
   const controller = requests;
@@ -17,7 +17,7 @@ async function request<T>(url: string, options: { method?: string; body?: unknow
   controller.signal.throwIfAborted(); return value;
 }
 export function retireTenantChatRequests() {
-  requests.abort(); requests = new AbortController(); candidates.clear(); manageHints.clear(); createAllowed = false; emptyReason = null; canManageSetup = false;
+  requests.abort(); requests = new AbortController(); candidates.clear(); manageHints.clear(); createAllowed = false; emptyReason = null; canManageSetup = false; assistantSetupPending = false;
 }
 const candidates = new Map<string, TenantChatCandidate>();
 let createAllowed = false;
@@ -46,10 +46,18 @@ export async function tenantChatCandidates(page = 0, query = ''): Promise<Tenant
   while (candidates.size > 128) candidates.delete(candidates.keys().next().value!);
   createAllowed = result.canCreateSessions;
   emptyReason = result.emptyReason ?? null; canManageSetup = result.canManageSetup === true;
+  assistantSetupPending = result.assistantSetupPending === true;
   return result;
 }
 let emptyReason: string | null = null; let canManageSetup = false;
+let assistantSetupPending = false;
+export function tenantChatSetupPending() { return assistantSetupPending; }
 export function tenantChatCanManageSetup() { return canManageSetup; }
+export async function retryTenantGeneralAssistantSetup() {
+  const result = await request<{ status: 'ready' | 'setup_pending' }>(path('/general-assistant/reconcile'), { method: 'POST' });
+  if (!result || !['ready', 'setup_pending'].includes(result.status)) throw new Error('Assistant setup outcome needs confirmation.');
+  return result;
+}
 export function tenantChatEmptyReason() { return emptyReason; }
 export function tenantCanCreateChat() { return createAllowed; }
 export async function tenantSessionView(id: string): Promise<SessionResponse> {

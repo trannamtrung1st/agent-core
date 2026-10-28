@@ -20,7 +20,7 @@ public sealed partial class TenantRunAdmissionTests
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true);
         var setup = await Setup(f, "general-assistant", 35);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision;
-        var target = crossAgent ? await f.Agents.CreateAsync(setup.Owner.PrincipalId, setup.Tenant, "general-assistant", 35, await Revision()) : setup.Agent;
+        var target = crossAgent ? await f.AgentsAtRelease(35).CreateAsync(setup.Owner.PrincipalId, setup.Tenant, "general-assistant", 35, await Revision()) : setup.Agent;
         var requester = await Member(f, setup.Tenant, setup.Owner.PrincipalId);
         var chat = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Exact chat", ["agents.chat"], await Revision());
         await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, requester.PrincipalId, chat.RoleId, AccessScope.ForResource(setup.Tenant, "agent", setup.Agent.Instance.InstanceId.ToString("D")), await Revision());

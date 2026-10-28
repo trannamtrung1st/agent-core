@@ -95,8 +95,8 @@ public sealed partial class TenantRunAdmissionTests
 
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Proceed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public async ValueTask<TenantAgentPage> ListTenantAgentsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedInstanceIds, int page, int pageSize, CancellationToken ct = default)
-        { var value = await inner.ListTenantAgentsAsync(tenantId, allowedInstanceIds, page, pageSize, ct); Entered.TrySetResult(); await Proceed.Task.WaitAsync(ct); return value; }
+        public async ValueTask<TenantAgentPage> ListTenantAgentsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedInstanceIds, int page, int pageSize, CancellationToken ct = default, TenantAgentChatFilter? chat = null)
+        { var value = await inner.ListTenantAgentsAsync(tenantId, allowedInstanceIds, page, pageSize, ct, chat); Entered.TrySetResult(); await Proceed.Task.WaitAsync(ct); return value; }
         public ValueTask<TenantAgentConfigurationSnapshot?> ReadTenantAgentConfigurationAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default) => inner.ReadTenantAgentConfigurationAsync(tenantId, instanceId, ct);
         public ValueTask<TenantAgent?> TryChangeTenantAgentConfigurationAsync(TenantSecurityState next, long expectedSecurityRevision, TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) => inner.TryChangeTenantAgentConfigurationAsync(next, expectedSecurityRevision, change, at, audit, ct);
         public ValueTask<TenantAgent?> FindTenantAgentAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default) => inner.FindTenantAgentAsync(tenantId, instanceId, ct);

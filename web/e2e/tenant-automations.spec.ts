@@ -13,7 +13,7 @@ async function fixture() {
   const api = await requests.newContext({ baseURL: process.env.TENANT_CHAT_TEST_BASE_URL, storageState: identity }); const nonce = crypto.randomUUID().slice(0, 8);
   const tenant = (await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Schedule ${nonce}`, slug: `schedule-${nonce}` })).tenantId;
   const root = `/api/v2/tenants/${tenant}`; const revision = async () => (await call<{ revision: number }>(api, root + '/access/me')).revision;
-  const agent = await call<{ principalId: string; instance: { instanceId: string } }>(api, root + '/agents', { templateId: 'general-assistant', version: 35, expectedRevision: await revision() });
+  const agent = await call<{ principalId: string; instance: { instanceId: string } }>(api, root + '/agents', { templateId: 'general-assistant', version: 36, expectedRevision: await revision() });
   const id = agent.instance.instanceId; const route = `/t/${tenant}/admin/agents/${id}/automations`, resource = root + `/agents/${id}/automations`;
   const role = await call<{ roleId: string }>(api, root + '/roles', { name: 'Independent scheduled executor', permissions: ['automations.run', 'sessions.create', 'agent-runs.create', 'sessions.read', 'agent-runs.read', 'agents.chat'], expectedRevision: await revision() });
   await call(api, root + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await revision() });

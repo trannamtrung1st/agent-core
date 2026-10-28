@@ -10,7 +10,7 @@ Reviewed against repository code and delivery evidence on **2026-10-28**, includ
 
 The existing platform includes locally delivered IAM, Spaces/Membership/Environments/Secrets, dynamic models, self-management, Saved/Temporary Chat, Decision Intelligence S1/S2, unified Evaluation and Session Goals. Their evidence and boundaries are indexed under [Completed work](#completed-work). No application milestone acceptance is started by this roadmap update.
 
-**Built-in General Assistant is implemented with focused local verification.** Global v36, protected tenant provisioning, canonical additional instructions, safe automatic adoption, Chat visibility and non-destructive reset use existing owners. The [delivery ledger](docs/reports/general-assistant-delivery-2026-10-28.md) records actual runtime evidence and external qualification limits. **Immediate next priority: Workflow.** Workflow and Group Chat remain separate, unstarted initiatives; neither is implied by existing Goals, Tasks or Automations.
+**Built-in General Assistant is implemented with focused local verification.** Global v36, protected tenant provisioning, canonical additional instructions, safe automatic adoption, Chat visibility and non-destructive reset use existing owners. The [delivery ledger](docs/reports/general-assistant-delivery-2026-10-28.md) records actual runtime evidence and external qualification limits. The [review stabilization](docs/reports/general-assistant-stabilization-2026-10-28.md) addresses discovery scaling, setup recovery and historical-template cutover. **Immediate next priority: Workflow.** Workflow and Group Chat remain separate, unstarted initiatives; neither is implied by existing Goals, Tasks or Automations.
 
 ## Prioritized roadmap
 

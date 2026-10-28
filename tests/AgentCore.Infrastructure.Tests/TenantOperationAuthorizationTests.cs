@@ -70,7 +70,8 @@ public sealed partial class TenantOperationAuthorizationTests
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var login = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;
         var actor = new TenantSessionInitiator(owner.AccountId, login.SessionId, owner.OwnerPrincipalId);
-        var agent = await f.Agents.CreateAsync(actor.PrincipalId, owner.TenantId, templateId, version, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
+        var agent = await (templateId == "general-assistant" && version == 35 ? f.AgentsAtRelease(35) : f.Agents)
+            .CreateAsync(actor.PrincipalId, owner.TenantId, templateId, version, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
         var privateSpace = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(owner.TenantId, agent.Instance.InstanceId))!;
         var contextRole = await f.Access.SaveRoleAsync(actor.PrincipalId, owner.TenantId, null, "Read assigned Private context", ["spaces.read"], (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
         await f.Access.AssignRoleAsync(actor.PrincipalId, owner.TenantId, agent.PrincipalId, contextRole.RoleId, TenantSpaceService.Scope(owner.TenantId, privateSpace.SpaceId), (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);

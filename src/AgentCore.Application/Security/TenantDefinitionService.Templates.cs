@@ -35,6 +35,8 @@ public sealed partial class TenantDefinitionService
     {
         var state = await ForChange(actor, tenant, "create", AccessScope.ForTenant(tenant), expectedRevision, ct, initiator).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(templateId) || version < 1) throw new ArgumentException("Choose an exact shipped template version.");
+        if (templateId == ManagedGeneralAssistant.DefinitionId)
+            ManagedGeneralAssistant.RequireNewTemplate(templateId, version, await templates.ListAsync(ct).ConfigureAwait(false));
         var source = await templates.ReadAsync(templateId, version, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("definition_unavailable");
         if (source.Definition.Id != templateId || source.Definition.Version != version) throw new AccessDeniedException("definition_unavailable");
         var id = ids.NewId(); var now = time.GetUtcNow();

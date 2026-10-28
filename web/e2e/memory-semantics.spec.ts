@@ -33,7 +33,7 @@ for (const viewport of [{ width: 1400, height: 950 }, { width: 390, height: 844 
       const tenant = (await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Memory ${nonce}`, slug: `memory-${nonce}` })).tenantId;
       const prefix = `/api/v2/tenants/${tenant}`;
       const revision = async () => (await call<{ revision: number }>(api, prefix + '/access/me')).revision;
-      const agent = await call<{ instance: { instanceId: string }; principalId: string }>(api, prefix + '/agents', { templateId: 'general-assistant', version: 35, expectedRevision: await revision() });
+      const agent = await call<{ instance: { instanceId: string }; principalId: string }>(api, prefix + '/agents', { templateId: 'general-assistant', version: 36, expectedRevision: await revision() });
       const role = await call<{ roleId: string }>(api, prefix + '/roles', { name: 'Memory executor', permissions: ['agents.chat', 'sessions.read', 'agent-runs.read', 'memory.read', 'memory.manage'], expectedRevision: await revision() });
       await call(api, prefix + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await revision() });
       const report = '# Vietnam car prices\nResearch retained after closing work.\n';

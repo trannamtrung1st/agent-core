@@ -7,8 +7,24 @@ namespace AgentCore.Application.Security;
 
 public sealed class TenantAgentService(IIamStore security, ITenantAgentStore agents, IBuiltInAgentDefinitionStore templates,
     IamAuthorizer authorizer, IIdGenerator ids, TimeProvider time, AdminLifecycleCoordinator? lifecycleGate = null,
-    SandboxPolicyEnforcement? sandbox = null, ITenantDefinitionStore? ownedDefinitions = null, TenantBrowserRetirementService? browserRetirement = null)
+    SandboxPolicyEnforcement? sandbox = null, ITenantDefinitionStore? ownedDefinitions = null, TenantBrowserRetirementService? browserRetirement = null,
+    ManagedGeneralAssistantService? assistant = null, IdentityService? identity = null)
 {
+    public async ValueTask<bool> RetryGeneralAssistantSetupAsync(Guid tenant, HumanSessionReference human, CancellationToken ct = default)
+    {
+        async ValueTask RequireOwner()
+        {
+            var state = await TenantHumanSessionAuthority.RequireAsync(security, identity ?? throw new InvalidOperationException("Human identity is required."), tenant, human, ct);
+            if (!state.Assignments.Any(a => a.PrincipalId == human.PrincipalId && a.Scope.Kind == AccessScopeKind.Tenant
+                && state.Roles.Any(r => r.RoleId == a.RoleId && r.IsBuiltin && r.Key == BuiltinAccessRoles.Owner)))
+                throw new AccessDeniedException("permission_denied");
+            await authorizer.RequireAsync(human.PrincipalId, "agents.create", AccessScope.ForTenant(tenant), ct);
+        }
+        await RequireOwner();
+        var ready = await (assistant ?? throw new InvalidOperationException("Managed setup is required.")).TryReconcileAsync(tenant, ct);
+        await RequireOwner();
+        return ready;
+    }
     public async ValueTask<IReadOnlyList<AgentDefinition>> ListTemplatesAsync(Guid actorId, Guid tenantId, CancellationToken ct = default)
     {
         await authorizer.RequireAsync(actorId, "agents.create", AccessScope.ForTenant(tenantId), ct).ConfigureAwait(false);
@@ -20,6 +36,8 @@ public sealed class TenantAgentService(IIamStore security, ITenantAgentStore age
     {
         var state = await ReadForChangeAsync(actorId, tenantId, "agents.create", AccessScope.ForTenant(tenantId), expectedRevision, ct).ConfigureAwait(false);
         if (version < 1 || string.IsNullOrWhiteSpace(templateId)) throw new ArgumentException("An exact template version is required.");
+        if (templateId == ManagedGeneralAssistant.DefinitionId)
+            ManagedGeneralAssistant.RequireNewTemplate(templateId, version, await templates.ListAsync(ct).ConfigureAwait(false));
         // Only immutable shipped templates are globally readable. Tenant publications must use their
         // own converted ownership store; the old composite/global catalog is never a fallback here.
         var template = await templates.GetAsync(templateId, version, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("definition_unavailable");

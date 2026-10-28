@@ -146,7 +146,7 @@ public sealed partial class TenantSessionAccessTests
             await Json(await owner.PostAsJsonAsync(api + $"/definition-drafts/{draftId}/publish", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = saved.GetProperty("revision").GetInt64() }));
             agent = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = draft.GetProperty("definitionId").GetString(), version = 1, expectedRevision = await Revision(owner, tenant) }));
         }
-        else agent=await Json(await owner.PostAsJsonAsync(api+"/agents",new{templateId="general-assistant",version=35,expectedRevision=await Revision(owner,tenant)}));
+        else agent=await Json(await owner.PostAsJsonAsync(api+"/agents",new{templateId="general-assistant",version=36,expectedRevision=await Revision(owner,tenant)}));
         var instance=agent.GetProperty("instance").GetProperty("instanceId").GetGuid();var executor=agent.GetProperty("principalId").GetGuid();
         var instanceRevision = 1;
         ((TenantBackgroundModel)factory.Services.GetRequiredService<ILanguageModel>()).DelegationTargetInstanceId = instance;

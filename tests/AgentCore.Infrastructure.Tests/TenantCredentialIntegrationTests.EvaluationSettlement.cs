@@ -42,7 +42,7 @@ public sealed partial class TenantCredentialIntegrationTests
             services.GetRequiredService<IDefinitionResourceContentStore>(), nativeSandbox: native, nativeAuthority: services.GetRequiredService<EvaluationSandboxAuthority>());
         var service = Service(intercepted); var competing = Service(store);
         var profile = (await SandboxService(f).SaveAsync(tenant, null, human, SandboxInput(), await Revision(), 0)).Profile;
-        var agent = await f.Agents.CreateAsync(human.PrincipalId, tenant, "general-assistant", 35, await Revision());
+        var agent = await f.AgentsAtRelease(35).CreateAsync(human.PrincipalId, tenant, "general-assistant", 35, await Revision());
         await GrantModelFixtureSpaceRead(f, tenant, human.PrincipalId, agent.PrincipalId);
         var role = await f.Access.SaveRoleAsync(human.PrincipalId, tenant, null, "Settlement executor",
             ["evaluations.read", "evaluations.run", "scripts.read", "scripts.execute", "agents.read", "sessions.read", "agent-runs.read", "sandbox.read", "sandbox.execute"], await Revision());

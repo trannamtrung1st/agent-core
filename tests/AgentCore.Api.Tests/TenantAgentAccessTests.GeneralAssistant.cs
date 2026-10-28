@@ -96,6 +96,7 @@ public sealed partial class TenantAgentAccessTests
         Assert.Equal(0, (await Json(await viewer.GetAsync(root + "/agents"))).GetProperty("total").GetInt32());
         Assert.Equal(1, (await Json(await viewer.GetAsync(root + "/chat/agents?q=General"))).GetProperty("total").GetInt32());
         Assert.Equal(HttpStatusCode.Forbidden, (await viewer.PostAsJsonAsync(root + $"/agents/{id}/reset-defaults", new { operationId = Guid.NewGuid(), expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await viewer.PostAsync(root + "/general-assistant/reconcile", null)).StatusCode);
         var store = factory.Services.GetRequiredService<IIamStore>(); var state = (await store.ReadTenantAsync(tenant))!;
         var assignment = state.Assignments.Single(a => a.RoleId == role.GetProperty("roleId").GetGuid());
         Assert.Equal(HttpStatusCode.NoContent, (await owner.DeleteAsync(root + $"/role-assignments/{assignment.AssignmentId}?expectedRevision={state.Tenant.Revision}")).StatusCode);

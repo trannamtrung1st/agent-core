@@ -6,6 +6,11 @@ public static partial class TenantAgentEndpoints
     public sealed record ResetDefaultsRequest(Guid OperationId, long ExpectedRevision, long ExpectedInstanceRevision);
     private static void MapGeneralAssistant(RouteGroupBuilder group)
     {
+        group.MapPost("/general-assistant/reconcile", (HttpContext http, TenantAgentService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
+            var actor = IdentityHttp.TenantContext(http);
+            var ready = await service.RetryGeneralAssistantSetupAsync(actor.TenantId, Human(http), ct);
+            return Results.Json(new { status = ready ? "ready" : "setup_pending" });
+        }));
         group.MapPut("/agents/{instanceId:guid}/chat-visibility", (Guid instanceId, ChatVisibilityRequest body, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
             var actor = IdentityHttp.TenantContext(http);
             return Results.Json(Safe(await service.SetChatVisibilityAsync(actor.PrincipalId, actor.TenantId, instanceId, body.ShowInChat,

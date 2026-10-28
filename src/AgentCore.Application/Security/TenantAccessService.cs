@@ -22,7 +22,8 @@ public sealed class TenantAccessService(IIamStore store, IamAuthorizer authorize
         var state = identities.CreateTenant(account, name, slug);
         if (!await store.TryCreateTenantAsync(state, Audit(state, systemActorId, "system.tenants.create", state.Tenant.TenantId.ToString("D")), ct).ConfigureAwait(false))
             throw new SecurityConflictException("tenant_exists");
-        if (assistant is not null) { await assistant.ReconcileAsync(state.Tenant.TenantId, ct); return (await store.ReadTenantAsync(state.Tenant.TenantId, ct))!; }
+        if (assistant is not null && await assistant.TryReconcileAsync(state.Tenant.TenantId, ct))
+            return (await store.ReadTenantAsync(state.Tenant.TenantId, ct))!;
         return state;
     }
 

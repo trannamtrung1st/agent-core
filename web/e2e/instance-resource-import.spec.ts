@@ -15,7 +15,7 @@ async function openResources(page: Page) {
   const tenant = await call(page, '/api/v2/system/tenants', { name: `Resource imports ${nonce}`, slug: `imports-${nonce}` });
   const tenantRoot = `/api/v2/tenants/${tenant.tenantId}`;
   const access = await call(page, tenantRoot + '/access/me');
-  const owner = await call(page, tenantRoot + '/agents', { templateId: 'general-assistant', version: 35, expectedRevision: access.revision });
+  const owner = await call(page, tenantRoot + '/agents', { templateId: 'general-assistant', version: 36, expectedRevision: access.revision });
   const root = `${tenantRoot}/agents/${owner.instance.instanceId}`;
   await page.goto(`/t/${tenant.tenantId}/admin/agents/${owner.instance.instanceId}/resources`);
   await expect(page.getByRole('region', { name: 'Instance resources', exact: true })).toBeVisible();

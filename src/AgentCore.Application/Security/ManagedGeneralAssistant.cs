@@ -33,6 +33,11 @@ public static class ManagedGeneralAssistant
         var current = templates.Where(d => d.Id == DefinitionId).Select(d => d.Version).DefaultIfEmpty(0).Max();
         return templates.Where(d => d.Id != DefinitionId || d.Version == current).ToArray();
     }
+    public static void RequireNewTemplate(string id, int version, IReadOnlyList<AgentDefinition> templates)
+    {
+        if (id == DefinitionId && !ProductTemplates(templates).Any(d => d.Id == id && d.Version == version))
+            throw new AccessDeniedException("definition_unavailable");
+    }
     public static void Require(TenantAgent agent)
     {
         if (agent.ManagedKind != Kind || agent.Instance.DefinitionId != DefinitionId || agent.Instance.Lifecycle != AgentInstanceLifecycle.Active)

@@ -111,7 +111,7 @@ public sealed partial class TenantCredentialAccessTests
             reportToSessionId = target, expectedRevision = Revision(owner, tenant).GetAwaiter().GetResult(), expectedInstanceRevision = 1, expectedAutomationRevision = revision, requiresTools = true };
         if (mode == "foreign-destination")
         {
-            var foreign = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 35, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
+            var foreign = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
             var foreignSession = await Conversation(foreign);
             Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync(route, Body(foreignSession))).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync(route, Body(Guid.NewGuid()))).StatusCode);

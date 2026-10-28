@@ -1010,7 +1010,7 @@ AgentRun JSON uses status tokens `queued`, `running`, `needsApproval`, `retrying
 Current tenant Chat candidates (`GET /api/v2/tenants/{tenantId}/chat/agents`; exact human authorization and visibility precede totals/paging):
 
 ```json
-{"items":[{"instanceId":"dca30000-0000-4000-8000-000000000036","revision":1,"definitionId":"general-assistant","activeVersion":36,"name":"General Assistant","role":"General assistant","description":"Help with conversation, research, files and authorized tasks.","voiceAvailable":false,"language":"auto","systemManaged":true,"setupState":null}],"total":1,"page":0,"pageSize":30,"securityRevision":2,"canCreateSessions":true,"emptyReason":null,"canManageSetup":true}
+{"items":[{"instanceId":"dca30000-0000-4000-8000-000000000036","revision":1,"definitionId":"general-assistant","activeVersion":36,"name":"General Assistant","role":"General assistant","description":"Help with conversation, research, files and authorized tasks.","voiceAvailable":false,"language":"auto","systemManaged":true,"setupState":null}],"total":1,"page":0,"pageSize":30,"securityRevision":2,"canCreateSessions":true,"emptyReason":null,"canManageSetup":true,"assistantSetupPending":false}
 ```
 
 `language` is the conversation language policy (`auto` or a fixed BCP-47-like language tag), not the speech locale; see `capabilities.speechLocale.effective` on `session.ready` for STT/TTS.
@@ -2281,9 +2281,14 @@ Task/message hint collection snapshots its attachment/cursors briefly under the 
 
 ## Managed assistant presentation and reset
 
-The existing tenant Chat candidate page returns safe `systemManaged` and `setupState` hints, page `emptyReason` and owner-only `canManageSetup`; it supports an exact `instanceId` filter through the same authorization/visibility query. These hints confer no authority. Hidden candidates are excluded before total/search/paging, and managed candidates sort first. Management projections expose `managedKind`, `canResetDefaults` and Instance `showInChat` without exposing Definition payloads merely to render status.
+The existing tenant Chat candidate page returns safe `systemManaged` and `setupState` hints, page `emptyReason` and owner-only `canManageSetup`/`assistantSetupPending`; it supports an exact `instanceId` filter through the same authorization/visibility query. These hints confer no authority. Hidden candidates are excluded before total/search/paging, and managed candidates sort first. Management projections expose `managedKind`, `canResetDefaults` and Instance `showInChat` without exposing Definition payloads merely to render status.
 
 - `PUT /api/v2/tenants/{tenantId}/agents/{instanceId}/chat-visibility`: `{showInChat, expectedRevision, expectedInstanceRevision}`; exact `agents.read` + `agents.update`, current original-human fence, CAS and audit. The normal safe Instance response includes the new security revision.
 - `POST /api/v2/tenants/{tenantId}/agents/{instanceId}/reset-defaults`: `{operationId, expectedRevision, expectedInstanceRevision}`; managed-only, same exact rights/fence, one configuration transaction. Returns operation/Instance IDs, resulting Instance revision, applied Definition version, `applied`/`already_applied` and retained-data explanation. Same-operation readback requires current authority; mismatched/stale requests do not replay effects.
 
 There is no public system provisioning/adoption endpoint or special Chat transport. Existing hidden-agent conversations continue through the same HTTP/SignalR Session/Run owners. Managed manual version/lifecycle changes return `system_managed_instance`; an unapplied mandatory release blocks new admissions with `assistant_upgrade_requires_attention`.
+
+
+### General Assistant stabilization
+
+`POST /api/v2/tenants/{tenantId}/general-assistant/reconcile` requires a current original-human tenant Owner and normal CSRF protection. It takes no arbitrary Definition, Instance or grant payload. The existing system coordinator performs at most five CAS attempts; the response is `{ "status": "ready" }` or `{ "status": "setup_pending" }`. Tenant creation still returns its committed result if subsequent assistant setup fails. Owner-only page `assistantSetupPending` remains true even when ordinary candidates exist, so they do not conceal the recovery action. Chat discovery never initiates reconciliation. Old General Assistant versions are refused for new `/agents` template creation and `/agent-definitions/from-template` forks, while historical exact-version reads and ordinary Instance adoption remain supported.

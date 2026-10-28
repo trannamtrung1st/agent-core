@@ -31,7 +31,7 @@ public sealed partial class TenantAgentAccessTests
         using var owner=factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress=new("https://localhost") }); await Login(owner,"owner@example.test","explicit-synthetic-test-password");
         foreach(var host in factory.Services.GetServices<IHostedService>().Where(s=>s is AgentCore.Api.AgentRunHostedService or AgentCore.Api.TriggerSchedulerHostedService)) await host.StopAsync(CancellationToken.None);
         var tenant=(await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api=$"/api/v2/tenants/{tenant}";
-        var saved=await Json(await owner.PostAsJsonAsync(api+"/agents",new { templateId="general-assistant",version=35,expectedRevision=await Revision(owner,tenant) }));
+        var saved=await Json(await owner.PostAsJsonAsync(api+"/agents",new { templateId="general-assistant",version=36,expectedRevision=await Revision(owner,tenant) }));
         var instance=saved.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor=saved.GetProperty("principalId").GetGuid();
         var permissions=new List<string> { "agents.read","automations.read","automations.run","sessions.create","agent-runs.create" }; if(mode!="missing")permissions.Add("sessions.read");
         var role=await Json(await owner.PostAsJsonAsync(api+"/roles",new { name="Independent public research",permissions,expectedRevision=await Revision(owner,tenant) }));

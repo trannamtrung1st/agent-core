@@ -10,6 +10,12 @@ public sealed record TenantAgent(Guid TenantId, Guid SystemIdentityId, Guid Prin
     public bool CanResetDefaults => ManagedKind == ManagedGeneralAssistant.Kind;
 }
 public sealed record TenantAgentPage(IReadOnlyList<TenantAgent> Items, int Total, int Page, int PageSize);
+public sealed record TenantAgentChatFilter(string? Query = null, Guid? InstanceId = null)
+{
+    public bool Matches(AgentIdentity persona) => string.IsNullOrEmpty(Query)
+        || persona.Name.Contains(Query, StringComparison.OrdinalIgnoreCase)
+        || persona.Role.Contains(Query, StringComparison.OrdinalIgnoreCase);
+}
 public sealed record TenantAgentConfigurationSnapshot(TenantAgent Agent, InstanceSkillSnapshot Skills, InstanceResourceSnapshot Resources, TenantIsolationMetadata Isolation);
 public sealed record TenantAgentConfigurationChange(Guid InstanceId, long ExpectedInstanceRevision,
     AgentIdentity? Persona = null, long? ExpectedPersonaRevision = null, int? ActiveVersion = null,
@@ -41,7 +47,7 @@ public interface ITenantAgentStore
         TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default);
     ValueTask<TenantAgent?> FindTenantAgentAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default);
     ValueTask<TenantAgentPage> ListTenantAgentsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedInstanceIds,
-        int page, int pageSize, CancellationToken ct = default);
+        int page, int pageSize, CancellationToken ct = default, TenantAgentChatFilter? chat = null);
     ValueTask<bool> TryCreateTenantAgentAsync(TenantSecurityState next, long expectedSecurityRevision,
         AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
     ValueTask<TenantAgent?> TrySetTenantAgentLifecycleAsync(TenantSecurityState next, long expectedSecurityRevision,

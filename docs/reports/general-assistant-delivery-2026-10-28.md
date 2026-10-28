@@ -105,3 +105,8 @@ The Impeccable context loader reported existing sidecar drift and two orphaned b
 This is focused local implementation acceptance, not deployment or a renewed claim for historical milestones. Hosted CI and the full local CI matrix were not requested or run. Live model/search/Email/Drive/Browser/Sandbox services, production multi-process load, physical microphone/speaker behavior, manual screen-reader testing and browser zoom remain external qualification. Voice is off by default and optional infrastructure does not become silently configured. The build's existing chunk-size advisory and test-only Ant Design deprecation messages are recorded in their logs.
 
 Follow the cutover runbook for stopped writers, matching database/files/key backups and deployment. No installed user data was erased. Stop feature refinement after the focused gates pass; Workflow remains unstarted.
+
+
+## Review stabilization successor
+
+The [focused stabilization](general-assistant-stabilization-2026-10-28.md) removes per-Instance discovery reads, adds owner-triggered in-process setup recovery with committed tenant success and safe diagnostics, and restricts new General Assistant template creation/forking to the current release. Its tests/evidence are scoped to the subsequent source; the original results above remain historical.

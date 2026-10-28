@@ -18,7 +18,7 @@ public sealed partial class InMemoryIamStore
         }
     }
 
-    public ValueTask<TenantAgentPage> ListTenantAgentsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedInstanceIds, int page, int pageSize, CancellationToken ct = default)
+    public ValueTask<TenantAgentPage> ListTenantAgentsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedInstanceIds, int page, int pageSize, CancellationToken ct = default, TenantAgentChatFilter? chat = null)
     {
         ct.ThrowIfCancellationRequested();
         if (tenantId == Guid.Empty || page < 0 || page > 100_000 || pageSize is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(page));
@@ -29,6 +29,8 @@ public sealed partial class InMemoryIamStore
                 && i.AgentInstanceId is { } id && (allowed is null || allowed.Contains(id)))
                 .Select(i => new TenantAgent(tenantId, i.SystemIdentityId, i.PrincipalId, instances.FindTenantBackingAsync(i.AgentInstanceId!.Value, ct).Result
                     ?? throw new InvalidOperationException("An owned agent lost its backing Instance."), i.ManagedKind))
+                .Where(i => chat is null || i.Instance.ShowInChat && i.Instance.Lifecycle == AgentInstanceLifecycle.Active
+                    && (chat.InstanceId is null || chat.InstanceId == i.Instance.InstanceId) && chat.Matches(i.Instance.Persona))
                 .OrderByDescending(i => i.ManagedKind != null).ThenBy(i => i.Instance.InstanceId.ToString("D"), StringComparer.Ordinal).ToArray();
             return ValueTask.FromResult(new TenantAgentPage(rows.Skip(page * pageSize).Take(pageSize).ToArray(), rows.Length, page, pageSize));
         }

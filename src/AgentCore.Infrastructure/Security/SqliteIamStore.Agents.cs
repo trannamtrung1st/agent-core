@@ -4,6 +4,8 @@ using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.Sqlite;
+using System.Text.Json;
 
 namespace AgentCore.Infrastructure.Security;
 
@@ -17,11 +19,31 @@ public sealed partial class SqliteIamStore
         return row is null ? null : Owned(row);
     }
 
-    public async ValueTask<TenantAgentPage> ListTenantAgentsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedInstanceIds, int page, int pageSize, CancellationToken ct = default)
+    public async ValueTask<TenantAgentPage> ListTenantAgentsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedInstanceIds, int page, int pageSize, CancellationToken ct = default, TenantAgentChatFilter? chat = null)
     {
         if (page < 0 || page > 100_000 || pageSize is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(page));
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-        var query = OwnedAgents(db, tenantId);
+        IQueryable<AgentInstanceRecord> instances = db.AgentInstances;
+        if (!string.IsNullOrEmpty(chat?.Query))
+        {
+            // SQLite LIKE/LOWER do not preserve OrdinalIgnoreCase for Unicode labels.
+            // Execute the same public-label predicate inside the count/page queries,
+            // without loading every Instance or searching private persona/settings fields.
+            await db.Database.OpenConnectionAsync(ct).ConfigureAwait(false);
+            ((SqliteConnection)db.Database.GetDbConnection()).CreateFunction<string, string, bool>("agent_chat_matches", (json, text) =>
+            {
+                using var persona = JsonDocument.Parse(json);
+                return persona.RootElement.GetProperty("name").GetString()!.Contains(text, StringComparison.OrdinalIgnoreCase)
+                    || persona.RootElement.GetProperty("role").GetString()!.Contains(text, StringComparison.OrdinalIgnoreCase);
+            }, isDeterministic: true);
+            instances = db.AgentInstances.FromSqlInterpolated($"SELECT * FROM AgentInstances WHERE agent_chat_matches(PersonaJson, {chat.Query})");
+        }
+        var query = OwnedAgents(db, tenantId, instances: instances);
+        if (chat is not null)
+        {
+            query = query.Where(x => x.Instance.ShowInChat && x.Instance.Lifecycle == nameof(AgentInstanceLifecycle.Active));
+            if (chat.InstanceId is { } exact) query = query.Where(x => x.Instance.InstanceId == exact.ToString("D"));
+        }
         if (allowedInstanceIds is not null)
         {
             var allowed = allowedInstanceIds.Select(id => id.ToString("D")).ToArray();
@@ -113,11 +135,11 @@ public sealed partial class SqliteIamStore
         public required IamSystemIdentityRow Identity { get; init; }
         public required AgentInstanceRecord Instance { get; init; }
     }
-    private static IQueryable<AgentJoin> OwnedAgents(AgentCoreDbContext db, Guid tenantId, bool includeRemoved = false)
+    private static IQueryable<AgentJoin> OwnedAgents(AgentCoreDbContext db, Guid tenantId, bool includeRemoved = false, IQueryable<AgentInstanceRecord>? instances = null)
     {
         if (tenantId == Guid.Empty) throw new ArgumentException("A tenant is required.");
         return from identity in db.Set<IamSystemIdentityRow>().AsNoTracking()
-            join instance in db.AgentInstances.AsNoTracking() on identity.AgentInstanceId equals instance.InstanceId
+            join instance in (instances ?? db.AgentInstances).AsNoTracking() on identity.AgentInstanceId equals instance.InstanceId
             where identity.TenantId == tenantId && identity.Kind == SystemIdentityKind.Agent && (includeRemoved || identity.Status != IdentityStatus.Removed)
             select new AgentJoin { Identity = identity, Instance = instance };
     }

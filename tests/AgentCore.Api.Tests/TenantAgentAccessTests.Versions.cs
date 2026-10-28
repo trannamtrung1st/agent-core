@@ -14,8 +14,9 @@ public sealed partial class TenantAgentAccessTests
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();
         var root = $"/api/v2/tenants/{tenant}/agents";
-        var created = await Json(await owner.PostAsJsonAsync(root, new { templateId = "general-assistant", version = 35, expectedRevision = await Revision(owner, tenant) }));
+        var created = await Json(await owner.PostAsJsonAsync(root, new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(owner, tenant) }));
         var id = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); root += $"/{id}";
+        Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(root + "/active-version", new { version = 35, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 })).StatusCode);
         var catalog = await Json(await owner.GetAsync(root + "/versions?pageSize=1"));
         Assert.Equal(1, catalog.GetProperty("items").GetArrayLength()); Assert.True(catalog.GetProperty("total").GetInt32() > 1);
         Assert.Equal("general-assistant", catalog.GetProperty("agent").GetProperty("instance").GetProperty("definitionId").GetString());
@@ -24,9 +25,9 @@ public sealed partial class TenantAgentAccessTests
         var previewResponse = await owner.GetAsync(root + "/active-version/preview?version=36"); var preview = await Json(previewResponse);
         Assert.True(previewResponse.Headers.CacheControl!.NoStore);
         Assert.Equal(35, preview.GetProperty("preview").GetProperty("currentVersion").GetInt32()); Assert.Equal(36, preview.GetProperty("preview").GetProperty("targetVersion").GetInt32());
-        Assert.Equal(before, await Revision(owner, tenant)); Assert.Equal(1, preview.GetProperty("preview").GetProperty("instanceRevision").GetInt64());
-        Assert.Equal(HttpStatusCode.OK, (await owner.PatchAsJsonAsync(root + "/settings/conversationPolicy", new { expectedRevision = before, expectedInstanceRevision = 1, set = new { language = "fr-FR" }, clear = Array.Empty<string>() })).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await owner.PutAsJsonAsync(root + "/active-version", new { version = 36, expectedRevision = before, expectedInstanceRevision = 1 })).StatusCode);
+        Assert.Equal(before, await Revision(owner, tenant)); Assert.Equal(2, preview.GetProperty("preview").GetProperty("instanceRevision").GetInt64());
+        Assert.Equal(HttpStatusCode.OK, (await owner.PatchAsJsonAsync(root + "/settings/conversationPolicy", new { expectedRevision = before, expectedInstanceRevision = 2, set = new { language = "fr-FR" }, clear = Array.Empty<string>() })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.PutAsJsonAsync(root + "/active-version", new { version = 36, expectedRevision = before, expectedInstanceRevision = 2 })).StatusCode);
         preview = await Json(await owner.GetAsync(root + "/active-version/preview?version=36"));
         var adopted = await Json(await owner.PutAsJsonAsync(root + "/active-version", new { version = 36, expectedRevision = preview.GetProperty("securityRevision").GetInt64(), expectedInstanceRevision = preview.GetProperty("preview").GetProperty("instanceRevision").GetInt64() }));
         Assert.Equal(36, adopted.GetProperty("instance").GetProperty("activeVersion").GetInt32());

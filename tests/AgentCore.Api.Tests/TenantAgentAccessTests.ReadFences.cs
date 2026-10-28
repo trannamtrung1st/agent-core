@@ -173,8 +173,8 @@ public sealed partial class TenantAgentAccessTests
 
         public async ValueTask<TenantAgent?> FindTenantAgentAsync(Guid tenant, Guid id, CancellationToken ct = default)
         { var result = await inner.FindTenantAgentAsync(tenant, id, ct); await factory.Captured("agent"); return result; }
-        public async ValueTask<TenantAgentPage> ListTenantAgentsAsync(Guid tenant, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default)
-        { var result = await inner.ListTenantAgentsAsync(tenant, allowed, page, pageSize, ct); await factory.Captured("inventory"); return result; }
+        public async ValueTask<TenantAgentPage> ListTenantAgentsAsync(Guid tenant, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default, TenantAgentChatFilter? chat = null)
+        { var result = await inner.ListTenantAgentsAsync(tenant, allowed, page, pageSize, ct, chat); await factory.Captured("inventory"); return result; }
         public async ValueTask<TenantAgentConfigurationSnapshot?> ReadTenantAgentConfigurationAsync(Guid tenant, Guid id, CancellationToken ct = default)
         { var snapshot = await inner.ReadTenantAgentConfigurationAsync(tenant, id, ct); await factory.Captured("configuration-snapshot"); return snapshot; }
         public async ValueTask<TenantAgent?> TryChangeTenantAgentConfigurationAsync(TenantSecurityState next, long revision, TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)

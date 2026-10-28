@@ -213,7 +213,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var system = (await f.Iam.ReadSystemAsync()).Principals.Single(p => p.AccountId == a.Owner.AccountId);
         var beta = await f.Access.CreateTenantAsync(system.PrincipalId, a.Owner.AccountId, "Beta", "beta");
         var betaHuman = a.Owner with { PrincipalId = beta.Users.Single().PrincipalId };
-        var betaAgent = await f.Agents.CreateAsync(betaHuman.PrincipalId, beta.Tenant.TenantId, "general-assistant", 35, beta.Tenant.Revision);
+        var betaAgent = await f.AgentsAtRelease(35).CreateAsync(betaHuman.PrincipalId, beta.Tenant.TenantId, "general-assistant", 35, beta.Tenant.Revision);
         var bound = await ResourceSourceCase(f, new(beta.Tenant.TenantId, betaHuman, betaAgent, a.Run), Encoding.UTF8.GetBytes("Private Beta resource")); var b = bound.Setup;
         Assert.NotEqual(a.Owner.PrincipalId, b.Owner.PrincipalId); Assert.Equal(alpha.Path, bound.Path);
         var frameA = await ClaimArtifactRun(f, a); var frameB = await ClaimArtifactRun(f, b);

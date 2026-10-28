@@ -966,3 +966,5 @@ The [Initiative 9 targeted review corrections](reports/initiative-9-review-fixes
 ## Built-in General Assistant successor
 
 The protected tenant default uses immutable global v36, trusted idempotent provisioning, ordinary isolated IAM/private Space, universal Chat visibility, non-destructive reset and automatic safe adoption through existing Instance/Run owners. The [design brief](reports/general-assistant-design-2026-10-28.md), [delivery ledger](reports/general-assistant-delivery-2026-10-28.md) and [cutover runbook](general-assistant-cutover.md) own its scoped local implementation and verification. Historical milestone acceptance is unchanged; Workflow is the next unstarted roadmap initiative. CI, deployment and external provider/device/load qualification remain separate.
+
+The [General Assistant review stabilization](reports/general-assistant-stabilization-2026-10-28.md) addresses discovery query count, failed setup recovery and historical-template creation. It preserves the local/external qualification boundary and does not start Workflow.

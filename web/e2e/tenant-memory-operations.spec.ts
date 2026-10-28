@@ -22,7 +22,7 @@ for (const viewport of [{ width: 1400, height: 950 }, { width: 390, height: 844 
     expect((await (await api.get('/health')).json()).profile).toBe('Synthetic'); await call(api, '/api/v2/auth/login', { login, password });
     const nonce = crypto.randomUUID().slice(0, 8); const tenant = (await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Memory consent ${nonce}`, slug: `memory-consent-${nonce}` })).tenantId;
     const prefix = `/api/v2/tenants/${tenant}`; const revision = async () => (await call<{ revision: number }>(api, prefix + '/access/me')).revision;
-    const agent = await call<{ instance: { instanceId: string }; principalId: string }>(api, prefix + '/agents', { templateId: 'general-assistant', version: 35, expectedRevision: await revision() });
+    const agent = await call<{ instance: { instanceId: string }; principalId: string }>(api, prefix + '/agents', { templateId: 'general-assistant', version: 36, expectedRevision: await revision() });
     const rights = ['agents.chat', 'agents.read', 'sessions.read', 'agent-runs.read', 'memory.read', 'memory.manage'];
     const role = await call<{ roleId: string }>(api, prefix + '/roles', { name: 'Memory consent executor', permissions: rights, expectedRevision: await revision() });
     await call(api, prefix + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await revision() });

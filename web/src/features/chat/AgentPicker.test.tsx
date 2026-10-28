@@ -1,6 +1,18 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentPicker } from "./AgentPicker";
+import { retryTenantGeneralAssistantSetup, tenantChatCanManageSetup, tenantChatEmptyReason, tenantChatSetupPending } from '../../services/tenantChat';
+
+vi.mock('../../services/tenantChat', async importOriginal => ({
+  ...await importOriginal<typeof import('../../services/tenantChat')>(),
+  chatTenantId: '11111111-1111-1111-1111-111111111111', tenantChatCanManageSetup: vi.fn(() => false),
+  tenantChatEmptyReason: vi.fn(() => null), tenantChatSetupPending: vi.fn(() => false), retryTenantGeneralAssistantSetup: vi.fn()
+}));
+beforeEach(() => {
+  vi.mocked(tenantChatCanManageSetup).mockReturnValue(false); vi.mocked(tenantChatEmptyReason).mockReturnValue(null);
+  vi.mocked(tenantChatSetupPending).mockReturnValue(false);
+  vi.mocked(retryTenantGeneralAssistantSetup).mockReset();
+});
 
 const instances = [
   {
@@ -162,4 +174,43 @@ it('explains an unavailable model without inventing a provider or credential', (
   render(<AgentPicker managedInstances={[item]} identityKey={`managed:${item.instanceId}`} error={null} managedInstancesError={null} managedInstancesLoading={false} onIdentityChange={vi.fn()} onRetryManagedInstances={vi.fn()} />);
   expect(screen.getByText('No model configured')).toBeVisible();
   expect(screen.getByText(/configure an available model before starting Chat/)).toBeVisible();
+});
+
+it('lets an owner explicitly retry pending setup once, refresh candidates and focus the recovered picker', async () => {
+  vi.mocked(tenantChatCanManageSetup).mockReturnValue(true); vi.mocked(tenantChatEmptyReason).mockReturnValue('setup_pending');
+  let resolve!: (value: { status: 'ready' }) => void;
+  vi.mocked(retryTenantGeneralAssistantSetup).mockReturnValue(new Promise(done => { resolve = done; }));
+  const props = { managedInstances: [], identityKey: '', error: null, managedInstancesError: null, managedInstancesLoading: false, onIdentityChange: vi.fn(), onRetryManagedInstances: vi.fn() };
+  const view = render(<AgentPicker {...props} />);
+  const button = screen.getByRole('button', { name: 'Retry assistant setup' }); fireEvent.click(button); fireEvent.click(button);
+  expect(retryTenantGeneralAssistantSetup).toHaveBeenCalledTimes(1); expect(props.onRetryManagedInstances).not.toHaveBeenCalled();
+  resolve({ status: 'ready' }); await waitFor(() => expect(props.onRetryManagedInstances).toHaveBeenCalledOnce());
+  vi.mocked(tenantChatEmptyReason).mockReturnValue(null);
+  view.rerender(<AgentPicker {...props} managedInstances={instances} identityKey={`managed:${instances[0].instanceId}`} />);
+  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Identity' })).toHaveFocus());
+});
+
+it('keeps a failed setup retry actionable without exposing the underlying exception', async () => {
+  vi.mocked(tenantChatCanManageSetup).mockReturnValue(true); vi.mocked(tenantChatEmptyReason).mockReturnValue('setup_pending');
+  vi.mocked(retryTenantGeneralAssistantSetup).mockRejectedValue(new Error('private-provider-body'));
+  const reload = vi.fn();
+  render(<AgentPicker managedInstances={[]} identityKey="" error={null} managedInstancesError={null} managedInstancesLoading={false} onIdentityChange={vi.fn()} onRetryManagedInstances={reload} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Retry assistant setup' }));
+  await waitFor(() => expect(screen.getByText(/Setup retry could not be confirmed/)).toBeVisible());
+  expect(screen.queryByText('private-provider-body')).not.toBeInTheDocument(); expect(reload).not.toHaveBeenCalled();
+});
+
+it('does not offer provisioning recovery to a non-owner', () => {
+  vi.mocked(tenantChatEmptyReason).mockReturnValue('setup_pending');
+  render(<AgentPicker managedInstances={[]} identityKey="" error={null} managedInstancesError={null} managedInstancesLoading={false} onIdentityChange={vi.fn()} onRetryManagedInstances={vi.fn()} />);
+  expect(screen.queryByRole('button', { name: 'Retry assistant setup' })).not.toBeInTheDocument();
+  expect(retryTenantGeneralAssistantSetup).not.toHaveBeenCalled();
+});
+
+it('keeps pending default setup visible when another ordinary agent is available', () => {
+  vi.mocked(tenantChatCanManageSetup).mockReturnValue(true); vi.mocked(tenantChatSetupPending).mockReturnValue(true);
+  render(<AgentPicker managedInstances={instances} identityKey={`managed:${instances[0].instanceId}`} error={null} managedInstancesError={null} managedInstancesLoading={false} onIdentityChange={vi.fn()} onRetryManagedInstances={vi.fn()} />);
+  expect(screen.getByText('Default assistant setup pending')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Retry assistant setup' })).toBeVisible();
+  expect(screen.getByRole('combobox', { name: 'Identity' })).toBeEnabled();
 });

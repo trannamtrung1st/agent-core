@@ -2,6 +2,15 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const identity = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock('./identity', () => ({ identityRequest: identity.request, tenantApi: (id: string, suffix: string) => `/api/v2/tenants/${id}${suffix}` }));
 const tenant = '11111111-1111-1111-1111-111111111111';
+it('retries setup only by explicit POST and refuses an unrecognized completion acknowledgement', async () => {
+  const service = await import('./tenantChat');
+  identity.request.mockResolvedValueOnce({ status: 'setup_pending' }).mockResolvedValueOnce({ status: 'ready' }).mockResolvedValueOnce({});
+  expect(await service.retryTenantGeneralAssistantSetup()).toEqual({ status: 'setup_pending' });
+  expect(identity.request.mock.lastCall?.[0]).toBe(`/api/v2/tenants/${tenant}/general-assistant/reconcile`);
+  expect(identity.request.mock.lastCall?.[1].method).toBe('POST');
+  expect(await service.retryTenantGeneralAssistantSetup()).toEqual({ status: 'ready' });
+  await expect(service.retryTenantGeneralAssistantSetup()).rejects.toThrow('outcome needs confirmation');
+});
 beforeEach(() => { vi.resetModules(); identity.request.mockReset(); window.history.replaceState(null, '', `/t/${tenant}`); });
 afterEach(() => { window.history.replaceState(null, '', '/'); });
 it('binds the document to one tenant and retires outstanding private requests', async () => {
@@ -19,8 +28,9 @@ it('binds the document to one tenant and retires outstanding private requests', 
 it('requires a current candidate, uses scoped witnesses, and clears permission hints at retirement', async () => {
   const service = await import('./tenantChat');
   await expect(service.createTenantChat('agent')).rejects.toThrow('Select an available agent');
-  identity.request.mockResolvedValueOnce({ items: [{ instanceId: 'agent', revision: 7 }], canCreateSessions: true });
+  identity.request.mockResolvedValueOnce({ items: [{ instanceId: 'agent', revision: 7 }], canCreateSessions: true, assistantSetupPending: true });
   await service.tenantChatCandidates(0, 'Alex & team');
+  expect(service.tenantChatSetupPending()).toBe(true);
   expect(identity.request.mock.lastCall?.[0]).toContain('q=Alex%20%26%20team');
   identity.request.mockResolvedValueOnce({ items: [{ instanceId: 'agent', revision: 8 }], canCreateSessions: true }).mockResolvedValueOnce({ revision: 12 }).mockResolvedValueOnce({ sessionId: 'saved' })
     .mockResolvedValueOnce({ sessionId: 'saved' }).mockResolvedValueOnce({ sessionId: 'saved', canManage: true });
@@ -28,7 +38,7 @@ it('requires a current candidate, uses scoped witnesses, and clears permission h
   expect(identity.request.mock.calls[3][0]).toBe(`/api/v2/tenants/${tenant}/sessions`);
   expect(identity.request.mock.calls[3][1].body).toMatchObject({ agentInstanceId: 'agent', expectedRevision: 12, expectedInstanceRevision: 8, modelPreference: { mode: 'fixed', offeringId: 'dca30000-0000-4000-8000-000000000002' }, mode: 'text' });
   expect(service.tenantMayManageSession('saved')).toBe(true);
-  service.retireTenantChatRequests(); expect(service.tenantMayManageSession('saved')).toBe(false);
+  service.retireTenantChatRequests(); expect(service.tenantMayManageSession('saved')).toBe(false); expect(service.tenantChatSetupPending()).toBe(false);
   await expect(service.createTenantChat('agent')).rejects.toThrow('Select an available agent');
 });
 

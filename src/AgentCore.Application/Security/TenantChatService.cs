@@ -11,7 +11,7 @@ namespace AgentCore.Application.Security;
 public sealed record TenantChatAgent(Guid InstanceId, long Revision, string DefinitionId, int ActiveVersion,
     string Name, string Role, string Description, bool VoiceAvailable, string Language, bool SystemManaged = false, string? SetupState = null);
 public sealed record TenantChatAgentPage(IReadOnlyList<TenantChatAgent> Items, int Total, int Page, int PageSize,
-    long SecurityRevision, bool CanCreateSessions, string? EmptyReason = null, bool CanManageSetup = false);
+    long SecurityRevision, bool CanCreateSessions, string? EmptyReason = null, bool CanManageSetup = false, bool AssistantSetupPending = false);
 
 // Public communication discovery is independent of administrative Instance/configuration reads.
 public sealed class TenantChatService(IIamStore security, ITenantAgentStore agents, ITenantDefinitionStore definitions,
@@ -71,27 +71,19 @@ public sealed class TenantChatService(IIamStore security, ITenantAgentStore agen
         if (query?.Length > 200) throw AgentCoreErrors.Validation("Chat search is too long.");
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         var eligible = new List<Guid>(); var authorized = false;
+        var activePrincipals = state.Principals.Where(p => p.Status == IdentityStatus.Active).Select(p => p.PrincipalId).ToHashSet();
         foreach (var executor in state.SystemIdentities.Where(i => i.Kind == SystemIdentityKind.Agent && i.Status == IdentityStatus.Active
-            && i.AgentInstanceId is not null && state.Principals.Any(p => p.PrincipalId == i.PrincipalId && p.Status == IdentityStatus.Active)))
+            && i.AgentInstanceId is not null && activePrincipals.Contains(i.PrincipalId)))
         {
             var id = executor.AgentInstanceId!.Value;
             if (!(await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("agents.chat"),
                 AccessScope.ForResource(tenant, "agent", id.ToString("D")), ct).ConfigureAwait(false)).Allowed) continue;
             authorized = true;
-            if (instanceId is { } exact && exact != id) continue;
-            var candidate = await agents.FindTenantAgentAsync(tenant, id, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-            if (!candidate.Instance.ShowInChat) continue;
-            if (!string.IsNullOrEmpty(query))
-            {
-                // Search only public picker labels. Private tone/settings never influence matches/counts.
-                if (!candidate.Instance.Persona.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
-                    && !candidate.Instance.Persona.Role.Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
-            }
             eligible.Add(id);
         }
         // Filter before count/offset in the existing authoritative ownership store, never on a page
         // of admin-visible agents. A read-only administrator has no implied communication grant.
-        var saved = await agents.ListTenantAgentsAsync(tenant, eligible, page, pageSize, ct).ConfigureAwait(false);
+        var saved = await agents.ListTenantAgentsAsync(tenant, eligible, page, pageSize, ct, new(query, instanceId)).ConfigureAwait(false);
         var visible = new List<TenantChatAgent>(saved.Items.Count);
         var catalog = saved.Items.Count > 0 ? await modelCatalogs.ReadAsync(state, ct) : null;
         foreach (var candidate in saved.Items)
@@ -122,7 +114,9 @@ public sealed class TenantChatService(IIamStore security, ITenantAgentStore agen
             empty = !string.IsNullOrEmpty(query) ? "no_matches" : owner && !state.SystemIdentities.Any(i => i.ManagedKind == ManagedGeneralAssistant.Kind)
                 ? "setup_pending" : authorized ? "no_visible_agents" : "no_chat_permission";
         }
-        return new(visible, saved.Total, saved.Page, saved.PageSize, current.Tenant.Revision, canCreate, empty,
-            state.Assignments.Any(a => a.PrincipalId == human.PrincipalId && a.Scope.Kind == AccessScopeKind.Tenant && state.Roles.Any(r => r.RoleId == a.RoleId && r.IsBuiltin && r.Key == BuiltinAccessRoles.Owner)));
+        var canManage = state.Assignments.Any(a => a.PrincipalId == human.PrincipalId && a.Scope.Kind == AccessScopeKind.Tenant
+            && state.Roles.Any(r => r.RoleId == a.RoleId && r.IsBuiltin && r.Key == BuiltinAccessRoles.Owner));
+        return new(visible, saved.Total, saved.Page, saved.PageSize, current.Tenant.Revision, canCreate, empty, canManage,
+            canManage && !state.SystemIdentities.Any(i => i.ManagedKind == ManagedGeneralAssistant.Kind));
     }
 }

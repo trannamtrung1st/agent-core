@@ -1,13 +1,37 @@
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Application.Security;
 
-// Host/bootstrap-only coordinator. There is no public provision/adoption endpoint.
+// Trusted coordinator, also used by the explicitly authorized setup retry.
 public sealed class ManagedGeneralAssistantService(IIamStore security, ITenantAgentStore agents,
-    IBuiltInAgentDefinitionStore definitions, IIdGenerator ids, TimeProvider time, Func<TenantAgentConfigurationService> configuration)
+    IBuiltInAgentDefinitionStore definitions, IIdGenerator ids, TimeProvider time, Func<TenantAgentConfigurationService> configuration,
+    ILogger<ManagedGeneralAssistantService>? logger = null)
 {
+    // Tenant creation has already committed. Keep its successful result truthful and let
+    // startup or an explicit owner retry repair setup through the same bounded operation.
+    public async ValueTask<bool> TryReconcileAsync(Guid tenant, CancellationToken ct = default)
+    {
+        try { await ReconcileAsync(tenant, ct).ConfigureAwait(false); return true; }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception error)
+        {
+            var reason = error switch {
+                SecurityConflictException conflict => conflict.ReasonCode,
+                AccessDeniedException denied => denied.ReasonCode,
+                AgentCore.Application.Sessions.AgentCoreException application => application.Code,
+                System.Data.Common.DbException => "storage_failure",
+                _ => "unexpected_failure"
+            };
+            // Exception messages/stacks can contain provider bodies, SQL or credentials.
+            // Retain safe type/code/correlation evidence without serializing the exception.
+            logger?.LogError("General Assistant setup pending for tenant {TenantId}; reason {ReasonCode}; exception {ExceptionType}; error {ErrorCode}; trace {TraceId}. An owner can retry setup in Chat.",
+                tenant, reason, error.GetType().FullName, error.HResult, System.Diagnostics.Activity.Current?.Id);
+            return false;
+        }
+    }
     public async ValueTask<TenantAgent> ReconcileAsync(Guid tenant, CancellationToken ct = default)
     {
         var definition = await definitions.GetAsync(ManagedGeneralAssistant.DefinitionId, cancellationToken: ct)

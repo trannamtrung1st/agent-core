@@ -229,7 +229,7 @@ public sealed class ManagedGeneralAssistantTests
     public async Task Additive_migration_roundtrip_preserves_populated_ordinary_identity_and_retirement_guards()
     {
         await using var f = await Fixture.Create(true, builtInAuthority: true); var (owner, human) = await Bootstrap(f);
-        var ordinary = await f.Agents.CreateAsync(human.PrincipalId, owner.TenantId, "general-assistant", 35, await Revision(f, owner.TenantId));
+        var ordinary = await f.AgentsAtRelease(35).CreateAsync(human.PrincipalId, owner.TenantId, "general-assistant", 35, await Revision(f, owner.TenantId));
         await using (var db = f.Contexts!.CreateDbContext())
         {
             await db.GetService<IMigrator>().MigrateAsync("20261027060000_TaskDelegation");
