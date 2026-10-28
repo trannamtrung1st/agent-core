@@ -11,6 +11,7 @@ public sealed class AgentRunHostedService : BackgroundService
     public static readonly TimeSpan Cadence = TimeSpan.FromSeconds(1);
 
     private readonly Func<CancellationToken, Task> _pass;
+    private readonly Func<CancellationToken, Task>? _hints;
     private readonly TimeProvider _time;
     private readonly ILogger<AgentRunHostedService> _logger;
     private readonly IDiagnosticIdSource _diagnostics;
@@ -35,7 +36,6 @@ public sealed class AgentRunHostedService : BackgroundService
                 await accountEffects.RecoverAsync(cancellationToken).ConfigureAwait(false);
                 await httpEffects.RecoverAsync(cancellationToken).ConfigureAwait(false);
                 var executed = await tenantExecution.ExecuteRunnableAsync(AgentRunCoordinator.DefaultBatchSize, cancellationToken).ConfigureAwait(false);
-                await delivery.PublishTaskHintsAsync(tasks, messages, cancellationToken).ConfigureAwait(false);
                 if (executed > 0)
                 {
                     logger.LogInformation("AgentRun pass dispatched {ExecutedCount} turn(s).", executed);
@@ -43,7 +43,8 @@ public sealed class AgentRunHostedService : BackgroundService
             },
             time,
             logger,
-            diagnostics)
+            diagnostics,
+            cancellationToken => delivery.PublishTaskHintsAsync(tasks, messages, cancellationToken).AsTask())
     {
     }
 
@@ -51,9 +52,10 @@ public sealed class AgentRunHostedService : BackgroundService
         Func<CancellationToken, Task> pass,
         TimeProvider time,
         ILogger<AgentRunHostedService> logger,
-        IDiagnosticIdSource diagnostics)
+        IDiagnosticIdSource diagnostics,
+        Func<CancellationToken, Task>? hints = null)
     {
-        _pass = pass;
+        _pass = pass; _hints = hints;
         _time = time;
         _logger = logger;
         _diagnostics = diagnostics;
@@ -61,13 +63,19 @@ public sealed class AgentRunHostedService : BackgroundService
 
     internal IDiagnosticIdSource DiagnosticIds => _diagnostics;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => _hints is null
+        ? LoopAsync(RunPassAsync, stoppingToken)
+        : Task.WhenAll(LoopAsync(RunPassAsync, stoppingToken), LoopAsync(RunHintPassAsync, stoppingToken));
+
+    // Separately awaited loops in the existing host: slow hint reads never hold up
+    // Run dispatch, and shutdown still cancels and drains both owned operations.
+    private async Task LoopAsync(Func<CancellationToken, Task> pass, CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await RunPassAsync(stoppingToken).ConfigureAwait(false);
+                await pass(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -83,6 +91,14 @@ public sealed class AgentRunHostedService : BackgroundService
                 break;
             }
         }
+    }
+
+    private async Task RunHintPassAsync(CancellationToken stoppingToken)
+    {
+        try { await _hints!(stoppingToken).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
+        catch (Exception exception)
+        { DiagnosticLog.Warning(_logger, exception, _diagnostics.NewId(), "Task hint pass failed."); }
     }
 
     internal async Task RunPassAsync(CancellationToken stoppingToken)

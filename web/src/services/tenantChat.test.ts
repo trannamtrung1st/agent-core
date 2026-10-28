@@ -26,7 +26,7 @@ it('requires a current candidate, uses scoped witnesses, and clears permission h
     .mockResolvedValueOnce({ sessionId: 'saved' }).mockResolvedValueOnce({ sessionId: 'saved', canManage: true });
   await service.createTenantChat('agent', { offeringId: 'dca30000-0000-4000-8000-000000000002', reasoningEffort: null });
   expect(identity.request.mock.calls[2][0]).toBe(`/api/v2/tenants/${tenant}/sessions`);
-  expect(identity.request.mock.calls[2][1].body).toMatchObject({ agentInstanceId: 'agent', expectedRevision: 12, expectedInstanceRevision: 7, offeringId: 'dca30000-0000-4000-8000-000000000002', mode: 'text' });
+  expect(identity.request.mock.calls[2][1].body).toMatchObject({ agentInstanceId: 'agent', expectedRevision: 12, expectedInstanceRevision: 7, modelPreference: { mode: 'fixed', offeringId: 'dca30000-0000-4000-8000-000000000002' }, mode: 'text' });
   expect(service.tenantMayManageSession('saved')).toBe(true);
   service.retireTenantChatRequests(); expect(service.tenantMayManageSession('saved')).toBe(false);
   await expect(service.createTenantChat('agent')).rejects.toThrow('Select an available agent');

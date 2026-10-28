@@ -115,7 +115,7 @@ Closed locally after the transition stabilization and audit-wording refinement. 
 
 ### 9. Task Delegation & Communication
 
-Implemented bounded internal cooperation through existing Session/Activation/Run and IAM owners: durable Tasks, independently owned workers, Task/direct two-party communication, opt-in wake, exact Review, reports, cancellation/retry and retained source protection. The [delivery report](docs/reports/initiative-9-local-verification-2026-10-27.md) records focused local checks, T01–T40 coverage, finish-review disposition and unrun external qualification. External A2A, Group Chat and general workflow orchestration remain outside this scope.
+Implemented bounded internal cooperation through existing Session/Activation/Run and IAM owners: durable Tasks, independently owned workers, Task/direct two-party communication, opt-in wake, exact Review, reports, cancellation/retry and retained source protection. The [delivery report](docs/reports/initiative-9-local-verification-2026-10-27.md) records focused local checks, T01–T40 coverage, finish-review disposition and unrun external qualification. The two targeted discovery/delivery review findings are [closed locally](docs/reports/initiative-9-review-fixes-2026-10-28.md) after focused HTTP/store/wire/browser regressions. Stop Initiative 9 refinement at that verified scope. External A2A, Group Chat and general workflow orchestration remain outside this scope.
 
 ### 10. Group Chat
 

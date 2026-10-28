@@ -18,6 +18,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
     {
         public SemaphoreSlim Gate { get; } = new(1, 1);
         public SemaphoreSlim Commands { get; } = new(1, 1);
+        public SemaphoreSlim TaskHints { get; } = new(1, 1);
         public volatile bool Closed;
         public volatile Subscription? Current;
     }

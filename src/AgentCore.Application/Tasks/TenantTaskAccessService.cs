@@ -156,18 +156,42 @@ public sealed class TenantTaskAccessService(IIamStore security, ITenantTaskStore
                     if (environment.DeletedAt is null) environments.Add(new { environmentId = environment.EnvironmentId, name = environment.Name });
             return new { spaceId = space.SpaceId, name = space.Name, environments };
         }
+        // Filter before paging, then walk every authorized page once for this discovery request.
+        // A worker's Private Space is not a prerequisite for a mutually usable Shared Space.
+        IReadOnlyList<Guid>? allowedSpaces = null;
+        if (!(await iam.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("spaces.read"), AccessScope.ForTenant(tenant), ct)).Allowed)
+        {
+            var allowed = new List<Guid>();
+            foreach (var scope in state.Assignments.Where(a => a.PrincipalId == human.PrincipalId).Select(a => a.Scope).Distinct())
+                if (scope.ResourceType == "space" && Guid.TryParseExact(scope.ResourceId, "D", out var id)
+                    && (await iam.CheckOwnedTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("spaces.read"), scope, ct)).Allowed) allowed.Add(id);
+            allowedSpaces = allowed;
+        }
+        var sharedOptions = new List<(AgentCore.Domain.Spaces.Space Space, IReadOnlyList<AgentCore.Domain.Spaces.SpaceMembership> Members)>();
+        for (var spacePage = 0; ; spacePage++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var catalog = await spaces.ListSpacesAsync(tenant, allowedSpaces, spacePage, 100, ct);
+            foreach (var shared in catalog.Items.Where(s => s.Kind == AgentCore.Domain.Spaces.SpaceKind.Shared && s.DeletedAt is null))
+                sharedOptions.Add((shared, await spaces.ReadMembershipsAsync(tenant, shared.SpaceId, ct)));
+            if ((long)(spacePage + 1) * catalog.PageSize >= catalog.Total || catalog.Items.Count == 0) break;
+        }
+        async ValueTask<bool> ReadableSpace(AgentCore.Domain.Spaces.Space space, TenantAgent worker) => space.DeletedAt is null
+            && (await iam.CheckOwnedTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("spaces.read"), TenantSpaceService.Scope(tenant, space.SpaceId), ct)).Allowed
+            && (await iam.CheckOwnedTenantAsync(state, worker.PrincipalId, PermissionCatalog.Get("spaces.read"), TenantSpaceService.Scope(tenant, space.SpaceId), ct)).Allowed;
         foreach (var candidate in candidates.Items)
             try
             {
                 await TaskAuthority.TargetAsync(state, human.PrincipalId, candidate, iam, ct);
                 var own = await spaces.FindPrivateSpaceAsync(tenant, candidate.Instance.InstanceId, ct); if (own is null) continue;
-                if (!(await iam.CheckOwnedTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("spaces.read"), TenantSpaceService.Scope(tenant, own.SpaceId), ct)).Allowed) continue;
-                var options = new List<object> { await SpaceOption(own, candidate) };
-                var catalog = await spaces.ListSpacesAsync(tenant, null, 0, 100, ct);
-                foreach (var shared in catalog.Items.Where(s => s.Kind == AgentCore.Domain.Spaces.SpaceKind.Shared && s.SpaceId != own.SpaceId))
-                    if ((await iam.CheckOwnedTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("spaces.read"), TenantSpaceService.Scope(tenant, shared.SpaceId), ct)).Allowed
-                        && (await spaces.ReadMembershipsAsync(tenant, shared.SpaceId, ct)).Any(m => m.InstanceId == candidate.Instance.InstanceId))
-                        options.Add(await SpaceOption(shared, candidate));
+                var options = new List<object>(); Guid? defaultSpace = null;
+                if (await ReadableSpace(own, candidate)
+                    && (await spaces.ReadMembershipsAsync(tenant, own.SpaceId, ct)).Any(m => m.InstanceId == candidate.Instance.InstanceId))
+                { options.Add(await SpaceOption(own, candidate)); defaultSpace = own.SpaceId; }
+                foreach (var (shared, members) in sharedOptions)
+                    if (members.Any(m => m.InstanceId == candidate.Instance.InstanceId) && await ReadableSpace(shared, candidate))
+                    { options.Add(await SpaceOption(shared, candidate)); defaultSpace ??= shared.SpaceId; }
+                if (defaultSpace is null) continue;
                 object? budget = null; object? model = null;
                 if (configurations is not null)
                 {
@@ -185,7 +209,7 @@ public sealed class TenantTaskAccessService(IIamStore security, ITenantTaskStore
                         }
                     }
                 }
-                result.Add(new { instanceId = candidate.Instance.InstanceId, name = candidate.Instance.Persona.Name, defaultSpaceId = own.SpaceId, spaces = options, budget, model });
+                result.Add(new { instanceId = candidate.Instance.InstanceId, name = candidate.Instance.Persona.Name, defaultSpaceId = defaultSpace.Value, spaces = options, budget, model });
             }
             catch (AccessDeniedException) { }
         await Fence(tenant, state.Tenant.Revision, ct);
