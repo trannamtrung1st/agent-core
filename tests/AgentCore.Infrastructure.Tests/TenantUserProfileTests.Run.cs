@@ -17,6 +17,10 @@ public sealed partial class TenantUserProfileTests
         var permissions = new List<string> { "agents.chat" }; if (memory) permissions.Add("memory.read"); if (sessionRead) permissions.Add("sessions.read");
         var role = await f.Access.SaveRoleAsync(human.PrincipalId, tenant, null, "Run Profile reads", permissions, (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision);
         await f.Access.AssignRoleAsync(human.PrincipalId, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(tenant), (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision);
+        var space = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(tenant, agent.Instance.InstanceId))!;
+        var contextRole = await f.Access.SaveRoleAsync(human.PrincipalId, tenant, null, "Exact Profile Run context", ["spaces.read"], (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision);
+        await f.Access.AssignRoleAsync(human.PrincipalId, tenant, agent.PrincipalId, contextRole.RoleId,
+            AccessScope.ForResource(tenant, "space", space.SpaceId.ToString("D")), (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision);
         var created = await f.Sessions.CreateAsync(tenant, agent.Instance.InstanceId, new(human.AccountId, human.AuthenticationSessionId, human.PrincipalId), SessionMode.Text, (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision, 1);
         var receipt = await f.RunService().SubmitTextAsync(tenant, created.Owner.SessionId, new(human.AccountId, human.AuthenticationSessionId, human.PrincipalId), f.Ids.NewId(), "Actual owned Profile source", (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision, 1);
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(tenant, receipt.RunId))!;

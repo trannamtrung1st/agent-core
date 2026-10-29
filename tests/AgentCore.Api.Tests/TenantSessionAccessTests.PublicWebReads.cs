@@ -69,7 +69,10 @@ public sealed partial class TenantSessionAccessTests
             var role = await access.SaveRoleAsync(human, tenant, null, "Public observation executor", mode == "missing" ? ["agents.read"] : ["agents.read", "sessions.read"], await Revision(owner, tenant));
             var assignment = await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
             if (mode == "review") Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/sessions.read", new { mode="always", independentReview=false, expectedRevision=await Revision(owner, tenant), expectedPolicyRevision=0 })).StatusCode);
-            var sent = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId=Guid.NewGuid(), text="Research the public source", expectedRevision=await Revision(owner, tenant), expectedSessionRevision=1 }));
+            await GrantNativePrivateSpaceRead(owner, tenant, instance);
+            using var sentResponse = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId=Guid.NewGuid(), text="Research the public source", expectedRevision=await Revision(owner, tenant), expectedSessionRevision=1 });
+            Assert.True(sentResponse.IsSuccessStatusCode, await sentResponse.Content.ReadAsStringAsync());
+            var sent = await Json(sentResponse);
             var id = sent.GetProperty("runId").GetGuid(); var runs = factory.Services.GetRequiredService<ITenantRunStore>();
             if (mode is "revoked" or "revoke-output")
             {

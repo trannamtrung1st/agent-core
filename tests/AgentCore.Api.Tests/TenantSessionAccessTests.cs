@@ -77,6 +77,20 @@ public sealed partial class TenantSessionAccessTests
     private static async Task Csrf(HttpClient client)
     { var token = (await Json(await client.GetAsync("/api/v2/auth/csrf"))).GetProperty("token").GetString(); client.DefaultRequestHeaders.Remove("X-AgentCore-CSRF"); client.DefaultRequestHeaders.Add("X-AgentCore-CSRF", token); }
     private static async Task<long> Revision(HttpClient client, Guid tenant) => (await Json(await client.GetAsync($"/api/v2/tenants/{tenant}/access/me"))).GetProperty("revision").GetInt64();
+    private static async Task GrantNativePrivateSpaceRead(HttpClient owner, Guid tenant, Guid instance)
+    {
+        var api = $"/api/v2/tenants/{tenant}";
+        var agent = await Json(await owner.GetAsync(api + $"/agents/{instance}"));
+        var space = await Json(await owner.GetAsync(api + $"/agents/{instance}/private-space"));
+        using var created = await owner.PostAsJsonAsync(api + "/roles", new { name = "Fixture context " + instance.ToString("N"),
+            permissions = new[] { "spaces.read" }, expectedRevision = await Revision(owner, tenant) });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var role = await Json(created);
+        using var assigned = await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = agent.GetProperty("principalId").GetGuid(),
+            roleId = role.GetProperty("roleId").GetGuid(), resourceType = "space", resourceId = space.GetProperty("spaceId").GetString(),
+            expectedRevision = await Revision(owner, tenant) });
+        Assert.Equal(HttpStatusCode.Created, assigned.StatusCode);
+    }
     private static async Task<JsonElement> Json(HttpResponseMessage response)
     { using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()); return body.RootElement.Clone(); }
 }

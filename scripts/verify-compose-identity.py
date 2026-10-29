@@ -16,11 +16,19 @@ with ComposeFixture(project, int(os.environ.get('AGENTCORE_COMPOSE_PORT', '5080'
     invalid_input = api.call(prefix + '/agents', 'POST',
         {'templateId': '', 'version': 0, 'expectedRevision': api.revision(prefix)}, expected=400)
     assert invalid_input['reasonCode'] == 'invalid_request'
-    assert api.call(prefix + '/agents')['total'] == 0
+    defaults = eventually(lambda: api.call(prefix + '/chat/agents'),
+        lambda catalog: any(item['systemManaged'] for item in catalog['items']), 'managed default provisioning')
+    assert defaults['total'] == 1 and defaults['items'][0]['systemManaged']
     for retired in ('/api/v1/local/owner-capability', '/api/v2/admin/agent-instances', '/api/v1/sessions'):
         api.call(retired, 'POST', {}, expected=404)
-    agent = api.call(prefix + '/agents', 'POST', {'templateId': 'examiner', 'version': 1, 'expectedRevision': api.revision(prefix)}, expected=201)['instance']
-    session = api.call(prefix + '/sessions', 'POST', {'agentInstanceId': agent['instanceId'], 'expectedRevision': api.revision(prefix), 'expectedInstanceRevision': agent['revision']}, expected=201)
+    created_agent = api.call(prefix + '/agents', 'POST', {'templateId': 'examiner', 'version': 1, 'expectedRevision': api.revision(prefix)}, expected=201)
+    agent = created_agent['instance']
+    private_space = api.call(prefix + '/agents/' + agent['instanceId'] + '/private-space')
+    role = api.call(prefix + '/roles', 'POST', {'name': 'Read exact smoke context', 'permissions': ['spaces.read'],
+        'expectedRevision': api.revision(prefix)}, expected=201)
+    api.call(prefix + '/role-assignments', 'POST', {'principalId': created_agent['principalId'], 'roleId': role['roleId'],
+        'resourceType': 'space', 'resourceId': private_space['spaceId'], 'expectedRevision': api.revision(prefix)}, expected=201)
+    session = api.call(prefix + '/sessions', 'POST', {'retentionKind': 'saved', 'agentInstanceId': agent['instanceId'], 'expectedRevision': api.revision(prefix), 'expectedInstanceRevision': agent['revision']}, expected=201)
     session_id = session.get('sessionId') or session['owner']['sessionId']
     path = prefix + '/sessions/' + session_id
     view = api.call(path + '/conversation')
