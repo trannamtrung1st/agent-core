@@ -194,10 +194,10 @@ public sealed partial class TenantSessionAccessTests
         var result=await Json(await owner.PostAsJsonAsync(api+$"/sessions/{session}/messages",new{messageId=Guid.NewGuid(),text="Start the exact owned background check",expectedRevision=await Revision(owner,tenant),expectedSessionRevision=1}));
         return(tenant,session,result.GetProperty("runId").GetGuid());
     }
-    private static async Task<(AgentRun Child,AgentRun? Report)> WaitTenantBackground(WebApplicationFactory<Program> factory,Guid tenant,Guid session,Guid source,bool report)
+    private static async Task<(AgentRun Child,AgentRun? Report)> WaitTenantBackground(WebApplicationFactory<Program> factory,Guid tenant,Guid session,Guid source,bool report,TimeSpan? wait = null)
     {
         var runs=factory.Services.GetRequiredService<ITenantRunStore>();var sessions=factory.Services.GetRequiredService<ITenantSessionStore>();
-        using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(35));AgentRun? child=null;AgentRun? notification=null;AgentRun? parent=null;
+        using var timeout=new CancellationTokenSource(wait ?? TimeSpan.FromSeconds(35));AgentRun? child=null;AgentRun? notification=null;AgentRun? parent=null;
         while(!timeout.IsCancellationRequested)
         {
             parent=await runs.FindTenantRunAsync(tenant,source);
@@ -208,7 +208,8 @@ public sealed partial class TenantSessionAccessTests
             {var item=await runs.FindTenantRunAsync(tenant,id);if(item?.Admission.ExecutionContext?.Origin==ExecutionOrigin.TaskCompletion)notification=item;}
             if(parent?.IsTerminal==true && parent.Status!=AgentRunStatus.Completed || child?.IsTerminal==true && child.Status!=AgentRunStatus.Completed || notification?.IsTerminal==true && notification.Status!=AgentRunStatus.Completed)break;
             if(parent?.IsTerminal==true && child?.IsTerminal==true && (!report||notification?.IsTerminal==true))break;
-            await Task.Delay(25,timeout.Token);
+            try { await Task.Delay(25,timeout.Token); }
+            catch (OperationCanceledException) when (timeout.IsCancellationRequested) { break; }
         }
         var model=(TenantBackgroundModel)factory.Services.GetRequiredService<ILanguageModel>();
         Assert.True(parent?.Status==AgentRunStatus.Completed,$"Parent {parent?.Status}: {parent?.Failure?.Code} {parent?.Failure?.Summary}\n{string.Join('\n',model.Failures)}");

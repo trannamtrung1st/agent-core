@@ -230,6 +230,7 @@ public sealed partial class TenantCredentialAccessTests
         var role = await access.SaveRoleAsync(actor, s.Tenant, null, "Exact background account actions", ["tasks.delegate", "tasks.read", "spaces.read", "sessions.create", "agent-runs.create", "sessions.read", "credentials.read", "credentials.use", "email.draft", "email.send", "drive.read", "drive.write", "agents.read"], await Revision(owner, s.Tenant));
         await access.AssignRoleAsync(actor, s.Tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(s.Tenant), await Revision(owner, s.Tenant));
         await EnableAccountTask(owner, s, model);
+        agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(s.Tenant, s.Instance))!;
         if (drive) await factory.Services.GetRequiredService<ISyntheticDriveStore>().SaveAsync(s.Credential, new("file", "Original.bin", "application/octet-stream", 3, "1", null, ["root"], false), [0, 255, 3], null, default);
         var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = agent.Instance.Revision }))).GetProperty("sessionId").GetGuid();
         var initial = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Start exact account background test",

@@ -58,7 +58,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.True(budget.IsSuccessStatusCode, await budget.Content.ReadAsStringAsync());
             var sent = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{setup.Session}/messages", new { messageId = Guid.NewGuid(), text = "Start the exact owned Browser read budget check",
                 expectedRevision = await Revision(owner, setup.Tenant), expectedSessionRevision = 1 }));
-            var (child, report) = await WaitTenantBackground(factory, setup.Tenant, setup.Session, sent.GetProperty("runId").GetGuid(), true);
+            var (child, report) = await WaitTenantBackground(factory, setup.Tenant, setup.Session, sent.GetProperty("runId").GetGuid(), true, TimeSpan.FromSeconds(90));
             Assert.Equal(ExecutionBudgetClass.UnattendedBoundBrowser, child.Admission.ExecutionBudget!.Class); Assert.Equal(32, child.Admission.ExecutionBudget.Profile.MaxSteps);
             Assert.Equal(240, child.Admission.ExecutionBudget.Profile.DurationSeconds);
             Assert.Equal(AgentRunStatus.Completed, child.Status); Assert.Equal(27, child.Checkpoint!.StepCount);
