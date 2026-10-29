@@ -64,6 +64,7 @@ public sealed partial class TenantSessionAccessTests
             {
                 var lower = await FloorHuman(host, owner, tenant, "floor-requester", ["agents.chat", "sessions.read", "sessions.create"]);
                 requester = lower.Client; human = requester; requesterPrincipal = lower.Principal; requesterRole = lower.Role;
+                await GrantNativePrivateSpaceRead(owner, tenant, instance, lower.Principal);
             }
             Guid runId;
             if (origin == "scheduled")

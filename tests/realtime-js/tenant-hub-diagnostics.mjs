@@ -26,8 +26,13 @@ csrf = (await json('/api/v2/auth/csrf')).token;
 const tenant = (await json('/api/v2/account/tenants')).items[0].tenantId, api = `/api/v2/tenants/${tenant}`;
 const revision = async () => (await json(api + '/access/me')).revision;
 const actor = (await json(api + '/access/me')).principalId;
-const agent = (await json(api + '/agents', { templateId: 'examiner', version: 1, expectedRevision: await revision() })).instance.instanceId;
-const session = (await json(api + '/sessions', { agentInstanceId: agent, expectedRevision: await revision(), expectedInstanceRevision: 1 })).sessionId;
+const createdAgent = await json(api + '/agents', { templateId: 'examiner', version: 1, expectedRevision: await revision() });
+const agent = createdAgent.instance.instanceId;
+const space = await json(api + `/agents/${agent}/private-space`);
+const role = await json(api + '/roles', { name: 'Exact diagnostic Hub context', permissions: ['spaces.read'], expectedRevision: await revision() });
+await json(api + '/role-assignments', { principalId: createdAgent.principalId, roleId: role.roleId,
+  resourceType: 'space', resourceId: space.spaceId, expectedRevision: await revision() });
+const session = (await json(api + '/sessions', { retentionKind: 'saved', agentInstanceId: agent, expectedRevision: await revision(), expectedInstanceRevision: 1 })).sessionId;
 const events = [];
 const hub = new HubConnectionBuilder().withUrl(base + '/hubs/session', {
   skipNegotiation: true, transport: HttpTransportType.WebSockets, headers: { Cookie: cookie(), Origin: base }

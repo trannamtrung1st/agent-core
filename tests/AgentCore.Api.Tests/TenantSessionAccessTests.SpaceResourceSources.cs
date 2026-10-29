@@ -82,7 +82,14 @@ public sealed partial class TenantSessionAccessTests
             }
             var run = await AttachmentTerminal(factory.Services.GetRequiredService<ITenantRunStore>(), v.Tenant, submitted.GetProperty("runId").GetGuid());
             Assert.True(run.Status == (mutation == "none" ? AgentRunStatus.Completed : AgentRunStatus.Failed), $"{run.Status}: {run.Failure}");
-            if (mutation != "none") { Assert.Equal("protected-output-unavailable", run.Failure?.Code); return; }
+            if (mutation != "none")
+            {
+                // The held model call resumes through its current source-authority fence before terminal output commit.
+                Assert.Equal("provider-authentication", run.Failure?.Code); Assert.Null(run.Result);
+                var retained = (await factory.Services.GetRequiredService<ITenantConversationStore>().ReadTenantConversationAsync(v.Tenant, v.Session, null, null, 100))!;
+                Assert.DoesNotContain(retained.History.Items, e => e.ResponseId == run.ResponseId && e.Role == ConversationRole.Assistant && e.Status == EntryStatus.Completed);
+                return;
+            }
             var pin = Assert.Single(run.Admission.Configuration!.Resources, r => r.Key == key);
             Assert.Equal(new SpaceResourceOrigin(v.Tenant, space, resource, 1), pin.SpaceSource);
             Assert.StartsWith("/space/resources/", pin.VirtualPath, StringComparison.Ordinal);

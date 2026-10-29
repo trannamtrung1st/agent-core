@@ -69,7 +69,12 @@ public sealed partial class TenantSessionAccessTests
             Assert.Single(await runs.ListTenantRunIdsAsync(started.Tenant, child.Owner.SessionId));
             var detail = await Json(await owner.GetAsync(activityApi + $"/{child.Owner.SessionId}/background"));
             Assert.Equal("Owned background result.", detail.GetProperty("initialRun").GetProperty("outcomeText").GetString());
-            Assert.Equal("delivered", detail.GetProperty("completionDelivery").GetProperty("status").GetString());
+            Assert.Equal(System.Text.Json.JsonValueKind.Null, detail.GetProperty("completionDelivery").ValueKind);
+            var taskReport = result.Report!.Admission.TaskReport!;
+            var notices = await Json(await owner.GetAsync($"/api/v2/tenants/{started.Tenant}/tasks/{taskReport.TaskId}/notifications"));
+            var notice = Assert.Single(notices.GetProperty("items").EnumerateArray());
+            Assert.Equal(taskReport.NotificationId, notice.GetProperty("notificationId").GetGuid());
+            Assert.True(notice.GetProperty("reportAdmitted").GetBoolean());
             var history = await Json(await owner.GetAsync(activityApi + $"/{child.Owner.SessionId}/runs"));
             Assert.Equal(initial, Assert.Single(history.GetProperty("items").EnumerateArray()).GetProperty("runId").GetGuid());
             Assert.DoesNotContain("checkpoint", history.ToString(), StringComparison.OrdinalIgnoreCase);
@@ -142,7 +147,7 @@ public sealed partial class TenantSessionAccessTests
             var detail = await Json(await reopened.GetAsync($"/api/v2/tenants/{tenant}/agents/{instance}/activity/sessions/{session}/background"));
             Assert.Equal(initial, detail.GetProperty("initialRun").GetProperty("runId").GetGuid());
             Assert.Equal("Owned background result.", detail.GetProperty("initialRun").GetProperty("outcomeText").GetString());
-            Assert.Equal("immediateBackground", detail.GetProperty("session").GetProperty("origin").GetString());
+            Assert.Equal("delegatedTask", detail.GetProperty("session").GetProperty("origin").GetString());
             Assert.Equal(new[] { "ChatList", "BackgroundWork" }, detail.GetProperty("session").GetProperty("surfaces").EnumerateArray().Select(x => x.GetString()).ToArray());
             Assert.Equal(2, (await Json(await reopened.GetAsync($"/api/v2/tenants/{tenant}/sessions"))).GetProperty("total").GetInt32());
             Assert.Single(await second.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200), a => a.Action == "sessions.continue-in-chat");

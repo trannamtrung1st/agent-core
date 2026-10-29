@@ -72,6 +72,7 @@ public sealed partial class TenantSessionAccessTests
                 var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
                 var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(owner, tenant) }));
                 var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
+                await GrantNativePrivateSpaceRead(owner, tenant, instance);
                 long instanceRevision = 1;
                 foreach (var (id, procedure) in new[] { ("journey-billing", JourneyProcedure), ("journey-order", "UNUSED-ORDER-PROCEDURE") })
                 {

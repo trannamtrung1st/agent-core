@@ -15,8 +15,12 @@ try{
  csrf=(await json('/api/v2/auth/csrf')).token;await json('/api/v2/auth/login',{login:'owner@example.test',password:'explicit-synthetic-test-password'});csrf=(await json('/api/v2/auth/csrf')).token;
  const tenant=(await json('/api/v2/account/tenants')).items[0].tenantId,api=`/api/v2/tenants/${tenant}`;
  const revision=async()=>(await json(api+'/access/me')).revision;
- const instance=(await json(api+'/agents',{templateId:'examiner',version:1,expectedRevision:await revision()})).instance.instanceId;
- const session=(await json(api+'/sessions',{agentInstanceId:instance,expectedRevision:await revision(),expectedInstanceRevision:1})).sessionId;
+ const createdAgent=await json(api+'/agents',{templateId:'examiner',version:1,expectedRevision:await revision()});
+ const instance=createdAgent.instance.instanceId;
+ const space=await json(api+`/agents/${instance}/private-space`);
+ const role=await json(api+'/roles',{name:'Exact voice wire context',permissions:['spaces.read'],expectedRevision:await revision()});
+ await json(api+'/role-assignments',{principalId:createdAgent.principalId,roleId:role.roleId,resourceType:'space',resourceId:space.spaceId,expectedRevision:await revision()});
+ const session=(await json(api+'/sessions',{retentionKind:'saved',agentInstanceId:instance,expectedRevision:await revision(),expectedInstanceRevision:1})).sessionId;
  const live=await connect();const attach=()=>({protocolVersion:1,type:'session.attach',sessionId:session,eventId:crypto.randomUUID(),sequence:0,payload:{tenantId:tenant}});
  assert.equal((await live.hub.invoke('AttachTenant',attach())).accepted,true);
  const ready=await until(()=>live.events.find(e=>e.type==='session.ready'));let sequence=0;

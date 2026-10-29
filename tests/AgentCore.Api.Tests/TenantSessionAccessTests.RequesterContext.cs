@@ -62,6 +62,7 @@ public sealed partial class TenantSessionAccessTests
             var chat = await Grant("Communicate", ["agents.chat"], agentScope);
             await Grant("Read this conversation", ["sessions.read"], TenantSessionRules.Scope(tenant, sessionId));
             var transient = await Grant("Before round only", ["agents.update"], agentScope);
+            await GrantNativePrivateSpaceRead(owner, tenant, instance, user.PrincipalId);
             await Login(requesterClient, account.LoginKey, "explicit-requester-test-password");
             var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); var first = 0;

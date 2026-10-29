@@ -33,7 +33,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(HttpStatusCode.OK,(await owner.PostAsJsonAsync(api+$"/approvals/{request.RequestId}/decision",new { decision="reject",actionHash=request.Operation.ActionHash,expectedRevision=await Revision(owner,tenant),expectedRequestRevision=request.Revision })).StatusCode);
             var final=await AwaitManagementSuccessor(runs,tenant,session,request.RequestId,runId);Assert.Equal(AgentRunStatus.Completed,final.Status);
             var alternative=await host.Services.GetRequiredService<ITenantManagementStore>().ObserveTenantManagementReadAsync(new(tenant,runId),null,"configuration.inspect","""{"goal":"Keep the next responses brief"}""");
-            var operation=TenantApprovalRules.PrepareManagementRead(Guid.NewGuid(),instance,alternative.Value,6,1);
+            var operation=TenantApprovalRules.ForRun(TenantApprovalRules.PrepareManagementRead(Guid.NewGuid(),instance,alternative.Value,6,1),pending);
             Assert.NotEqual(request.Operation.ActionHash,operation.ActionHash);Assert.Equal(request.Operation.OperationFingerprint,operation.OperationFingerprint);
             var prior=await approvals.FindRootApprovalAsync(tenant,request.RootActivationId,request.ExecutorPrincipalId,operation);
             Assert.NotNull(prior);Assert.Equal(request.RequestId,prior.RequestId);Assert.Equal(TenantApprovalStatus.Rejected,prior.Status);

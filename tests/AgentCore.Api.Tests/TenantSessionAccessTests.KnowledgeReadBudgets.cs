@@ -32,7 +32,7 @@ public sealed partial class TenantSessionAccessTests
             var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(v.Human.PrincipalId, v.Tenant, null, "Exact owned knowledge source", ["agents.read", "sessions.read", "resources.read"], await Revision(owner, v.Tenant));
             var state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(v.Tenant))!;
-            await access.AssignRoleAsync(v.Human.PrincipalId, v.Tenant, state.SystemIdentities.Single().PrincipalId, role.RoleId, AccessScope.ForTenant(v.Tenant), await Revision(owner, v.Tenant));
+            await access.AssignRoleAsync(v.Human.PrincipalId, v.Tenant, state.SystemIdentities.Single(identity => identity.AgentInstanceId == value.Instance).PrincipalId, role.RoleId, AccessScope.ForTenant(v.Tenant), await Revision(owner, v.Tenant));
             model.Arguments = JsonSerializer.Serialize(new { identity }); model.ReadEnabled = true;
             var sent = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{v.Session}/messages", new { messageId = Guid.NewGuid(), text = "Inspect the admitted knowledge policy",
                 expectedRevision = await Revision(owner, v.Tenant), expectedSessionRevision = 1 }));

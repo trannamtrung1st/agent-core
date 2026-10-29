@@ -63,6 +63,7 @@ public sealed partial class TenantSessionAccessTests
             var principal = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
             var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) })))
                 .GetProperty("instance").GetProperty("instanceId").GetGuid();
+            await GrantNativePrivateSpaceRead(owner, tenant, instance);
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var events = new ConcurrentQueue<ServerEvent>(); var audio = new ConcurrentQueue<OutputAudioDto>();
             await using var hub = TenantSocket(ready.BaseAddress!, cookies, events); hub.On<OutputAudioDto>("AudioOutput", audio.Enqueue); await hub.StartAsync();

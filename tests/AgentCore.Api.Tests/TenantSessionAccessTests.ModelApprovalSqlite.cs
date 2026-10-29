@@ -60,6 +60,7 @@ public sealed partial class TenantSessionAccessTests
                 tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
                 var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
                 instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
+                await GrantNativePrivateSpaceRead(owner, tenant, instance);
                 Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + $"/agents/{instance}/self-management", new
                 {
                     expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
