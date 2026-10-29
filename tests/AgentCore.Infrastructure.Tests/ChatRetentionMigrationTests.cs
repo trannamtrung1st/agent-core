@@ -19,6 +19,7 @@ public sealed class ChatRetentionMigrationTests
         var definition = (await f.BuiltIns.ListAsync()).First();
         var snapshot = AgentRunTestFixtures.Snapshot(new(Guid.NewGuid(), Guid.NewGuid()), definition, f.Clock.GetUtcNow());
         await f.Memory.SaveAsync(snapshot, 0);
+        await f.SelectHistoricalConversationAsync("20261026010000_CanonicalSelfManagement");
         await using var db = f.Contexts!.CreateDbContext();
         await db.GetService<IMigrator>().MigrateAsync("20261026010000_CanonicalSelfManagement");
         await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE SessionSnapshots SET LifecycleSource='Legacy',LifecycleStatus={status} WHERE SessionId={snapshot.SessionId.ToString("D")}");

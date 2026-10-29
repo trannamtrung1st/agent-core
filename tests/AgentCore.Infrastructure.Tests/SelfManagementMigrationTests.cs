@@ -16,18 +16,18 @@ public sealed partial class TenantCredentialIntegrationTests
     [InlineData(true)]
     public async Task SelfManagement_one_time_normalization_preserves_choices_freeze_history_and_reopens(bool numericEnums)
     {
-        await using var f = await Fixture.Create(true);
+        await using var f = await Fixture.Create(true, targetMigration: "20261025090000_CanonicalModelIdentity");
         var now = DateTimeOffset.UtcNow;
         var instance = new AgentInstance(Guid.NewGuid(), "examiner", 1, new("Migration", "Test", "", ""), AgentInstanceLifecycle.Active, now, now);
-        await f.Instances.InsertAsync(instance);
         var legacy = """
             {"policy":{"mode":"Managed","scopes":["KnowledgeResources"],"sources":["retained"],"eligibleTools":[],"frozen":true,"managedAutoApply":[],"builtInSkills":{"configurationAssistance":false,"harnessAuthoring":true}},"policyRevision":7,"preparation":{"purpose":"IMMUTABLE-HISTORY","approvals":[{"actionHash":"EXACT-OLD-HASH"}]},"instanceChanges":null}
             """;
         if (numericEnums) legacy = legacy.Replace("\"Managed\"", "2").Replace("\"KnowledgeResources\"", "0");
         await using (var db = f.Contexts!.CreateDbContext())
         {
-            await db.GetService<IMigrator>().MigrateAsync("20261025090000_CanonicalModelIdentity");
-            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE AgentInstances SET HarnessManagementJson={legacy} WHERE InstanceId={instance.InstanceId.ToString("D")}");
+            // Seed the actual predecessor columns; today's mapped INSERT includes later fields.
+            var persona = JsonSerializer.Serialize(instance.Persona);
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO AgentInstances (InstanceId,DefinitionId,ActiveVersion,PersonaJson,Lifecycle,CreatedAtUtc,UpdatedAtUtc,Revision,PersonaRevision,HarnessManagementJson) VALUES ({instance.InstanceId.ToString("D")},{instance.DefinitionId},{instance.ActiveVersion},{persona},{"Active"},{now.ToUnixTimeMilliseconds()},{now.ToUnixTimeMilliseconds()},{instance.Revision},{instance.PersonaRevision},{legacy})");
             await db.Database.MigrateAsync();
         }
         await using var reopened = f.Contexts!.CreateDbContext();

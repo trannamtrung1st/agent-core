@@ -11,7 +11,7 @@ public sealed partial class TenantCredentialIntegrationTests
     [Fact]
     public async Task DynamicModels_canonical_identity_preserves_all_guard_owners_and_renames_physical_references()
     {
-        await using var f = await Fixture.Create(true);
+        await using var f = await Fixture.Create(true, targetMigration: "20261025085000_TenantDynamicModels");
         await using var db = f.Contexts!.CreateDbContext();
         await db.GetService<IMigrator>().MigrateAsync("20261025085000_TenantDynamicModels");
         var before = await IdentityGuards(db);
@@ -53,12 +53,23 @@ public sealed partial class TenantCredentialIntegrationTests
         await using var f = await Fixture.Create(true); var definition = (await f.BuiltIns.ListAsync()).First();
         var snapshot = AgentRunTestFixtures.Snapshot(new(Guid.NewGuid(), Guid.NewGuid()), definition, f.Clock.GetUtcNow());
         await f.Memory.SaveAsync(snapshot, 0);
+        await f.SelectHistoricalConversationAsync("20261025090000_CanonicalModelIdentity");
         await using var db = f.Contexts!.CreateDbContext();
+        var guards = await IdentityGuards(db);
+        var applied = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
         var error = await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261025085000_TenantDynamicModels"));
         Assert.Contains("LegacyModelDataResetRequired", error.Message);
         Assert.Equal("20261025090000_CanonicalModelIdentity", (await db.Database.GetAppliedMigrationsAsync()).Last());
-        var retained = (await f.Memory.LoadAsync(snapshot.SessionId))!;
-        Assert.Equal(snapshot.ModelSelection, retained.ModelSelection); Assert.Equal(snapshot.Entries.Single().Text, retained.Entries.Single().Text);
+        Assert.Equal(applied, await db.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(guards, await IdentityGuards(db));
+        // Read the frozen physical columns; today's mapping includes later preferences.
+        Assert.Equal(snapshot.ModelSelection!.OfferingId, await db.Database.SqlQueryRaw<string>("SELECT ModelOfferingId AS Value FROM SessionSnapshots").SingleAsync());
+        Assert.Equal(snapshot.ModelSelection.ConnectionId, await db.Database.SqlQueryRaw<string>("SELECT ModelConnectionId AS Value FROM SessionSnapshots").SingleAsync());
+        Assert.Equal(snapshot.ModelSelection.ExternalModelId, await db.Database.SqlQueryRaw<string>("SELECT ExternalModelId AS Value FROM SessionSnapshots").SingleAsync());
+        Assert.Equal(snapshot.ModelSelection.SelectionSource.ToString(), await db.Database.SqlQueryRaw<string>("SELECT ModelSelectionSource AS Value FROM SessionSnapshots").SingleAsync());
+        Assert.Equal(snapshot.ModelSelection.ReasoningEffort, await db.Database.SqlQueryRaw<string?>("SELECT ModelReasoningEffort AS Value FROM SessionSnapshots").SingleAsync());
+        Assert.Null(await db.Database.SqlQueryRaw<string?>("SELECT ModelBindingJson AS Value FROM SessionSnapshots").SingleAsync());
+        Assert.Equal(snapshot.Entries.Single().Text, await db.Database.SqlQueryRaw<string>("SELECT Text AS Value FROM ConversationEntries").SingleAsync());
     }
 
     [Theory]
@@ -67,7 +78,7 @@ public sealed partial class TenantCredentialIntegrationTests
     [InlineData("catalogKey", "\"retired-alias\"")]
     public async Task DynamicModels_canonical_identity_refuses_retired_document_fields_before_renaming_columns(string property, string value)
     {
-        await using var f = await Fixture.Create(true); await using var db = f.Contexts!.CreateDbContext();
+        await using var f = await Fixture.Create(true, targetMigration: "20261025085000_TenantDynamicModels"); await using var db = f.Contexts!.CreateDbContext();
         await db.GetService<IMigrator>().MigrateAsync("20261025085000_TenantDynamicModels");
         var document = "{\"nested\":{\"" + property + "\":" + value + "}}";
         await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO AgentDefinitionDrafts (DraftId,DefinitionId,Revision,CandidateJson,SourceKind,CreatedAtUtc,UpdatedAtUtc) VALUES ({"retired-model-field"},{"retained-definition"},{1L},{document},{0},{0L},{0L})");

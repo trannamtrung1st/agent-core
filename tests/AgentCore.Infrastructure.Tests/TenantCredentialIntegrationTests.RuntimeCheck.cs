@@ -241,7 +241,7 @@ public sealed partial class TenantCredentialIntegrationTests
     [Theory]
     [InlineData(false, false)] [InlineData(true, false)]
     [InlineData(false, true)] [InlineData(true, true)]
-    public async Task Abandoned_credential_dispatch_recovers_after_lease_or_deleted_session_without_provider_replay(bool sqlite, bool deleted)
+    public async Task Abandoned_credential_dispatch_recovers_after_lease_or_guarded_session_deletion_without_provider_replay(bool sqlite, bool deleted)
     {
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-17T12:00:00Z"));
         await using var f = await Fixture.Create(sqlite, clock); var (setup, request, run) = await ApprovedRuntimeCheck(f);
@@ -256,9 +256,11 @@ public sealed partial class TenantCredentialIntegrationTests
             await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(cancelled.Owner, cancelled.AgentRunId,
                 new AgentRunCommand.CommitCancellation(cancelled.Revision, clock.GetUtcNow(), run.Claim!.Generation, null), f.Ids.NewId());
             var session = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(setup.Tenant, run.SessionId))!;
-            await f.Sessions.ChangeAsync(setup.Tenant, setup.Owner, new(run.SessionId, session.Snapshot.Revision, TenantSessionAction.Delete),
-                (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
-            Assert.Null(await ((ITenantRunStore)f.Iam).FindTenantRunAsync(setup.Tenant, run.AgentRunId));
+            var securityRevision = (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision;
+            var refused = await Assert.ThrowsAsync<SecurityConflictException>(() => f.Sessions.ChangeAsync(setup.Tenant, setup.Owner,
+                new(run.SessionId, session.Snapshot.Revision, TenantSessionAction.Delete), securityRevision).AsTask());
+            Assert.Equal("session_effect_reconciliation_pending", refused.ReasonCode);
+            Assert.NotNull(await ((ITenantRunStore)f.Iam).FindTenantRunAsync(setup.Tenant, run.AgentRunId));
         }
         else clock.Advance(TimeSpan.FromMinutes(6));
         IIamStore reopened = sqlite ? new SqliteIamStore(f.Contexts!, clock: clock) : f.Iam;
@@ -462,8 +464,9 @@ public sealed partial class TenantCredentialIntegrationTests
         await using var f = await Fixture.Create(sqlite); var (setup, request, run) = await ApprovedRuntimeCheck(f);
         var verifier = new RuntimeCheckVerifier(async (original, _) => {
             var state = (await f.Iam.ReadTenantAsync(setup.Tenant))!;
-            var assignment = state.Assignments.Single(a => a.PrincipalId == setup.Agent.PrincipalId);
-            await f.Access.RevokeAssignmentAsync(setup.Owner.PrincipalId, setup.Tenant, assignment.AssignmentId, state.Tenant.Revision);
+            foreach (var assignment in state.Assignments.Where(a => a.PrincipalId == setup.Agent.PrincipalId))
+                await f.Access.RevokeAssignmentAsync(setup.Owner.PrincipalId, setup.Tenant, assignment.AssignmentId,
+                    (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
             return new(f.Protector.Protect(original.CredentialId, original.ProtectionVersion, GoogleOAuthRefreshGrant.Write("completed-private-refresh", "tenant-client")));
         });
         var receipt = await RuntimeChecks(f, verifier).ExecuteAsync(new(setup.Tenant, run.AgentRunId), request.RequestId, request.Operation.OperationId, run.Claim!.Generation, request.Operation.ActionHash);

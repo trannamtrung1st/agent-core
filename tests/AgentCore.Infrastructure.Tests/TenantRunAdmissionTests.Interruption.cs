@@ -34,7 +34,8 @@ public sealed partial class TenantRunAdmissionTests
             "Captured old prefix", active.Run.ResponseId, EntryStatus.Streaming, SessionMode.Text, 0, 7, clock.GetUtcNow());
         await runtime.SaveTenantRuntimeAsync(active.Frame, active.Snapshot with { Revision = active.Snapshot.Revision + 1,
             Entries = [..active.Snapshot.Entries, prefix], LastEntrySequence = prefix.Sequence }, active.Snapshot.Revision);
-        var member = await Member(f, setup.Tenant, setup.Owner.PrincipalId); var grants = new Dictionary<string, Guid>();
+        var member = await Member(f, setup.Tenant, setup.Owner.PrincipalId);
+        await GrantExactContextRead(f, setup, member.PrincipalId); var grants = new Dictionary<string, Guid>();
         foreach (var permission in new[] { "agents.chat", "sessions.read", "attachments.read", "agent-runs.read", "agent-runs.cancel" })
         {
             if (mode == "missing-cancel" && permission == "agent-runs.cancel") continue;

@@ -38,7 +38,7 @@ public sealed partial class TenantPreferenceOperationTests
     [InlineData(false)] [InlineData(true)]
     public async Task Receipt_migration_round_trips_empty_source_but_refuses_to_discard_direct_receipts(bool hasReceipt)
     {
-        await using var f = await Fixture.Create(true);
+        await using var f = await Fixture.Create(true, targetMigration: hasReceipt ? null : "20261017052609_TenantDirectLocalOperationReceipts");
         if (hasReceipt)
         {
             var setup = await Setup(f);

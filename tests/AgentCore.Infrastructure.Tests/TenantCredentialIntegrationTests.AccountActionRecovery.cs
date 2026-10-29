@@ -67,13 +67,14 @@ public sealed partial class TenantCredentialIntegrationTests
     [Fact]
     public async Task Account_action_empty_SQLite_down_up_retains_all_read_guards_and_current_shape()
     {
-        await using var f = await Fixture.Create(true, builtInAuthority: true);
+        await using var f = await Fixture.Create(true, builtInAuthority: true, targetMigration: "20261020160000_TenantAccountActionReview");
         await using var db = f.Contexts!.CreateDbContext(); var migrator = db.GetService<IMigrator>();
         var currentGuards = await AccountConsentGuards(db);
         await migrator.MigrateAsync("20261020150000_TenantAccountReadReview");
         Assert.Equal(15, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM sqlite_master WHERE type='trigger' AND (name LIKE 'TR_TenantApprovals_%' OR name LIKE 'TR_TenantReceipts_%')").SingleAsync());
-        await migrator.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
+        await migrator.MigrateAsync("20261020160000_TenantAccountActionReview");
         Assert.Equal(currentGuards, await AccountConsentGuards(db));
+        await migrator.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
     }
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Account_password_read_consent_accepts_epoch_zero_without_enabling_provider_io(bool sqlite)

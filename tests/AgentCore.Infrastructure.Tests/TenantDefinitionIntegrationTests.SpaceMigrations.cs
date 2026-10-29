@@ -9,7 +9,7 @@ public sealed partial class TenantDefinitionIntegrationTests
     [Fact]
     public async Task Space_migrations_preserve_predecessor_guards_and_roundtrip_empty_disposable_storage()
     {
-        await using var f = await Fixture.Create(true);
+        await using var f = await Fixture.Create(true, targetMigration: "20261025080000_SpaceResourceApprovals");
         await using var db = f.Contexts!.CreateDbContext();
         var migrator = db.GetService<IMigrator>();
         static bool NewGuard(string name) => name.StartsWith("TR_SpaceResources_", StringComparison.Ordinal) || name.StartsWith("TR_SpaceBinding_Source_", StringComparison.Ordinal) || name.StartsWith("TR_SpaceSources_", StringComparison.Ordinal) || name.StartsWith("TR_TenantRuns_Context_", StringComparison.Ordinal) || name.StartsWith("TR_SpaceAutomationPins_", StringComparison.Ordinal) || name.StartsWith("TR_Spaces_", StringComparison.Ordinal)
@@ -47,7 +47,7 @@ public sealed partial class TenantDefinitionIntegrationTests
     [Fact]
     public async Task Workspace_cutover_refuses_retained_unowned_Instance_rows_without_resetting_them()
     {
-        await using var f = await Fixture.Create(true);
+        await using var f = await Fixture.Create(true, targetMigration: "20261025030000_ContextualExecutionSources");
         await using var db = f.Contexts!.CreateDbContext();
         var migrator = db.GetService<IMigrator>();
         await migrator.MigrateAsync("20261025030000_ContextualExecutionSources");

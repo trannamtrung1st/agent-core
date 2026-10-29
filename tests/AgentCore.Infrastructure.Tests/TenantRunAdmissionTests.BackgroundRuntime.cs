@@ -133,7 +133,7 @@ public sealed partial class TenantRunAdmissionTests
     [Fact]
     public async Task Tenant_background_nullable_receipt_migration_has_empty_down_up_parity()
     {
-        await using var f=await Fixture.Create(true,builtInAuthority:true);await using var db=f.Contexts!.CreateDbContext();
+        await using var f=await Fixture.Create(true,builtInAuthority:true,targetMigration:"20261020100000_TenantBackgroundRuntime");await using var db=f.Contexts!.CreateDbContext();
         await db.GetService<IMigrator>().MigrateAsync("20261020090000_TenantAgentDecommission");await db.Database.MigrateAsync();Assert.False(db.Database.HasPendingModelChanges());
         var checks=await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM pragma_foreign_key_check").SingleAsync();Assert.Equal(0,checks);
     }
@@ -142,7 +142,7 @@ public sealed partial class TenantRunAdmissionTests
     {
         await using var f=await Fixture.Create(sqlite,builtInAuthority:true);var original=await BackgroundParent(f);await CompleteBackgroundParent(f,original);
         async Task<long> Revision()=>(await f.Iam.ReadTenantAsync(original.Setup.Tenant))!.Tenant.Revision;
-        var role=await f.Access.SaveRoleAsync(original.Setup.Owner.PrincipalId,original.Setup.Tenant,null,"Scoped requester creation",["sessions.create","agent-runs.create"],await Revision());
+        var role=await f.Access.SaveRoleAsync(original.Setup.Owner.PrincipalId,original.Setup.Tenant,null,"Scoped requester creation",["sessions.create","agent-runs.create","tasks.delegate"],await Revision());
         var account=await f.Identity.RegisterAsync("background-reader@example.test","Scoped requester","strong-requester-password");
         var invite=await f.Access.InviteAsync(original.Setup.Owner.PrincipalId,original.Setup.Tenant,account.LoginKey,role.RoleId,await Revision());
         var user=await f.Access.AcceptInvitationAsync(account.AccountId,original.Setup.Tenant,invite.Invitation.InvitationId,invite.Token);
@@ -153,6 +153,7 @@ public sealed partial class TenantRunAdmissionTests
         role=await f.Access.SaveRoleAsync(original.Setup.Owner.PrincipalId,original.Setup.Tenant,null,"Exact chat",["agents.chat"],await Revision());
         await f.Access.AssignRoleAsync(original.Setup.Owner.PrincipalId,original.Setup.Tenant,user.PrincipalId,role.RoleId,AccessScope.ForResource(original.Setup.Tenant,"agent",original.Parent.AgentInstanceId.ToString("D")),await Revision());
         var metadata=(await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(original.Setup.Tenant,original.Setup.Session))!;
+        await GrantExactContextRead(f,original.Setup,member.PrincipalId);
         var message=await f.RunService().SubmitTextAsync(original.Setup.Tenant,original.Setup.Session,member,f.Ids.NewId(),"Scoped background request",await Revision(),metadata.Snapshot.Revision);
         var source=(await ((ITenantRunStore)f.Iam).FindTenantRunAsync(original.Setup.Tenant,message.RunId))!;var claimedSource=await ClaimBackground(f,source);
         var parent=original with{Parent=claimedSource.Run,Frame=claimedSource.Frame,Snapshot=claimedSource.Snapshot};

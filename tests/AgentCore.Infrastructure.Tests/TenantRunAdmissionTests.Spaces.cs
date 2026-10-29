@@ -52,10 +52,14 @@ public sealed partial class TenantRunAdmissionTests
         Assert.NotEqual(destination.SpaceId, child.Session.ContextSelection!.SpaceId);
         Assert.Null(child.Session.ContextSelection.EffectiveAfterRunId); Assert.Null(child.Session.ContextSelection.TransitionId);
         Assert.True((await AdmitTaskFixture(f, parent.Frame, child.Session, child.Run, f.Ids.NewId())).Created);
-        // A prepared child cannot borrow the newer desired Session selection.
+        // An admitted Task replays its original child; a later desired selection cannot retarget it.
         var redirected = (await f.RunConfiguration().ResolveInSpaceAsync(s.Tenant, s.Agent.Instance.InstanceId, selection, default)).Configuration;
         var forged = child with { Session = child.Session with { ContextSelection = selection } };
-        await Assert.ThrowsAsync<AccessDeniedException>(() => AdmitTaskFixture(f, parent.Frame, forged.Session, forged.Run, f.Ids.NewId()).AsTask());
+        var replay = await AdmitTaskFixture(f, parent.Frame, forged.Session, forged.Run, f.Ids.NewId());
+        Assert.False(replay.Created);
+        Assert.True(beforePin.SameLocation(replay.Run.Admission.Configuration!.SpaceContext));
+        var retainedChild = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, child.Session.SessionId))!;
+        Assert.True(beforePin.MatchesSelection(retainedChild.Snapshot.ContextSelection));
         Assert.Equal(child.Run.AgentRunId, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, child.Run.AgentRunId))!.AgentRunId);
         Assert.Equal(selection, (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Session))!.Snapshot.ContextSelection);
         Assert.Equal(beforePin, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, parent.Parent.AgentRunId))!.Admission.Configuration!.SpaceContext);

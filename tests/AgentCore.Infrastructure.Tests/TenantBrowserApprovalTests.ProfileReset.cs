@@ -169,7 +169,7 @@ public sealed partial class TenantBrowserApprovalTests
     [Fact]
     public async Task Tenant_Browser_profile_SQLite_empty_migration_roundtrip_preserves_model()
     {
-        await using var f = await Fixture.Create(true); await using var db = await f.Contexts!.CreateDbContextAsync();
+        await using var f = await Fixture.Create(true, targetMigration: "20261020060000_TenantBrowserProfileReset"); await using var db = await f.Contexts!.CreateDbContextAsync();
         await db.GetService<IMigrator>().MigrateAsync("20261020040000_TenantBrowserArtifactDrops");
         await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
         Assert.Contains("TR_AgentInstances_ProfileReset_Update", await db.Database.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type='trigger'").ToListAsync());

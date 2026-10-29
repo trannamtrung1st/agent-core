@@ -36,9 +36,10 @@ public sealed partial class TenantCredentialIntegrationTests
         }
         // Seed through the current store before selecting the historical schema. No
         // current-model INSERT is valid against a predecessor with fewer columns.
-        await db.GetService<IMigrator>().MigrateAsync("20261027010000_UnifiedEvaluations");
-        var before = await Guards(); var approval = await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(setup.Tenant, legacy.RequestId);
+        var approval = await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(setup.Tenant, legacy.RequestId);
         var historical = await catalog.FindScriptAsync(setup.Tenant, script.ScriptId, 1);
+        await db.GetService<IMigrator>().MigrateAsync("20261027010000_UnifiedEvaluations");
+        var before = await Guards();
         await db.GetService<IMigrator>().MigrateAsync("20261027020000_EvaluationSandboxExecutions");
         var after = await Guards();
         var changed = new HashSet<string> { "TR_TenantApprovals_IndependentTask_Insert", "TR_TenantApprovals_IndependentTask_Update", "TR_TenantApprovals_Space_INSERT", "TR_TenantApprovals_Space_Workspace_INSERT" };

@@ -11,6 +11,8 @@ using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Security;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace AgentCore.Infrastructure.Tests;
 
@@ -140,16 +142,17 @@ public sealed partial class TenantCredentialIntegrationTests
             return new FileAgentDefinitionStore(Path.Combine(directory!.FullName, "agents"), SyntheticProviderAliases.Default);
         }
         public IDbContextFactory<AgentCoreDbContext>? Contexts { get; private set; }
-        public static async Task<Fixture> Create(bool sqlite, TimeProvider? clock = null, bool builtInAuthority = false, bool artifactAuthority = false, bool attachmentAuthority = false)
+        public static async Task<Fixture> Create(bool sqlite, TimeProvider? clock = null, bool builtInAuthority = false, bool artifactAuthority = false, bool attachmentAuthority = false, string? targetMigration = null)
         {
+            if (!sqlite && targetMigration is not null) throw new ArgumentException("A historical schema requires SQLite.", nameof(targetMigration));
             var f = new Fixture(clock); Directory.CreateDirectory(f.Root);
             try
             {
                 if (sqlite)
                 {
-                    await CurrentSqliteTestDatabase.SeedAsync(Path.Combine(f.Root, "store.db"));
+                    if (targetMigration is null) await CurrentSqliteTestDatabase.SeedAsync(Path.Combine(f.Root, "store.db"));
                     f.Contexts = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f.Root}/store.db;Foreign Keys=True;Default Timeout=10").AddInterceptors(new TaskDatabaseFailureCapture(f.DatabaseErrors)).Options);
-                    await using (var db = f.Contexts.CreateDbContext()) { await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); }
+                    await using (var db = f.Contexts.CreateDbContext()) { await db.GetService<IMigrator>().MigrateAsync(targetMigration); Assert.False(db.Database.HasPendingModelChanges()); }
                     if (attachmentAuthority) f.Attachments = new SqliteAttachmentStore(f.Contexts, f.Clock, Path.Combine(f.Root, "attachments"));
                     if (artifactAuthority) f.Artifacts = new SqliteArtifactStore(f.Contexts, f.Clock, Path.Combine(f.Root, "artifacts"));
                     f.Sandboxes = new SqliteSandboxStore(f.Contexts);

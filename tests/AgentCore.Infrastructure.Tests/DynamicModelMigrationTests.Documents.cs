@@ -14,7 +14,7 @@ public sealed partial class TenantCredentialIntegrationTests
     [InlineData("providerLanguageModel", "{\"value\":\"retired-route\"}")]
     public async Task DynamicModels_legacy_definition_and_override_documents_refuse_upgrade_before_schema_mutation(string property, string value)
     {
-        await using var f = await Fixture.Create(true);
+        await using var f = await Fixture.Create(true, targetMigration: "20261025080000_SpaceResourceApprovals");
         const string predecessor = "20261025080000_SpaceResourceApprovals";
         await using (var db = f.Contexts!.CreateDbContext())
         {
@@ -34,14 +34,18 @@ public sealed partial class TenantCredentialIntegrationTests
     }
 
     [Fact]
-    public async Task DynamicModels_empty_tracked_predecessor_upgrades_on_startup_and_preserves_unrelated_data()
+    public async Task DynamicModels_tracked_predecessor_requires_explicit_migration_before_startup_and_preserves_unrelated_data()
     {
-        await using var f = await Fixture.Create(true);
+        await using var f = await Fixture.Create(true, targetMigration: "20261025080000_SpaceResourceApprovals");
         await using (var db = f.Contexts!.CreateDbContext())
         {
             await db.GetService<IMigrator>().MigrateAsync("20261025080000_SpaceResourceApprovals");
             await db.Database.ExecuteSqlRawAsync("INSERT INTO UserProfiles (ProfileId,PreferencesJson,Revision,UpdatedAtUtc) VALUES ('retained-independent-profile','{{}}',9,123)");
         }
+        var refused = await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() => ((SqliteMemoryStore)f.Memory).EnsureCreatedAsync().AsTask());
+        Assert.Equal("SessionPersistenceUnavailable", refused.Code);
+        Assert.Contains("data_reset_required", refused.Message);
+        await using (var db = f.Contexts!.CreateDbContext()) await db.Database.MigrateAsync();
         await ((SqliteMemoryStore)f.Memory).EnsureCreatedAsync();
         await ((SqliteMemoryStore)f.Memory).EnsureCreatedAsync();
         await using var reopened = f.Contexts!.CreateDbContext();

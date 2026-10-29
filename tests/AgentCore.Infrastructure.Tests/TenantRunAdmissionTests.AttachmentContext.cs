@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
 using AgentCore.Infrastructure.Attachments;
@@ -19,7 +20,18 @@ public sealed partial class TenantRunAdmissionTests
             processor ?? new AttachmentProcessor(f.Attachments, new OfficeProcessor()), f.Clock, (ITenantApprovalStore)f.Iam, (ITenantApprovedOperationStore)f.Iam, f.Ids, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), new OfficeProcessor());
     private static async Task<(Environment Setup, AgentRun Run, SessionSnapshot Snapshot, Guid Id, RoleAssignment Grant)> ContextCase(Fixture f, string[]? permissions = null, bool denyReadCapability = false)
     {
-        var s = await Setup(f, denyReadCapability ? "general-assistant" : "examiner", denyReadCapability ? 32 : 1); var id = await Upload(f, s);
+        const string withoutRead = "attachment-denial-fixture";
+        if (denyReadCapability)
+        {
+            var source = (await f.BuiltIns.GetAsync("general-assistant", 36))!;
+            var policy = source.ExecutionPolicy!;
+            f.AddBuiltInFixture(source with { Id = withoutRead, Version = 1, ExecutionPolicy = policy with {
+                ToolAllowlist = policy.ToolAllowlist?.Where(name => name != ToolCatalog.AttachmentsRead).ToArray(),
+                Capabilities = policy.Capabilities! with { ResolvedCapabilities = policy.Capabilities!.ResolvedCapabilities.Where(name => name != ToolCatalog.AttachmentsRead).ToArray(), AuthorizationFingerprint = null },
+                Projection = policy.Projection! with { AlwaysCapabilities = policy.Projection!.AlwaysCapabilities.Where(name => name != ToolCatalog.AttachmentsRead).ToArray() }
+            } });
+        }
+        var s = await Setup(f, denyReadCapability ? withoutRead : "examiner", 1); var id = await Upload(f, s);
         var role = await f.Access.SaveRoleAsync(s.Owner.PrincipalId, s.Tenant, null, "Agent input reads", permissions ?? ["sessions.read", "attachments.read"], (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
         var grant = await f.Access.AssignRoleAsync(s.Owner.PrincipalId, s.Tenant, s.Agent.PrincipalId, role.RoleId, AccessScope.ForTenant(s.Tenant), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
         var receipt = await f.RunService().SubmitMessageAsync(s.Tenant, s.Session, s.Owner, f.Ids.NewId(), "Read the file", [id], (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1);

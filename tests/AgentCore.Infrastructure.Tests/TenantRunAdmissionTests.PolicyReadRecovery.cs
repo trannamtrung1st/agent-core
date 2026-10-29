@@ -22,6 +22,7 @@ public sealed partial class TenantRunAdmissionTests
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision;
         var requester = await Member(f, setup.Tenant, setup.Owner.PrincipalId);
+        await GrantExactContextRead(f, setup, requester.PrincipalId);
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Read and chat", ["agents.chat", "sessions.read"], await Revision());
         var grant = await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, requester.PrincipalId, role.RoleId, AccessScope.ForTenant(setup.Tenant), await Revision());
         var receipt = await f.RunService().SubmitTextAsync(setup.Tenant, setup.Session, requester, f.Ids.NewId(), "Read current policy coherently", await Revision(), 1);

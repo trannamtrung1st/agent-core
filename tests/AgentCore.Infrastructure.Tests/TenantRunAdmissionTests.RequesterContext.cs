@@ -34,6 +34,7 @@ public sealed partial class TenantRunAdmissionTests
         await Hint(alpha.Tenant, alpha.Owner, "Alpha private hint"); await Hint(beta, betaHuman, "Beta private hint");
         var betaAgent = await f.Agents.CreateAsync(betaHuman.PrincipalId, beta, "examiner", 1, await Revision(beta));
         var betaSession = await f.Sessions.CreateAsync(beta, betaAgent.Instance.InstanceId, betaHuman, SessionMode.Text, await Revision(beta), 1);
+        await GrantExactContextRead(f, new(beta, betaHuman, betaAgent, betaSession.Owner.SessionId), betaAgent.PrincipalId);
         async Task<TenantRequesterContext> Read(Guid tenant, Guid session, TenantSessionInitiator human)
         {
             var receipt = await f.RunService().SubmitTextAsync(tenant, session, human, f.Ids.NewId(), "Current organization request", await Revision(tenant), 1);
@@ -58,6 +59,7 @@ public sealed partial class TenantRunAdmissionTests
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision;
         var requester = await Member(f, setup.Tenant, setup.Owner.PrincipalId);
+        await GrantExactContextRead(f, setup, requester.PrincipalId);
         var agentScope = AccessScope.ForResource(setup.Tenant, "agent", setup.Agent.Instance.InstanceId.ToString("D"));
         var sessionScope = TenantSessionRules.Scope(setup.Tenant, setup.Session);
         async Task<RoleAssignment> Grant(string name, string[] permissions, AccessScope scope)

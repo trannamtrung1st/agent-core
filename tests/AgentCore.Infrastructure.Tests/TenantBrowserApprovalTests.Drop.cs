@@ -52,7 +52,7 @@ public sealed partial class TenantBrowserApprovalTests
     [Fact]
     public async Task Tenant_Browser_Artifact_drop_SQLite_empty_upgrade_downgrade_restores_previous_upload_guards()
     {
-        await using var f = await Fixture.Create(true, builtInAuthority: true, artifactAuthority: true);
+        await using var f = await Fixture.Create(true, builtInAuthority: true, artifactAuthority: true, targetMigration: "20261020040000_TenantBrowserArtifactDrops");
         await using var db = await f.Contexts!.CreateDbContextAsync();
         await db.GetService<IMigrator>().MigrateAsync("20261020000100_TenantBrowserArtifactPublication");
         await db.Database.MigrateAsync();

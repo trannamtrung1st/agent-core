@@ -27,6 +27,7 @@ public sealed partial class TenantRunAdmissionTests
     {
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow); await using var f = await Fixture.Create(sqlite, clock, attachmentAuthority: true); var setup = await Setup(f);
         var id = await Upload(f, setup); var human = await Member(f, setup.Tenant, setup.Owner.PrincipalId);
+        await GrantExactContextRead(f, setup, human.PrincipalId);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision;
         var chat = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Chat and Session", ["agents.chat", "sessions.read"], await Revision());
         await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, human.PrincipalId, chat.RoleId, AccessScope.ForTenant(setup.Tenant), await Revision());
@@ -57,6 +58,7 @@ public sealed partial class TenantRunAdmissionTests
         await using var f = await Fixture.Create(sqlite, attachmentAuthority: true); var setup = await Setup(f); var id = await Upload(f, setup);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision;
         var human = await Member(f, setup.Tenant, setup.Owner.PrincipalId);
+        await GrantExactContextRead(f, setup, human.PrincipalId);
         var chat = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Chat and Session", ["agents.chat", "sessions.read"], await Revision());
         await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, human.PrincipalId, chat.RoleId, AccessScope.ForTenant(setup.Tenant), await Revision());
         var service = f.RunService();

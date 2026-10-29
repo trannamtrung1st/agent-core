@@ -20,7 +20,7 @@ public sealed partial class TenantCredentialIntegrationTests
         snapshot = snapshot with { ModelSelection = null, SummaryModel = null,
             Entries = snapshot.Entries.Select(entry => entry with { ModelProvenance = null }).ToArray() };
         await f.Memory.SaveAsync(snapshot, 0);
-        await using (var db = f.Contexts!.CreateDbContext()) await db.GetService<IMigrator>().MigrateAsync(predecessor);
+        await f.SelectHistoricalConversationAsync(predecessor);
         await using (var db = f.Contexts!.CreateDbContext())
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE SessionSnapshots SET ModelCatalogKey='legacy-model', ModelProviderAlias='primary-llm', ModelId='legacy-model' WHERE SessionId={snapshot.SessionId.ToString("D")}");

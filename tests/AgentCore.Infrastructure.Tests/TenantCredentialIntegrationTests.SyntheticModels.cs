@@ -29,6 +29,9 @@ public sealed partial class TenantCredentialIntegrationTests
         var human = new TenantSessionInitiator(login.AccountId, login.AuthenticationSessionId, login.PrincipalId);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision;
         var agent = await f.Agents.CreateAsync(human.PrincipalId, tenant, "examiner", 1, await Revision());
+        var space = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(tenant, agent.Instance.InstanceId))!;
+        var contextRole = await f.Access.SaveRoleAsync(human.PrincipalId, tenant, null, "Read Synthetic model context", ["spaces.read"], await Revision());
+        await f.Access.AssignRoleAsync(human.PrincipalId, tenant, agent.PrincipalId, contextRole.RoleId, TenantSpaceService.Scope(tenant, space.SpaceId), await Revision());
         using var http = new ProviderHttpFixture(); await using var services = RuntimeServices(f, http, new(), "Synthetic");
         var session = await services.GetRequiredService<TenantSessionService>().CreateAsync(tenant, agent.Instance.InstanceId, human,
             SessionMode.Text, await Revision(), agent.Instance.Revision, preference: offeringId == SyntheticModelCatalog.ScriptedAlphaOfferingId ? null : AgentCore.Domain.Models.ModelPreference.Fixed(offeringId));
@@ -62,6 +65,9 @@ public sealed partial class TenantCredentialIntegrationTests
         var tenant = setup.Route.TenantId; var human = new TenantSessionInitiator(setup.Human.AccountId, setup.Human.AuthenticationSessionId, setup.Human.PrincipalId);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision;
         var agent = await f.Agents.CreateAsync(human.PrincipalId, tenant, "examiner", 1, await Revision());
+        var space = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(tenant, agent.Instance.InstanceId))!;
+        var contextRole = await f.Access.SaveRoleAsync(human.PrincipalId, tenant, null, "Read Synthetic model context", ["spaces.read"], await Revision());
+        await f.Access.AssignRoleAsync(human.PrincipalId, tenant, agent.PrincipalId, contextRole.RoleId, TenantSpaceService.Scope(tenant, space.SpaceId), await Revision());
         await Models(f).SaveDefaultAsync(setup.Human, tenant, setup.Offering.OfferingId, "high", await Revision(), 0);
         using var http = new ProviderHttpFixture(); await using var services = RuntimeServices(f, http, new(), "Synthetic");
         var session = await services.GetRequiredService<TenantSessionService>().CreateAsync(tenant, agent.Instance.InstanceId, human,

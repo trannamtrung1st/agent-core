@@ -89,12 +89,14 @@ public sealed partial class TenantRunAdmissionTests
         var claimed = await ClaimBackground(f, child.Run); var outcome = BackgroundOutcome(f, claimed.Run, claimed.Snapshot);
         await ((ITenantRuntimeStore)f.Iam).CommitTenantOutcomeAsync(claimed.Frame, outcome.Snapshot, claimed.Snapshot.Revision, outcome.Complete, null, f.Ids.NewId());
         clock.Advance(TimeSpan.FromSeconds(1));
+        var currentAgent = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(parent.Setup.Tenant, child.Run.AgentInstanceId))!;
         var empty = await f.Sessions.CreateAsync(parent.Setup.Tenant, child.Run.AgentInstanceId, parent.Setup.Owner, SessionMode.Text,
-            (await f.Iam.ReadTenantAsync(parent.Setup.Tenant))!.Tenant.Revision, parent.Setup.Agent.Instance.Revision);
+            (await f.Iam.ReadTenantAsync(parent.Setup.Tenant))!.Tenant.Revision, currentAgent.Instance.Revision);
         var all = await Activity(f).ListSessionsAsync(parent.Setup.Tenant, child.Run.AgentInstanceId, parent.Setup.Owner, pageSize: 1);
         Assert.Equal(3, all.Total); Assert.Equal(empty.Owner.SessionId, Assert.Single(all.Items).Session.Owner.SessionId);
         Assert.Equal(0, (await Activity(f).ListRunsAsync(parent.Setup.Tenant, child.Run.AgentInstanceId, empty.Owner.SessionId, parent.Setup.Owner)).Total);
         var member = await Member(f, parent.Setup.Tenant, parent.Setup.Owner.PrincipalId);
+        await GrantExactContextRead(f,parent.Setup,member.PrincipalId);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(parent.Setup.Tenant))!.Tenant.Revision;
         async Task Grant(string name, string permission, AccessScope scope)
         {
@@ -116,7 +118,7 @@ public sealed partial class TenantRunAdmissionTests
         await Assert.ThrowsAsync<AccessDeniedException>(() => activity.ReadRunAsync(parent.Setup.Tenant, child.Run.AgentInstanceId, child.Session.SessionId, child.Run.AgentRunId, member).AsTask());
         await Grant("Exact initial Run read", "agent-runs.read", TenantRunRules.Scope(parent.Setup.Tenant, child.Run.AgentRunId));
         var visible = await activity.ReadBackgroundAsync(parent.Setup.Tenant, child.Run.AgentInstanceId, child.Session.SessionId, member);
-        Assert.Equal("Owned result", visible.InitialRun!.OutcomeText); Assert.Null(visible.CompletionDelivery!.TargetSessionId); Assert.False(visible.Session.CanContinue);
+        Assert.Equal("Owned result", visible.InitialRun!.OutcomeText); Assert.Null(visible.CompletionDelivery); Assert.False(visible.Session.CanContinue);
         Assert.Single((await activity.ListRunsAsync(parent.Setup.Tenant, child.Run.AgentInstanceId, child.Session.SessionId, member)).Items);
         var globalRuns = await activity.ListAgentRunsAsync(parent.Setup.Tenant, child.Run.AgentInstanceId, member, pageSize: 1);
         Assert.Equal(1, globalRuns.Total); Assert.Equal(child.Run.AgentRunId, Assert.Single(globalRuns.Items).RunId);

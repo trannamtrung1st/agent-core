@@ -45,13 +45,14 @@ public sealed partial class TenantCredentialIntegrationTests
     [Fact]
     public async Task Account_read_SQLite_empty_down_up_preserves_predecessor_guards_and_current_model()
     {
-        await using var f = await Fixture.Create(true, builtInAuthority: true);
+        await using var f = await Fixture.Create(true, builtInAuthority: true, targetMigration: "20261020150000_TenantAccountReadReview");
         await using var db = f.Contexts!.CreateDbContext(); var migrations = db.GetService<IMigrator>();
         var currentGuards = await AccountConsentGuards(db);
         await migrations.MigrateAsync("20261020140000_TenantReportSourceReadReview");
         Assert.Equal(13, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM sqlite_master WHERE type='trigger' AND (name LIKE 'TR_TenantApprovals_%' OR name LIKE 'TR_TenantReceipts_%')").SingleAsync());
-        await migrations.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
+        await migrations.MigrateAsync("20261020150000_TenantAccountReadReview");
         Assert.Equal(currentGuards, await AccountConsentGuards(db));
+        await migrations.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
     }
     private static Task<string[]> AccountConsentGuards(AgentCore.Infrastructure.Persistence.AgentCoreDbContext db) =>
         db.Database.SqlQueryRaw<string>("SELECT name || ':' || sql AS Value FROM sqlite_master WHERE type='trigger' AND (name LIKE 'TR_TenantApprovals_%' OR name LIKE 'TR_TenantReceipts_%') ORDER BY name").ToArrayAsync();

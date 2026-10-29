@@ -18,6 +18,7 @@ public sealed partial class TenantRunAdmissionTests
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision;
         var member = await Member(f, setup.Tenant, setup.Owner.PrincipalId);
+        await GrantExactContextRead(f, setup, member.PrincipalId);
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Session reader", ["sessions.read"], await Revision());
         await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, member.PrincipalId, role.RoleId, TenantSessionRules.Scope(setup.Tenant, setup.Session), await Revision());
         var service = f.RunService(); var message = f.Ids.NewId(); var revision = await Revision();
@@ -56,6 +57,7 @@ public sealed partial class TenantRunAdmissionTests
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision;
         var member = await Member(f, setup.Tenant, setup.Owner.PrincipalId);
+        await GrantExactContextRead(f, setup, member.PrincipalId);
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Chat and read", ["agents.chat", "sessions.read"], await Revision());
         var assignment = await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, member.PrincipalId, role.RoleId, AccessScope.ForTenant(setup.Tenant), await Revision());
         var gate = new Gate((ITenantRunStore)f.Iam); using var cancel = new CancellationTokenSource();
@@ -92,6 +94,7 @@ public sealed partial class TenantRunAdmissionTests
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision;
         var agent = await f.Agents.CreateAsync(owner.OwnerPrincipalId, owner.TenantId, "examiner", 1, await Revision());
         var session = await f.Sessions.CreateAsync(owner.TenantId, agent.Instance.InstanceId, actor, SessionMode.Text, await Revision(), 1);
+        await GrantExactContextRead(f, new(owner.TenantId, actor, agent, session.Owner.SessionId), agent.PrincipalId);
         var service = f.RunService(); var messageId = f.Ids.NewId();
         var receipt = await service.SubmitTextAsync(owner.TenantId, session.Owner.SessionId, actor, messageId, "Inspect this request", await Revision(), 1);
         Assert.True(receipt.Created); Assert.Equal(2, receipt.SessionRevision);
@@ -141,6 +144,12 @@ public sealed partial class TenantRunAdmissionTests
         await f.Access.AssignRoleAsync(actor.PrincipalId, owner.TenantId, agent.PrincipalId, context.RoleId, TenantSpaceService.Scope(owner.TenantId, space.SpaceId), (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
         var session = await f.Sessions.CreateAsync(owner.TenantId, agent.Instance.InstanceId, actor, SessionMode.Text, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision, 1);
         return new(owner.TenantId, actor, agent, session.Owner.SessionId);
+    }
+    private static async Task GrantExactContextRead(Fixture f, Environment setup, Guid requester)
+    {
+        var space = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(setup.Tenant, setup.Agent.Instance.InstanceId))!;
+        var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Read exact admission context prerequisite", ["spaces.read"], (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
+        await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, requester, role.RoleId, TenantSpaceService.Scope(setup.Tenant, space.SpaceId), (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
     }
     private static async Task<TenantSessionInitiator> Member(Fixture f, Guid tenant, Guid owner)
     {

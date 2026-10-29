@@ -32,7 +32,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var login = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;
         var human = new TenantSessionInitiator(owner.AccountId, login.SessionId, owner.OwnerPrincipalId);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision;
-        var agent = await f.Agents.CreateAsync(human.PrincipalId, owner.TenantId, "general-assistant", variableReference ? 33 : 32, await Revision());
+        var agent = await f.Agents.CreateAsync(human.PrincipalId, owner.TenantId, "general-assistant", 36, await Revision());
         var credential = password
             ? (await f.Service.CreateAsync(human.PrincipalId, owner.TenantId, new("Custom mail", CredentialKind.Password, CredentialPurpose.EmailAccount,
                 null, null, "private-mail-password", EmailAccountProfile.Custom("fixture@example.test")), await Revision())).Credential.CredentialId
@@ -210,6 +210,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var changed = TenantApprovalRules.PrepareCredentialCheck(f.Ids.NewId(), request.Operation.InstanceId,
             request.Operation.CredentialCheck! with { SecretRevision = request.Operation.CredentialCheck!.SecretRevision + 1 },
             request.Operation.ExpectedInstanceRevision + 1, request.Operation.ExpectedPersonaRevision);
+        changed = TenantApprovalRules.ForRun(changed, setup.Run);
         Assert.NotEqual(request.Operation.ActionHash, changed.ActionHash); Assert.Equal(request.Operation.OperationFingerprint, changed.OperationFingerprint);
         Assert.Equal(request, await ((ITenantApprovalStore)f.Iam).FindRootApprovalAsync(setup.Tenant, request.RootActivationId, request.ExecutorPrincipalId, changed));
     }
