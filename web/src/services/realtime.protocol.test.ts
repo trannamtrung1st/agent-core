@@ -73,6 +73,19 @@ describe("realtime protocol selection", () => {
     expect(bytesOf("not base64")).toEqual(new Uint8Array());
   });
 
+  it("preserves typed-array offsets and decodes supported transport forms", () => {
+    const backing = new Uint8Array([99, 1, 2, 88]);
+    const view = new DataView(backing.buffer, 1, 2);
+    expect(Array.from(bytesOf(view))).toEqual([1, 2]);
+    expect(bytesOf(backing)).toBe(backing);
+    expect(Array.from(bytesOf(backing.buffer))).toEqual([99, 1, 2, 88]);
+    expect(Array.from(bytesOf({ type: "Buffer", data: [1, 2] }))).toEqual([1, 2]);
+    expect(Array.from(bytesOf([1, 2]))).toEqual([1, 2]);
+    for (const invalid of [null, undefined, {}, "AQI", "A===", "AQ I"]) {
+      expect(bytesOf(invalid)).toEqual(new Uint8Array());
+    }
+  });
+
   it.each([
     ["unset", undefined],
     ["messagepack", "messagepack"],
