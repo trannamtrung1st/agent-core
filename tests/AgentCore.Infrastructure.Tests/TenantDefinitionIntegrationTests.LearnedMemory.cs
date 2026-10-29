@@ -16,7 +16,7 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed partial class TenantDefinitionIntegrationTests
 {
     private sealed record MemorySetup(Guid Tenant, HumanSessionReference Human, TenantAgent Agent, Guid Role, Guid Assignment,
-        Guid Definition, TenantSessionService Sessions, TenantRunService Runs);
+        Guid Definition, TenantSessionService Sessions, TenantRunService Runs, Guid ContextRole);
     private sealed record MemoryTurn(AgentRun Run, TenantRuntimeFrame Frame, SessionSnapshot Before, SessionSnapshot Proposed);
     private static MemoryProposal Learned(string body = "Use typed durable evidence", MemoryScopeHint scope = MemoryScopeHint.User,
         MemoryKind kind = MemoryKind.Preference, MemoryProposalOperation operation = MemoryProposalOperation.Upsert) => new(operation, kind, "Evidence workflow", body, scope, MemoryProposalSource.UserExplicit);
@@ -32,6 +32,9 @@ public sealed partial class TenantDefinitionIntegrationTests
         var publication = await f.Service.PublishAsync(human.PrincipalId, owner.TenantId, draft.DraftId, await Revision(), draft.Revision);
         var builtIns = new SessionNoBuiltinFallback(); var agents = new TenantAgentService(f.Iam, (ITenantAgentStore)f.Iam, builtIns, f.Authorizer, f.Ids, TimeProvider.System, ownedDefinitions: f.Definitions);
         var agent = await agents.CreateFromPublicationAsync(human.PrincipalId, owner.TenantId, Guid.Parse(publication.DefinitionId), 1, await Revision());
+        var space = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(owner.TenantId, agent.Instance.InstanceId))!;
+        var context = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Read exact learned-memory context", ["spaces.read"], await Revision());
+        await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, context.RoleId, TenantSpaceService.Scope(owner.TenantId, space.SpaceId), await Revision());
         var permissions = new List<string> { "sessions.read", "agents.chat" }; if (operations) permissions.Add("agents.read"); if (read) permissions.Add("memory.read"); if (manage) permissions.Add("memory.manage");
         var role = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Independent learned-memory rights", permissions, await Revision());
         var assignment = await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(owner.TenantId), await Revision());
@@ -40,7 +43,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var runs = new TenantRunService(f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam,
             new((ITenantAgentStore)f.Iam, f.Definitions, builtIns, new(f.Resources, builtIns, new NoBuiltinKnowledge(), f.Content), (ITenantCredentialBindingStore)f.Iam),
             f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), f.Ids, TimeProvider.System);
-        return new(owner.TenantId, human, agent, role.RoleId, assignment.AssignmentId, Guid.Parse(publication.DefinitionId), sessions, runs);
+        return new(owner.TenantId, human, agent, role.RoleId, assignment.AssignmentId, Guid.Parse(publication.DefinitionId), sessions, runs, context.RoleId);
     }
     private static async Task<MemoryTurn> MemoryClaim(Fixture f, MemorySetup owner, Guid? existing = null, HumanSessionReference? requester = null, TenantAgent? otherAgent = null)
     {
@@ -81,6 +84,8 @@ public sealed partial class TenantDefinitionIntegrationTests
         var agents = new TenantAgentService(f.Iam, (ITenantAgentStore)f.Iam, new SessionNoBuiltinFallback(), f.Authorizer, f.Ids, TimeProvider.System, ownedDefinitions: f.Definitions);
         var secondAgent = await agents.CreateFromPublicationAsync(owner.Human.PrincipalId, owner.Tenant, owner.Definition, 1, (await f.Iam.ReadTenantAsync(owner.Tenant))!.Tenant.Revision);
         await f.Access.AssignRoleAsync(owner.Human.PrincipalId, owner.Tenant, secondAgent.PrincipalId, owner.Role, AccessScope.ForTenant(owner.Tenant), (await f.Iam.ReadTenantAsync(owner.Tenant))!.Tenant.Revision);
+        var secondSpace = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(owner.Tenant, secondAgent.Instance.InstanceId))!;
+        await f.Access.AssignRoleAsync(owner.Human.PrincipalId, owner.Tenant, secondAgent.PrincipalId, owner.ContextRole, TenantSpaceService.Scope(owner.Tenant, secondSpace.SpaceId), (await f.Iam.ReadTenantAsync(owner.Tenant))!.Tenant.Revision);
         var other = await MemoryClaim(f, owner, otherAgent: secondAgent); Assert.Equal(MemoryScope.User, Assert.Single((await reader.ReadTenantRunMemoryAsync(other.Frame)).Items).Scope);
         if (sqlite)
         {
@@ -149,6 +154,8 @@ public sealed partial class TenantDefinitionIntegrationTests
         var role = await f.Access.SaveRoleAsync(owner.Human.PrincipalId, owner.Tenant, null, "Peer memory rights", ["agents.chat", "sessions.create", "sessions.read", "memory.read", "memory.manage"], (await f.Iam.ReadTenantAsync(owner.Tenant))!.Tenant.Revision);
         var invite = await f.Access.InviteAsync(owner.Human.PrincipalId, owner.Tenant, account.LoginKey, role.RoleId, (await f.Iam.ReadTenantAsync(owner.Tenant))!.Tenant.Revision);
         var user = await f.Access.AcceptInvitationAsync(account.AccountId, owner.Tenant, invite.Invitation.InvitationId, invite.Token);
+        var space = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(owner.Tenant, owner.Agent.Instance.InstanceId))!;
+        await f.Access.AssignRoleAsync(owner.Human.PrincipalId, owner.Tenant, user.PrincipalId, owner.ContextRole, TenantSpaceService.Scope(owner.Tenant, space.SpaceId), (await f.Iam.ReadTenantAsync(owner.Tenant))!.Tenant.Revision);
         var login = (await f.Identity.SignInAsync(account.LoginKey, "strong-memory-peer-password"))!.Session;
         var peer = new HumanSessionReference(account.AccountId, login.SessionId, user.PrincipalId);
         var next = await MemoryClaim(f, owner, original.Frame.SessionId, peer); var store = (ITenantLearnedMemoryStore)f.Iam;
