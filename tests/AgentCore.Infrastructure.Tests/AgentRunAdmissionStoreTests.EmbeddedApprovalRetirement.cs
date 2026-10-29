@@ -9,6 +9,7 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class AgentRunAdmissionStoreTests
 {
+    private const string EmbeddedRetirement = "20261023160000_RetireEmbeddedRunApproval";
     private const string BeforeEmbeddedRetirement = "20261023140000_TenantConfigurationRemedyAuthoring";
 
     [Fact]
@@ -16,12 +17,12 @@ public sealed partial class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(true);
         var turn = UserTurn(); await f.Runs.AdmitAsync(turn.Snapshot, 0, turn.Run);
+        await f.SeedEmbeddedApprovalPredecessorAsync();
         await using (var db = await f.Contexts!.CreateDbContextAsync())
         {
-            var migrator = db.GetService<IMigrator>(); await migrator.MigrateAsync(BeforeEmbeddedRetirement);
+            var migrator = db.GetService<IMigrator>();
             await db.Database.ExecuteSqlRawAsync("UPDATE AgentRuns SET PayloadJson=json_set(PayloadJson,'$.approval',NULL)");
-            await migrator.MigrateAsync();
-            Assert.False(db.Database.HasPendingModelChanges());
+            await migrator.MigrateAsync(EmbeddedRetirement);
             var row = await db.AgentRuns.SingleAsync();
             using var payload = System.Text.Json.JsonDocument.Parse(row.PayloadJson);
             Assert.False(payload.RootElement.TryGetProperty("approval", out _));
@@ -35,16 +36,16 @@ public sealed partial class AgentRunAdmissionStoreTests
             Assert.Contains("embedded Run approvals are retired", injected.Message);
             await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlRawAsync("UPDATE AgentRuns SET Status=2"));
         }
-        await f.ReopenAsync();
-        var retained = (await f.Runs.GetAsync(Owner, turn.Run.AgentRunId))!;
+        // Reopen the frozen migration's result. Later destructive cutovers have
+        // independent restore contracts and are not part of this migration proof.
+        await using var reopened = await f.Contexts!.CreateDbContextAsync();
+        var retained = AgentRunStoreMapping.ToDomain(await reopened.AgentRuns.AsNoTracking().SingleAsync());
         Assert.Equal(turn.Run.ActivationId, retained.ActivationId);
         Assert.Equal(turn.Run.Admission.Activation.RootActivationId, retained.Admission.Activation.RootActivationId);
         Assert.Equal(turn.Run.Admission.Activation.SourceEntryIds, retained.Admission.Activation.SourceEntryIds);
         Assert.Equal(turn.Run.Revision, retained.Revision);
         Assert.Null(retained.ApprovalRequestId);
         Assert.Equal(AgentRunStatus.Queued, retained.Status);
-        var running = await Claim(f, retained);
-        Assert.Equal(1, running.AttemptCount);
     }
 
     [Theory]
@@ -55,15 +56,16 @@ public sealed partial class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(true);
         var turn = UserTurn(); await f.Runs.AdmitAsync(turn.Snapshot, 0, turn.Run);
+        await f.SeedEmbeddedApprovalPredecessorAsync();
         await using var db = await f.Contexts!.CreateDbContextAsync();
-        var migrator = db.GetService<IMigrator>(); await migrator.MigrateAsync(BeforeEmbeddedRetirement);
+        var migrator = db.GetService<IMigrator>();
         if (state == "waiting") await db.Database.ExecuteSqlRawAsync("UPDATE AgentRuns SET Status=2");
         else if (state == "expiry") await db.Database.ExecuteSqlRawAsync("UPDATE AgentRuns SET ApprovalExpiresAtUtc=123456");
         else await db.Database.ExecuteSqlRawAsync("UPDATE AgentRuns SET PayloadJson=json_set(PayloadJson,'$.approval',json_object('decision',1))");
         var before = await db.AgentRuns.AsNoTracking().SingleAsync();
         var guards = await EmbeddedRunGuards(db);
         var applied = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
-        var error = await Assert.ThrowsAsync<SqliteException>(() => migrator.MigrateAsync());
+        var error = await Assert.ThrowsAsync<SqliteException>(() => migrator.MigrateAsync(EmbeddedRetirement));
         Assert.Contains("RequiresExplicitLegacyApprovalRecovery", error.Message);
         var after = await db.AgentRuns.AsNoTracking().SingleAsync();
         Assert.Equal(before.PayloadJson, after.PayloadJson); Assert.Equal(before.Status, after.Status); Assert.Equal(before.Revision, after.Revision);

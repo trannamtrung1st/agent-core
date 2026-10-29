@@ -10,6 +10,7 @@ using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Infrastructure.Tests;
@@ -1216,6 +1217,50 @@ public sealed partial class AgentRunAdmissionStoreTests
             Memory = memory;
             Runs = new SqliteAgentRunStore(_factory, memory, new Diagnostics());
             Triggers = new SqliteTriggerStore(_factory);
+        }
+        public async Task SeedEmbeddedApprovalPredecessorAsync()
+        {
+            // Prepare a real predecessor database instead of downgrading across
+            // later cutovers that correctly require a matched backup restore.
+            var sourcePath = _path!;
+            var destinationPath = sourcePath + ".embedded-predecessor";
+            var destination = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>()
+                .UseSqlite($"Data Source={destinationPath};Foreign Keys=True").Options);
+            await using (var db = destination.CreateDbContext())
+            {
+                await db.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>().MigrateAsync(BeforeEmbeddedRetirement);
+                await db.Database.OpenConnectionAsync();
+                var connection = (SqliteConnection)db.Database.GetDbConnection();
+                await using (var attach = connection.CreateCommand())
+                {
+                    attach.CommandText = "ATTACH DATABASE $path AS fixtureSource";
+                    attach.Parameters.AddWithValue("$path", sourcePath); await attach.ExecuteNonQueryAsync();
+                }
+                async Task<HashSet<string>> Columns(string schema, string table)
+                {
+                    await using var command = connection.CreateCommand();
+                    command.CommandText = $"PRAGMA {schema}.table_info(\"{table}\")";
+                    var columns = new HashSet<string>(StringComparer.Ordinal);
+                    await using var reader = await command.ExecuteReaderAsync();
+                    while (await reader.ReadAsync()) columns.Add(reader.GetString(1));
+                    return columns;
+                }
+                // Only this test-created admission graph; no account, tenant,
+                // approval or customer state is copied and no guard is disabled.
+                foreach (var table in new[] { "AgentInstances", "Sessions", "ConversationSnapshots", "ConversationEntries", "Activations", "ActivationSourceEntries", "AgentRuns" })
+                {
+                    var columns = await Columns("main", table);
+                    columns.IntersectWith(await Columns("fixtureSource", table));
+                    if (columns.Count == 0) continue;
+                    var names = string.Join(",", columns.Order(StringComparer.Ordinal).Select(name => "\"" + name + "\""));
+                    await using var insert = connection.CreateCommand();
+                    insert.CommandText = $"INSERT INTO \"{table}\" ({names}) SELECT {names} FROM fixtureSource.\"{table}\"";
+                    await insert.ExecuteNonQueryAsync();
+                }
+            }
+            using (var old = new SqliteConnection($"Data Source={sourcePath}")) SqliteConnection.ClearPool(old);
+            _path = destinationPath; _factory = destination;
+            foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(sourcePath + suffix);
         }
         public ValueTask DisposeAsync()
         {
