@@ -45,17 +45,19 @@ public sealed partial class TenantSessionAccessTests
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
+            await GrantNativePrivateSpaceRead(owner, tenant, instance);
+            var spaceId = await NativePrivateSpaceId(owner, tenant, instance);
             const string path = "/home/reference.txt"; const string body = "Private Composer body → thử nghiệm";
-            Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(api + $"/agents/{instance}/workspace/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent(Encoding.UTF8.GetBytes(body)))).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(await PrivateWorkspacePath(owner, tenant, instance) + $"/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent(Encoding.UTF8.GetBytes(body)))).StatusCode);
             var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, tenant, null, "Composer source read", mode == "missing" ? ["agents.read", "sessions.read"] : ["agents.read", "sessions.read", "workspaces.read"], await Revision(owner, tenant));
             await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
             if (mode == "review") Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/workspaces.read", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
-            var choices = await Json(await owner.GetAsync(api + $"/agents/{instance}/composer?category=homeFile&search=reference"));
+            var choices = await Json(await owner.GetAsync(api + $"/agents/{instance}/composer?category=homeFile&spaceId={spaceId}&search=reference"));
             var choice = Assert.Single(choices.GetProperty("items").EnumerateArray()); Assert.Equal(path, choice.GetProperty("reference").GetProperty("path").GetString()); Assert.DoesNotContain(body, choices.ToString());
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
-            var text = "Inspect @homeFile:" + instance.ToString("D") + path;
-            object[] parts = [new { kind = "text", text = "Inspect " }, new { kind = "reference", reference = new { kind = "homeFile", agentInstanceId = instance, path } }];
+            var text = "Inspect @homeFile:" + spaceId.ToString("D") + path;
+            object[] parts = [new { kind = "text", text = "Inspect " }, new { kind = "reference", reference = new { kind = "homeFile", spaceId, path } }];
             var message = Guid.NewGuid();
             var response = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = message, text, parts, expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, response.StatusCode); var receipt = await Json(response); var runId = receipt.GetProperty("runId").GetGuid();
@@ -77,7 +79,7 @@ public sealed partial class TenantSessionAccessTests
             {
                 var restricted = await FloorHuman(factory, owner, tenant, "composer-restricted-reader", ["agents.read", "agents.chat", "sessions.read", "sessions.create"]);
                 using var reader = restricted.Client;
-                Assert.Equal(HttpStatusCode.Forbidden, (await reader.GetAsync(api + $"/agents/{instance}/composer?category=homeFile")).StatusCode);
+                Assert.Equal(HttpStatusCode.Forbidden, (await reader.GetAsync(api + $"/agents/{instance}/composer?category=homeFile&spaceId={spaceId}")).StatusCode);
                 var hiddenSkills = await Json(await reader.GetAsync(api + $"/agents/{instance}/composer?category=skill")); Assert.Empty(hiddenSkills.GetProperty("items").EnumerateArray());
                 var hiddenHistory = await Json(await reader.GetAsync(api + $"/sessions/{session}/messages"));
                 Assert.Contains("Inspect [Resource unavailable]", hiddenHistory.GetProperty("items")[0].GetProperty("text").GetString());
@@ -126,15 +128,24 @@ public sealed partial class TenantSessionAccessTests
             var artifact = await factory.Services.GetRequiredService<ITenantArtifactStore>().CreateTenantAsync(new(child.Owner, child.SessionId, child.AgentRunId, child.Claim!.Generation), Guid.NewGuid(), "Reference artifact.txt", "text/plain", Encoding.UTF8.GetBytes("Bounded Artifact source body" + new string('A', 5000)));
             model.ChildRelease.TrySetResult(); await WaitTenantBackground(factory, value.Tenant, value.Session, value.Source, true);
             var api = $"/api/v2/tenants/{value.Tenant}"; var human = source.Admission.ExecutionContext!.OriginalInitiatorPrincipalId!.Value;
+            var spaceId = await NativePrivateSpaceId(owner, value.Tenant, instance);
+            var configuration = await Json(await owner.GetAsync(api + $"/agents/{instance}"));
+            var instanceRevision = configuration.GetProperty("instance").GetProperty("revision").GetInt64();
+            const string skillKey = "instance:composer-reference";
+            var skill = await owner.PostAsJsonAsync(api + $"/agents/{instance}/skills/commands", new {
+                operation = "create", expectedRevision = await Revision(owner, value.Tenant), expectedInstanceRevision = instanceRevision,
+                input = new { id = "composer-reference", name = "Composer source", description = "Explicit reference-only fixture", procedure = "A referenced procedure must not activate itself.",
+                    projection = "OnDemand", enabled = true, requiredCapabilities = new[] { "chat.respond" } } });
+            Assert.True(skill.IsSuccessStatusCode, await skill.Content.ReadAsStringAsync()); instanceRevision++;
             var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, value.Tenant, null, "All Composer source reads", ["agents.read", "sessions.read", "agent-runs.read", "artifacts.read", "workspaces.read", "skills.read"], await Revision(owner, value.Tenant));
             await access.AssignRoleAsync(human, value.Tenant, source.Owner.ExecutorPrincipalId!.Value, role.RoleId, AccessScope.ForTenant(value.Tenant), await Revision(owner, value.Tenant));
             const string path = "/home/all-reference.txt";
-            Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(api + $"/agents/{instance}/workspace/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, value.Tenant)}", new ByteArrayContent(Encoding.UTF8.GetBytes("Bounded Home source body" + new string('H', 5000))))).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(await PrivateWorkspacePath(owner, value.Tenant, instance) + $"/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, value.Tenant)}", new ByteArrayContent(Encoding.UTF8.GetBytes("Bounded Home source body" + new string('H', 5000))))).StatusCode);
             var references = new List<UserResourceReference>();
-            foreach (var (category, search) in new[] { ("homeFile", "all-reference"), ("session", value.Session.ToString("D")), ("backgroundSession", child.SessionId.ToString("D")), ("artifact", artifact.ArtifactId.ToString("D")), ("agentRun", child.AgentRunId.ToString("D")), ("skill", "definition:browser.record.lookup") })
+            foreach (var (category, search) in new[] { ("homeFile", "all-reference"), ("session", value.Session.ToString("D")), ("backgroundSession", child.SessionId.ToString("D")), ("artifact", artifact.ArtifactId.ToString("D")), ("agentRun", child.AgentRunId.ToString("D")), ("skill", skillKey) })
             {
-                var page = await Json(await owner.GetAsync(api + $"/agents/{instance}/composer?category={category}&search={Uri.EscapeDataString(search)}"));
+                var page = await Json(await owner.GetAsync(api + $"/agents/{instance}/composer?category={category}&spaceId={spaceId}&search={Uri.EscapeDataString(search)}"));
                 var item = Assert.Single(page.GetProperty("items").EnumerateArray());
                 references.Add(item.GetProperty("reference").Deserialize<UserResourceReference>(UserMessageContent.Json)!);
                 Assert.DoesNotContain("Bounded Home source body", page.ToString()); Assert.DoesNotContain("Bounded Artifact source body", page.ToString());
@@ -147,11 +158,11 @@ public sealed partial class TenantSessionAccessTests
                 ("oversized.txt", Encoding.UTF8.GetBytes(new string('Z', 65537))) })
             {
                 var extra = "/home/" + name;
-                Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(api + $"/agents/{instance}/workspace/content?path={Uri.EscapeDataString(extra)}&expectedRevision={await Revision(owner, value.Tenant)}", new ByteArrayContent(bytes))).StatusCode);
-                references.Add(new("homeFile", AgentInstanceId: instance, Path: extra));
+                Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(await PrivateWorkspacePath(owner, value.Tenant, instance) + $"/content?path={Uri.EscapeDataString(extra)}&expectedRevision={await Revision(owner, value.Tenant)}", new ByteArrayContent(bytes))).StatusCode);
+                references.Add(new("homeFile", SpaceId: spaceId, Path: extra));
             }
             model.ReferencesMode = true;
-            var target = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, value.Tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            var target = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, value.Tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
             var parts = references.SelectMany(r => new[] { new UserMessagePart("reference", Reference: r), new UserMessagePart("text", Text: " ") }).ToArray();
             var response = await owner.PostAsJsonAsync(api + $"/sessions/{target}/messages", new { messageId = Guid.NewGuid(), text = UserMessageContent.DisplayText(parts), parts, expectedRevision = await Revision(owner, value.Tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
@@ -164,7 +175,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(3, done.Admission.ComposerInput.References.Count(r => r.Status == "metadataOnly"));
             Assert.All(done.Admission.ComposerInput.References.Where(r => r.Status == "metadataOnly"), r => Assert.Empty(r.Text));
             Assert.Contains(done.Admission.ComposerInput.References, r => r.Reference.Kind == "backgroundSession" && r.Text.Contains("Owned background result."));
-            Assert.DoesNotContain("definition:browser.record.lookup", done.ActiveSkillKeys);
+            Assert.DoesNotContain(skillKey, done.ActiveSkillKeys);
             Assert.Contains("Bounded Home source body", string.Join('\n', model.ReferenceRequest!.Messages.Select(m => m.Text)));
             Assert.Contains("Bounded Artifact source body", string.Join('\n', model.ReferenceRequest.Messages.Select(m => m.Text)));
             // Current source policy is required even after a terminal Run, including cold readback.
@@ -173,7 +184,8 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{foreign}/agents/{instance}/composer?category=homeFile")).StatusCode);
             var sibling = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, value.Tenant) }));
             var siblingId = sibling.GetProperty("instance").GetProperty("instanceId").GetGuid();
-            var foreignPart = new[] { new UserMessagePart("reference", Reference: new("homeFile", AgentInstanceId: siblingId, Path: path)) };
+            var siblingSpace = await NativePrivateSpaceId(owner, value.Tenant, siblingId);
+            var foreignPart = new[] { new UserMessagePart("reference", Reference: new("homeFile", SpaceId: siblingSpace, Path: path)) };
             var targetRevision = (await Json(await owner.GetAsync(api + $"/sessions/{target}"))).GetProperty("revision").GetInt64();
             Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync(api + $"/sessions/{target}/messages", new { messageId = Guid.NewGuid(), text = UserMessageContent.DisplayText(foreignPart), parts = foreignPart, expectedRevision = await Revision(owner, value.Tenant), expectedSessionRevision = targetRevision })).StatusCode);
             if (sqlite)
@@ -203,14 +215,16 @@ public sealed partial class TenantSessionAccessTests
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
+            await GrantNativePrivateSpaceRead(owner, tenant, instance);
+            var spaceId = await NativePrivateSpaceId(owner, tenant, instance);
             const string path = "/home/source-fence.txt";
-            var workspace = api + $"/agents/{instance}/workspace/content?path={Uri.EscapeDataString(path)}";
+            var workspace = await PrivateWorkspacePath(owner, tenant, instance) + $"/content?path={Uri.EscapeDataString(path)}";
             Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(workspace + $"&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent(Encoding.UTF8.GetBytes("Consumed reference evidence")))).StatusCode);
             var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, tenant, null, "Recheck Composer reads", ["agents.read", "sessions.read", "workspaces.read"], await Revision(owner, tenant));
             var assignment = await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
-            var reference = new UserResourceReference("homeFile", AgentInstanceId: instance, Path: path); var parts = new[] { new UserMessagePart("reference", Reference: reference) };
+            var reference = new UserResourceReference("homeFile", SpaceId: spaceId, Path: path); var parts = new[] { new UserMessagePart("reference", Reference: reference) };
             var response = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = UserMessageContent.DisplayText(parts), parts, expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, response.StatusCode); var runId = (await Json(response)).GetProperty("runId").GetGuid();
             await model.Entered.Task.WaitAsync(TimeSpan.FromSeconds(20)); Assert.Contains("Consumed reference evidence", string.Join('\n', Assert.Single(model.Requests).Messages.Select(m => m.Text)));
@@ -240,9 +254,10 @@ public sealed partial class TenantSessionAccessTests
             for (var i = 0; i < 41; i++)
             {
                 var path = directory + $"/needle-{i:00}.txt";
-                Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(api + $"/agents/{instance}/workspace/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent([65]))).StatusCode);
+                Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(await PrivateWorkspacePath(owner, tenant, instance) + $"/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent([65]))).StatusCode);
             }
-            var endpoint = api + $"/agents/{instance}/composer?category=homeFile&search=needle";
+            var spaceId = await NativePrivateSpaceId(owner, tenant, instance);
+            var endpoint = api + $"/agents/{instance}/composer?category=homeFile&spaceId={spaceId}&search=needle";
             var first = await Json(await owner.GetAsync(endpoint)); Assert.Equal(40, first.GetProperty("items").GetArrayLength());
             var cursor = first.GetProperty("nextCursor").GetString()!; Assert.InRange(cursor.Length, 1, 8192);
             Assert.Contains("資料", Encoding.UTF8.GetString(Convert.FromBase64String(cursor)));
