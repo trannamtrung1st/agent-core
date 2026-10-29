@@ -291,11 +291,27 @@ for (const decision of ['approve', 'reject'] as const) test(`original Chat recov
 test('tenant Steer atomically interrupts the current Run with row and keyboard controls', async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const f = await fixture(); const observed = watch(page);
+  const wire: unknown[] = []; const protocol = new MessagePackHubProtocol();
+  page.on('websocket', socket => {
+    for (const direction of ['framesent', 'framereceived'] as const) socket.on(direction, frame => {
+      if (typeof frame.payload === 'string' || wire.length >= 500) return;
+      try {
+        for (const parsed of protocol.parseMessages(new Uint8Array(frame.payload).buffer, { log() {} })) {
+          if (wire.length >= 500) break;
+          const message = parsed as { target?: string; invocationId?: string; type: number; result?: { accepted?: boolean; error?: { code?: string } }; arguments?: { type?: string; responseId?: string; sequence?: number }[] };
+          const event = message.arguments?.[0];
+          wire.push({ direction, target: message.target, invocationId: message.invocationId, type: event?.type ?? message.type,
+            responseId: event?.responseId, sequence: event?.sequence, accepted: message.result?.accepted, errorCode: message.result?.error?.code });
+        }
+      } catch { /* JSON negotiation is separate from MessagePack. */ }
+    });
+  });
+  let session: string | undefined;
   try {
     await page.setViewportSize({ width: 1440, height: 1000 }); await signIn(page); await page.goto(f.path);
     await send(page, '[test:durable-stream-long] original steer objective');
     await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
-    const session = page.url().split('/').pop()!;
+    session = page.url().split('/').pop()!;
     const before = await call<{ items: { runId: string; status: string }[] }>(f.api, `${f.prefix}/agents/${f.agent}/activity/runs?page=0&pageSize=20`);
     const original = before.items.find(item => item.status === 'running')!; expect(original).toBeTruthy();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Steered exact human objective');
@@ -321,6 +337,14 @@ test('tenant Steer atomically interrupts the current Run with row and keyboard c
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.reload(); await reply(page, 3);
     expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
+  } catch (error) {
+    const runs = await f.api.get(`${f.prefix}/agents/${f.agent}/activity/runs?page=0&pageSize=20`, { timeout: 5_000 }).then(async response => {
+      if (!response.ok()) return { httpStatus: response.status() };
+      const body = await response.json() as { items: { runId: string; status: string; revision: number }[] };
+      return body.items.slice(0, 20).map(item => ({ runId: item.runId, status: item.status, revision: item.revision }));
+    }).catch(() => ({ unavailable: true }));
+    await testInfo.attach('steer-state', { body: JSON.stringify({ session, wire, runs }), contentType: 'application/json' });
+    throw error;
   } finally { await f.api.dispose(); }
 });
 

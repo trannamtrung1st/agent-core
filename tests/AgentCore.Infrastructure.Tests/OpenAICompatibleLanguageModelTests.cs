@@ -1557,12 +1557,14 @@ internal sealed class ChunkedStream : Stream
     private readonly bool _holdOpen;
     private readonly CancellationToken _cancellation;
     private int _index;
+    private readonly Action? _beforeStall;
 
-    public ChunkedStream(IReadOnlyList<byte[]> chunks, bool holdOpen, CancellationToken cancellation)
+    public ChunkedStream(IReadOnlyList<byte[]> chunks, bool holdOpen, CancellationToken cancellation, Action? beforeStall = null)
     {
         _chunks = chunks;
         _holdOpen = holdOpen;
         _cancellation = cancellation;
+        _beforeStall = beforeStall;
     }
 
     public override bool CanRead => true;
@@ -1578,6 +1580,7 @@ internal sealed class ChunkedStream : Stream
         {
             if (_holdOpen)
             {
+                _beforeStall?.Invoke();
                 await Task.Delay(Timeout.Infinite, linked.Token).ConfigureAwait(false);
             }
 

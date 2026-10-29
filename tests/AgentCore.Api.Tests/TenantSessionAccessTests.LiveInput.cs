@@ -16,6 +16,28 @@ namespace AgentCore.Api.Tests;
 
 public sealed partial class TenantSessionAccessTests
 {
+    private static async Task ContinueLiveChildInChatAsync(HttpClient owner, string url)
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        while (true)
+        {
+            // Model entry does not mean its earlier runtime checkpoint has committed.
+            // Use a coherent public witness pair; only a definitive CAS refusal can retry.
+            using var read = await owner.GetAsync(url + "/messages?limit=1", deadline.Token);
+            if (read.StatusCode == HttpStatusCode.Conflict && (await Json(read)).GetProperty("reasonCode").GetString() == "stale_revision")
+            { await Task.Delay(25, deadline.Token); continue; }
+            Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+            var witness = await Json(read);
+            using var response = await owner.PostAsJsonAsync(url + "/continue-in-chat", new {
+                expectedRevision = witness.GetProperty("securityRevision").GetInt64(),
+                expectedSessionRevision = witness.GetProperty("sessionRevision").GetInt64() }, deadline.Token);
+            if (response.StatusCode == HttpStatusCode.Conflict && (await Json(response)).GetProperty("reasonCode").GetString() == "stale_revision")
+            { await Task.Delay(25, deadline.Token); continue; }
+            Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            return;
+        }
+    }
+
     [Theory(Timeout = 90000)] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_live_queue_binds_files_once_and_preserves_running_background_input(bool sqlite, bool cancelSource)
     {
@@ -31,7 +53,7 @@ public sealed partial class TenantSessionAccessTests
             var child = (await sessions.ListTenantSessionsAsync(setup.Tenant, null, 0, 100)).Items.Single(s => s.Snapshot.Origin.OriginatingAgentRunId == setup.Source);
             var childRun = (await runs.FindTenantRunAsync(setup.Tenant, child.Snapshot.Origin.InitialBackgroundAgentRunId!.Value))!;
             var api = $"/api/v2/tenants/{setup.Tenant}"; var url = api + $"/sessions/{child.Owner.SessionId}";
-            Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(url + "/continue-in-chat", new { expectedRevision = await Revision(owner, setup.Tenant), expectedSessionRevision = child.Snapshot.Revision })).StatusCode);
+            await ContinueLiveChildInChatAsync(owner, url);
             child = (await sessions.FindTenantSessionAsync(setup.Tenant, child.Owner.SessionId))!;
             using var upload = new MultipartFormDataContent(); var bytes = new ByteArrayContent(Encoding.UTF8.GetBytes("Human queued source, invisible to previous task.")); bytes.Headers.ContentType = new("text/plain"); upload.Add(bytes, "file", "queued.txt");
             var attachmentId = (await Json(await owner.PostAsync(url + $"/attachments?uploadId={Guid.NewGuid()}&expectedRevision={await Revision(owner, setup.Tenant)}&expectedSessionRevision={child.Snapshot.Revision}", upload))).GetProperty("attachmentId").GetGuid();
@@ -97,7 +119,7 @@ public sealed partial class TenantSessionAccessTests
             await model.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
             var sessions = factory.Services.GetRequiredService<ITenantSessionStore>();
             var child = (await sessions.ListTenantSessionsAsync(setup.Tenant, null, 0, 100)).Items.Single(s => s.Snapshot.Origin.OriginatingAgentRunId == setup.Source);
-            Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync($"/api/v2/tenants/{setup.Tenant}/sessions/{child.Owner.SessionId}/continue-in-chat", new { expectedRevision = await Revision(owner, setup.Tenant), expectedSessionRevision = child.Snapshot.Revision })).StatusCode);
+            await ContinueLiveChildInChatAsync(owner, $"/api/v2/tenants/{setup.Tenant}/sessions/{child.Owner.SessionId}");
             var repo = new DirectoryInfo(AppContext.BaseDirectory); while (repo is not null && !File.Exists(Path.Combine(repo.FullName, "AgentCore.sln"))) repo = repo.Parent; Assert.NotNull(repo);
             var start = new ProcessStartInfo("node", "tenant-live-queue.mjs") { WorkingDirectory = Path.Combine(repo.FullName, "tests", "realtime-js"), UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
             start.Environment["BASE_URL"] = owner.BaseAddress!.ToString().TrimEnd('/'); start.Environment["TENANT_ID"] = setup.Tenant.ToString("D"); start.Environment["SESSION_ID"] = child.Owner.SessionId.ToString("D");

@@ -68,6 +68,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
     private readonly ConcurrentDictionary<string, Connection> _connections = new();
     private readonly ConcurrentDictionary<(Guid Tenant, Guid Session), Source> _sources = new();
     internal Func<AgentRun, OutputPayload, CancellationToken, Task>? BeforeRecipientDelivery { get; set; }
+    internal Source ObserveOutputSource(Guid tenant, Guid session) => _sources[(tenant, session)];
 
     public sealed class Source(TenantSessionLiveDelivery delivery, AgentRun run, TenantVoiceLease? voice = null) : ISessionOutput, ISessionAudioOutput
     {
@@ -269,6 +270,12 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
                     subscription.Delivery[delivered] = segmentBound with { SpeechEnd = Math.Max(segmentBound.SpeechEnd, segment.TextStart + segment.Text.Length) };
                 if (output.Payload is BlockUpsertOutput publishedBlock) subscription.ObserveBlock(delivered, publishedBlock.BlockId, publishedBlock.Kind, publishedBlock.ArtifactId);
             }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Supersession/Stop cancels this source's publication, not the independently
+            // authenticated attachment. Later sources still perform their own current reads.
+            logger.LogDebug("Tenant source publication cancelled for {OutputType}.", output.Payload.GetType().Name);
         }
         catch (Exception ex) when (ex is AccessDeniedException or SecurityConflictException or OperationCanceledException)
         {

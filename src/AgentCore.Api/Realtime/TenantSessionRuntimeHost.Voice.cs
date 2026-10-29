@@ -296,6 +296,13 @@ public sealed partial class TenantSessionRuntimeHost
             await delivery.PublishVoiceAsync(lease, new ErrorOutput("Transport", code, "Speech input restarted. Please say that again.", false, null), ct).ConfigureAwait(false);
             await delivery.PublishVoiceStateAsync(lease, false, ct).ConfigureAwait(false);
         }
+        catch
+        {
+            // A restart has already faulted its ingress and may have paused the lease.
+            // The pump's stale-operation catch must not leave that stream silently stuck.
+            _ = ObserveVoiceRetirementAsync(RetireVoiceAsync(voice.Lease).AsTask());
+            throw;
+        }
         finally { voice.Commands.Release(); }
     }
     public async ValueTask MuteVoiceAsync(TenantVoiceLease lease, bool muted, CancellationToken ct)

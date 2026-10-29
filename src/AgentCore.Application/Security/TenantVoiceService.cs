@@ -49,6 +49,17 @@ public sealed class TenantVoiceService(IIamStore security, ITenantSessionStore s
     }
     private async ValueTask RequireCurrentAsync(TenantVoiceLease lease, CancellationToken ct)
     {
+        // Only rebuild a conflicted read witness. Mutation occurs after this returns,
+        // under the existing lease operation; denial and cancellation are never retried.
+        for (var attempt = 0; ; attempt++)
+        {
+            ct.ThrowIfCancellationRequested();
+            try { await RequireCurrentOnceAsync(lease, ct).ConfigureAwait(false); return; }
+            catch (SecurityConflictException ex) when (ex.ReasonCode == "stale_revision" && attempt < 2) { }
+        }
+    }
+    private async ValueTask RequireCurrentOnceAsync(TenantVoiceLease lease, CancellationToken ct)
+    {
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, lease.Owner.TenantId, lease.Human, ct).ConfigureAwait(false);
         var saved = await sessions.FindTenantSessionAsync(lease.Owner.TenantId, lease.Owner.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         var agent = await agents.FindTenantAgentAsync(lease.Owner.TenantId, lease.Owner.AgentInstanceId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");

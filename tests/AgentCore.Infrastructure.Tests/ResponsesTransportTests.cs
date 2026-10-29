@@ -120,14 +120,15 @@ public sealed class ResponsesTransportTests
     public async Task Idle_timeout_or_cancellation_never_executes_partial_calls_and_next_request_recovers(bool cancel)
     {
         var partial = Event(new { type = "response.function_call_arguments.delta", delta = "{\"unfinished\":" });
-        using var http = new HttpClient(new InterruptedHandler(partial));
+        // Cancel synchronously at the stalled read after the partial frame was consumed.
+        // Competing wall-clock timers do not establish which cause wins under CI load.
+        using var cts = new CancellationTokenSource();
+        using var http = new HttpClient(new InterruptedHandler(partial, cancel ? () => cts.Cancel() : null));
         var model = new OpenAICompatibleLanguageModel(http, new()
         {
             DefaultModel = "test-model", BaseUrl = "https://openrouter.ai/api/v1/", Transport = ModelInferenceTransport.Responses,
-            Tools = true, Timeouts = new() { SetupSeconds = 5, StreamIdleSeconds = 1, TotalSeconds = 10 }
+            Tools = true, Timeouts = new() { SetupSeconds = 5, StreamIdleSeconds = cancel ? 10 : 1, TotalSeconds = cancel ? 20 : 10 }
         });
-        using var cts = new CancellationTokenSource();
-        if (cancel) cts.CancelAfter(TimeSpan.FromMilliseconds(100));
         var interrupted = new List<ModelGenerationEvent>();
         await foreach (var item in model.GenerateAsync(new(Guid.NewGuid(), [], Tools: [new("lookup", "lookup", "{\"type\":\"object\"}")]), cts.Token)) interrupted.Add(item);
         Assert.Equal(cancel ? ProviderErrorCode.Cancelled : ProviderErrorCode.Timeout, Assert.Single(interrupted.OfType<ModelFailed>()).Failure.Code);
@@ -267,7 +268,7 @@ public sealed class ResponsesTransportTests
         }
     }
 
-    private sealed class InterruptedHandler(string partial) : HttpMessageHandler
+    private sealed class InterruptedHandler(string partial, Action? beforeStall = null) : HttpMessageHandler
     {
         private int _calls;
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -276,7 +277,7 @@ public sealed class ResponsesTransportTests
             var data = first ? partial : Event(new { type = "response.completed", response = new { status = "completed", output = Array.Empty<object>() } });
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StreamContent(new ChunkedStream([Encoding.UTF8.GetBytes(data)], first, ct))
+                Content = new StreamContent(new ChunkedStream([Encoding.UTF8.GetBytes(data)], first, ct, beforeStall))
             });
         }
     }
