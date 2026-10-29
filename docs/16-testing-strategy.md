@@ -1777,3 +1777,22 @@ Real worker tests use the ordinary Synthetic model/tool/runtime boundary. They m
 Frontend focused checks cover receipt recovery, explicit same-key catalog resumption after an empty receipt check, complete stale field comparison, nested guard/Escape/focus ownership, exact off-page Goal evidence and read loss, plus affected Task/Automation/Session inspectors. TypeScript and production build complement actual Playwright MCP journeys. The Synthetic browser minimum is visible author → validate → publish → typed start → real worker Task → Evaluation → assigned process sign-off → Branch → completion, plus rejection, SQLite host restart, Automation and Chat entry, lost reply, stale draft, read-only/revoked source and source evidence links. Inspect 320/390/768/1024/1440 widths, native keyboard, reduced motion and the explicitly documented 200% layout equivalent. A screenshot or compilation alone does not establish this behavior.
 
 The [delivery ledger](reports/formal-workflows-delivery-2026-10-28.md) owns exact commands, results, source SHA, retries and measured limits. These focused local checks do not run the full CI suite, assert a new historical milestone acceptance or certify live providers, physical devices, native browser zoom/screen-reader use, multi-host operation or installed production deployment. CI remains opt-in.
+
+## Structural refactoring test selection
+
+[Refactoring design](proposals/project-refactoring-architecture-stabilization.md) and its [delivery ledger](reports/project-refactoring-delivery-2026-10-29.md) own the 2026-10-29 initiative’s full acceptance. Ordinary work uses the smallest affected path first:
+
+| Changed owner | First local proof | Escalation |
+| --- | --- | --- |
+| API physical hosting/options | Readiness, worker phase/cadence, canonical runtime shutdown and HTTP lifecycle | Registration/lifetime/order changes add attached Session shutdown/recovery integration. |
+| Admin composer | `NativeEffectiveConfigurationTests`, current model/Instance configuration tests | Shared policy changes include Session/Run/evaluation consumers. |
+| Session round projection / browser continuation | `ModelRoundRequestPolicyTests`, `BrowserContinuationPolicyTests`, completion/checkpoint Synthetic runtime tests | State/order/authority changes add cancellation, late-output, tool approval and both-store recovery journeys. |
+| Realtime codec | `realtime.protocol`, race, queue, overflow and tenant Vitest regressions; Synthetic Chat/reconnect | Transport/audio changes add real MessagePack/Kestrel, receipts, sequence-gap and fake-device Voice. |
+| Shipped sources / persistence | Definition/resource/provisioning/adoption tests; disposable SQLite migrations/reopen | Assembly/resource changes require resource identity/byte and fresh/upgrade/restart equivalence. |
+| Scripts / Compose | Associated `scripts/tests`, outside-CWD/redaction tests and topology config rendering | Lifecycle/packaging changes add disposable HTTPS startup, keys/SQLite survival and exact-service shutdown. |
+
+The existing `scripts/backend-test-shards.py` discovers every API/Infrastructure method and theory case, keeps parameter sets together and verifies each shard’s TRX total against its source/digest-bound plan. A targeted selection is never full coverage. Complete suite execution may also be reconciled against that discovery, with skipped/failed/unexecuted cases reported separately and no double counting. Keep large logs under ignored `local/`. Missing Docker, a failed baseline or absent hosted results remains an explicit qualification gap; it never turns an unexecuted check into a pass.
+
+Backend shard receipts retain available TRX counters even when the test process fails, along with its original exit code and whether executed case totals match discovery. Missing/malformed counters remain explicit; a successful process exit without valid complete counters never qualifies the shard. Failed/partial execution must not be counted as a complete passing suite.
+
+Ordinary current-schema API/Infrastructure fixtures may reuse a process-local empty migrated schema through `tests/Shared/CurrentSqliteTestDatabase.cs`. Each case owns a fresh SQLite backup and separate protected roots; existing files are never overwritten. Identity, tenant data, receipts and keys are not cached. Frozen predecessor, fresh schema, upgrade and restart proofs keep their explicit migration setup. Schema/history parity, foreign keys and isolation are checked against an independently migrated fresh database.

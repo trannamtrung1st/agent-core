@@ -1,0 +1,9 @@
+# Shipped Agent Definitions
+
+`agents/` is the immutable, versioned product Definition/template source. `.agents/` contains developer-agent instructions and design context. Tenant-authored Definitions, Instances, overrides, Sessions and Runs use the existing tenant stores; this directory is not tenant runtime storage or a DB-backed global catalog.
+
+The loader validates every recursively discovered JSON Definition and rejects duplicate `(id, version)` pairs. Current sources include examiner v1, customer-support v3, compliance v2, General Assistant v35/v36 and secretary v8/v9/v10. These version pins remain available; do not edit old versions or remove them based only on the newest template. New releases use a new version and the existing validation/publication and tenant adoption rules. The protected tenant General Assistant adopts supported releases through its current IAM/provisioning owner; ordinary clones retain their own lifecycle.
+
+`knowledge/` and `templates/` contain approved backing bytes resolved by the built-in template source. Keep source references and resource bytes together. Never insert private tenant data or credentials. Native startup resolves this directory through `AgentCore:AgentDirectory`; the Dockerfile copies the entire directory to `/app/agents`. A source move must preserve loader discovery, approved resource paths, historical pins, tenant template listing and provisioning/adoption/reset behavior.
+
+Verify changes through Domain Definition validation, Infrastructure `AgentDefinitionStoreTests`, resource/template tests and managed General Assistant integration/browser journeys. [Configuration and migration rules](../docs/15-persistence-and-configuration.md), [operations](../docs/17-observability-and-operations.md) and [source ownership](../docs/11-repository-structure.md) remain canonical.

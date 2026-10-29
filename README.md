@@ -57,6 +57,8 @@ Agent Core is proprietary software. Source availability does not grant permissio
 
 ## Project documents
 
+Start with the [current documentation map](docs/README.md); [dated delivery reports](docs/reports/README.md) retain source-specific evidence.
+
 - [Product Vision](docs/01-product-vision.md)
 - [MVP Scope](docs/02-mvp-scope.md)
 - [System Architecture](docs/03-system-architecture.md)

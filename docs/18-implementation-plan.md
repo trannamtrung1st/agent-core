@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Project refactoring and architecture stabilization
+
+Authorized 2026-10-29 on `e9994fed2cc33c277d4cda114c95a59e8fec71b7`, immediately before comprehensive Production Hardening in [TODO](../TODO.md#prioritized-roadmap). The [reviewed design and move map](proposals/project-refactoring-architecture-stabilization.md) preserve the existing ownership/transaction graph and reject an unjustified persistence assembly split. The [delivery ledger](reports/project-refactoring-delivery-2026-10-29.md) owns exact commands, source, counts, independent review and missing acceptance gates. This initiative explicitly includes complete automated suites and authorized CI; ordinary task verification remains focused and CI opt-in. No historical milestone or Production Hardening acceptance is implied.
+
 ## Formal Workflows
 
 Owner-authorized Formal Workflows implementation began on baseline `f8449f7566e55f90aa0fe963bdfbf19281277861`, 2026-10-28. The [architecture/source contract](formal-workflows-architecture.md), [bounded technology decision](10-technology-decisions.md#decision-bounded-embedded-formal-workflows) and [design direction](../.impeccable/surfaces/formal-workflows.md) own the delivered scope. Local qualification covers the pinned SQLite runtime proof, immutable catalog/publication recovery, genuine Task bridge, independent Evaluation/Goal proof, sign-off/branching, all invocation origins, designer/outline/Chat/Automation UI, source minimization and protected/uncertain-effect recovery. The [delivery ledger](reports/formal-workflows-delivery-2026-10-28.md) owns exact checks, source SHA, final review and external limits. This is scoped successor delivery; historical milestone acceptance is unchanged, and live-provider/device/deployment/hosted-CI qualification is not implied.

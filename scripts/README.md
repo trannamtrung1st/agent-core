@@ -1,0 +1,18 @@
+# Script ownership and effects
+
+Keep documented entrypoints stable. `dev-env.py` owns environment parsing/validation; .NET section keys and uppercase operator inputs are translated explicitly. Launchers must not print private input values. [Operations](../docs/17-observability-and-operations.md) owns runnable setup and recovery instructions; this is an inventory, not another configuration contract.
+
+| Entrypoint / family | Caller and prerequisites | Effects / destructive boundary | Regression owner |
+| --- | --- | --- | --- |
+| `dev-real.sh`, `dev-env.py` | Developer; .NET, pnpm, private root `.env` | Builds/starts native host/Vite; optional managed Sandbox; explicit one-use bootstrap and stop | `tests/test_configuration_cutover.py`, `tests/test_dev_real.py` |
+| `compose.py` | Developer/CI; Docker Compose | Validates then forwards exact env-file paths; requested Compose command determines effects; `down -v` destroys selected volumes | `tests/test_compose.py` |
+| `opensandbox-compose.py`, `opensandbox-local.py`, `opensandbox_config.py` | Explicit trusted-local Sandbox operator; Docker/Python/private key | Generates private state, manages selected infrastructure, binds Docker socket/workspace roots; no default app startup | Sandbox/launcher tests under `tests/` |
+| `decision-compose.py` | Optional LocalKev operator; CUDA Docker or separately served native model | Explicit build/download/start/stop; model downloads are separate; no app startup | Decision tests under `tests/` |
+| `backend-test-shards.py` | Developer/CI; built tests and dotnet | Discover → source/digest-bound plan → TRX/receipt accounting, including available counts from failed shards; preserves failure exit codes and writes selected result directory | `tests/test_infrastructure_shards.py` |
+| `prepare-ci-apt.py` | Ubuntu CI browser setup | Repairs narrowly scoped package sources before dependency install; not an application launcher | Apt tests under `tests/` |
+| `canonical_smoke.py`, `verify-compose-identity.py`, `verify-compose-drive-transfer.mjs`, `verify-email-watch-restart.py`, `compose-sqlite-volume.sh` | Explicit qualification/CI; selected disposable hosts, Node/Docker as applicable | Real authenticated API/transport and restart checks; disposable identities/roots/volumes, never customer reset | Existing qualification fixtures and script tests |
+| `decision-quality.py`, `decision-migration-preflight.py`, `event-storage-snapshot.py`, `qualification/`, `opensandbox-proof/` | Explicit offline/read-only or native qualification; inspect command help | Reports/measurements or bounded selected native effects; inspect command and environment before invocation | Associated decision, event and Sandbox tests |
+| `reset-canonical-workspace.py`, `reset-model-data.py`, `reset-automation-demo.py` | Explicit maintenance operator, stopped selected writers/backups | Destructive scoped reset behind existing confirmation flags; never normal startup or a generic smoke | Reset tests under `tests/` |
+| `nopcommerce-demo.sh` | Separate demo operator; Docker and private demo DB password | Own project/volumes; explicit reset; no core SQLite volumes | Demo/plugin tests and Compose checks |
+
+`fixtures/` holds deterministic test inputs. `tests/` exercises parsers, redaction, bad inputs, outside-CWD invocation and bounded lifecycle/reset behavior without hosted AI keys. No duplicate launcher implementation or obsolete entrypoint was proven by this audit, so no script is removed or renamed. Read the supported command’s help before native effects; no inventory entry authorizes a customer-data reset.
