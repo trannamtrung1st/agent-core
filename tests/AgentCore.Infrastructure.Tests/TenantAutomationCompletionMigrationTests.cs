@@ -23,13 +23,13 @@ public sealed class TenantAutomationCompletionMigrationTests
             var legacy = new Automation(Guid.NewGuid(), new(Guid.NewGuid(), Guid.NewGuid()), AutomationStatus.Active, "Retain exact legacy report destination", new ScheduleTrigger(schedule), schedule.AtUtc,
                 null, 0, 1, 1, new(TriggerAuthorizationOrigin.AdminOwner, null, null, at, at), null,
                 completionDelivery: AutomationCompletionDelivery.ToSession(Guid.NewGuid()));
-            var store = new SqliteTriggerStore(factory); await store.CreateAsync(legacy);
+            var store = new SqliteTriggerStore(factory); await TenantAutomationMigrationTests.InsertLegacy(db, legacy);
             // The original 83-guard checkpoint includes the conversation-destination successor.
             const string completionCheckpoint = "20261021060000_TenantAutomationConversation";
             await db.GetService<IMigrator>().MigrateAsync(completionCheckpoint);
             var latest = await Guards(db); Assert.Equal(83, latest.Length); Assert.All(previous, name => Assert.Contains(name, latest));
             Assert.Contains("TR_TenantCompletion_Automation_Insert", latest); Assert.Contains("TR_TenantCompletion_Occurrence_Update", latest);
-            Assert.Equal(legacy.CompletionDelivery, (await store.GetAsync(legacy.Owner, legacy.AutomationId))!.CompletionDelivery);
+            Assert.Equal(legacy.CompletionDelivery.SessionId!.Value.ToString("D"), await db.Database.SqlQueryRaw<string>("SELECT ReportToSessionId AS Value FROM Automations").SingleAsync());
             await db.GetService<IMigrator>().MigrateAsync("20261021040000_TenantEmailWatchOwnership"); Assert.Equal(previous, await Guards(db));
             await db.GetService<IMigrator>().MigrateAsync(completionCheckpoint); Assert.Equal(latest, await Guards(db));
             await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());

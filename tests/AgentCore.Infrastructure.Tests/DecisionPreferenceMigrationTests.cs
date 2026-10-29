@@ -19,7 +19,7 @@ public sealed class DecisionPreferenceMigrationTests
             VALUES ('dca30000-0000-4000-8000-000000000099','examiner',1,'{{"name":"Migrated","role":"Examiner","description":"Test","tone":"Calm"}}','Active',0,0,1,1,'dca30000-0000-4000-8000-000000000001','low');
             """);
         var before = await Guards(connection);
-        await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
+        await db.GetService<IMigrator>().MigrateAsync("20261026100000_DecisionIntelligencePreferences");
         var after = await Guards(connection);
         Assert.Equal(before.Select(v => v.Split(':')[0]), after.Select(v => v.Split(':')[0]));
         Assert.Equal(188, before.Intersect(after).Count()); // Only the two preference-bearing guards change.
@@ -28,6 +28,8 @@ public sealed class DecisionPreferenceMigrationTests
         command.CommandText = "SELECT json_extract(UnattendedModelJson,'$.mode'),json_extract(UnattendedModelJson,'$.offeringId'),json_extract(UnattendedModelJson,'$.reasoning.effort') FROM AgentInstances";
         await using var values = await command.ExecuteReaderAsync(); Assert.True(await values.ReadAsync());
         Assert.Equal("fixed", values.GetString(0)); Assert.Equal("dca30000-0000-4000-8000-000000000001", values.GetString(1)); Assert.Equal("low", values.GetString(2));
+        await values.DisposeAsync();
+        await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
     }
 
     [Fact]

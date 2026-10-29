@@ -32,15 +32,25 @@ public sealed class TenantSandboxRuntimeMigrationTests
                 await db.GetService<IMigrator>().MigrateAsync("20261017205857_TenantSandboxInstanceVerification");
                 await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO SandboxSessionLeases (SessionId, AgentInstanceId, Revision, State, ExpiresAt, Json) VALUES ({lease.SessionId.ToString("D")}, {lease.AgentInstanceId.ToString("D")}, {lease.Revision}, {(int)lease.State}, {lease.ExpiresAt.ToUnixTimeMilliseconds()}, {leaseJson})");
                 await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO SandboxExecutions (Id, SessionId, AgentRunId, ToolCallId, Json) VALUES ({receipt.Id.ToString("D")}, {receipt.SessionId.ToString("D")}, {receipt.AgentRunId.ToString("D")}, {receipt.ToolCallId}, {receiptJson})");
-                await db.Database.MigrateAsync();
+                await db.GetService<IMigrator>().MigrateAsync("20261017213309_TenantSandboxRuntimeOwnership");
             }
             var store = new SqliteSandboxStore(factory);
-            Assert.Equal(lease, await store.GetLeaseAsync(lease.SessionId)); Assert.Equal(receipt, await store.GetExecutionAsync(lease.SessionId, receipt.Id));
+            Assert.Equal(lease, await store.GetLeaseAsync(lease.SessionId));
             await using var reopened = factory.CreateDbContext();
-            var l = await reopened.Set<SandboxLeaseRow>().SingleAsync(); var e = await reopened.Set<SandboxExecutionRow>().SingleAsync();
-            Assert.Null(l.TenantId); Assert.Null(e.TenantId); Assert.Equal(0, e.Revision);
-            Assert.Equal(leaseJson, l.Json); Assert.Equal(receiptJson, e.Json);
-            Assert.Empty(await reopened.Set<TenantSessionRecord>().ToArrayAsync());
+            var l = await reopened.Set<SandboxLeaseRow>().SingleAsync();
+            Assert.Null(l.TenantId); Assert.Equal(leaseJson, l.Json);
+            // Read the bounded physical model; later approval columns do not exist yet.
+            await reopened.Database.OpenConnectionAsync();
+            using (var read = reopened.Database.GetDbConnection().CreateCommand())
+            {
+                read.CommandText = "SELECT Json, Revision, TenantId, ExecutorPrincipalId, AgentInstanceId, OwnedRunId, LeaseSessionId FROM SandboxExecutions";
+                using var rows = await read.ExecuteReaderAsync(); Assert.True(await rows.ReadAsync());
+                Assert.Equal(receiptJson, rows.GetString(0)); Assert.Equal(0, rows.GetInt64(1));
+                for (var i = 2; i < 7; i++) Assert.True(rows.IsDBNull(i));
+                Assert.Equal(receipt, JsonSerializer.Deserialize<SandboxExecution>(rows.GetString(0), json));
+                Assert.False(await rows.ReadAsync());
+            }
+            Assert.Equal(0, await reopened.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM TenantSessions").SingleAsync());
             await reopened.Database.OpenConnectionAsync();
             using var command = reopened.Database.GetDbConnection().CreateCommand(); command.CommandText = "PRAGMA foreign_key_check";
             using var result = await command.ExecuteReaderAsync(); Assert.False(await result.ReadAsync());

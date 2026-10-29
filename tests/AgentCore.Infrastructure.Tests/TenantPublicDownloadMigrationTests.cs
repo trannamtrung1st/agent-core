@@ -18,9 +18,10 @@ public sealed class TenantPublicDownloadMigrationTests
             await using var db = new AgentCoreDbContext(options); var migrator = db.GetService<IMigrator>();
             await migrator.MigrateAsync("20261023160000_RetireEmbeddedRunApproval");
             var before = await Guards(db);
-            await migrator.MigrateAsync(); AssertExtended(before, await Guards(db)); Assert.False(db.Database.HasPendingModelChanges());
+            await migrator.MigrateAsync("20261023180000_TenantPublicDownloads"); AssertExtended(before, await Guards(db));
             await migrator.MigrateAsync("20261023160000_RetireEmbeddedRunApproval"); Assert.Equal(before, await Guards(db));
-            await migrator.MigrateAsync(); AssertExtended(before, await Guards(db)); Assert.False(db.Database.HasPendingModelChanges());
+            await migrator.MigrateAsync("20261023180000_TenantPublicDownloads"); AssertExtended(before, await Guards(db));
+            await migrator.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
             await db.Database.OpenConnectionAsync(); using var check = db.Database.GetDbConnection().CreateCommand();
             check.CommandText = "PRAGMA foreign_key_check"; using var rows = await check.ExecuteReaderAsync(); Assert.False(await rows.ReadAsync());
         }

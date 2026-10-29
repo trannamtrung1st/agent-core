@@ -127,12 +127,17 @@ public sealed partial class TenantDefinitionIntegrationTests
     [Fact]
     public async Task Unified_installed_data_cutover_preserves_exact_trusted_evidence_and_demotes_unproven_results()
     {
-        await using var f = await Fixture.Create(true, "20261026100000_DecisionIntelligencePreferences");
+        await using var f = await Fixture.Create(true);
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var draft = await f.Service.CreateAsync(owner.OwnerPrincipalId, owner.TenantId, "Installed draft", 1);
         var scenario = new DefinitionEvaluationScenario(draft.DraftId, "no-email", 1, "No email", "Attempt external email.", DefinitionEvaluationRequirementLevel.Required, DefinitionEvaluationCheckType.ExternalActionDenied, "email.send", DateTimeOffset.UtcNow);
         var fingerprint = TenantDefinitionChildRules.Fingerprint(new(draft, [], [], [])); var auditId = f.Ids.NewId(); var untrustedId = f.Ids.NewId(); var at = DateTimeOffset.UtcNow;
-        await using (var db = f.Contexts!.CreateDbContext())
+        await using var historical = await HistoricalTenantDatabase.CreateAsync(f.Contexts!,
+            "20261026100000_DecisionIntelligencePreferences", [.. HistoricalTenantDatabase.AdmissionTables[..12],
+                "TenantAgentDefinitions", "AgentDefinitionDrafts", "AgentDefinitionDraftResources"]);
+        var historicalPath = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(historical.Db.Database.GetConnectionString()).DataSource;
+        historicalPath = new Uri(historicalPath).LocalPath;
+        await using (var db = historical.CreateDbContext())
         {
             db.Add(DefinitionDraftEvaluationPersistence.MapScenario(scenario));
             db.Add(DefinitionDraftEvaluationPersistence.MapResult(new(draft.DraftId, 1, fingerprint, "no-email", 1, "Synthetic", true, [], at, 3), auditId));
@@ -141,21 +146,26 @@ public sealed partial class TenantDefinitionIntegrationTests
             var audit = f.Audit(owner.TenantId, owner.OwnerPrincipalId, Guid.Parse(draft.DefinitionId)) with { AuditId = auditId, Action = "agent-definitions.evaluations.run", At = at }; db.Add(audit);
             var tenant = await db.Set<AgentCore.Domain.Security.Tenant>().SingleAsync(t => t.TenantId == owner.TenantId); db.Entry(tenant).CurrentValues.SetValues(tenant with { Revision = 3 }); await db.SaveChangesAsync();
         }
-        var backup = f.DatabasePath + ".backup";
+        var backup = historicalPath + ".backup";
         try
         {
-            Assert.Equal(3, await EvaluationCutover.MigrateAsync(f.DatabasePath!, backup)); Assert.True(File.Exists(backup));
-            var store = (ITenantEvaluationStore)new SqliteIamStore(f.Contexts!, f.Content);
+            Assert.Equal(3, await EvaluationCutover.MigrateAsync(historicalPath, backup)); Assert.True(File.Exists(backup));
+            var store = (ITenantEvaluationStore)new SqliteIamStore(historical, f.Content);
             var suite = (await store.FindSuiteAsync(owner.TenantId, draft.DraftId))!; Assert.Equal(EvaluationRules.Freeze(suite).ContentHash, suite.ContentHash);
             var attempts = (await store.ListAttemptsAsync(owner.TenantId, EvaluationSubjectKind.DefinitionDraft, draft.DraftId, 0, 100)).Items;
             Assert.Equal(EvaluationOutcome.Passed, attempts.Single(a => a.AttemptId == auditId).Outcome); Assert.Equal(3, attempts.Single(a => a.AttemptId == auditId).CommitSequence);
             Assert.Null(attempts.Single(a => a.AttemptId == untrustedId).CommitSequence);
             Assert.Equal(EvaluationOutcome.Inconclusive, attempts.Single(a => a.AttemptId == untrustedId).Outcome);
             Assert.Contains(attempts, a => a.ReasonCode == "historical_requires_reevaluation" && a.Outcome == EvaluationOutcome.Inconclusive);
-            await using (var db = f.Contexts!.CreateDbContext()) { Assert.Empty(await db.AgentDefinitionDraftEvaluationScenarios.IgnoreQueryFilters().ToArrayAsync()); Assert.Empty(await db.AgentDefinitionDraftEvaluationResults.IgnoreQueryFilters().ToArrayAsync()); }
-            var publication = await f.Service.PublishAsync(owner.OwnerPrincipalId, owner.TenantId, draft.DraftId, 3, 1); Assert.Equal(1, publication.Version);
-            var fork = await f.Service.ForkAsync(owner.OwnerPrincipalId, owner.TenantId, Guid.Parse(draft.DefinitionId), 1, 4);
-            var snapshot = (await f.Definitions.ReadDefinitionDraftSnapshotAsync(owner.TenantId, fork.DraftId))!; Assert.Single(snapshot.Suites); Assert.Equal(fork.DraftId, snapshot.Suites[0].SuiteId); Assert.Empty(snapshot.Attempts);
+            await using (var db = historical.CreateDbContext()) { Assert.Empty(await db.AgentDefinitionDraftEvaluationScenarios.IgnoreQueryFilters().ToArrayAsync()); Assert.Empty(await db.AgentDefinitionDraftEvaluationResults.IgnoreQueryFilters().ToArrayAsync()); }
+            var iam = (SqliteIamStore)store;
+            var identity = new IdentityService(iam, new AccountPasswordHasher(), f.Tokens, f.Ids, TimeProvider.System);
+            var service = new TenantDefinitionService(iam, iam, new(iam), SyntheticProviderAliases.Default,
+                new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(iam), AgentCore.Application.Tools.ToolConfigurationGates.AllowAll,
+                f.Ids, TimeProvider.System, f.Content, Fixture.ShippedTemplates(), identity);
+            var publication = await service.PublishAsync(owner.OwnerPrincipalId, owner.TenantId, draft.DraftId, 3, 1); Assert.Equal(1, publication.Version);
+            var fork = await service.ForkAsync(owner.OwnerPrincipalId, owner.TenantId, Guid.Parse(draft.DefinitionId), 1, 4);
+            var snapshot = (await iam.ReadDefinitionDraftSnapshotAsync(owner.TenantId, fork.DraftId))!; Assert.Single(snapshot.Suites); Assert.Equal(fork.DraftId, snapshot.Suites[0].SuiteId); Assert.Empty(snapshot.Attempts);
         }
         finally { if (File.Exists(backup)) File.Delete(backup); }
     }
