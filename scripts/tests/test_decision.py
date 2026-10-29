@@ -36,4 +36,21 @@ class DecisionLauncherTests(unittest.TestCase):
             with self.assertRaises(ValueError) as raised: DECISION['main']()
             self.assertNotIn('sentinel', str(raised.exception)); run.assert_not_called()
 
+    def test_standalone_commands_include_valid_base_and_target_only_decision(self):
+        for command in ('build', 'download', 'start', 'stop', 'status'):
+            with self.subTest(command=command), patch.dict(os.environ, {
+                'DecisionIntelligence__Enabled': 'true', 'KEV_API_KEY': 'disposable-test-key-1234'
+            }, clear=True), patch.dict(DECISION['policy'], read_env=lambda _: {}), patch.object(sys, 'argv', ['decision-compose.py', command]), patch('subprocess.run') as run:
+                run.return_value.returncode = 0
+                run.return_value.stdout = '{"nvidia": {}}'
+                self.assertEqual(0, DECISION['main']())
+                args = run.call_args.args[0]
+                compose_files = [args[i + 1] for i, arg in enumerate(args) if arg == '-f']
+                self.assertEqual(compose_files[:3], [str(ROOT / name) for name in (
+                    'docker-compose.yml', 'docker-compose.decision.yml', 'docker-compose.decision.native.yml')])
+                self.assertIn('--env-file', args)
+                self.assertEqual(args[args.index('--env-file') + 1], os.devnull)
+                self.assertEqual(args[-2:] if command == 'download' else args[-1:],
+                    ['decision', 'download'] if command == 'download' else ['decision'])
+
 if __name__ == '__main__': unittest.main()

@@ -86,6 +86,23 @@ Path(os.environ['COMPOSE_TEST_CAPTURE']).write_text(json.dumps({
         self.assertNotIn('private-sentinel', result.stdout + result.stderr)
         self.assertFalse(self.capture.exists())
 
+    def test_external_decision_and_sidecar_refuse_before_docker(self):
+        for flags in (['-f', 'docker-compose.decision.yml', '--file=docker-compose.decision.external.yml'],
+                      ['--file', 'docker-compose.decision.native.yml', '-f', 'docker-compose.decision.external.yml']):
+            with self.subTest(flags=flags):
+                result = self.launch(*flags)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('external Decision bridge', result.stderr)
+                self.assertFalse(self.capture.exists())
+
+    def test_compose_file_environment_cannot_mix_external_and_sidecar(self):
+        env = {**self.env, 'COMPOSE_FILE': 'docker-compose.decision.yml' + os.pathsep + 'docker-compose.decision.external.yml'}
+        result = subprocess.run([sys.executable, str(self.root / 'scripts/compose.py'), 'config'],
+                                cwd=self.caller, env=env, capture_output=True, text=True, timeout=10)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('external Decision bridge', result.stderr)
+        self.assertFalse(self.capture.exists())
+
     def test_default_env_file_stays_at_project_root(self):
         (self.root / '.env').write_text('AGENTCORE_DRIVE_ENABLED=false\n')
         (self.caller / '.env').write_text('GoogleEmailOAuth__ClientId=retired\n')

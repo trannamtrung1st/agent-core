@@ -33,6 +33,9 @@ def main():
         raise ValueError('Decision service and host credentials differ. Values are redacted.')
     env['KEV_API_KEY'] = key or 'status-does-not-authenticate'
     base = ['docker', 'compose', '-p', 'agent-core-decision', '--env-file', os.devnull,
+            # The sidecar overlay also configures agent-core. Include its base so
+            # Compose validates the model; every command below still targets decision only.
+            '-f', str(ROOT / 'docker-compose.yml'),
             '-f', str(ROOT / 'docker-compose.decision.yml'), '-f', str(ROOT / 'docker-compose.decision.native.yml')]
     if args.command in ('start', 'preflight'):
         info = subprocess.run(['docker', 'info', '--format', '{{json .Runtimes}}'], capture_output=True, text=True, check=True, env=env)
