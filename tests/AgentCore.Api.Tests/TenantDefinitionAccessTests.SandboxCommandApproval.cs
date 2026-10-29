@@ -41,6 +41,7 @@ public sealed partial class TenantDefinitionAccessTests
         await definitions.PublishAsync(actor, tenant, draft.DraftId, await Revision(owner, tenant), draft.Revision);
         var created = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = Guid.Parse(draft.DefinitionId), version = 1, expectedRevision = await Revision(owner, tenant) }));
         var instance = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = created.GetProperty("principalId").GetGuid();
+        await TenantSessionAccessTests.GrantNativePrivateSpaceRead(owner, tenant, instance);
         var access = factory.Services.GetRequiredService<TenantAccessService>();
         var role = await access.SaveRoleAsync(actor, tenant, null, "Sandbox command", ["sandbox.execute"], await Revision(owner, tenant));
         await access.AssignRoleAsync(actor, tenant, executor, role.RoleId, AccessScope.ForResource(tenant, "agent", instance.ToString("D")), await Revision(owner, tenant));
@@ -48,6 +49,10 @@ public sealed partial class TenantDefinitionAccessTests
         await access.AssignRoleAsync(actor, tenant, executor, role.RoleId, TenantSandboxProfileRules.Scope(tenant, profileId), await Revision(owner, tenant));
         var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
         var id = session.GetProperty("sessionId").GetGuid();
+        var workspaceRole = await access.SaveRoleAsync(actor, tenant, null, "Exact Sandbox command workspace",
+            ["sessions.read", "workspaces.read", "workspaces.write", "workspaces.delete"], await Revision(owner, tenant));
+        foreach (var scope in new[] { TenantSessionRules.Scope(tenant, id), TenantWorkspaceRules.Working(tenant, id) })
+            await access.AssignRoleAsync(actor, tenant, executor, workspaceRole.RoleId, scope, await Revision(owner, tenant));
         var submitted = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{id}/messages", new { messageId = Guid.NewGuid(), text = "Prepare exact Sandbox command", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }));
         var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var run = (await runs.FindTenantRunAsync(tenant, submitted.GetProperty("runId").GetGuid()))!;
         var at = DateTimeOffset.UtcNow; var runtime = factory.Services.GetRequiredService<ITenantRuntimeStore>();

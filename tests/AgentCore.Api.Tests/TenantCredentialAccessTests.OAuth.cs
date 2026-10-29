@@ -211,8 +211,17 @@ public sealed partial class TenantCredentialAccessTests
                 servicesOverride?.Invoke(services);
             });
         }
-        public override async ValueTask DisposeAsync()
-        { await base.DisposeAsync(); SqliteConnection.ClearAllPools(); if (!preserve && Directory.Exists(Root)) Directory.Delete(Root, true); }
+        private Task? disposal;
+        private readonly object disposalGate = new();
+        public override ValueTask DisposeAsync()
+        {
+            lock (disposalGate) return new(disposal ??= DisposeOnceAsync());
+        }
+        private async Task DisposeOnceAsync()
+        {
+            await base.DisposeAsync(); SqliteConnection.ClearAllPools();
+            if (!preserve && Directory.Exists(Root)) Directory.Delete(Root, true);
+        }
     }
     private sealed class NoOAuthNetwork(OAuthFactory factory) : HttpMessageHandler
     {
