@@ -15,6 +15,7 @@ public sealed partial class TenantSessionAccessTests
     {
         private ITenantRuntimeStore inner = null!;
         public bool HoldReceipt;
+        public Func<TenantHumanInput, CancellationToken, ValueTask>? BeforeInput;
         private int holdLoad;
         private bool countLoads;
         public int LoadsAfterArm;
@@ -40,9 +41,12 @@ public sealed partial class TenantSessionAccessTests
         }
         public ValueTask<long> SaveTenantQuiescentReceiptAsync(TenantDeliveryReceipt receipt, CancellationToken ct = default) =>
             ((ITenantDeliveryReceiptStore)inner).SaveTenantQuiescentReceiptAsync(receipt, ct);
-        public ValueTask<TenantHumanInputCommit> SaveTenantRuntimeInputAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot,
-            long expectedRevision, TenantHumanInput input, Guid auditId, CancellationToken ct = default) =>
-            ((ITenantRuntimeInputStore)inner).SaveTenantRuntimeInputAsync(frame, snapshot, expectedRevision, input, auditId, ct);
+        public async ValueTask<TenantHumanInputCommit> SaveTenantRuntimeInputAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot,
+            long expectedRevision, TenantHumanInput input, Guid auditId, CancellationToken ct = default)
+        {
+            if (BeforeInput is not null) await BeforeInput(input, ct);
+            return await ((ITenantRuntimeInputStore)inner).SaveTenantRuntimeInputAsync(frame, snapshot, expectedRevision, input, auditId, ct);
+        }
         public ValueTask<AgentRun> CommitTenantOutcomeAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision,
             AgentRunCommand.Complete completion, Guid? draftEntryId, Guid diagnosticId, CancellationToken ct = default) => inner.CommitTenantOutcomeAsync(frame, snapshot, expectedRevision, completion, draftEntryId, diagnosticId, ct);
         public ValueTask<TenantBackgroundCompletion?> ReadTenantBackgroundCompletionAsync(AgentRunOwner owner, Guid childRunId, CancellationToken ct = default) => inner.ReadTenantBackgroundCompletionAsync(owner, childRunId, ct);

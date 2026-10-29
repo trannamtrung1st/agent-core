@@ -22,6 +22,12 @@ public sealed partial class TenantSessionAccessTests
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int held;
+        public async ValueTask BeforeInput(TenantHumanInput input, CancellationToken ct)
+        {
+            if (input.Admission.Interruption is null || Interlocked.Exchange(ref held, 1) != 0) return;
+            Entered.TrySetResult(); await Release.Task.WaitAsync(ct);
+            if (refuse) throw new InvalidOperationException("Injected interruption commit refusal");
+        }
         public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData data, InterceptionResult<int> result, CancellationToken ct = default)
         {
             if (data.Context!.ChangeTracker.Entries<AgentRunRecord>().Any(e => e.State == EntityState.Added && e.Entity.PayloadJson.Contains("inputBehavior", StringComparison.Ordinal))
@@ -41,11 +47,13 @@ public sealed partial class TenantSessionAccessTests
         var model = new TenantPrefixModel(); var gate = new InterruptedWriteGate(refuse);
         try
         {
-            await using var factory = new NativeTenantSqliteFactory(root, model, services => {
-                var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={Path.Combine(root, "store.db")}")
-                    .AddInterceptors(new SqlitePragmaInterceptor(5000), gate).Options;
-                services.Replace(ServiceDescriptor.Singleton<IDbContextFactory<AgentCoreDbContext>>(new InterruptionContexts(options)));
-            });
+            // Hold the Runtime's queued input before opening the SQLite writer.
+            // The worker can then finish its current-authority read and actually
+            // deliver the output that the mailbox must hold until commit/refusal.
+            var storage = new TenantReceiptRaceStore { BeforeInput = gate.BeforeInput };
+            await using var factory = new NativeTenantSqliteFactory(root, model, storage.Install);
+            try
+            {
             factory.UseKestrel(0); using var ready = factory.CreateClient(); var cookies = new CookieContainer();
             using var owner = new HttpClient(new HttpClientHandler { CookieContainer = cookies }) { BaseAddress = ready.BaseAddress };
             var setup = await StartTenantBackground(factory, owner, submit: false, reportReads: true); var url = $"/api/v2/tenants/{setup.Tenant}/sessions/{setup.Session}";
@@ -79,6 +87,8 @@ public sealed partial class TenantSessionAccessTests
             Assert.Single(history, e => e.Role == ConversationRole.Assistant && e.Status == EntryStatus.Completed && e.Text == "Hello from synthetic.");
             Assert.Equal(refuse ? 0 : 1, history.Count(e => e.Status == EntryStatus.Interrupted && e.Text == "Hello"));
             Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
+            }
+            finally { gate.Release.TrySetResult(); model.Release.TrySetResult(); }
         }
         finally { gate.Release.TrySetResult(); model.Release.TrySetResult(); SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
@@ -95,6 +105,8 @@ public sealed partial class TenantSessionAccessTests
                     .AddInterceptors(new SqlitePragmaInterceptor(5000), gate).Options;
                 services.Replace(ServiceDescriptor.Singleton<IDbContextFactory<AgentCoreDbContext>>(new InterruptionContexts(options)));
             });
+            try
+            {
             factory.UseKestrel(0); using var ready = factory.CreateClient(); var cookies = new CookieContainer();
             using var owner = new HttpClient(new HttpClientHandler { CookieContainer = cookies }) { BaseAddress = ready.BaseAddress };
             var setup = await StartTenantBackground(factory, owner, submit: false, reportReads: true); var url = $"/api/v2/tenants/{setup.Tenant}/sessions/{setup.Session}";
@@ -120,6 +132,8 @@ public sealed partial class TenantSessionAccessTests
             var history = (await factory.Services.GetRequiredService<ITenantConversationStore>().ReadTenantConversationAsync(setup.Tenant, setup.Session, 0, null, 100))!.History.Items;
             Assert.Single(history, e => e.Status == EntryStatus.Interrupted && e.Text == "Hello"); Assert.Single(history, e => e.Role == ConversationRole.Assistant && e.Status == EntryStatus.Completed);
             Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
+            }
+            finally { gate.Release.TrySetResult(); model.Release.TrySetResult(); }
         }
         finally { gate.Release.TrySetResult(); model.Release.TrySetResult(); SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
