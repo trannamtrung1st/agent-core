@@ -149,18 +149,24 @@ public sealed partial class TenantOperationAuthorizationTests
     }
 
     [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_workspace_effects_deleted_Session_keeps_factual_recovery_without_live_resource_lookup_or_native_IO(bool sqlite)
+    public async Task Tenant_workspace_effects_refuse_Session_deletion_and_keep_factual_recovery_without_native_IO(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var v = await WorkspaceEffectCase(f);
         var fence = await StageWorkspaceFence(f, v.Frame, v.Call); await CancelArtifactRun(f, v.Setup, v.Frame);
         var session = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(v.Setup.Tenant, v.Frame.SessionId))!;
-        await f.Sessions.ChangeAsync(v.Setup.Tenant, v.Setup.Owner, new(v.Frame.SessionId, session.Snapshot.Revision, TenantSessionAction.Delete), (await f.Iam.ReadTenantAsync(v.Setup.Tenant))!.Tenant.Revision);
-        Assert.Null(await ((ITenantRunStore)f.Iam).FindTenantRunAsync(v.Setup.Tenant, v.Frame.RunId));
+        Assert.Equal("session_effect_reconciliation_pending", (await Assert.ThrowsAsync<SecurityConflictException>(() => f.Sessions.ChangeAsync(v.Setup.Tenant, v.Setup.Owner,
+            new(v.Frame.SessionId, session.Snapshot.Revision, TenantSessionAction.Delete), (f.Iam.ReadTenantAsync(v.Setup.Tenant).Result)!.Tenant.Revision).AsTask())).ReasonCode);
         var calls = 0;
         var service = WorkspaceEffects(f, new WorkspaceMutationHook(WorkspaceReader(f), beforeEffect: () => { calls++; return Task.CompletedTask; }));
         Assert.Equal(1, await service.RecoverAsync()); Assert.Equal(0, await service.RecoverAsync()); Assert.Equal(0, calls);
         var receipt = await ((ITenantDirectOperationStore)f.Iam).FindDirectOperationReceiptAsync(v.Setup.Tenant, v.Frame.RunId, v.Call.Id);
         Assert.Equal(fence.Origin.DirectOperation!.OperationId, receipt!.OperationId); Assert.Equal(TenantOperationOutcome.Indeterminate, receipt.Outcome);
+        session = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(v.Setup.Tenant, v.Frame.SessionId))!;
+        Assert.Equal("session_effect_reconciliation_pending", (await Assert.ThrowsAsync<SecurityConflictException>(() => f.Sessions.ChangeAsync(v.Setup.Tenant, v.Setup.Owner,
+            new(v.Frame.SessionId, session.Snapshot.Revision, TenantSessionAction.Delete), (f.Iam.ReadTenantAsync(v.Setup.Tenant).Result)!.Tenant.Revision).AsTask())).ReasonCode);
+        Assert.True((await ((ITenantRunStore)f.Iam).FindTenantRunAsync(v.Setup.Tenant, v.Frame.RunId))!.RequiresEffectReconciliation);
+        Assert.Equal(0, await service.RecoverAsync()); Assert.Equal(0, calls);
+        Assert.Equal(receipt, await ((ITenantDirectOperationStore)f.Iam).FindDirectOperationReceiptAsync(v.Setup.Tenant, v.Frame.RunId, v.Call.Id));
     }
 
     private sealed class UnavailableWorkspaceSettlement(ITenantWorkspaceOperationStore inner) : ITenantWorkspaceOperationStore

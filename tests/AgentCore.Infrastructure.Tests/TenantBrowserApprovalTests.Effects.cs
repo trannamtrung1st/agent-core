@@ -120,7 +120,7 @@ public sealed partial class TenantBrowserApprovalTests
     }
 
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
-    public async Task Tenant_Browser_effect_abandoned_Run_fence_recovers_from_expired_claim_or_deleted_Session_without_native_IO(bool sqlite, bool deleted)
+    public async Task Tenant_Browser_effect_abandoned_Run_fence_recovers_from_expired_claim_or_deletion_refusal_without_native_IO(bool sqlite, bool deletionRequested)
     {
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow); await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true);
         var s = await Prepare(f); var probe = new EffectProbe(Probe(s)); (s, var request) = await ApprovedEffect(f, s, probe);
@@ -133,26 +133,36 @@ public sealed partial class TenantBrowserApprovalTests
         Assert.NotNull(start.Fence); var service = Effects(f, probe); Assert.Equal(0, await service.RecoverAsync());
         var current = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, s.Run.AgentRunId))!;
         AgentRun recovered;
-        if (deleted)
+        if (deletionRequested)
         {
             var cancelled = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(current.Owner, current.AgentRunId,
                 new AgentRunCommand.RequestCancellation(current.Revision, clock.GetUtcNow(), null), f.Ids.NewId());
             recovered = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(current.Owner, current.AgentRunId,
                 new AgentRunCommand.CommitCancellation(cancelled.Revision, clock.GetUtcNow(), s.Run.Claim.Generation, null), f.Ids.NewId());
             var session = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Run.SessionId))!;
-            await f.Sessions.ChangeAsync(s.Tenant, s.Human, new(s.Run.SessionId, session.Snapshot.Revision, TenantSessionAction.Delete), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
+            Assert.Equal("session_effect_reconciliation_pending", (await Assert.ThrowsAsync<SecurityConflictException>(() => f.Sessions.ChangeAsync(s.Tenant, s.Human,
+                new(s.Run.SessionId, session.Snapshot.Revision, TenantSessionAction.Delete), (f.Iam.ReadTenantAsync(s.Tenant).Result)!.Tenant.Revision).AsTask())).ReasonCode);
         }
         else
         {
             clock.Advance(TimeSpan.FromMinutes(6));
             recovered = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(current.Owner, current.AgentRunId, new AgentRunCommand.Recover(current.Revision, clock.GetUtcNow()), f.Ids.NewId());
         }
-        Assert.Equal(start.Fence.Origin, recovered.SideEffect.ExternalEffect); Assert.Equal(deleted ? AgentRunSideEffectDisposition.InFlight : AgentRunSideEffectDisposition.Indeterminate, recovered.SideEffect.Disposition);
+        Assert.Equal(start.Fence.Origin, recovered.SideEffect.ExternalEffect); Assert.Equal(deletionRequested ? AgentRunSideEffectDisposition.InFlight : AgentRunSideEffectDisposition.Indeterminate, recovered.SideEffect.Disposition);
         IIamStore reopened = sqlite ? new SqliteIamStore(f.Contexts!, builtIns: f.BuiltIns, clock: f.Clock) : f.Iam;
         service = Effects(f, probe, reopened); Assert.Equal(1, await service.RecoverAsync()); Assert.Equal(0, await service.RecoverAsync()); Assert.Equal(0, probe.NativeEffects);
         var receipt = (await ((ITenantApprovedOperationStore)reopened).FindOperationReceiptAsync(s.Tenant, request.Operation.OperationId))!;
         Assert.Equal(TenantOperationOutcome.Indeterminate, receipt.Outcome); Assert.Equal(TenantBrowserEffectRules.Uncertain, receipt.ReasonCode);
-        if (!deleted) Assert.Equal(start.Fence.Origin, (await ((ITenantRunStore)reopened).FindTenantRunAsync(s.Tenant, s.Run.AgentRunId))!.SideEffect.ExternalEffect);
+        if (!deletionRequested) Assert.Equal(start.Fence.Origin, (await ((ITenantRunStore)reopened).FindTenantRunAsync(s.Tenant, s.Run.AgentRunId))!.SideEffect.ExternalEffect);
+        else
+        {
+            var session = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Run.SessionId))!;
+            Assert.Equal("session_effect_reconciliation_pending", (await Assert.ThrowsAsync<SecurityConflictException>(() => f.Sessions.ChangeAsync(s.Tenant, s.Human,
+                new(s.Run.SessionId, session.Snapshot.Revision, TenantSessionAction.Delete), (f.Iam.ReadTenantAsync(s.Tenant).Result)!.Tenant.Revision).AsTask())).ReasonCode);
+            Assert.True((await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, s.Run.AgentRunId))!.RequiresEffectReconciliation);
+            Assert.Equal(0, await service.RecoverAsync()); Assert.Equal(0, probe.NativeEffects);
+            Assert.Equal(receipt, await ((ITenantApprovedOperationStore)reopened).FindOperationReceiptAsync(s.Tenant, request.Operation.OperationId));
+        }
     }
 
     [Theory] [InlineData(false)] [InlineData(true)]

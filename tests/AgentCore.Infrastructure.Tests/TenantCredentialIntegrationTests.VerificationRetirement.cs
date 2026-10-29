@@ -34,7 +34,7 @@ public sealed partial class TenantCredentialIntegrationTests
                 await http.Response.WriteAsJsonAsync(new { contractVersion = 1, verificationFencing = true, verificationScopeVersion = 2 });
             else if (path == "/agent-core/verifications/retire")
             {
-                fences++; Assert.Equal(foreign ? 1 : 3, creates); Assert.Equal(foreign ? 0 : 3, kills);
+                fences++; Assert.Equal(foreign ? 1 : 4, creates); Assert.Equal(foreign ? 0 : 4, kills);
                 using var body = await JsonDocument.ParseAsync(http.Request.Body); var value = body.RootElement;
                 Assert.Equal(Assert.Single(owners), value.GetProperty("tenant").GetString() + "." + value.GetProperty("attempt").GetString());
                 await http.Response.WriteAsJsonAsync(new { contractVersion = 1, tenant = value.GetProperty("tenant").GetString(), attempt = value.GetProperty("attempt").GetString(), retired = !pending });
@@ -88,7 +88,8 @@ public sealed partial class TenantCredentialIntegrationTests
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision;
         var p = (await v.Profiles.SaveAsync(owner.TenantId, null, human, SandboxInput() with { ImageReference = "sha256:" + new string('a', 64), InitializationScript = "printf verification-init" }, await Revision(), 0)).Profile;
         var result = await v.Service.VerifyAsync(owner.TenantId, p.Id, human, await Revision(), 1);
-        Assert.Equal(foreign ? (1, 0, 1, 0, 0) : (3, 3, 1, 3, 1), (creates, kills, fences, probes, scripts));
+        // Read/write, read-only, disabled Home and read-only Working mounts.
+        Assert.Equal(foreign ? (1, 0, 1, 0, 0) : (4, 4, 1, 4, 1), (creates, kills, fences, probes, scripts));
         Assert.Equal(pending ? SandboxVerificationStatus.CleanupPending : foreign ? SandboxVerificationStatus.Failed : SandboxVerificationStatus.Succeeded, result.Attempt!.Status);
         Assert.Equal(!pending && !foreign, (await store.ReadSandboxVerificationAsync(owner.TenantId, p.Id, 1)).Observation?.Passed == true);
         Assert.Equal(pending, Directory.Exists(Path.Combine(root, ".verification", result.Attempt.AttemptId.ToString("N"))));

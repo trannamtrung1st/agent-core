@@ -30,7 +30,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var v = await ApprovedWorkspaceCase(f, true, false); var s = v.Setup;
         async Task RevokeWrite()
         {
-            var state = (await f.Iam.ReadTenantAsync(s.Tenant))!; var assignment = Assert.Single(state.Assignments, a => a.PrincipalId == s.Agent.PrincipalId);
+            var state = (await f.Iam.ReadTenantAsync(s.Tenant))!; var assignment = Assert.Single(state.Assignments, a => a.PrincipalId == s.Agent.PrincipalId && state.Roles.Single(r => r.RoleId == a.RoleId).Name == "Owned model workspace reads");
             await f.Access.RevokeAssignmentAsync(s.Owner.PrincipalId, s.Tenant, assignment.AssignmentId, state.Tenant.Revision);
             await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read"]);
         }
@@ -56,19 +56,19 @@ public sealed partial class TenantOperationAuthorizationTests
     }
 
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
-    public async Task Tenant_approved_workspace_effect_abandoned_fence_recovers_with_retained_owner_after_access_loss_or_Session_deletion(bool sqlite, bool deleted)
+    public async Task Tenant_approved_workspace_effect_abandoned_fence_recovers_with_retained_owner_after_access_loss_or_deletion_refusal(bool sqlite, bool deletionRequested)
     {
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-19T03:00:00Z"));
         await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true); var v = await ApprovedWorkspaceCase(f, true, true); var s = v.Setup;
         var fence = await StageApprovedWorkspace(f, v.Frame, v.Request);
-        var state = (await f.Iam.ReadTenantAsync(s.Tenant))!; var assignment = Assert.Single(state.Assignments, a => a.PrincipalId == s.Agent.PrincipalId);
+        var state = (await f.Iam.ReadTenantAsync(s.Tenant))!; var assignment = Assert.Single(state.Assignments, a => a.PrincipalId == s.Agent.PrincipalId && state.Roles.Single(r => r.RoleId == a.RoleId).Name == "Owned model workspace reads");
         await f.Access.RevokeAssignmentAsync(s.Owner.PrincipalId, s.Tenant, assignment.AssignmentId, state.Tenant.Revision);
-        if (deleted)
+        if (deletionRequested)
         {
             await CancelArtifactRun(f, s, v.Frame);
             var session = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, v.Frame.SessionId))!;
-            await f.Sessions.ChangeAsync(s.Tenant, s.Owner, new(v.Frame.SessionId, session.Snapshot.Revision, TenantSessionAction.Delete), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
-            Assert.Null(await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, v.Frame.RunId));
+            Assert.Equal("session_effect_reconciliation_pending", (await Assert.ThrowsAsync<SecurityConflictException>(() => f.Sessions.ChangeAsync(s.Tenant, s.Owner,
+                new(v.Frame.SessionId, session.Snapshot.Revision, TenantSessionAction.Delete), (f.Iam.ReadTenantAsync(s.Tenant).Result)!.Tenant.Revision).AsTask())).ReasonCode);
         }
         else clock.Advance(TimeSpan.FromMinutes(6));
         if (sqlite)
@@ -81,6 +81,15 @@ public sealed partial class TenantOperationAuthorizationTests
         var result = await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(s.Tenant, v.Request.Operation.OperationId);
         Assert.Equal(TenantOperationOutcome.Indeterminate, result!.Outcome); Assert.Equal(v.Frame.RunId, result.RunId); Assert.Equal(v.Request.RequestId, result.RequestId);
         Assert.Equal(OperationGrantStatus.Indeterminate, (await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(s.Tenant, v.Request.RequestId))!.Status);
+        if (deletionRequested)
+        {
+            var session = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, v.Frame.SessionId))!;
+            Assert.Equal("session_effect_reconciliation_pending", (await Assert.ThrowsAsync<SecurityConflictException>(() => f.Sessions.ChangeAsync(s.Tenant, s.Owner,
+                new(v.Frame.SessionId, session.Snapshot.Revision, TenantSessionAction.Delete), (f.Iam.ReadTenantAsync(s.Tenant).Result)!.Tenant.Revision).AsTask())).ReasonCode);
+            Assert.True((await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, v.Frame.RunId))!.RequiresEffectReconciliation);
+            Assert.Equal(0, await service.RecoverAsync()); Assert.Equal(0, calls);
+            Assert.Equal(result, await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(s.Tenant, v.Request.Operation.OperationId));
+        }
     }
 
     [Theory] [InlineData(false)] [InlineData(true)]

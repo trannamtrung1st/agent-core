@@ -24,7 +24,7 @@ public sealed partial class TenantDefinitionIntegrationTests
     [InlineData(false, "backgroundUnacknowledged")] [InlineData(true, "backgroundUnacknowledged")]
     [InlineData(false, "foreign")] [InlineData(true, "foreign")]
     [InlineData(false, "revoked")] [InlineData(true, "revoked")]
-    [InlineData(false, "deleted")] [InlineData(true, "deleted")]
+    [InlineData(false, "deletionRequested")] [InlineData(true, "deletionRequested")]
     [InlineData(false, "backgroundRevoked")] [InlineData(true, "backgroundRevoked")]
     [InlineData(false, "backgroundForeign")] [InlineData(true, "backgroundForeign")]
     [InlineData(false, "backgroundDeadline")] [InlineData(true, "backgroundDeadline")]
@@ -131,7 +131,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             if (outcome is "revoked" or "backgroundRevoked") await f.Access.RevokeAssignmentAsync(s.Human.PrincipalId, s.Tenant, s.ExecutionGrant, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
             if (outcome == "backgroundSourceRevoked")
                 await SetupProfiles(f).Profiles.SaveAsync(s.Tenant, s.Lease.Profile.Id, s.Human, SetupInput("Runtime source") with { Enabled = false }, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1);
-            if (outcome == "deleted")
+            if (outcome == "deletionRequested")
             {
                 var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!; var runtime = (ITenantRuntimeStore)f.Iam;
                 run = await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId, new AgentRunCommand.RequestCancellation(run.Revision, DateTimeOffset.UtcNow, "Recovery cancellation"), f.Ids.NewId());
@@ -139,7 +139,8 @@ public sealed partial class TenantDefinitionIntegrationTests
                 var current = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, frame.SessionId))!;
                 var sessionService = new TenantSessionService(f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam, f.Definitions,
                     new SessionNoBuiltinFallback(), f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), new(), f.Ids, TimeProvider.System);
-                await sessionService.ChangeAsync(s.Tenant, SandboxHuman(s), new(frame.SessionId, current.Snapshot.Revision, TenantSessionAction.Delete), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
+                Assert.Equal("session_effect_reconciliation_pending", (await Assert.ThrowsAsync<SecurityConflictException>(() => sessionService.ChangeAsync(s.Tenant, SandboxHuman(s),
+                    new(frame.SessionId, current.Snapshot.Revision, TenantSessionAction.Delete), (f.Iam.ReadTenantAsync(s.Tenant).Result)!.Tenant.Revision).AsTask())).ReasonCode);
             }
             if (revokedContextPermission is not null)
             {
@@ -180,7 +181,17 @@ public sealed partial class TenantDefinitionIntegrationTests
             Assert.Equal(0, dispatches); Assert.Equal(kept || outcome is "foreign" or "backgroundForeign" or "hostChanged" ? 0 : 1, deletes);
             Assert.Equal(effect, await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(s.Tenant, request.Operation.OperationId));
             Assert.Null(await f.Sandbox.GetLeaseAsync(frame.SessionId)); Assert.Empty(await f.Sandbox.ListLeasesAsync());
-            if (outcome == "deleted") Assert.Null(await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, frame.SessionId));
+            if (outcome == "deletionRequested")
+            {
+                var current = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, frame.SessionId))!;
+                var sessions = new TenantSessionService(f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam, f.Definitions,
+                    new SessionNoBuiltinFallback(), f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), new(), f.Ids, TimeProvider.System);
+                Assert.Equal("session_effect_reconciliation_pending", (await Assert.ThrowsAsync<SecurityConflictException>(() => sessions.ChangeAsync(s.Tenant, SandboxHuman(s),
+                    new(frame.SessionId, current.Snapshot.Revision, TenantSessionAction.Delete), (f.Iam.ReadTenantAsync(s.Tenant).Result)!.Tenant.Revision).AsTask())).ReasonCode);
+                Assert.NotNull(await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, frame.SessionId));
+                await worker.ReconcileAsync(); Assert.Equal(0, dispatches); Assert.Equal(1, deletes);
+                Assert.Equal(effect, await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(s.Tenant, request.Operation.OperationId));
+            }
             await host.StopAsync();
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }

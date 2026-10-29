@@ -38,7 +38,7 @@ public sealed partial class TenantDefinitionIntegrationTests
     [InlineData(false, "background")] [InlineData(true, "background")]
     [InlineData(false, "foreign")] [InlineData(true, "foreign")]
     [InlineData(false, "revoked")] [InlineData(true, "revoked")]
-    [InlineData(false, "deleted")] [InlineData(true, "deleted")]
+    [InlineData(false, "deletionRequested")] [InlineData(true, "deletionRequested")]
     [InlineData(false, "callerCanceled")] [InlineData(true, "callerCanceled")]
     [InlineData(false, "duringCommandRevoked")] [InlineData(true, "duringCommandRevoked")]
     [InlineData(false, "cleanupForeign")] [InlineData(true, "cleanupForeign")]
@@ -121,7 +121,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                     if (userCommand && outcome == "callerCanceled") callerCancellation.Cancel();
                     if (userCommand && outcome == "duringCommandRevoked")
                         await f.Access.RevokeAssignmentAsync(s.Human.PrincipalId, s.Tenant, s.ExecutionGrant, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
-                    if (userCommand && outcome == "deleted")
+                    if (userCommand && outcome == "deletionRequested")
                     {
                         var active = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, s.Run.AgentRunId))!;
                         var runtime = (ITenantRuntimeStore)f.Iam;
@@ -132,11 +132,11 @@ public sealed partial class TenantDefinitionIntegrationTests
                         var sessions = new TenantSessionService(f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam,
                             f.Definitions, new SessionNoBuiltinFallback(), f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), new(), f.Ids, TimeProvider.System);
                         var current = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Session.SessionId))!;
-                        await sessions.ChangeAsync(s.Tenant, SandboxHuman(s), new(s.Session.SessionId, current.Snapshot.Revision, TenantSessionAction.Delete),
-                            (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
+                        Assert.Equal("session_effect_reconciliation_pending", (await Assert.ThrowsAsync<SecurityConflictException>(async () => { await sessions.ChangeAsync(s.Tenant, SandboxHuman(s),
+                            new(s.Session.SessionId, current.Snapshot.Revision, TenantSessionAction.Delete), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision); })).ReasonCode);
                         deletionCompleted.TrySetResult();
                     }
-                    if (userCommand && outcome is "uncertain" or "deleted" or "cleanupForeign" or "absent") { http.Response.StatusCode = 500; await http.Response.WriteAsync("PRIVATE_SDK_BODY"); return; }
+                    if (userCommand && outcome is "uncertain" or "deletionRequested" or "cleanupForeign" or "absent") { http.Response.StatusCode = 500; await http.Response.WriteAsync("PRIVATE_SDK_BODY"); return; }
                     http.Response.ContentType = "text/event-stream";
                     await http.Response.WriteAsync("data: {\"type\":\"init\",\"text\":\"owned-command\",\"timestamp\":0}\n\n");
                     if (userCommand) await http.Response.WriteAsync("data: " + JsonSerializer.Serialize(new { type = "stdout", text = outcome == "outputLarge" ? new string('界', 10000) : "actual SDK output", timestamp = 1 }) + "\n\n");
@@ -211,11 +211,17 @@ public sealed partial class TenantDefinitionIntegrationTests
                     retained.DurationMs ?? 0, retained.FilesystemEffectsMayHaveOccurred, TerminationConfirmed: retained.TerminationConfirmed);
             }
             else result = await sdk.ExecuteApprovedAsync(frame, request.RequestId);
-            // A bounded SDK call may settle before the server-side SQLite
-            // deletion finishes. Await that actual commit, never a delay guess.
-            if (outcome == "deleted") await deletionCompleted.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            if (outcome == "deletionRequested")
+            {
+                await deletionCompleted.Task.WaitAsync(TimeSpan.FromSeconds(30));
+                var sessions = new TenantSessionService(f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam,
+                    f.Definitions, new SessionNoBuiltinFallback(), f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), new(), f.Ids, TimeProvider.System);
+                var current = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Session.SessionId))!;
+                Assert.Equal("session_effect_reconciliation_pending", (await Assert.ThrowsAsync<SecurityConflictException>(() => sessions.ChangeAsync(s.Tenant, SandboxHuman(s),
+                    new(s.Session.SessionId, current.Snapshot.Revision, TenantSessionAction.Delete), (f.Iam.ReadTenantAsync(s.Tenant).Result)!.Tenant.Revision).AsTask())).ReasonCode);
+            }
             var denied = outcome is "foreign" or "revoked" or "instanceChanged";
-            var uncertain = outcome is "uncertain" or "deleted" or "callerCanceled" or "duringCommandRevoked" or "cleanupForeign" or "absent" or "backgroundIncomplete" or "backgroundError" or "humanStop" or "humanReset";
+            var uncertain = outcome is "uncertain" or "deletionRequested" or "callerCanceled" or "duringCommandRevoked" or "cleanupForeign" or "absent" or "backgroundIncomplete" or "backgroundError" or "humanStop" or "humanReset";
             Assert.Equal(denied ? 0 : 1, dispatches);
             if (!denied)
             {
@@ -229,7 +235,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             Assert.NotNull(effect);
             Assert.Equal(denied ? TenantOperationOutcome.Denied : uncertain ? TenantOperationOutcome.Indeterminate : TenantOperationOutcome.Completed, effect.Outcome);
             var run = await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId);
-            if (outcome == "deleted") { Assert.Null(run); Assert.True((await storage.ReadTenantSandboxExecutionFactsAsync(s.Tenant, frame.SessionId, result.ExecutionId))!.RunCancellationRequested); }
+            if (outcome == "deletionRequested") { Assert.NotNull(run); Assert.Equal(AgentRunStatus.Cancelled, run.Status); Assert.True(run.RequiresEffectReconciliation); Assert.True((await storage.ReadTenantSandboxExecutionFactsAsync(s.Tenant, frame.SessionId, result.ExecutionId))!.RunCancellationRequested); }
             else
             {
                 Assert.Null(run!.Owner.ProfileIdOrNull);
@@ -269,7 +275,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             else if (outcome == "background") { Assert.Equal("Running", result.Status); Assert.Equal("sandbox_command_started", effect.ReasonCode); }
             else if (!denied)
             {
-                Assert.Equal(outcome is "deleted" or "callerCanceled" or "humanStop" or "humanReset" ? "Canceled" : "Indeterminate", result.Status);
+                Assert.Equal(outcome is "deletionRequested" or "callerCanceled" or "humanStop" or "humanReset" ? "Canceled" : "Indeterminate", result.Status);
                 Assert.Equal(outcome is "cleanupForeign" or "absent" ? 0 : 1, deletes);
                 Assert.DoesNotContain("PRIVATE_SDK_BODY", result.Stderr);
                 if (outcome == "cleanupForeign") { Assert.False(result.TerminationConfirmed); Assert.Equal("NeedsReconciliation", result.EnvironmentState); }
@@ -285,7 +291,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                 if (outcome == "humanStop") { Assert.NotNull(stopped.Execution.ProcessStop); Assert.Null(stopped.Execution.ProcessStop.DispatchStartedAt); }
             }
             var before = contacts;
-            if (outcome is "revoked" or "deleted" or "duringCommandRevoked" or "outputRevoked") await Assert.ThrowsAsync<AccessDeniedException>(() => sdk.ExecuteApprovedAsync(frame, request.RequestId).AsTask());
+            if (outcome is "revoked" or "deletionRequested" or "duringCommandRevoked" or "outputRevoked") await Assert.ThrowsAsync<AccessDeniedException>(() => sdk.ExecuteApprovedAsync(frame, request.RequestId).AsTask());
             else Assert.Equal(result.ExecutionId, (await sdk.ExecuteApprovedAsync(frame, request.RequestId)).ExecutionId);
             Assert.Equal(before, contacts); Assert.Equal(denied ? 0 : 1, dispatches);
             Assert.Null(await f.Sandbox.GetExecutionAsync(frame.SessionId, result.ExecutionId));
