@@ -151,9 +151,16 @@ public sealed partial class TenantCredentialAccessTests
         catch (OperationCanceledException) { throw new Xunit.Sdk.XunitException(string.Join("\n", diagnostics.Failures.TakeLast(8))); }
         if (choice == "final-family-revoked")
         {
-            Assert.Equal(AgentRunStatus.Failed, finished.Status); Assert.Equal("protected-output-unavailable", finished.Failure!.Code); Assert.Null(finished.Result); Assert.Equal(1, probe.Calls);
+            // Revocation happens inside the final model call; the provider authority fence refuses it before terminal output commit.
+            Assert.Equal(AgentRunStatus.Failed, finished.Status); Assert.Equal("provider-authentication", finished.Failure!.Code); Assert.Null(finished.Result); Assert.Equal(1, probe.Calls);
             Assert.Contains(model.Requests.Last().Messages, m => m.Role == ModelRole.Tool && m.Text.Contains("tenantAccountRead", StringComparison.Ordinal));
-            Assert.Contains(await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(s.Tenant, 200), a => a.Execution?.Context.RunId == finished.AgentRunId && a.Decision == "denied" && a.ReasonCode == "account_read_required");
+            var current = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(s.Tenant))!;
+            Assert.DoesNotContain(current.Assignments, assignment => assignment.AssignmentId == family.AssignmentId);
+            var denied = await Assert.ThrowsAsync<AccessDeniedException>(() => TenantAccountReadRules.PermissionsAsync(current,
+                request.Operation.AccountRead!, agent.PrincipalId, factory.Services.GetRequiredService<IamAuthorizer>(), true, default).AsTask());
+            Assert.Equal("account_read_required", denied.ReasonCode);
+            Assert.Contains(await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(s.Tenant, 200), a => a.Execution?.Context.RunId == finished.AgentRunId
+                && a.Action == "operations.accounts.read" && a.Decision == "allowed" && a.ReasonCode == "connected_account_read");
         }
         if (choice != "final-family-revoked") Assert.True(finished.Status == AgentRunStatus.Completed, $"{finished.Status}: {finished.Failure?.Code}: {finished.Failure?.Summary}");
         var recent = choice.StartsWith("recent-", StringComparison.Ordinal);
@@ -184,7 +191,9 @@ public sealed partial class TenantCredentialAccessTests
             new AgentRunCommand.CommitCancellation(inspect.Revision, clock.GetUtcNow(), inspect.Claim!.Generation, null), ids.NewId());
         if (choice == "final-family-revoked")
         {
+            Assert.Contains(retained.Entries, e => e.Role == ConversationRole.User);
             Assert.DoesNotContain(retained.Entries, e => e.ResponseId == finished.ResponseId && e.Role == ConversationRole.Assistant && e.Status == EntryStatus.Completed);
+            Assert.Equal(0, source.Outbound); Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
             return;
         }
         if (allowed)
