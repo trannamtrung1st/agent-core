@@ -45,7 +45,8 @@ for (const tool of ['harness', 'configuration', 'skills.list', 'skills.inspect',
     await page.goto(`/t/${tenant}`); const input = page.getByRole('textbox', { name: 'Message', exact: true }); await expect(input).toBeEnabled();
     const selected = tool === 'skills.inspect' ? tool + ' definition:metadata-review' : tool === 'resources.inspect' ? tool + ' ' + savedResource.resource.key : tool;
     await input.fill('synthetic-tenant-management-read: ' + selected); await page.getByRole('button', { name: 'Send', exact: true }).click();
-    const approvals = page.getByRole('region', { name: 'Conversation approvals', exact: true }); await expect(approvals.getByText('Inspect exact Agent configuration', { exact: true })).toBeVisible();
+    const approvals = page.getByRole('region', { name: 'Conversation approvals', exact: true }); // The multi-round native read can remain live beyond the default 15 s on CI.
+    await expect(approvals.getByText('Inspect exact Agent configuration', { exact: true })).toBeVisible({ timeout: 60_000 });
     await approvals.getByRole('link', { name: 'Review details', exact: true }).click(); const detail = page.getByRole('dialog', { name: 'Approval details', exact: true });
     const read = detail.getByRole('region', { name: 'Exact saved read', exact: true });
     if (tool === 'harness') await expect(read.getByText(instruction, { exact: false }).first()).toBeAttached();
