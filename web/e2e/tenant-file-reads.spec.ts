@@ -21,15 +21,27 @@ for (const width of [1440, 390]) test(`tenant original, working copy and Artifac
   const errors: string[] = [], obsolete: string[] = [], unexpected: string[] = [], consoleErrors: string[] = [];
   page.on('pageerror', error => errors.push(error.message)); page.on('console', entry => { if (entry.type() === 'error') consoleErrors.push(entry.text()); });
   page.on('request', request => { const path = new URL(request.url()).pathname; if (path.includes('owner-capability') || /^\/api\/v[12]\/(sessions|agent-instances|admin|file-preview)(\/|$)/.test(path) || request.headers()['x-agentcore-owner-capability']) obsolete.push(path); });
-  let expectedDeniedPath = '', expectedStalePath = '', metadataRefusals = 0;
+  let expectedDeniedPath = '', expectedStalePath = '', metadataRefusals = 0, tenantPrefix = '', responseOrder = 0, injectedApprovalConflict = false;
+  const approvalConflicts: { path: string; order: number }[] = [], responseChecks: Promise<void>[] = [];
+  const successfulApprovalReads = new Map<string, number>();
   page.on('response', response => {
-    const path = new URL(response.url()).pathname;
+    const path = new URL(response.url()).pathname, order = ++responseOrder;
+    const approvalRead = response.request().method() === 'GET' && path.startsWith(tenantPrefix + '/sessions/') && path.endsWith('/approvals');
+    if (approvalRead && response.status() === 200) successfulApprovalReads.set(path, order);
     if (response.status() < 400 || response.status() === 403 && path === expectedDeniedPath) return;
     if (response.status() === 409 && path === expectedStalePath && metadataRefusals++ === 0) return;
+    if (approvalRead && response.status() === 409) {
+      responseChecks.push(response.json().then(body => {
+        if (body.reasonCode === 'stale_revision') approvalConflicts.push({ path, order });
+        else unexpected.push(`409 ${path}: ${body.reasonCode}`);
+      }).catch(() => { unexpected.push(`409 ${path}: unreadable refusal`); }));
+      return;
+    }
     unexpected.push(`${response.status()} ${path}`);
   });
   try {
     const tenant = await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `File proof ${nonce}`, slug: `file-proof-${nonce}` }); const prefix = `/api/v2/tenants/${tenant.tenantId}`;
+    tenantPrefix = prefix;
     const access = await call<{ revision: number }>(api, prefix + '/access/me');
     await call(api, prefix + '/agents', { templateId: 'examiner', version: 1, expectedRevision: access.revision });
     await page.setViewportSize({ width, height: 900 }); await page.addInitScript(() => localStorage.setItem('agent-core.owner-capability', 'obsolete-file-read-token'));
@@ -58,11 +70,19 @@ for (const width of [1440, 390]) test(`tenant original, working copy and Artifac
     await expect(preview).toContainText('const scope = "tenant";'); await page.keyboard.press('Escape'); await expect(preview).toBeHidden();
     const originalDownload = page.waitForEvent('download'); await original.getByRole('button', { name: `Download ${name}`, exact: true }).click();
     expect(await readFile((await (await originalDownload).path())!)).toEqual(bytes);
+    await page.route(`**${prefix}/sessions/*/approvals**`, async route => {
+      if (!injectedApprovalConflict && route.request().method() === 'GET') {
+        injectedApprovalConflict = true;
+        await route.fulfill({ status: 409, contentType: 'application/json', body: '{"reasonCode":"stale_revision","title":"Security state changed. Reload before trying again."}' });
+      } else await route.continue();
+    });
     await original.getByRole('button', { name: `Copy ${name} to working files`, exact: true }).click();
     let files = page.getByRole('dialog', { name: 'Session files', exact: true }); await files.getByRole('button', { name: 'Create copies', exact: true }).click();
     const copied = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/materialize'));
     await page.getByRole('dialog', { name: 'Create working and Artifact copies?', exact: true }).getByRole('button', { name: 'Create copies', exact: true }).click();
-    const copy = await (await copied).json() as { workspaceLogicalPath: string };
+    const copiedResponse = await copied;
+    const copy = await copiedResponse.json() as { workspaceLogicalPath: string };
+    const approvalsPath = new URL(copiedResponse.url()).pathname.split('/attachments/')[0] + '/approvals';
     await expect(files.getByText('Copies created', { exact: true })).toBeVisible();
     await files.getByRole('button', { name: `Preview ${copy.workspaceLogicalPath.split('/').at(-1)}`, exact: true }).click();
     preview = page.getByRole('dialog', { name: copy.workspaceLogicalPath.split('/').at(-1)!, exact: true });
@@ -82,7 +102,17 @@ for (const width of [1440, 390]) test(`tenant original, working copy and Artifac
     await files.getByRole('button', { name: 'Retry file', exact: true }).click(); await expect(artifact).toBeVisible();
     const restored = page.waitForEvent('download'); await artifact.getByRole('button', { name: `Download ${name}`, exact: true }).click();
     const download = await restored; expect(download.suggestedFilename()).toBe(name); expect(await readFile((await download.path())!)).toEqual(bytes);
+    await expect.poll(() => injectedApprovalConflict).toBe(true);
+    await Promise.all(responseChecks);
+    expect(approvalConflicts.length).toBeGreaterThan(0);
+    for (const conflict of approvalConflicts) expect(conflict.path).toBe(approvalsPath);
+    // File mutations can invalidate a concurrent approval-status snapshot. Require
+    // the exact refusal and a later real scoped read, never a blanket 409 exemption.
+    await expect.poll(() => approvalConflicts.every(conflict => (successfulApprovalReads.get(conflict.path) ?? 0) > conflict.order)).toBe(true);
+    await expect(page.getByText('Approval status could not be refreshed.', { exact: true })).toBeHidden();
     expect(staleMetadata).toBe(true); expect(metadataRefusals).toBe(1); expect(denied).toBe(true); expect(errors).toEqual([]); expect(obsolete).toEqual([]); expect(unexpected).toEqual([]);
-    expect(consoleErrors).toHaveLength(2); expect(consoleErrors[0]).toContain('409'); expect(consoleErrors[1]).toContain('403');
+    expect(consoleErrors).toHaveLength(2 + approvalConflicts.length);
+    expect(consoleErrors.filter(error => error.includes('409'))).toHaveLength(1 + approvalConflicts.length);
+    expect(consoleErrors.filter(error => error.includes('403'))).toHaveLength(1);
   } finally { await api.dispose(); }
 });
