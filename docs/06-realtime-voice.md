@@ -151,6 +151,8 @@ sequenceDiagram
 
 Track generatedText, synthesized segment boundaries/durations, and last acknowledged consumedSamples separately. Browser reports progress every 100 ms while playing, and immediately at start, completion and stop. Only samples actually consumed by the output worklet count; buffering, time spent underrunning and speculative queued audio do not. Canonical sample counts remain valid after output resampling. Progress is monotonic and capped at sent samples.
 
+The 100 ms cadence samples the latest progress; a slow acknowledgment must not build an unbounded command backlog. Keep one outstanding periodic progress call and one latest deferred value for the current attachment. Completion/stop retain their final actual position and supersede deferred progress for that response. Rendered receipts use the same bounded publication principle while retaining a deferred final rendered prefix. Neither local publication nor coalescing grants heard/delivery credit before server validation.
+
 Heard text is a **conservative undercount**. Never infer that a user heard a word from proportional audio duration; speech timing is nonuniform.
 
 | Timing information | Heard credit rule |

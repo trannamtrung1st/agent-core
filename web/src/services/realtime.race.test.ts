@@ -27,6 +27,93 @@ function pcmFrame(samples = 480): Uint8Array {
 
 describe("realtime race handling", () => {
   beforeEach(() => { window.history.replaceState(null, "", "/t/11111111-1111-1111-1111-111111111111"); vi.mocked(endSession).mockResolvedValue(undefined); });
+  it("coalesces slow rendered receipts without starving Unmute or losing the final rendered prefix", async () => {
+    const receipts: Array<(ack: { accepted: boolean }) => void> = [];
+    const invoke = vi.fn().mockImplementation((method: string) => method === "ResponseReceived"
+      ? new Promise(resolve => receipts.push(resolve)) : Promise.resolve({ accepted: true }));
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    const entry = { role: "assistant" as const, responseId: "slow-rendered", text: "Hello", status: "streaming" as const,
+      entryId: "feedback-entry", sequence: 1, sourceEventId: null, deliveryMode: "voice" as const,
+      heardTextEndExclusive: 0, receivedTextEndExclusive: 0, createdAt: "2026-10-29T00:00:00Z" };
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1",
+      liveResponseId: entry.responseId, entries: [entry], mode: "voice", muted: true, sttTransport: "serverAudio" });
+    reportCommittedEntries([entry]);
+    await vi.waitFor(() => expect(receipts).toHaveLength(1));
+    for (let pass = 0; pass < 30; pass++) reportCommittedEntries([{ ...entry, text: "Hello world" }]);
+    hooks.handleEvent({ protocolVersion: 1, sessionId: "s1", attachmentId: "a1", eventId: "final", sequence: 1,
+      timestamp: "2026-10-29T00:00:00Z", correlationId: "c1", causationId: null, responseId: entry.responseId,
+      type: "agent.response.completed", payload: { status: "completed" } });
+    const unmuting = setMuted(false);
+    receipts[0]({ accepted: true });
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("SetMuted", expect.objectContaining({ payload: { muted: false } })));
+    await unmuting;
+    await vi.waitFor(() => expect(receipts).toHaveLength(2));
+    expect(invoke.mock.calls.map(([method]) => method)).toEqual(["ResponseReceived", "SetMuted", "ResponseReceived"]);
+    expect(invoke).toHaveBeenLastCalledWith("ResponseReceived", expect.objectContaining({ responseId: entry.responseId,
+      payload: expect.objectContaining({ textEndExclusive: 11 }) }));
+    receipts[1]({ accepted: true });
+  });
+
+  it("keeps periodic playback feedback bounded while preserving completion and Unmute", async () => {
+    let release!: (ack: { accepted: boolean }) => void;
+    const invoke = vi.fn().mockImplementation((method: string) => method === "PlaybackProgress"
+      ? new Promise(resolve => { release = resolve; }) : Promise.resolve({ accepted: true }));
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1",
+      mode: "voice", muted: true, sttTransport: "serverAudio" });
+    const first = hooks.sendPlayback("PlaybackProgress", "playback.progress", "slow-playback", 1);
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    for (let consumed = 2; consumed <= 31; consumed++) void hooks.sendPlayback("PlaybackProgress", "playback.progress", "slow-playback", consumed);
+    const completing = hooks.sendPlayback("PlaybackCompleted", "playback.completed", "slow-playback", 32);
+    const unmuting = setMuted(false);
+    release({ accepted: true });
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("SetMuted", expect.anything()));
+    await Promise.all([first, completing, unmuting]);
+    expect(invoke.mock.calls.map(([method]) => method)).toEqual(["PlaybackProgress", "PlaybackCompleted", "SetMuted"]);
+    expect(invoke).toHaveBeenCalledWith("PlaybackCompleted", expect.objectContaining({ responseId: "slow-playback",
+      payload: expect.objectContaining({ consumedSamples: 32 }) }));
+  });
+
+  it("discards queued feedback-era controls before allocating a sequence on a replacement attachment", async () => {
+    let release!: (ack: { accepted: boolean }) => void;
+    const invoke = vi.fn().mockImplementation((method: string) => method === "ResponseReceived"
+      ? new Promise(resolve => { release = resolve; }) : Promise.resolve({ accepted: true }));
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    const entry = { role: "assistant" as const, responseId: "retired-feedback", text: "Old", status: "streaming" as const,
+      entryId: "retired-entry", sequence: 1, sourceEventId: null, deliveryMode: "voice" as const,
+      heardTextEndExclusive: 0, receivedTextEndExclusive: 0, createdAt: "2026-10-29T00:00:00Z" };
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1",
+      liveResponseId: entry.responseId, entries: [entry], mode: "voice", muted: true, sttTransport: "serverAudio" });
+    reportCommittedEntries([entry]);
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    const retired = setMuted(false);
+    useSessionStore.setState({ attachmentId: "a2" });
+    release({ accepted: true }); await retired;
+    expect(invoke.mock.calls.map(([method]) => method)).toEqual(["ResponseReceived"]);
+    expect(useSessionStore.getState().error).toBeNull();
+    await setMuted(false);
+    expect(invoke).toHaveBeenLastCalledWith("SetMuted", expect.objectContaining({ attachmentId: "a2", sequence: 2 }));
+  });
+
+  it("keeps local capture muted through unrelated state updates until the mute acknowledgment", async () => {
+    let streaming = true; let release!: (ack: { accepted: boolean; error?: { message: string } }) => void;
+    vi.spyOn(capture, "isPrepared").mockReturnValue(true);
+    vi.spyOn(capture, "isStreaming").mockImplementation(() => streaming);
+    vi.spyOn(capture, "muteInput").mockImplementation(async () => { streaming = false; });
+    const start = vi.spyOn(capture, "start").mockImplementation(async () => { streaming = true; });
+    const invoke = vi.fn().mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1",
+      mode: "voice", streamId: "mute-pending", muted: false, captureAuthorized: true, sttTransport: "serverAudio" });
+    const muting = setMuted(true);
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    hooks.syncCapture(); await Promise.resolve();
+    expect(start).not.toHaveBeenCalled(); expect(streaming).toBe(false);
+    release({ accepted: false, error: { message: "Mute failed." } }); await muting;
+    expect(start).toHaveBeenCalledOnce();
+    expect(useSessionStore.getState().error).toBe("Mute failed.");
+  });
+
   it("holds prepared media when SetMode acknowledges before any pending or applied mode event", async () => {
     let prepared = false, streaming = false;
     vi.spyOn(capture, "preflight").mockImplementation(async () => { prepared = true; });

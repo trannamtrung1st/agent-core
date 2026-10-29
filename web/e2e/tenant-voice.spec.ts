@@ -23,13 +23,52 @@ for (const width of [1440, 390]) test(`tenant voice keeps capture active, credit
     }, 20);
   });
   const wire: unknown[] = []; const protocol = new MessagePackHubProtocol();
+  let receiptInvocation: string | null = null, receiptHeld = false, receiptReleased = false;
+  let releaseReceipt = () => { receiptReleased = true; };
+  // Delay one real receipt ACK, while forwarding every other hub message in
+  // order. Real PCM frames provide the progress barrier; no sleep or retry.
+  await page.routeWebSocket('**/hubs/session*', route => {
+    const server = route.connectToServer();
+    let handshakeReceived = false;
+    route.onMessage(data => {
+      if (typeof data !== 'string') {
+        for (const parsed of protocol.parseMessages(new Uint8Array(data).buffer, { log() {} })) {
+          const message = parsed as { target?: string; invocationId?: string };
+          if (receiptInvocation === null && message.target === 'ResponseReceived' && message.invocationId)
+            receiptInvocation = message.invocationId;
+        }
+      }
+      server.send(data);
+    });
+    server.onMessage(data => {
+      if (typeof data === 'string') { handshakeReceived = true; route.send(data); return; }
+      let binary = new Uint8Array(data);
+      if (!handshakeReceived) {
+        // SignalR sends its JSON handshake as binary before switching to MessagePack.
+        const separator = binary.indexOf(0x1e);
+        expect(separator, 'complete SignalR handshake').toBeGreaterThanOrEqual(0);
+        route.send(Buffer.from(binary.slice(0, separator + 1)));
+        handshakeReceived = true; binary = binary.slice(separator + 1);
+      }
+      if (binary.length === 0) return;
+      for (const parsed of protocol.parseMessages(binary.buffer as ArrayBuffer, { log() {} })) {
+        const message = parsed as { type: number; invocationId?: string };
+        const encoded = Buffer.from(protocol.writeMessage(parsed));
+        if (!receiptReleased && message.type === 3 && message.invocationId === receiptInvocation) {
+          receiptHeld = true;
+          releaseReceipt = () => { if (receiptReleased) return; receiptReleased = true; route.send(encoded); };
+        } else route.send(encoded);
+      }
+    });
+  });
   page.on('websocket', socket => {
     for (const direction of ['framesent', 'framereceived'] as const) socket.on(direction, frame => {
       if (typeof frame.payload === 'string') return;
       try { for (const msg of protocol.parseMessages(new Uint8Array(frame.payload).buffer, { log() {} })) {
         const message = msg as { target?: string; arguments?: { type?: string; payload?: Record<string, unknown> }[] };
         if (message.target) wire.push({ direction, target: message.target, type: message.arguments?.[0]?.type,
-          mode: message.arguments?.[0]?.payload?.mode, pending: message.arguments?.[0]?.payload?.pendingMode });
+          mode: message.arguments?.[0]?.payload?.mode, pending: message.arguments?.[0]?.payload?.pendingMode,
+          muted: message.arguments?.[0]?.payload?.muted });
       } } catch { /* JSON negotiation has a separate frame. */ }
     });
   });
@@ -57,8 +96,12 @@ for (const width of [1440, 390]) test(`tenant voice keeps capture active, credit
     await expect(page.getByText('Hello from synthetic.', { exact: true })).toBeVisible({ timeout: 60_000 });
     await expect.poll(() => page.evaluate(() => window.__agentCore?.playbackConsumed() ?? 0)).toBeGreaterThan(0);
     await expect.poll(() => page.evaluate(() => window.__agentCore?.captureStreaming())).toBe(true);
+    await expect.poll(() => receiptHeld).toBe(true);
+    const captured = await page.evaluate(() => window.__agentCore?.audioFramesSent() ?? 0);
+    await expect.poll(() => page.evaluate(() => window.__agentCore?.audioFramesSent() ?? 0)).toBeGreaterThan(captured + 20);
     await page.getByRole('button', { name: 'Mute', exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.__agentCore?.captureStreaming())).toBe(false);
+    releaseReceipt();
     await expect(page.getByRole('button', { name: 'Unmute', exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('connection')).not.toHaveText('Listening…');
     await expect.poll(() => page.evaluate(() => window.__agentCore?.capturePrepared())).toBe(true);
@@ -83,6 +126,7 @@ for (const width of [1440, 390]) test(`tenant voice keeps capture active, credit
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(errors).toEqual([]); expect(legacy).toEqual([]);
   } finally {
+    releaseReceipt();
     const states = await page.evaluate(() => (window as unknown as { voiceObservations?: unknown[] }).voiceObservations).catch(() => []);
     fs.mkdirSync('.playwright-mcp', { recursive: true }); fs.writeFileSync(`.playwright-mcp/tenant-voice-state-${width}.json`, JSON.stringify({ wire, states }, null, 2));
     await test.info().attach('voice-state', { body: JSON.stringify({ wire, states }), contentType: 'application/json' });

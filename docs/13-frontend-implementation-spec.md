@@ -497,6 +497,8 @@ Effective configuration includes Browser provider identity, readiness, supported
 
 ## Voice preflight
 
+Mute holds local input through its acknowledgment and applied muted state; unrelated output/state updates cannot rearm capture during that intent. A rejected mute restores capture according to the current authoritative state and reports its error. Unmute uses the current attachment and server-issued stream; late acknowledgments cannot change a replacement attachment. Render/progress feedback retains bounded outstanding work, and queued commands keep their enqueue-time connection/Session/attachment fence before allocating a sequence. Disconnect releases these local intents; reconnect still requires a fresh Voice click.
+
 User activation may expire before a queued `pendingMode=voice` wait finishes. When a session already exists, the Voice click prepares audio locally first. When Voice is the first action, create/attach first so preflight can use `session.ready` transports and skip getUserMedia for Browser/Browser; then ask the server to change mode, and only then send PCM.
 
 ```text

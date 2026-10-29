@@ -56,6 +56,12 @@ let receiptTimer: number | null = null;
 let lastReceiptOffset = 0;
 let lastReceiptResponseId: string | null = null;
 let lastReceiptBlockSignature = "";
+type PublicationScope = { hub: HubConnection | null; epoch: number; sessionId: string | null; attachmentId: string | null };
+let receiptFlight: PublicationScope | null = null;
+let deferredReceipt: { responseId: string; finalRender: boolean } | null = null;
+let progressFlight: PublicationScope | null = null;
+let deferredProgress: { responseId: string; consumed: number; textEndExclusive?: number } | null = null;
+let inputMuteIntent: (PublicationScope & { acknowledged: boolean }) | null = null;
 let disposed = false;
 // Chat and Admin share this SPA. Hide media and render receipts outside Chat, not the live SignalR stream.
 let chatSurfaceVisible = true;
@@ -266,19 +272,38 @@ export function releaseDurableApprovalWait(session: string, response: string, ru
 
 type HubCommandAck = { accepted?: boolean; error?: WireError; result?: Record<string, unknown> };
 
+function publicationScope(): PublicationScope {
+  const state = useSessionStore.getState();
+  return { hub: connection, epoch: connectionEpoch, sessionId: state.sessionId, attachmentId: state.attachmentId };
+}
+
+function publicationScopeCurrent(scope: PublicationScope): boolean {
+  const state = useSessionStore.getState();
+  return scope.hub !== null && connection === scope.hub && connectionEpoch === scope.epoch
+    && state.sessionId === scope.sessionId && state.attachmentId === scope.attachmentId;
+}
+
+function clearFeedbackState(): void {
+  receiptFlight = null; deferredReceipt = null;
+  progressFlight = null; deferredProgress = null; inputMuteIntent = null;
+}
+
+function localMuteHeld(): boolean {
+  if (!inputMuteIntent || !publicationScopeCurrent(inputMuteIntent)) return false;
+  if (inputMuteIntent.acknowledged && useSessionStore.getState().muted) { inputMuteIntent = null; return false; }
+  return true;
+}
+
 function dispatchHubCommand(run: (sequence: number) => Promise<HubCommandAck | void>, prepare?: () => Promise<void>): Promise<HubCommandAck | void> {
+  const scope = publicationScope();
   const result = commandDispatchChain.then(async () => {
-    if (!connection) {
+    if (!publicationScopeCurrent(scope)) {
       return;
     }
 
     if (chatTenantId && useSessionStore.getState().connection !== 'ready') return;
-    const current = connection; const epoch = connectionEpoch;
-    const attachment = useSessionStore.getState().attachmentId;
     if (prepare) await prepare();
-    if (!connection || connection !== current) return;
-    if (chatTenantId && (connectionEpoch !== epoch || useSessionStore.getState().attachmentId !== attachment
-      || useSessionStore.getState().connection !== 'ready')) return;
+    if (!publicationScopeCurrent(scope) || (chatTenantId && useSessionStore.getState().connection !== 'ready')) return;
     commandSequence += 1;
     const sequence = commandSequence;
     return run(sequence);
@@ -611,6 +636,7 @@ function reconnectBudgetRemaining(): number {
 }
 
 function dropLiveTransport(connection: "reconnecting" | "failed"): void {
+  clearFeedbackState();
   abortPlayback();
   void releaseClientSpeech();
   capture.release();
@@ -1307,6 +1333,12 @@ function stopReceipts(): void {
   }
 }
 
+function takeDeferredReceipt() {
+  const next = deferredReceipt;
+  deferredReceipt = null;
+  return next;
+}
+
 async function sendReceipt(finalRender: boolean, responseId?: string): Promise<void> {
   if (!connection || !chatSurfaceVisible) {
     return;
@@ -1329,14 +1361,38 @@ async function sendReceipt(finalRender: boolean, responseId?: string): Promise<v
     return;
   }
 
+  if (receiptFlight && publicationScopeCurrent(receiptFlight)) {
+    deferredReceipt = { responseId: id, finalRender: finalRender || (deferredReceipt?.responseId === id && deferredReceipt.finalRender) };
+    return;
+  }
+  const flight = publicationScope();
+  receiptFlight = flight; deferredReceipt = null;
   try {
     const ack = await dispatchHubCommand((sequence) => invoke("ResponseReceived", "response.received",
       { textEndExclusive: offset, blockIds: chatTenantId ? renderedBlockIds(id).slice(0, 32) : renderedBlockIds(id) }, sequence, id));
-    if (ack?.accepted) { lastReceiptOffset = offset; lastReceiptResponseId = id; lastReceiptBlockSignature = blockSignature; }
+    if (ack?.accepted && publicationScopeCurrent(flight)) { lastReceiptOffset = offset; lastReceiptResponseId = id; lastReceiptBlockSignature = blockSignature; }
   } catch { /* A lost acknowledgement grants no receipt credit. Fresh attach can retry rendered text. */ }
+  finally {
+    if (receiptFlight === flight) {
+      receiptFlight = null;
+      const next = takeDeferredReceipt();
+      if (next && publicationScopeCurrent(flight)) void sendReceipt(next.finalRender, next.responseId);
+    }
+  }
 }
 
 async function sendPlayback(method: string, type: string, responseId: string, consumed: number, textEndExclusive?: number): Promise<void> {
+  if (!connection) return;
+  const flight = publicationScope();
+  if (method === "PlaybackProgress") {
+    if (progressFlight && publicationScopeCurrent(progressFlight)) {
+      deferredProgress = { responseId, consumed, textEndExclusive };
+      return;
+    }
+    progressFlight = flight; deferredProgress = null;
+  } else if ((method === "PlaybackCompleted" || method === "PlaybackStopped") && deferredProgress?.responseId === responseId) {
+    deferredProgress = null;
+  }
   try {
     await dispatchHubCommand((sequence) =>
       invoke(
@@ -1353,6 +1409,14 @@ async function sendPlayback(method: string, type: string, responseId: string, co
   } catch {
     // Playback feedback is best effort. Transport loss proves no local hearing credit;
     // the server receipt transaction owns durability. Never replay it after reattach.
+  }
+  finally {
+    if (method === "PlaybackProgress" && progressFlight === flight) {
+      progressFlight = null;
+      const next = deferredProgress; deferredProgress = null;
+      if (next && publicationScopeCurrent(flight) && !stoppedResponses.has(next.responseId))
+        void sendPlayback("PlaybackProgress", "playback.progress", next.responseId, next.consumed, next.textEndExclusive);
+    }
   }
 }
 
@@ -1399,13 +1463,14 @@ function stopPlayback(responseId?: string): void {
 
 function publishCaptureLive(): void {
   const state = useSessionStore.getState();
+  const held = localMuteHeld();
   if (state.sttTransport === "clientTranscript") {
     syncClientTranscriptBlockedFromLifecycle();
   }
 
   if (state.sttTransport === "clientTranscript" && state.mode === "voice") {
     const live =
-      !state.muted
+      !state.muted && !held
       && Boolean(transcriptLife?.isListening())
       && !transcriptLife?.isBlocked();
     if (state.captureLive !== live) {
@@ -1415,7 +1480,7 @@ function publishCaptureLive(): void {
     return;
   }
 
-  const live = capture.isPrepared() && !state.muted && capture.isStreaming();
+  const live = capture.isPrepared() && !state.muted && !held && capture.isStreaming();
   if (state.captureLive !== live) {
     useSessionStore.setState({ captureLive: live });
   }
@@ -1484,6 +1549,8 @@ function syncCapture(): void {
       publishCaptureLive();
       return;
     }
+
+    if (localMuteHeld()) { publishCaptureLive(); return; }
 
     if (state.sttTransport === "clientTranscript") {
       ensureSpeechAdapters();
@@ -1655,6 +1722,7 @@ export const realtimeTestHooks =
           outputGate.markStarted(responseId);
         },
         resetOutput() {
+          clearFeedbackState();
           chatSurfaceVisible = true;
           navigationVoiceResetSessionId = null;
           attachLoop += 1;
@@ -1834,6 +1902,7 @@ async function stopAfterTerminalCommands(): Promise<void> {
 }
 
 async function stopConnection(options?: { keepPreparedCapture?: boolean }): Promise<void> {
+  clearFeedbackState();
   if (!options?.keepPreparedCapture) {
     disarmCapture("explicit");
   }
@@ -3775,29 +3844,48 @@ export async function cancelVoice(): Promise<boolean> {
 }
 
 export async function setMuted(muted: boolean): Promise<void> {
+  const scope = publicationScope();
+  const intent = { ...scope, acknowledged: false };
+  if (muted) inputMuteIntent = intent;
+  else inputMuteIntent = null;
+  const releaseIntent = () => { if (inputMuteIntent === intent) inputMuteIntent = null; };
   const clientTranscript = useSessionStore.getState().sttTransport === "clientTranscript";
-  if (muted) {
-    if (clientTranscript) {
-      await ensureTranscriptLife().mute();
-      await commandDispatchChain;
-    } else {
-      await capture.muteInput();
-    }
-    publishCaptureLive();
-  }
-
   try {
+    if (muted) {
+      if (clientTranscript) {
+        await ensureTranscriptLife().mute();
+        await commandDispatchChain;
+      } else {
+        await capture.muteInput();
+      }
+      publishCaptureLive();
+    }
+    if (!publicationScopeCurrent(scope)) { releaseIntent(); return; }
     const ack = await dispatchHubCommand((sequence) =>
       invoke("SetMuted", "session.mute", { muted }, sequence)
     );
+    if (!publicationScopeCurrent(scope)) { releaseIntent(); return; }
     if (!ack?.accepted) {
+      releaseIntent();
       useSessionStore.setState({ error: ack?.error?.message ?? "Mute failed.", sessionError: sessionErrorFromWire(ack?.error, ack?.error?.message ?? "Mute failed."), errorFatal: false });
       if (muted) {
         syncCapture();
       }
       return;
     }
+    if (muted && inputMuteIntent === intent) {
+      intent.acknowledged = true;
+      if (useSessionStore.getState().muted) releaseIntent();
+    }
+    if (!muted) {
+      if (clientTranscript) {
+        await ensureTranscriptLife().unmute(useSessionStore.getState().attachmentId ?? "");
+      }
+      if (publicationScopeCurrent(scope)) syncCapture();
+    }
   } catch (error) {
+    releaseIntent();
+    if (!publicationScopeCurrent(scope)) return;
     useSessionStore.setState({
       ...sessionFailurePatch(error instanceof Error ? error.message : "Mute failed.", { category: "Speech", code: "MuteFailed" })
     });
@@ -3805,13 +3893,6 @@ export async function setMuted(muted: boolean): Promise<void> {
       syncCapture();
     }
     return;
-  }
-
-  if (!muted) {
-    if (clientTranscript) {
-      await ensureTranscriptLife().unmute(useSessionStore.getState().attachmentId ?? "");
-    }
-    syncCapture();
   }
 }
 
