@@ -78,7 +78,8 @@ public sealed partial class TenantSessionAccessTests
             agent = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = draft.GetProperty("definitionId").GetString(), version = 1, expectedRevision = await Revision(owner, tenant) }));
         }
         else agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
-        var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var instanceRevision = 1L;
+        var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
+        await GrantNativePrivateSpaceRead(owner, tenant, instance); var instanceRevision = 1L;
         if (recoveryBudget)
         {
             var changed = await Json(await owner.PutAsJsonAsync(api + $"/agents/{instance}/execution-budgets", new {

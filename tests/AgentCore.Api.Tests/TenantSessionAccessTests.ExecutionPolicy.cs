@@ -31,6 +31,7 @@ public sealed partial class TenantSessionAccessTests
         await definitions.PublishAsync(actor, tenant, draft.DraftId, await Revision(owner, tenant), draft.Revision);
         var created = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = Guid.Parse(draft.DefinitionId), version = 1, expectedRevision = await Revision(owner, tenant) }));
         var instance = created.GetProperty("instance").GetProperty("instanceId").GetGuid();
+        await GrantNativePrivateSpaceRead(owner, tenant, instance);
         var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
         var id = session.GetProperty("sessionId").GetGuid();
         var submitted = await owner.PostAsJsonAsync(api + $"/sessions/{id}/messages", new { messageId = Guid.NewGuid(), text = "Hello Synthetic policy", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });

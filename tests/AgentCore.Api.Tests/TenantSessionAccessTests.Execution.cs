@@ -34,6 +34,7 @@ public sealed partial class TenantSessionAccessTests
         var requester = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
         var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
         var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
+        await GrantNativePrivateSpaceRead(owner, tenant, instance);
         var executor = agent.GetProperty("principalId").GetGuid();
         var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
         var id = session.GetProperty("sessionId").GetGuid();
@@ -70,6 +71,7 @@ public sealed partial class TenantSessionAccessTests
         var api = $"/api/v2/tenants/{tenant}";
         var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
         var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
+        await GrantNativePrivateSpaceRead(owner, tenant, instance);
         var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
         var id = session.GetProperty("sessionId").GetGuid();
         var receipt = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{id}/messages", new { messageId = Guid.NewGuid(), text = "Do not process after archive", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }));

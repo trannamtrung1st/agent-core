@@ -24,6 +24,7 @@ public sealed partial class TenantSessionAccessTests
             var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
+            await GrantNativePrivateSpaceRead(owner, tenant, instance);
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var path = api + $"/sessions/{session}/attachments"; using var body = new MultipartFormDataContent(); var file = new ByteArrayContent("Private attachment body"u8.ToArray()); file.Headers.ContentType = new MediaTypeHeaderValue("text/plain"); body.Add(file, "file", "Private file label.txt");
             var id = (await Json(await owner.PostAsync(path + $"?uploadId={Guid.NewGuid()}&expectedRevision={await Revision(owner, tenant)}&expectedSessionRevision=1", body))).GetProperty("attachmentId").GetGuid();

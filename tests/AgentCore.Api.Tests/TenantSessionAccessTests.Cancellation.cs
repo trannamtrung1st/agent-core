@@ -84,6 +84,7 @@ public sealed partial class TenantSessionAccessTests
                 factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentCore.Api.Realtime.AgentCoreOptions>>().Value.MaxActiveSessions = 1;
                 var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) })))
                     .GetProperty("instance").GetProperty("instanceId").GetGuid();
+                await GrantNativePrivateSpaceRead(owner, tenant, instance);
                 var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
                 var id = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Hold this Synthetic turn", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 })))
                     .GetProperty("runId").GetGuid();

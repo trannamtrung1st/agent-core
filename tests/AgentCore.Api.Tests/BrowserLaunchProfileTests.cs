@@ -20,7 +20,7 @@ public sealed class BrowserLaunchProfileTests
         Assert.Equal("Synthetic", synthetic.GetProperty("AgentCore__Profile").GetString());
         Assert.False(synthetic.TryGetProperty("Browser__PolicyMode", out _));
 
-        var real = profiles.GetProperty("http-openrouter").GetProperty("environmentVariables");
+        var real = profiles.GetProperty("http-real").GetProperty("environmentVariables");
         Assert.Equal("Real", real.GetProperty("AgentCore__Profile").GetString());
         Assert.Equal("OpenWeb", real.GetProperty("Browser__PolicyMode").GetString());
         Assert.Equal("PersistentAgent", real.GetProperty("Browser__ProfileMode").GetString());

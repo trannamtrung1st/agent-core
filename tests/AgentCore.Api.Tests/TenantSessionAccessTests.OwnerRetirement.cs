@@ -34,6 +34,7 @@ public sealed partial class TenantSessionAccessTests
                 var membership = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0];
                 tenant = membership.GetProperty("tenantId").GetGuid(); principal = membership.GetProperty("principalId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
                 var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new {templateId="examiner", version=1, expectedRevision=await Revision(owner, tenant)}))).GetProperty("instance").GetProperty("instanceId").GetGuid();
+                await GrantNativePrivateSpaceRead(owner, tenant, instance);
                 session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new {agentInstanceId=instance, expectedRevision=await Revision(owner, tenant), expectedInstanceRevision=1}))).GetProperty("sessionId").GetGuid();
                 var admitted = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new {messageId=Guid.NewGuid(), text="Preserve this tenant conversation across credential retirement", expectedRevision=await Revision(owner, tenant), expectedSessionRevision=1});
                 Assert.Equal(HttpStatusCode.Accepted, admitted.StatusCode); var run = (await Json(admitted)).GetProperty("runId").GetGuid();

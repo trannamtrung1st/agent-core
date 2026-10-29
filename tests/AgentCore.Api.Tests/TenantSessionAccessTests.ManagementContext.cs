@@ -70,7 +70,8 @@ public sealed partial class TenantSessionAccessTests
             await Login(human, "owner@example.test", "explicit-synthetic-test-password");
             var tenant = (await Json(await human.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
             var created = await Json(await human.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(human, tenant) }));
-            var instance = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); model.Instance = instance;
+            var instance = created.GetProperty("instance").GetProperty("instanceId").GetGuid();
+            await GrantNativePrivateSpaceRead(human, tenant, instance); model.Instance = instance;
             async Task ChangePolicy(string mode, string[] scopes, bool harness = true)
             {
                 var current = (await host.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;

@@ -43,7 +43,8 @@ public sealed partial class TenantSessionAccessTests
             var tenant=(await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();var api=$"/api/v2/tenants/{tenant}";
             var human=(await Json(await owner.GetAsync(api+"/access/me"))).GetProperty("principalId").GetGuid();
             var saved=await Json(await owner.PostAsJsonAsync(api+"/agents",new { templateId="general-assistant",version=36,expectedRevision=await Revision(owner,tenant) }));
-            var instance=saved.GetProperty("instance").GetProperty("instanceId").GetGuid();var executor=saved.GetProperty("principalId").GetGuid();var instanceRevision=1L;
+            var instance=saved.GetProperty("instance").GetProperty("instanceId").GetGuid();
+            await GrantNativePrivateSpaceRead(owner, tenant, instance);var executor=saved.GetProperty("principalId").GetGuid();var instanceRevision=1L;
             var native=Assert.IsType<NativePlaywrightBrowser>(factory.Services.GetRequiredService<IBrowser>());
             model.Url=budget?native.Fixture.Origin+"/budget-workflow":sso.ApplicationOrigin+"/";
             var secret=budget?"synthetic-budget-password":GenericSsoFixture.Password;var origin=budget?native.Fixture.Origin!:sso.IdentityOrigin;

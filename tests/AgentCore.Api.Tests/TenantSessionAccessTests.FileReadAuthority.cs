@@ -52,6 +52,7 @@ public sealed partial class TenantSessionAccessTests
             var api = $"/api/v2/tenants/{tenant}";
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
+            await GrantNativePrivateSpaceRead(owner, tenant, instance);
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             Assert.True((await owner.PatchAsJsonAsync(api + $"/sessions/{session}", new { title = "Private file retirement sentinel", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 })).IsSuccessStatusCode);
             var office = factory.Services.GetRequiredService<IOfficeProcessor>();
