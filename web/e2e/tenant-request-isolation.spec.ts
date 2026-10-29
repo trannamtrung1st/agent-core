@@ -1,5 +1,7 @@
 import { test, expect, request as requests, type APIRequestContext } from '@playwright/test';
 
+import { prepareOrdinaryChat } from './support/tenant-auth';
+
 async function call<T>(api: APIRequestContext, path: string, body?: unknown) {
   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
   const result = await api.fetch(path, { method: body === undefined ? 'GET' : 'POST', headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
@@ -18,6 +20,7 @@ test('request isolation completes the live Chat, retains history, and New chat a
     const root = `/api/v2/tenants/${tenant}`, revision = async () => (await call<{ revision: number }>(api, root + '/access/me')).revision;
     const agent = await call<{ principalId: string; instance: { instanceId: string } }>(api, root + '/agents', { templateId: 'examiner', version: 1, expectedRevision: await revision() });
     const id = agent.instance.instanceId, isolation = root + `/agents/${id}/state-isolation`;
+    await prepareOrdinaryChat(api, tenant, id);
     const preview = await call<{ securityRevision: number; plan: { expected: unknown; draft: unknown; fingerprint: string } }>(api, isolation + '/presets/Stateless', {});
     await call(api, isolation + '/apply', { expectedRevision: preview.securityRevision, expected: preview.plan.expected, draft: preview.plan.draft, fingerprint: preview.plan.fingerprint });
     const role = await call<{ roleId: string }>(api, root + '/roles', { name: 'Isolated Chat executor', permissions: ['agents.chat'], expectedRevision: await revision() });

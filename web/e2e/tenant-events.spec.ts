@@ -1,5 +1,5 @@
 import { expect, test, request as requests, type APIRequestContext, type Page } from '@playwright/test';
-import { canonicalFetch } from './support/tenant-auth';
+import { canonicalFetch, grantPrivateSpaceRead } from './support/tenant-auth';
 
 const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password';
 let identity: Awaited<ReturnType<APIRequestContext['storageState']>>;
@@ -86,6 +86,7 @@ test('typed subscriptions test filters, preserve child identities, and separate 
   const f = await fixture(); const observed = watch(page);
   try {
     const agent = await call<{ principalId: string; instance: { instanceId: string; revision: number } }>(f.api, f.root + '/agents', { templateId: 'general-assistant', version: 36, expectedRevision: await f.revision() });
+    await grantPrivateSpaceRead(f.api, f.tenant, agent.instance.instanceId);
     const instance = agent.instance.instanceId; const resource = f.root + `/agents/${instance}/automations`;
     const role = await call<{ roleId: string }>(f.api, f.root + '/roles', { name: 'Independent event executor', permissions: ['automations.run', 'sessions.create', 'agent-runs.create', 'webhooks.read', 'core-events.read'], expectedRevision: await f.revision() });
     await call(f.api, f.root + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await f.revision() });

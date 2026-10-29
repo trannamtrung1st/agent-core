@@ -1,5 +1,6 @@
 import { test, expect, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 import fs from 'node:fs';
+import { grantPrivateSpaceRead } from './support/tenant-auth';
 import path from 'node:path';
 const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password';
 async function call<T>(api: APIRequestContext, route: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
@@ -18,6 +19,7 @@ test('Runtime State refresh, expiry, exact reader scope and revocation work on n
     const tenant = (await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `State ${nonce}`, slug: `state-${nonce}` })).tenantId, root = `/api/v2/tenants/${tenant}`;
     const revision = async () => (await call<{ revision: number }>(api, root + '/access/me')).revision;
     const agent = await call<{ principalId: string; instance: { instanceId: string } }>(api, root + '/agents', { templateId: 'examiner', version: 1, expectedRevision: await revision() }); const id = agent.instance.instanceId;
+    await grantPrivateSpaceRead(api, tenant, id);
     const name = 'Runtime observation — readable agent';
     await call(api, root + `/agents/${id}/persona`, { persona: { name, role: 'Guide', description: 'Observe only readable runtime facts', tone: 'Clear' }, expectedRevision: await revision(), expectedInstanceRevision: 1, expectedPersonaRevision: 1 }, 'PUT');
     const executor = await call<{ roleId: string }>(api, root + '/roles', { name: 'Runtime text executor', permissions: ['agents.chat'], expectedRevision: await revision() });
