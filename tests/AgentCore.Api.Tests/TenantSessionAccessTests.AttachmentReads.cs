@@ -88,7 +88,7 @@ public sealed partial class TenantSessionAccessTests
             instanceRevision = changed.GetProperty("instance").GetProperty("revision").GetInt64();
         }
         var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision,
-            offeringId = format is "png" or "jpeg" or "gif" or "webp" ? "dca30000-0000-4000-8000-000000000003" : null }))).GetProperty("sessionId").GetGuid();
+            modelPreference = format is "png" or "jpeg" or "gif" or "webp" ? new { mode = "fixed", offeringId = "dca30000-0000-4000-8000-000000000003" } : null }))).GetProperty("sessionId").GetGuid();
         byte[] bytes; string name, type; var office = services.GetRequiredService<IOfficeProcessor>();
         if (format == "docx") { bytes = office.CreateDocument(new("Read document", [new(null, ["Private read body", "Second source paragraph"], null)]), default).Bytes; name = "read.docx"; type = OfficeLimits.DocumentMime; }
         else if (format.StartsWith("xlsx", StringComparison.Ordinal)) { bytes = office.CreateWorkbook(new([new("Data", [[new("number", Number: 0), new("text", Text: "Private read body")]])]), default).Bytes; name = "read.xlsx"; type = OfficeLimits.SpreadsheetMime; }

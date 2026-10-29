@@ -67,6 +67,7 @@ public sealed partial class TenantAgentAccessTests
     {
         var api = $"/api/v2/tenants/{tenant}"; var actor = (await Json(await owner.GetAsync(api + $"/agents/{instance}"))).GetProperty("principalId").GetGuid();
         var permissions = new List<string> { "agents.chat", "sessions.read" }; if (runRead) permissions.Add("agent-runs.read"); if (operations) permissions.Add("agents.read"); if (read) permissions.Add("memory.read"); if (manage) permissions.Add("memory.manage");
+        await TenantSessionAccessTests.GrantNativePrivateSpaceRead(owner, tenant, instance);
         var role = await Json(await owner.PostAsJsonAsync(api + "/roles", new { name = "Memory executor " + instance.ToString("N"), permissions, expectedRevision = await Revision(owner, tenant) }));
         await Json(await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = actor, roleId = role.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(owner, tenant) }));
     }

@@ -82,12 +82,18 @@ public sealed partial class TenantSessionAccessTests
         var api = $"/api/v2/tenants/{tenant}";
         var agent = await Json(await owner.GetAsync(api + $"/agents/{instance}"));
         var space = await Json(await owner.GetAsync(api + $"/agents/{instance}/private-space"));
-        using var created = await owner.PostAsJsonAsync(api + "/roles", new { name = "Fixture context " + instance.ToString("N"),
-            permissions = new[] { "spaces.read" }, expectedRevision = await Revision(owner, tenant) });
+        var principal = agent.GetProperty("principalId").GetGuid();
+        var spaceId = space.GetProperty("spaceId").GetString();
+        var access = await Json(await owner.PostAsJsonAsync(api + "/access/check", new { principalId = principal,
+            permission = "spaces.read", resourceType = "space", resourceId = spaceId }));
+        if (access.GetProperty("allowed").GetBoolean()) return;
+        var revision = await Revision(owner, tenant);
+        using var created = await owner.PostAsJsonAsync(api + "/roles", new { name = "Fixture context " + instance.ToString("N") + "-" + revision,
+            permissions = new[] { "spaces.read" }, expectedRevision = revision });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var role = await Json(created);
-        using var assigned = await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = agent.GetProperty("principalId").GetGuid(),
-            roleId = role.GetProperty("roleId").GetGuid(), resourceType = "space", resourceId = space.GetProperty("spaceId").GetString(),
+        using var assigned = await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = principal,
+            roleId = role.GetProperty("roleId").GetGuid(), resourceType = "space", resourceId = spaceId,
             expectedRevision = await Revision(owner, tenant) });
         Assert.Equal(HttpStatusCode.Created, assigned.StatusCode);
     }

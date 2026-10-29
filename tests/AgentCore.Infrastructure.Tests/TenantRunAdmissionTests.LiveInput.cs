@@ -97,6 +97,9 @@ public sealed partial class TenantRunAdmissionTests
         var member = await Member(f, setup.Tenant, setup.Owner.PrincipalId);
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Live input requester", ["sessions.read", "agents.chat"], await Revision());
         await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, member.PrincipalId, role.RoleId, AccessScope.ForTenant(setup.Tenant), await Revision());
+        var space = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(setup.Tenant, setup.Agent.Instance.InstanceId))!;
+        var context = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Read live input context", ["spaces.read"], await Revision());
+        await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, member.PrincipalId, context.RoleId, TenantSpaceService.Scope(setup.Tenant, space.SpaceId), await Revision());
         Assert.False((await f.Authorizer.CheckAsync(member.PrincipalId, "agent-runs.create", AccessScope.ForTenant(setup.Tenant))).Allowed);
         var adapter = new StoreLiveInput(f, active.Frame); var service = f.RunService(inputs: adapter);
         var queued = new List<TenantRunReceipt>();

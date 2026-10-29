@@ -25,17 +25,21 @@ public sealed class SandboxApiTests
     {
         await using var factory = new SandboxFactory();
         var source = (await factory.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 35))!;
-        Assert.Contains("sandbox.run", DefinitionExecutionPolicies.Of(source).ToolList);
-        var candidate = AgentDefinitionCandidate.FromDefinition(source);
+        Assert.DoesNotContain("sandbox.run", DefinitionExecutionPolicies.Of(source).ToolList);
+        var current = AgentDefinitionCandidate.FromDefinition(source);
+        // Construct a disposable legacy draft; shipped versions are immutable inputs.
+        var policy = current.ExecutionPolicy!;
+        var candidate = current with { ExecutionPolicy = policy with { Capabilities = policy.Capabilities! with {
+            ResolvedCapabilities = [.. policy.Capabilities.ResolvedCapabilities, "sandbox.run"] } } };
         var aliases = factory.Services.GetRequiredService<ProviderAliasSet>();
         var rejected = Assert.Throws<AgentCore.Application.Sessions.AgentCoreException>(() =>
             AgentCore.Application.Admin.AgentDefinitionCandidateValidator.ValidateForPersistence(candidate with { AgentInstructions = "Explicit repair." }, aliases));
         Assert.Equal(400, rejected.StatusCode);
         var repaired = HarnessLegacyFixture.WithoutRetiredSandboxTool(candidate) with { AgentInstructions = "Explicit repair." };
         AgentCore.Application.Admin.AgentDefinitionCandidateValidator.ValidateForPersistence(repaired, aliases);
-        Assert.DoesNotContain("sandbox.run", repaired.ExecutionPolicy!.ToolList); Assert.DoesNotContain("sandbox.exec", repaired.ExecutionPolicy.ToolList);
-        Assert.Null(repaired.SandboxPolicy);
-        Assert.Contains("sandbox.run",DefinitionExecutionPolicies.Of((await factory.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(source.Id,source.Version))!).ToolList);
+        Assert.Equal(DefinitionExecutionPolicies.Of(source).ToolList, repaired.ExecutionPolicy!.ToolList);
+        Assert.Equal(current.SandboxPolicy, repaired.SandboxPolicy);
+        Assert.DoesNotContain("sandbox.run",DefinitionExecutionPolicies.Of((await factory.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(source.Id,source.Version))!).ToolList);
     }
 
     private sealed class SandboxFactory(OpenSandboxOptions? options = null) : AgentCoreApiFactory

@@ -52,7 +52,7 @@ public sealed partial class TenantAgentAccessTests
                 path += "/state-isolation/apply"; method = HttpMethod.Post; body["expected"] = isolation.GetProperty("plan").GetProperty("expected");
                 body["draft"] = isolation.GetProperty("plan").GetProperty("draft"); body["fingerprint"] = isolation.GetProperty("plan").GetProperty("fingerprint").GetString(); break;
             case "budgets": path += "/execution-budgets"; body["budgets"] = null; break;
-            case "model": path += "/unattended-model"; body["offeringId"] = null; body["reasoningEffort"] = null; break;
+            case "model": path += "/unattended-model"; body["modelPreference"] = new { mode = "inherit" }; break;
             case "management": path += "/self-management"; body["overrides"] = new { mode = new { value = "Assisted" }, scopes = new { value = new[] { "Settings" } } }; break;
             case "freeze": path += "/self-management/freeze"; method = HttpMethod.Post; break;
             case "skill": path += "/skills/commands"; method = HttpMethod.Post; body["operation"] = "create"; body["input"] = new { id = "human-check", name = "Human check", description = "Check a scoped change", procedure = "Review the current task.", projection = "OnDemand", enabled = true, requiredCapabilities = new[] { "chat.respond" } }; break;
@@ -87,10 +87,10 @@ public sealed partial class TenantAgentAccessTests
         using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var prefix = $"/api/v2/tenants/{tenant}";
-        var created = await Json(await owner.PostAsJsonAsync(prefix + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(owner, tenant) }));
+        var created = await Json(await owner.PostAsJsonAsync(prefix + "/agents", new { templateId = "secretary", version = 10, expectedRevision = await Revision(owner, tenant) }));
         var id = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); var root = prefix + $"/agents/{id}";
         var skills = await Json(await owner.GetAsync(root + "/skills"));
-        var skill = skills.GetProperty("items").EnumerateArray().Single(s => s.GetProperty("key").GetString() == "definition:browser.record.lookup");
+        var skill = skills.GetProperty("items").EnumerateArray().Single(s => s.GetProperty("key").GetString() == "definition:store.signin");
         var revision = await Revision(owner, tenant);
         var body = new { operation = "reset_enabled", key = skill.GetProperty("key").GetString(), expectedSkillRevision = skill.GetProperty("revision").GetInt64(), expectedRevision = revision, expectedInstanceRevision = 1 };
         factory.CaptureAt = "configuration-snapshot"; factory.AfterCapture = async () => Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync("/api/v2/auth/logout", null)).StatusCode);
