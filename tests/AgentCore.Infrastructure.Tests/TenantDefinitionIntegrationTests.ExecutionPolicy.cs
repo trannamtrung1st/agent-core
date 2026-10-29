@@ -44,7 +44,9 @@ public sealed partial class TenantDefinitionIntegrationTests
     {
         await using var f = await Fixture.Create(sqlite); var s = await PrepareRuntimeSandbox(f); var store = (ITenantSandboxRuntimeStore)f.Iam;
         async ValueTask<long> Revision() => (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;
-        var mounted = new SandboxMountAuthority("working-inode", "home-inode", HomeAccess.ReadWrite, 1000, 1000);
+        var workspace = await RuntimeWorkspaceAccess(f, s);
+        var mounted = new SandboxMountAuthority("working-inode", "home-inode", workspace.HomeAccess, 1000, 1000,
+            WorkspaceAccess: workspace, PrivateIdentity: "home-inode", PrivateAccess: workspace.PrivateAccess, WorkingReadOnly: workspace.WorkingReadOnly);
         var lease = s.Lease with { MountAuthority = mounted };
         Assert.True(await store.TryReserveTenantSandboxLeaseAsync(s.Write, lease, 0, DateTimeOffset.UtcNow));
         Assert.True(await store.TrySaveTenantSandboxLeaseFactsAsync(s.Tenant, lease with { Revision = 2, State = SandboxLeaseState.Ready }, 1));
@@ -77,11 +79,15 @@ public sealed partial class TenantDefinitionIntegrationTests
         await ConfigurationServices(f).Configuration.AdoptVersionAsync(s.Human.PrincipalId, s.Tenant, s.Session.AgentInstanceId, 2, await Revision(), 1);
         var write = s.Write with { SecurityRevision = (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision };
         var store = (ITenantSandboxRuntimeStore)f.Iam;
-        var broad = s.Lease with { MountAuthority = new("working", "home", HomeAccess.ReadWrite, 1000, 1000) };
+        var workspace = await RuntimeWorkspaceAccess(f, s);
+        var broadened = workspace with { HomeAccess = HomeAccess.ReadWrite, PrivateAccess = HomeAccess.ReadWrite };
+        var broad = s.Lease with { MountAuthority = new("working", "home", HomeAccess.ReadWrite, 1000, 1000,
+            WorkspaceAccess: broadened, PrivateIdentity: "home", PrivateAccess: HomeAccess.ReadWrite, WorkingReadOnly: broadened.WorkingReadOnly) };
         var denied = await Assert.ThrowsAsync<AccessDeniedException>(() => store.TryReserveTenantSandboxLeaseAsync(write, broad, 0, DateTimeOffset.UtcNow).AsTask());
         Assert.Equal("sandbox_mount_policy_changed", denied.ReasonCode);
         Assert.True(await store.TryReserveTenantSandboxLeaseAsync(write,
-            s.Lease with { MountAuthority = new("working", null, HomeAccess.Disabled, 1000, 1000) }, 0, DateTimeOffset.UtcNow));
+            s.Lease with { MountAuthority = new("working", null, HomeAccess.Disabled, 1000, 1000,
+                WorkspaceAccess: workspace, PrivateAccess: workspace.PrivateAccess, WorkingReadOnly: workspace.WorkingReadOnly) }, 0, DateTimeOffset.UtcNow));
     }
 
 }

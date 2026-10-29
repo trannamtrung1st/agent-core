@@ -45,6 +45,13 @@ public sealed partial class TenantDefinitionIntegrationTests
             f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), f.Ids, TimeProvider.System);
         return new(owner.TenantId, human, agent, role.RoleId, assignment.AssignmentId, Guid.Parse(publication.DefinitionId), sessions, runs, context.RoleId);
     }
+    private static async Task GrantMemoryContext(Fixture f, MemorySetup owner, Guid principal, TenantAgent? agent = null)
+    {
+        var selected = agent ?? owner.Agent;
+        var space = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(owner.Tenant, selected.Instance.InstanceId))!;
+        await f.Access.AssignRoleAsync(owner.Human.PrincipalId, owner.Tenant, principal, owner.ContextRole,
+            TenantSpaceService.Scope(owner.Tenant, space.SpaceId), (await f.Iam.ReadTenantAsync(owner.Tenant))!.Tenant.Revision);
+    }
     private static async Task<MemoryTurn> MemoryClaim(Fixture f, MemorySetup owner, Guid? existing = null, HumanSessionReference? requester = null, TenantAgent? otherAgent = null)
     {
         var human = requester ?? owner.Human; var actor = new TenantSessionInitiator(human.AccountId, human.AuthenticationSessionId, human.PrincipalId); var agent = otherAgent ?? owner.Agent;

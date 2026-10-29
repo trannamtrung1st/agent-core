@@ -64,6 +64,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var otherAgent = await new TenantAgentService(f.Iam, (ITenantAgentStore)f.Iam, new SessionNoBuiltinFallback(), f.Authorizer, f.Ids, TimeProvider.System, ownedDefinitions: f.Definitions)
             .CreateFromPublicationAsync(owner.Human.PrincipalId, owner.Tenant, owner.Definition, 1, (await f.Iam.ReadTenantAsync(owner.Tenant))!.Tenant.Revision);
         await f.Access.AssignRoleAsync(owner.Human.PrincipalId, owner.Tenant, otherAgent.PrincipalId, owner.Role, AccessScope.ForTenant(owner.Tenant), (await f.Iam.ReadTenantAsync(owner.Tenant))!.Tenant.Revision);
+        await GrantMemoryContext(f, owner, otherAgent.PrincipalId, otherAgent);
         var other = await MemoryClaim(f, owner, otherAgent: otherAgent); await MemoryCommit(f, other, await MemoryPlan(f, other));
         await Assert.ThrowsAsync<AccessDeniedException>(() => s.Reads.InspectAsync(current.Frame, HistoryCall(other.Frame.SessionId), 6000).AsTask());
     }

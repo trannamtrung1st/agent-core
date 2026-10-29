@@ -37,6 +37,10 @@ public sealed partial class TenantDefinitionIntegrationTests
         var runService = new TenantRunService(f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam,
             new((ITenantAgentStore)f.Iam, f.Definitions, builtIns, new(f.Resources, builtIns, new NoBuiltinKnowledge(), f.Content), (ITenantCredentialBindingStore)f.Iam),
             f.Identity, f.Authorizer, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(f.Iam), f.Ids, TimeProvider.System);
+        var space = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(owner.TenantId, agent.Instance.InstanceId))!;
+        var contextRole = await f.Access.SaveRoleAsync(owner.OwnerPrincipalId, owner.TenantId, null, "Owned publication exact context", ["spaces.read"], await Revision());
+        await f.Access.AssignRoleAsync(owner.OwnerPrincipalId, owner.TenantId, agent.PrincipalId, contextRole.RoleId,
+            TenantSpaceService.Scope(owner.TenantId, space.SpaceId), await Revision());
         var receipt = await runService.SubmitTextAsync(owner.TenantId, item.Owner.SessionId, actor, f.Ids.NewId(), "Owned publication request", await Revision(), 1);
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(owner.TenantId, receipt.RunId))!;
         Assert.Equal(publication.Payload.AgentInstructions, run.Admission.Configuration!.Definition.AgentInstructions);

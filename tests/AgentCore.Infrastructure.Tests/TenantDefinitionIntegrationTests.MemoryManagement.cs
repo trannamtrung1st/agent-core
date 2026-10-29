@@ -89,6 +89,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var invite = await f.Access.InviteAsync(owner.Human.PrincipalId, owner.Tenant, account.LoginKey, role.RoleId, (await f.Iam.ReadTenantAsync(owner.Tenant))!.Tenant.Revision);
         var user = await f.Access.AcceptInvitationAsync(account.AccountId, owner.Tenant, invite.Invitation.InvitationId, invite.Token);
         var login = (await f.Identity.SignInAsync(account.LoginKey, "strong-memory-peer-password"))!.Session; var peer = new HumanSessionReference(account.AccountId, login.SessionId, user.PrincipalId);
+        await GrantMemoryContext(f, owner, peer.PrincipalId);
         var turn = await MemoryClaim(f, owner, requester: peer); await MemoryCommit(f, turn, await MemoryPlan(f, turn, Learned()));
         await f.Access.SaveRoleAsync(owner.Human.PrincipalId, owner.Tenant, role.RoleId, "Independent human Memory authority", permissions, (await f.Iam.ReadTenantAsync(owner.Tenant))!.Tenant.Revision);
         var service = HumanMemories(f); var query = new TenantMemoryQuery(MemoryScope.IdentityUser);
@@ -112,6 +113,9 @@ public sealed partial class TenantDefinitionIntegrationTests
         var invite = await f.Access.InviteAsync(owner.Human.PrincipalId, owner.Tenant, account.LoginKey, full.RoleId, await Revision());
         var user = await f.Access.AcceptInvitationAsync(account.AccountId, owner.Tenant, invite.Invitation.InvitationId, invite.Token);
         var login = (await f.Identity.SignInAsync(account.LoginKey, "strong-memory-peer-password"))!.Session; var peer = new HumanSessionReference(account.AccountId, login.SessionId, user.PrincipalId);
+        await GrantMemoryContext(f, owner, peer.PrincipalId);
+        await GrantMemoryContext(f, owner, second.PrincipalId, second);
+        await GrantMemoryContext(f, owner, peer.PrincipalId, second);
         var a = await MemoryClaim(f, owner, requester: peer); await MemoryCommit(f, a, await MemoryPlan(f, a, Learned("FIRST_ORIGIN") with { Subject = "First source" }));
         var b = await MemoryClaim(f, owner, requester: peer, otherAgent: second); await MemoryCommit(f, b, await MemoryPlan(f, b, Learned("SECOND_ORIGIN") with { Subject = "Second source" }));
         var read = await f.Access.SaveRoleAsync(owner.Human.PrincipalId, owner.Tenant, null, "Scoped Memory read", ["agents.read", "memory.read"], await Revision());
