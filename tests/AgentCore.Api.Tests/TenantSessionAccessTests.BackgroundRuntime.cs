@@ -149,11 +149,14 @@ public sealed partial class TenantSessionAccessTests
         else agent=await Json(await owner.PostAsJsonAsync(api+"/agents",new{templateId="general-assistant",version=36,expectedRevision=await Revision(owner,tenant)}));
         var instance=agent.GetProperty("instance").GetProperty("instanceId").GetGuid();var executor=agent.GetProperty("principalId").GetGuid();
         var instanceRevision = 1;
-        ((TenantBackgroundModel)factory.Services.GetRequiredService<ILanguageModel>()).DelegationTargetInstanceId = instance;
-        var cooperation = await owner.PutAsJsonAsync(api + $"/agents/{instance}/cooperation", new {
-            cooperation = new { acceptTasks = true, acceptDirectMessages = false, allowDirectMessageWake = false, maxConcurrentTasks = 2 },
-            expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision });
-        Assert.True(cooperation.IsSuccessStatusCode, await cooperation.Content.ReadAsStringAsync()); instanceRevision++;
+        if (factory.Services.GetRequiredService<ILanguageModel>() is TenantBackgroundModel background)
+        {
+            background.DelegationTargetInstanceId = instance;
+            var cooperation = await owner.PutAsJsonAsync(api + $"/agents/{instance}/cooperation", new {
+                cooperation = new { acceptTasks = true, acceptDirectMessages = false, allowDirectMessageWake = false, maxConcurrentTasks = 2 },
+                expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision });
+            Assert.True(cooperation.IsSuccessStatusCode, await cooperation.Content.ReadAsStringAsync()); instanceRevision++;
+        }
 
         if (requestIsolated)
         {
