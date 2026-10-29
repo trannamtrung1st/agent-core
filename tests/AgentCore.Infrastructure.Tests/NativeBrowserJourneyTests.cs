@@ -43,6 +43,7 @@ public sealed class NativeBrowserJourneyTests(Xunit.Abstractions.ITestOutputHelp
     [InlineData(720, true)]
     public async Task Native_forms_keyboard_visual_target_and_pending_action_cancellation_recover(int viewportHeight, bool withholdFirstCapture)
     {
+        var releaseRecovery = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var browser = new NativePlaywrightBrowser(new BrowserOptions { Enabled = true, Headless = true, FixtureEnabled = true,
             FixturePort = 0, Environment = new() { ViewportWidth = 1280, ViewportHeight = viewportHeight }, InteractionMode = "InteractiveDemo", NavigationOrigins = ["http://127.0.0.1:5091"], InteractionOrigins = ["http://127.0.0.1:5091"] }, loggerFactory: null);
         await browser.StartAsync(CancellationToken.None);
@@ -80,18 +81,36 @@ public sealed class NativeBrowserJourneyTests(Xunit.Abstractions.ITestOutputHelp
             Assert.True(mouse.ErrorCode is null, $"Mouse error: {mouse.ErrorCode}; effectAttempted={mouse.EffectAttempted}");
             Assert.Contains("Visual target clicked", mouse.Observation!.Content!);
             var waiting = await Find("Waiting action");
+            var originalPage = browser.ContextFor(id)!.Pages[0];
+            var recoveryUrl = originalPage.Url;
+            var recoveryEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (withholdFirstCapture)
+                await browser.ContextFor(id)!.RouteAsync(recoveryUrl, async route =>
+                {
+                    recoveryEntered.TrySetResult();
+                    await releaseRecovery.Task;
+                    try { await route.ContinueAsync(); } catch (Microsoft.Playwright.PlaywrightException) { }
+                });
             var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             browser.ActionStartedProbe = () => started.TrySetResult();
             using var cancel = new CancellationTokenSource();
             var pending = browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id, "browser.click", JsonSerializer.SerializeToElement(new { target = waiting, clickCount = 1 })), cancel.Token).AsTask();
             await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
             cancel.Cancel();
+            if (withholdFirstCapture) await recoveryEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
             browser.ActionStartedProbe = null;
+            Assert.True(originalPage.IsClosed);
+            if (withholdFirstCapture)
+            {
+                releaseRecovery.TrySetResult();
+                await browser.ContextFor(id)!.UnrouteAsync(recoveryUrl);
+                Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(recoveryUrl)))).ErrorCode);
+            }
             var recovered = await Run("browser.snapshot", new { }); Assert.Null(recovered.ErrorCode);
             Assert.Contains("Nothing selected", recovered.Observation!.Content!);
         }
-        finally { browser.CaptureConsistencyProbe = null; await browser.StopAsync(CancellationToken.None); }
+        finally { releaseRecovery.TrySetResult(); browser.CaptureConsistencyProbe = null; await browser.StopAsync(CancellationToken.None); }
     }
     [Fact]
     public async Task Unadmitted_capture_and_expired_admitted_capture_reject_before_effect_then_fresh_capture_recovers()

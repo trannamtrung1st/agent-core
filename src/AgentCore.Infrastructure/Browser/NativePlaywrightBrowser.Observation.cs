@@ -22,7 +22,7 @@ public sealed partial class NativePlaywrightBrowser
             RememberPage(session, session.Page); AdvanceGeneration(session);
             if (IsAllowed(session, url))
                 try { await session.Page.GotoAsync(url, new() { Timeout = 1000, WaitUntil = WaitUntilState.DOMContentLoaded }); }
-                catch (PlaywrightException) { }
+                catch (Exception ex) when (ex is PlaywrightException or TimeoutException) { }
         }
         finally { await EndCallAsync(session, recoveryCall); }
     }

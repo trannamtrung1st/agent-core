@@ -368,6 +368,8 @@ Browser UI presentation may use an explicitly identified controlled approval pro
 
 ## Tenant Browser exact target verification
 
+Native pending-action cancellation also holds the replacement page's navigation through its real bounded restoration timeout. Require the original cancellation, confirmed old-page closure and a successful deliberate fresh navigation/observation after releasing the held restoration request. Restoration must never replay the cancelled action or replace its outcome with the navigation timeout.
+
 Using actual disposable Chromium, prepare a cold navigation and assert no context/profile allocation. Reject missing targets and changed typed arguments before native work. Race two identical saved targets and require one admitted native call; replay must reject. Change the page, shared sibling activity, isolation mode (including changing back), view ownership/release and provider lifetime to invalidate old targets. Replace a native dialog without another Core command and reject the former dialog target. Exercise a real pending Confirm action and retain inspection/dismissal controls. Verify bounded preparation/caller cancellation preserves the native call holding the gate.
 
 Inject a lost close acknowledgement against an existing disposable context and assert one attempted close and no repeat with its consumed target. Keep exact upload-byte/collection snapshot invariants, shared legacy profile/isolation consumers, current state-read authorization and the closed model effect boundary in the focused regression. HTTP active-state fixtures derive a live target through the trusted internal port; this is not a reviewed model effect or a new public command API.

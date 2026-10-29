@@ -1358,6 +1358,8 @@ Credential-name classification normalizes separators and camel case in protected
 
 Persistent profiles remain Agent-Instance-owned and are independent of credentials. `browser.close` returns `closed` only after native context closure is confirmed, or `already_closed` when no live context remains. `close_failed` and `close_uncertain` retain owned live state until actual closure; reset refuses to delete an unconfirmed live profile. Best-effort shutdown cleanup remains separate. Confirmed close releases live state/locks but retains the profile directory and may retain authentication; sign-out requires independent application evidence. A competing process receives `profile_busy`. Profile reset is a separate owner action. Caller cancellation propagates its original token; timed-out/cancelled native actions must be fenced before another operation acquires the session gate. Core retains the durable approval acknowledgement, receipt and uncertain-effect recovery boundaries.
 
+After fencing the old page, restoration of its allowed URL is bounded best effort. A restoration navigation timeout cannot replace the original caller cancellation or replay the cancelled native action; subsequent work uses the new page generation.
+
 The historical P9/P9.5/P9.6 reports describe their original runtime at frozen SHAs. Native wrapper acceptance is tracked independently in the [implementation plan](18-implementation-plan.md#historical-native-playwright-wrapper-full-cutover).
 
 ## System credentials and browser profiles
