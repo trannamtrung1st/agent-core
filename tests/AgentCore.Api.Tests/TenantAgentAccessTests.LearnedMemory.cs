@@ -176,6 +176,13 @@ public sealed partial class TenantAgentAccessTests
         await Login(member, "memory-customer@example.test", "strong-memory-customer-password");
         var peerHistory = await Json(await member.GetAsync(api + $"/sessions/{first.Session}/messages"));
         Assert.DoesNotContain(peerHistory.GetProperty("items").EnumerateArray(), i => i.TryGetProperty("memoryReceipts", out var receipts) && receipts.ValueKind == JsonValueKind.Array && receipts.GetArrayLength() > 0);
+        var peer = (await Json(await member.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
+        var space = (await Json(await owner.GetAsync(api + $"/agents/{instance}/private-space"))).GetProperty("spaceId").GetGuid();
+        var contextRole = await Json(await owner.PostAsJsonAsync(api + "/roles", new { name = "Peer exact Memory conversation context",
+            permissions = new[] { "spaces.read" }, expectedRevision = await Revision(owner, tenant) }));
+        Assert.Equal(HttpStatusCode.Created, (await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = peer,
+            roleId = contextRole.GetProperty("roleId").GetGuid(), resourceType = "space", resourceId = space.ToString("D"),
+            expectedRevision = await Revision(owner, tenant) })).StatusCode);
         await MemoryRequest(factory, member, tenant, instance, first.Session); Assert.DoesNotContain(model.Requests.Last().Context!.Sections, s => s.Id is ContextSectionId.Memory or ContextSectionId.MemoryReceipts);
         var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Memory Beta", slug = "memory-beta" }))).GetProperty("tenantId").GetGuid();
         var (_, betaAgent) = await OwnedMemoryAgent(owner, beta); await MemoryExecutor(owner, beta, betaAgent); await MemoryRequest(factory, owner, beta, betaAgent);

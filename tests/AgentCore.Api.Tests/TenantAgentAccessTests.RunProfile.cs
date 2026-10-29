@@ -207,6 +207,13 @@ public sealed partial class TenantAgentAccessTests
         Assert.Equal(HttpStatusCode.Created, (await member.PostAsJsonAsync("/api/v2/auth/register", new { login = "profile-requester@example.test", displayName = "Second requester", password = "strong-profile-requester-password",
             invitation = new { tenantId = tenant, invitationId = invitation.GetProperty("invitationId").GetGuid(), token = invitation.GetProperty("token").GetString() } })).StatusCode);
         await Login(member, "profile-requester@example.test", "strong-profile-requester-password"); await SetOwnProfile(member, tenant, "ALPHA_MEMBER_PRIVATE");
+        var requester = (await Json(await member.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
+        var space = (await Json(await owner.GetAsync(api + $"/agents/{instance}/private-space"))).GetProperty("spaceId").GetGuid();
+        var contextRole = await Json(await owner.PostAsJsonAsync(api + "/roles", new { name = "Requester exact Profile conversation context",
+            permissions = new[] { "spaces.read" }, expectedRevision = await Revision(owner, tenant) }));
+        Assert.Equal(HttpStatusCode.Created, (await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = requester,
+            roleId = contextRole.GetProperty("roleId").GetGuid(), resourceType = "space", resourceId = space.ToString("D"),
+            expectedRevision = await Revision(owner, tenant) })).StatusCode);
         var second = await SubmitProfileRequest(member, tenant, instance, existing: first.Session); await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
         var terminal = await ProfileTerminal(factory, tenant, second.Run); Assert.Equal(AgentRunStatus.Completed, terminal.Status);
         var profile = Assert.Single(model.Requests.Last().Context!.Sections, s => s.Id == ContextSectionId.Profile);
