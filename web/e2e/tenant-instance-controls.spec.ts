@@ -75,7 +75,7 @@ test('320px budgets retain stale drafts; policy freeze preserves drafts; model r
     await navigateTo(page, 'Unattended model'); await page.getByRole('dialog', { name: 'Discard unsaved changes?' }).getByRole('button', { name: 'Keep editing', exact: true }).click();
     await page.getByRole('button', { name: 'Discard Self-management changes', exact: true }).click(); await navigateTo(page, 'Unattended model');
     await select('Unattended model', 'Scripted Beta · Offline Synthetic'); await save('Save Unattended model'); expect((await read()).agent.instance.unattendedModel?.offeringId).toBe('dca30000-0000-4000-8000-000000000002');
-    await page.getByRole('button', { name: 'Reset to execution default', exact: true }).click(); await save('Save Unattended model'); expect((await read()).agent.instance.unattendedModel).toBeNull();
+    await page.getByRole('button', { name: 'Reset to execution default', exact: true }).click(); await save('Save Unattended model'); expect((await read()).agent.instance.unattendedModel).toEqual({ mode: 'inherit', offeringId: null, reasoning: null });
     await expect(page.getByRole('combobox', { name: 'Unattended reasoning effort', exact: true })).toBeVisible(); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); expect(errors).toEqual([]); expect(legacy).toEqual([]);
   } finally { await f.api.dispose(); }
 });

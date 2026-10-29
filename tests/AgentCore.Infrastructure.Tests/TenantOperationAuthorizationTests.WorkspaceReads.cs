@@ -33,6 +33,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.False(await f.Iam.OwnsResourceAsync(TenantWorkspaceRules.Home(setup.Tenant, setup.Run.SessionId)));
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Read exact workspace", ["workspaces.read"], (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         var grant = await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, reader.PrincipalId, role.RoleId, homeScope, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
+        await GrantExactSpaceRead(f, setup, reader.PrincipalId, SpaceId(setup));
         Assert.Equal("/home/private.txt", Assert.Single((await service.ListAsync(setup.Tenant, SpaceId(setup), false, reader)).Items).LogicalPath);
         Assert.Equal("Private home thử nghiệm", Encoding.UTF8.GetString((await service.ReadAsync(setup.Tenant, SpaceId(setup), false, reader, "/home/private.txt")).Bytes));
         await Assert.ThrowsAsync<AccessDeniedException>(() => service.ReadAsync(setup.Tenant, setup.Run.SessionId, true, reader, "/working/private.txt").AsTask());

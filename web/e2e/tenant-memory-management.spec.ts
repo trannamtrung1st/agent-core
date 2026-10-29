@@ -1,4 +1,4 @@
-import { canonicalFetch } from './support/tenant-auth';
+import { canonicalFetch, prepareOrdinaryChat } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext } from '@playwright/test';
 const login = 'tenant-chat-owner@example.test'; const password = 'synthetic-tenant-chat-password';
 async function call<T>(api: APIRequestContext, path: string, data?: unknown, method = data === undefined ? 'GET' : 'POST'): Promise<T> {
@@ -19,6 +19,7 @@ for (const viewport of [{ width: 1400, height: 950 }, { width: 390, height: 844 
       const agent = await call<{ instance: { instanceId: string }; principalId: string }>(api, prefix + '/agents', { templateId: 'general-assistant', version: 36, expectedRevision: await revision() });
       const role = await call<{ roleId: string }>(api, prefix + '/roles', { name: 'Memory executor', permissions: ['agents.chat', 'sessions.read', 'agent-runs.read', 'memory.read', 'memory.manage'], expectedRevision: await revision() });
       await call(api, prefix + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await revision() });
+      await prepareOrdinaryChat(api, tenant, agent.instance.instanceId);
       await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(login); await page.getByLabel('Password', { exact: true }).fill(password); await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
       await page.goto(`/t/${tenant}/profile`); await expect(page.getByLabel('Preferred name', { exact: true })).toHaveValue('');
       await page.getByLabel('Preferred name', { exact: true }).fill('Organization-specific name'); await page.getByLabel('Language', { exact: true }).fill('en'); await page.getByLabel('Locale', { exact: true }).fill('en-GB'); await page.getByLabel('Time zone', { exact: true }).fill('Asia/Ho_Chi_Minh');

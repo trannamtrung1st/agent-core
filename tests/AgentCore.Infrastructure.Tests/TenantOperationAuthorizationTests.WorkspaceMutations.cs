@@ -14,6 +14,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f);
         var store = WorkspaceReader(f); var service = WorkspaceMutations(f, store);
         var writer = await User(f, setup, "workspace-writer@example.test", ["agents.read", "sessions.read"]);
+        if (!working) await GrantExactSpaceRead(f, setup, writer.PrincipalId, SpaceId(setup));
         var scope = working ? TenantWorkspaceRules.Working(setup.Tenant, setup.Run.SessionId) : TenantWorkspaceRules.Home(setup.Tenant, SpaceId(setup));
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Write exact workspace", ["workspaces.write"], (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, writer.PrincipalId, role.RoleId, scope, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);

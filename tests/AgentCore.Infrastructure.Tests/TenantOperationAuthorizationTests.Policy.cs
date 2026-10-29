@@ -69,6 +69,17 @@ public sealed partial class TenantOperationAuthorizationTests
 
     private static TenantOperationPolicyService Policies(Fixture f, ITenantOperationPolicyStore? store = null) => new(f.Iam, store ?? (ITenantOperationPolicyStore)f.Iam, f.Authorizer, f.Identity, f.Ids, f.Clock);
     private static TenantOperationAuthorizer Operations(Fixture f) => new(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock));
+    private static async Task GrantExactSpaceRead(Fixture f, Environment setup, Guid principal, Guid space)
+    {
+        var scope = TenantSpaceService.Scope(setup.Tenant, space);
+        var state = (await f.Iam.ReadTenantAsync(setup.Tenant))!;
+        if ((await f.Authorizer.CheckTenantAsync(state, principal, PermissionCatalog.Get("spaces.read"), scope, default)).Allowed) return;
+        const string name = "Exact prerequisite Space reader";
+        var role = state.Roles.SingleOrDefault(r => r.Name == name)
+            ?? await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, name, ["spaces.read"], state.Tenant.Revision);
+        await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, principal, role.RoleId, scope,
+            (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
+    }
     private static async Task<TenantSessionInitiator> User(Fixture f, Environment setup, string login, string[] permissions)
     {
         var account = await f.Identity.RegisterAsync(login, "User", "strong-operation-password");

@@ -177,6 +177,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         _ = WorkspaceReader(f);
         var human = await User(f, setup, "workspace-mutator@example.test", ["agents.read", "sessions.read"]);
+        if (!working) await GrantExactSpaceRead(f, setup, human.PrincipalId, SpaceId(setup));
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Exact workspace mutations", ["workspaces.write", "workspaces.delete"], (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         var grant = await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, human.PrincipalId, role.RoleId,
             working ? TenantWorkspaceRules.Working(setup.Tenant, setup.Run.SessionId) : TenantWorkspaceRules.Home(setup.Tenant, SpaceId(setup)), (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
@@ -184,7 +185,7 @@ public sealed partial class TenantOperationAuthorizationTests
             : AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), setup.Tenant, SpaceId(setup));
         var path = (working ? "/working" : "/home") + "/private.txt";
         await new CanonicalWorkspaceFilesystem(root, working ? "/working" : "/home").WriteAsync(path, "original"u8.ToArray(), 1024, 4096);
-        return (human, grant, working ? setup.Run.SessionId : setup.Agent.Instance.InstanceId, path, root);
+        return (human, grant, working ? setup.Run.SessionId : SpaceId(setup), path, root);
     }
     private sealed class WorkspaceMutationHook(ITenantWorkspaceMutationStore inner, Func<Task>? beforeCommit = null, Func<Task>? afterEffect = null, Func<Task>? beforeEffect = null) : ITenantWorkspaceMutationStore
     {

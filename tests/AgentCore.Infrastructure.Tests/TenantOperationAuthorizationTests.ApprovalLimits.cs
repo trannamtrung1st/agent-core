@@ -32,6 +32,9 @@ public sealed partial class TenantOperationAuthorizationTests
             var agent = agents[ai]; var human = humans[hi];
             if (!sessions.TryGetValue((ai, hi), out var session))
             {
+                var space = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(setup.Tenant, agent.Instance.InstanceId))!;
+                await GrantExactSpaceRead(f, setup, agent.PrincipalId, space.SpaceId);
+                await GrantExactSpaceRead(f, setup, human.PrincipalId, space.SpaceId);
                 var created = await f.Sessions.CreateAsync(setup.Tenant, agent.Instance.InstanceId, human, SessionMode.Text, await Revision(), agent.Instance.Revision);
                 session = (created.Owner.SessionId, 1);
             }
