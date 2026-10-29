@@ -213,6 +213,7 @@ public sealed partial class TenantDefinitionAccessTests
             await definitions.PublishAsync(actor, tenant, draft.DraftId, await Revision(owner, tenant), draft.Revision);
             var created = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = Guid.Parse(draft.DefinitionId), version = 1, expectedRevision = await Revision(owner, tenant) }));
             var instance = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = created.GetProperty("principalId").GetGuid();
+            await TenantSessionAccessTests.GrantNativePrivateSpaceRead(owner, tenant, instance);
             var access = factory.Services.GetRequiredService<TenantAccessService>();
             foreach (var grant in new[] { ("sandbox.execute", AccessScope.ForResource(tenant, "agent", instance.ToString("D"))), ("sandbox.read", TenantSandboxProfileRules.Scope(tenant, profileId)) })
             {
@@ -221,6 +222,13 @@ public sealed partial class TenantDefinitionAccessTests
             }
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var parentSession = session;
+            if (!backgroundTask)
+            {
+                var workspace = await access.SaveRoleAsync(actor, tenant, null, "Exact Sandbox session workspace",
+                    ["sessions.read", "workspaces.read", "workspaces.write", "workspaces.delete"], await Revision(owner, tenant));
+                foreach (var scope in new[] { TenantSessionRules.Scope(tenant, session), TenantWorkspaceRules.Working(tenant, session) })
+                    await access.AssignRoleAsync(actor, tenant, executor, workspace.RoleId, scope, await Revision(owner, tenant));
+            }
             factory.Model.TargetInstanceId = instance;
             if (backgroundTask && independentOrigin is null)
                 Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + $"/agents/{instance}/cooperation", new {
