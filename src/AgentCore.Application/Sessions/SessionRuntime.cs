@@ -2798,17 +2798,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 sections = sections.Upsert(ContextSection.Runtime(ContextSectionId.ExecutionPhase, ContextSourceKind.AgentRun,
                     $"phase={State().Phase}; finalizationReason={finalizationReason ?? "none"}; protocolRepairReason={repairReason ?? "none"}", semantics: ContextSemantics.TrustedFact));
                 var working = inRepair
-                    ? request with
-                    {
-                        Context = sections,
-                        Tools = null,
-                        ToolChoice = ModelToolChoice.Auto,
-                        ToolChoiceName = null,
-                        ResponseContract = null,
-                        MaxOutputTokens = ModelOutputBudgets.ForTurn(
-                            request.MaxOutputTokens,
-                            toolsOffered: authorizedTools is { Count: > 0 })
-                    }
+                    ? ModelRoundRequestPolicy.ForRepair(request with { Context = sections }, authorizedTools is { Count: > 0 })
                     : BrowserContinuationPolicy.ProjectTools(
                         WithOfferedTools(
                             request with { Context = sections },
@@ -2817,18 +2807,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             model),
                         pageBlocked,
                         terminalBrowserContinuation, evidence.DialogPending);
-                if (SessionCompletionIntent.Reason(messages) is not null) working = working with { Tools = null, ToolChoice = ModelToolChoice.Auto, ToolChoiceName = null };
-                if (IsInitialBackgroundRun) working = working with { ResponseContract = null };
-                if (checkpointCapacityReached) working = working with { Tools = IsInitialBackgroundRun ? [AgentCore.Application.Work.WorkCompletionRequest.Contract] : null };
-                if (trigger.Kind == TriggerKind.BackgroundCompleted) working = working with { Tools = null };
-                if (cleanupPhase && finalizationReason is null && working.Tools is { } cleanupTools)
-                    working = working with { Tools = RunFinalization.CleanupTools(cleanupTools) };
-                if (finalizationReason is not null) working = IsInitialBackgroundRun
-                    ? working with { Tools = [AgentCore.Application.Work.WorkCompletionRequest.Contract],
-                        ToolChoice = ModelToolChoice.Named, ToolChoiceName = ToolCatalog.WorkComplete, ResponseContract = null,
-                        MaxOutputTokens = 4096 }
-                    : working with { Tools = null, ToolChoice = ModelToolChoice.Auto, ToolChoiceName = null,
-                        MaxOutputTokens = Math.Min(working.MaxOutputTokens, 2048) };
+                working = ModelRoundRequestPolicy.ForPhase(working, new(
+                    CompletionRequested: SessionCompletionIntent.Reason(messages) is not null,
+                    InitialBackgroundRun: IsInitialBackgroundRun,
+                    CheckpointCapacityReached: checkpointCapacityReached,
+                    CompletionReport: trigger.Kind == TriggerKind.BackgroundCompleted,
+                    Cleanup: cleanupPhase,
+                    FinalizationReason: finalizationReason));
                 if (projectionContext is not null)
                 {
                     IReadOnlyList<ModelToolDefinition>? eligibleForGuide = null;
