@@ -34,7 +34,7 @@ public sealed partial class TenantSessionAccessTests
     }
 
     [Theory(Timeout = 90000)] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_Run_Profile_follows_the_actual_human_root_into_owned_background_and_completion_report(bool sqlite)
+    public async Task Tenant_Run_Profile_stays_with_actual_human_root_without_borrowing_into_Task_worker_or_report(bool sqlite)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-profile-background-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
@@ -47,18 +47,31 @@ public sealed partial class TenantSessionAccessTests
             var input = await Json(await owner.PostAsJsonAsync($"/api/v2/tenants/{started.Tenant}/sessions/{started.Session}/messages", new { messageId = Guid.NewGuid(), text = "Start the exact owned background check",
                 expectedRevision = await Revision(owner, started.Tenant), expectedSessionRevision = session.Snapshot.Revision }));
             var source = input.GetProperty("runId").GetGuid(); var (child, report) = await WaitTenantBackground(factory, started.Tenant, started.Session, source, true);
-            var markers = new[] { (await factory.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(started.Tenant, source))!, child }
-                .Select(r => AgentRunToolCallCheckpoint.ReadExecutionState(r.Checkpoint).TenantProfileSource).ToArray();
-            Assert.All(markers, Assert.NotNull); Assert.All(markers, m => Assert.Equal(markers[0], m));
-            Assert.All(model.Requests, r => Assert.Contains(r.Context!.Sections, s => s.Id == ContextSectionId.Profile && s.Layer == ContextLayer.Evidence
-                && s.Message.Text.Contains("ACTUAL_HUMAN_ROOT_PROFILE", StringComparison.Ordinal)));
-            Assert.Contains(model.Requests, r => TenantBackgroundModel.Origin(r) == ExecutionOrigin.DelegatedTask);
+            var parent = (await factory.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(started.Tenant, source))!;
+            Assert.NotNull(AgentRunToolCallCheckpoint.ReadExecutionState(parent.Checkpoint).TenantProfileSource);
+            Assert.Null(AgentRunToolCallCheckpoint.ReadExecutionState(child.Checkpoint).TenantProfileSource);
+            var parentRequests = model.Requests.Where(r => TenantBackgroundModel.Origin(r) == ExecutionOrigin.UserMessage).ToArray();
+            Assert.NotEmpty(parentRequests);
+            Assert.All(parentRequests, r => Assert.Contains(r.Context!.Sections, section => section.Id == ContextSectionId.Profile && section.Layer == ContextLayer.Evidence
+                && section.Message.Text.Contains("ACTUAL_HUMAN_ROOT_PROFILE", StringComparison.Ordinal)));
+            var workerRequests = model.Requests.Where(r => TenantBackgroundModel.Origin(r) == ExecutionOrigin.DelegatedTask).ToArray();
+            Assert.NotEmpty(workerRequests);
+            Assert.All(workerRequests, r => {
+                Assert.DoesNotContain(r.Context!.Sections, section => section.Id == ContextSectionId.Profile);
+                Assert.DoesNotContain("ACTUAL_HUMAN_ROOT_PROFILE", string.Join("\n", r.Messages.Select(message => message.Text)));
+            });
             // Completion uses a factual projection of the child, with no second model/Profile read.
             Assert.Null(AgentRunToolCallCheckpoint.ReadExecutionState(report!.Checkpoint).TenantProfileSource);
             Assert.DoesNotContain(model.Requests, r => TenantBackgroundModel.Origin(r) == ExecutionOrigin.CompletionReport);
             var reportReads = factory.Services.GetRequiredService<TenantReportReadAuthority>();
             await reportReads.RequireAsync(report, default);
             await SetRequesterProfile(owner, started.Tenant, "CHANGED_ROOT_PROFILE");
+            await reportReads.RequireAsync(report, default); // The worker never captured the parent's private Profile.
+            var security = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(started.Tenant))!;
+            var sourceReader = Assert.Single(security.Assignments, assignment => assignment.PrincipalId == child.Owner.ExecutorPrincipalId
+                && security.Roles.Single(role => role.RoleId == assignment.RoleId).Name == "Independent completion source reader");
+            await factory.Services.GetRequiredService<TenantAccessService>().RevokeAssignmentAsync(security.Users.Single().PrincipalId,
+                started.Tenant, sourceReader.AssignmentId, security.Tenant.Revision);
             await Assert.ThrowsAsync<AccessDeniedException>(() => reportReads.RequireAsync(report, default).AsTask());
         }
         finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }

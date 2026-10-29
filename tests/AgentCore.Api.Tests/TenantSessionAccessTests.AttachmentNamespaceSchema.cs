@@ -47,11 +47,12 @@ public sealed partial class TenantSessionAccessTests
                 row.PayloadJson = data.ToJsonString();
                 var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync()); Assert.Equal(275, Assert.IsType<SqliteException>(error.InnerException).SqliteExtendedErrorCode);
             }
-            await using (var db = await contexts.CreateDbContextAsync())
-            {
-                var migrations = (await db.Database.GetAppliedMigrationsAsync()).ToArray(); var own = Array.FindIndex(migrations, m => m.EndsWith("TenantAttachmentNamespaceReview", StringComparison.Ordinal)); Assert.True(own > 0);
-                await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync(migrations[own - 1])); Assert.False(db.Database.HasPendingModelChanges());
-            }
+            await HistoricalTenantDatabase.AssertApprovalDowngradeRefusedAsync(contexts,
+                "20261019151350_TenantAttachmentNamespaceReview", "20261019132944_TenantAttachmentArtifactSource",
+                "CK_TenantApprovalRequest_Values",
+                [.. HistoricalTenantDatabase.AdmissionTables.TakeWhile(table => table != "TenantApprovalRequests"), "Attachments",
+                    .. HistoricalTenantDatabase.AdmissionTables.SkipWhile(table => table != "TenantApprovalRequests")]);
+            await using (var db = await contexts.CreateDbContextAsync()) Assert.False(db.Database.HasPendingModelChanges());
             Assert.Equal(request, await factory.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(v.Tenant, request.RequestId));
         }
         finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }

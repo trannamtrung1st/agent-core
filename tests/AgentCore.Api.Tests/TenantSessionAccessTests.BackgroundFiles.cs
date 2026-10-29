@@ -276,7 +276,9 @@ public sealed partial class TenantSessionAccessTests
         await Grant("agent-runs.read", "agent-run", successor);
         var visible = await Json(await reader.GetAsync(url)); Assert.Equal(successor, visible.GetProperty("initialRun").GetProperty("runId").GetGuid());
         Assert.Equal("File observation finished.", visible.GetProperty("initialRun").GetProperty("outcomeText").GetString());
-        Assert.Equal(JsonValueKind.Null, visible.GetProperty("completionDelivery").GetProperty("targetSessionId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, visible.GetProperty("completionDelivery").ValueKind);
+        var task = (await factory.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, successor))!.Admission.DelegatedTask!;
+        Assert.Equal(HttpStatusCode.Forbidden, (await reader.GetAsync(api + $"/tasks/{task.TaskId}")).StatusCode);
     }
     private static async Task<AgentRun> WaitBackgroundFileReport(ITenantRunStore runs, Guid tenant, Guid session)
     {

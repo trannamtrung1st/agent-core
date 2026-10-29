@@ -71,7 +71,7 @@ public sealed partial class TenantSessionAccessTests
             var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(v.Human.PrincipalId, v.Tenant, null, "Current policy and exact report", ["agents.read", "sessions.read", "resources.read", "artifacts.create", "artifacts.read"], await Revision(owner, v.Tenant));
             var state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(v.Tenant))!;
-            await access.AssignRoleAsync(v.Human.PrincipalId, v.Tenant, state.SystemIdentities.Single().PrincipalId, role.RoleId, AccessScope.ForTenant(v.Tenant), await Revision(owner, v.Tenant));
+            await access.AssignRoleAsync(v.Human.PrincipalId, v.Tenant, state.SystemIdentities.Single(identity => identity.AgentInstanceId == value.Instance).PrincipalId, role.RoleId, AccessScope.ForTenant(v.Tenant), await Revision(owner, v.Tenant));
             var events = new ConcurrentQueue<ServerEvent>(); await using var hub = TenantSocket(ready.BaseAddress!, cookies, events); await hub.StartAsync();
             Assert.True((await hub.InvokeAsync<CommandAck>("AttachTenant", TenantAttach(v.Tenant, v.Session))).Accepted);
             var sent = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{v.Session}/messages", new { messageId = Guid.NewGuid(), text = "Cite retention for this compliance image and publish the exact report", attachmentIds = new[] { v.Id },
