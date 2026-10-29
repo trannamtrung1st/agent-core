@@ -456,7 +456,14 @@ public sealed partial class TenantDefinitionAccessTests
                 await factory.Services.GetRequiredService<AgentCore.Application.Tasks.TenantTaskCoordinationService>().ReconcileAsync(16, CancellationToken.None);
                 var tasks = await Json(await owner.GetAsync(api + $"/sessions/{parentSession}/tasks"));
                 var task = Assert.Single(tasks.GetProperty("items").EnumerateArray());
-                Assert.Equal(completed.AgentRunId, task.GetProperty("terminalRunId").GetGuid());
+                if (choice == "uncertain")
+                {
+                    Assert.True(completed.RequiresEffectReconciliation);
+                    Assert.Equal("NeedsAttention", task.GetProperty("state").GetString());
+                    Assert.Equal(JsonValueKind.Null, task.GetProperty("terminalRunId").ValueKind);
+                    Assert.Equal(JsonValueKind.Null, task.GetProperty("result").ValueKind);
+                }
+                else Assert.Equal(completed.AgentRunId, task.GetProperty("terminalRunId").GetGuid());
                 Assert.NotEqual(parentSession, task.GetProperty("workerSessionId").GetGuid());
                 if (choice is "approve" or "reviewProfiles" or "inspect")
                 {

@@ -84,12 +84,12 @@ public sealed partial class TenantSessionAccessTests
     }
     private static async Task<Guid> NativePrivateSpaceId(HttpClient owner, Guid tenant, Guid instance) =>
         (await Json(await owner.GetAsync($"/api/v2/tenants/{tenant}/agents/{instance}/private-space"))).GetProperty("spaceId").GetGuid();
-    internal static async Task GrantNativePrivateSpaceRead(HttpClient owner, Guid tenant, Guid instance)
+    internal static async Task GrantNativePrivateSpaceRead(HttpClient owner, Guid tenant, Guid instance, Guid? contextPrincipal = null)
     {
         var api = $"/api/v2/tenants/{tenant}";
         var agent = await Json(await owner.GetAsync(api + $"/agents/{instance}"));
         var space = await Json(await owner.GetAsync(api + $"/agents/{instance}/private-space"));
-        var principal = agent.GetProperty("principalId").GetGuid();
+        var principal = contextPrincipal ?? agent.GetProperty("principalId").GetGuid();
         var spaceId = space.GetProperty("spaceId").GetString();
         var access = await Json(await owner.PostAsJsonAsync(api + "/access/check", new { principalId = principal,
             permission = "spaces.read", resourceType = "space", resourceId = spaceId }));

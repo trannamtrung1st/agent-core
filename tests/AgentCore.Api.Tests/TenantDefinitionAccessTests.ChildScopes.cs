@@ -73,11 +73,11 @@ public sealed partial class TenantDefinitionAccessTests
         Assert.Equal(HttpStatusCode.Forbidden, (await editor.GetAsync($"{path}/skills")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await editor.DeleteAsync($"{path}/resources/{Uri.EscapeDataString(fileKey)}?expectedRevision={await Revision(owner, tenant)}&expectedInstanceRevision={await Ir(id)}&expectedResourceRevision=2")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await editor.GetAsync($"{path}/resources")).StatusCode);
-        var builtin = await Agent("general-assistant", 35);
+        var builtin = await Agent("secretary", 10);
         await Json(await owner.PostAsJsonAsync($"{prefix}/role-assignments", new { principalId = principal, roleId = reader, resourceType = "agent", resourceId = builtin, expectedRevision = await Revision(owner, tenant) }));
-        await Json(await Grant(owner, "skill", builtin.ToString("D") + ":definition:browser.record.lookup"));
+        await Json(await Grant(owner, "skill", builtin.ToString("D") + ":definition:store.order.review"));
         var builtinSkills = await Json(await editor.GetAsync($"{prefix}/agents/{builtin}/skills"));
-        Assert.Equal("definition:browser.record.lookup", Assert.Single(builtinSkills.GetProperty("items").EnumerateArray()).GetProperty("key").GetString());
+        Assert.Equal("definition:store.order.review", Assert.Single(builtinSkills.GetProperty("items").EnumerateArray()).GetProperty("key").GetString());
         var support = await Agent("customer-support", 3);
         await Json(await owner.PostAsJsonAsync($"{prefix}/role-assignments", new { principalId = principal, roleId = reader, resourceType = "agent", resourceId = support, expectedRevision = await Revision(owner, tenant) }));
         var inheritedFile = (await Json(await owner.GetAsync($"{prefix}/agents/{support}/resources"))).GetProperty("catalog").GetProperty("resources")[0].GetProperty("key").GetString()!;

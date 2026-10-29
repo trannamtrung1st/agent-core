@@ -36,6 +36,7 @@ public sealed partial class TenantSessionAccessTests
             var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
             var principal = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
             var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
+            await GrantNativePrivateSpaceRead(owner, tenant, instance);
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var identity = factory.Services.GetRequiredService<IdentityService>(); var access = factory.Services.GetRequiredService<TenantAccessService>();
             var member = await identity.RegisterAsync("voice-reader@example.test", "Voice reader", "strong-voice-password");
@@ -45,6 +46,7 @@ public sealed partial class TenantSessionAccessTests
             var cookies = new CookieContainer(); using var reader = new HttpClient(new HttpClientHandler { CookieContainer = cookies }) { BaseAddress = ready.BaseAddress };
             await Login(reader, member.LoginKey, "strong-voice-password");
             var readerPrincipal = (await Json(await reader.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
+            await GrantNativePrivateSpaceRead(owner, tenant, instance, readerPrincipal);
             var events = new ConcurrentQueue<ServerEvent>(); await using var hub = TenantSocket(ready.BaseAddress!, cookies, events); await hub.StartAsync();
             Assert.True((await hub.InvokeAsync<CommandAck>("AttachTenant", TenantAttach(tenant, session))).Accepted);
             var readyEvent = await AwaitTenantWire(() => events.FirstOrDefault(e => e.Type == "session.ready")); long sequence = 0;

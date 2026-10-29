@@ -178,7 +178,7 @@ public sealed class SelfManagementAuthorityTests
     public async Task Native_Admin_builtin_catalog_discloses_missing_authority_without_runtime_grant()
     {
         await using var host = new AgentCoreApiFactory();
-        var owner = await NativeInstanceConfigurationSeed.CreateAsync(host.Services, "general-assistant", 35);
+        var owner = await NativeInstanceConfigurationSeed.CreateAsync(host.Services, "examiner", 1);
         var skill = await NativeInstanceConfigurationSeed.InspectSkillAsync(host.Services, owner.InstanceId, ManagementBuiltInSkills.ConfigurationKey);
         Assert.False(skill.Enabled);
         Assert.Contains("configuration.inspect", skill.MissingCapabilities);

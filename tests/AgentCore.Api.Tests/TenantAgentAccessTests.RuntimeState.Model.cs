@@ -31,6 +31,7 @@ public sealed partial class TenantAgentAccessTests
         var model = new RuntimeObservationModel { Arguments = JsonSerializer.Serialize(new { scope }) }; var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
         await using var factory = new RuntimeStateFactory(sqlite, clock, model); using var owner = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
         var (tenant, id, isolation) = await IsolationAgent(owner); var api = $"/api/v2/tenants/{tenant}";
+        await TenantSessionAccessTests.GrantNativePrivateSpaceRead(owner, tenant, id);
         var agent = await Json(await owner.GetAsync(api + $"/agents/{id}"));
         var role = await Json(await owner.PostAsJsonAsync(api + "/roles", new { name = "Runtime observation executor", permissions = new[] { "sessions.read", "agent-runs.read", "agents.chat" }, expectedRevision = await Revision(owner, tenant) }));
         await Json(await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = agent.GetProperty("principalId").GetGuid(), roleId = role.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(owner, tenant) }));
