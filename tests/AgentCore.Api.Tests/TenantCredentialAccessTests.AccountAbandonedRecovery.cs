@@ -234,7 +234,7 @@ public sealed partial class TenantCredentialAccessTests
                 if (!email && window != "revoked")
                 {
                     var api = $"/api/v2/tenants/{setup.Tenant}";
-                    var inspectionSession = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = setup.Instance,
+                    var inspectionSession = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = setup.Instance,
                         expectedRevision = await Revision(owner, setup.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
                     var readInitial = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{inspectionSession}/messages", new { messageId = Guid.NewGuid(),
                         text = "synthetic account read " + JsonSerializer.Serialize(new { tool = ToolCatalog.DriveGet, arguments = new { accountRef = setup.Alias, operationId = request.Operation.OperationId } }),

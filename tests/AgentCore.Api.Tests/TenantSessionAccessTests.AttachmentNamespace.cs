@@ -123,7 +123,7 @@ public sealed partial class TenantSessionAccessTests
             {
                 var access = factory.Services.GetRequiredService<TenantAccessService>();
                 await access.RevokeAssignmentAsync(v.Human.PrincipalId, v.Tenant, v.Grant.AssignmentId, await Revision(owner, v.Tenant));
-                var state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(v.Tenant))!; var agent = state.SystemIdentities.Single().PrincipalId;
+                var state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(v.Tenant))!; var agent = state.SystemIdentities.Single(identity => identity.AgentInstanceId == value.Instance).PrincipalId;
                 var role = await access.SaveRoleAsync(v.Human.PrincipalId, v.Tenant, null, "Parent or exact child only", [boundary == "parent" ? "attachments.read" : "sessions.read"], await Revision(owner, v.Tenant));
                 await access.AssignRoleAsync(v.Human.PrincipalId, v.Tenant, agent, role.RoleId, AccessScope.ForTenant(v.Tenant), await Revision(owner, v.Tenant));
                 if (boundary == "scoped")
@@ -137,7 +137,7 @@ public sealed partial class TenantSessionAccessTests
             if (boundary == "review") Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/attachments.read", new {
                 mode = "always", independentReview = false, expectedRevision = await Revision(owner, v.Tenant), expectedPolicyRevision = 0 })).StatusCode);
             if (boundary == "other-session") v = v with { Session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new {
-                agentInstanceId = value.Instance, expectedRevision = await Revision(owner, v.Tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid() };
+                retentionKind = "saved", agentInstanceId = value.Instance, expectedRevision = await Revision(owner, v.Tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid() };
             model.Requests.Clear(); model.ReadEnabled = true; model.Arguments = """{"path":"/attachments","limit":1}""";
             var done = await NamespaceTerminal(factory.Services, v.Tenant, await SendNamespaceMessage(owner, v, factory.Services));
             Assert.Equal(AgentRunStatus.Completed, done.Status); Assert.Equal(2, model.Requests.Count);

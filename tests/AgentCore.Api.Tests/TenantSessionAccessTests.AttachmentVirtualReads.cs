@@ -42,14 +42,14 @@ public sealed partial class TenantSessionAccessTests
                 catch (Xunit.Sdk.XunitException e) { throw new Xunit.Sdk.XunitException(e.Message + "; diagnostics=" + string.Join("\n", diagnostics.Lines) + "; errors=" + string.Join("\n", diagnostics.Errors.Select(error => error.ToString()))); }
             }
             if (boundary == "other-session") targetSession = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new {
-                agentInstanceId = value.Instance, expectedRevision = await Revision(owner, v.Tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+                retentionKind = "saved", agentInstanceId = value.Instance, expectedRevision = await Revision(owner, v.Tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             if (boundary is "parent" or "child")
             {
                 var access = factory.Services.GetRequiredService<TenantAccessService>();
                 await access.RevokeAssignmentAsync(v.Human.PrincipalId, v.Tenant, v.Grant.AssignmentId, await Revision(owner, v.Tenant));
                 var role = await access.SaveRoleAsync(v.Human.PrincipalId, v.Tenant, null, "Only one independent read", [boundary == "parent" ? "attachments.read" : "sessions.read"], await Revision(owner, v.Tenant));
                 var state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(v.Tenant))!;
-                await access.AssignRoleAsync(v.Human.PrincipalId, v.Tenant, state.SystemIdentities.Single().PrincipalId, role.RoleId, AccessScope.ForTenant(v.Tenant), await Revision(owner, v.Tenant));
+                await access.AssignRoleAsync(v.Human.PrincipalId, v.Tenant, state.SystemIdentities.Single(identity => identity.AgentInstanceId == value.Instance).PrincipalId, role.RoleId, AccessScope.ForTenant(v.Tenant), await Revision(owner, v.Tenant));
             }
             if (boundary is "review" or "media-review") Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/attachments.read", new {
                 mode = "always", independentReview = false, expectedRevision = await Revision(owner, v.Tenant), expectedPolicyRevision = 0 })).StatusCode);
