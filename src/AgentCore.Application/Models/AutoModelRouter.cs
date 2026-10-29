@@ -7,7 +7,7 @@ using AgentCore.Domain.Models;
 namespace AgentCore.Application.Models;
 
 // One routing policy for new foreground and unattended admissions. This service never dispatches work.
-public sealed class AutoModelRouter(IDecisionEngine engine)
+public sealed class AutoModelRouter(IDecisionEngine engine, TimeProvider? clock = null)
 {
     public const string PolicyRevision = "routing-v2";
     public async ValueTask<SessionModelSelection> ResolveAsync(IModelCatalog catalog, ModelPreference preference,
@@ -17,14 +17,20 @@ public sealed class AutoModelRouter(IDecisionEngine engine)
         ct.ThrowIfCancellationRequested();
         var execution = engine.Policy;
         if (execution.AdmissionTimeoutMs is < 50 or > 10000) throw Failure("invalidBudget");
-        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        budget.CancelAfter(execution.AdmissionTimeoutMs);
-        return await ResolveCoreAsync(catalog, preference, definitionDefault, requiresVision, requiresTools, source, safeSignals, execution, budget.Token, ct).ConfigureAwait(false);
+        var time = clock ?? TimeProvider.System;
+        var duration = TimeSpan.FromMilliseconds(execution.AdmissionTimeoutMs);
+        var started = time.GetTimestamp();
+        using var timeout = new CancellationTokenSource(duration, time);
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+        // A queued timer callback can arrive late under load. The elapsed deadline
+        // also rejects late results and remains shared by model/effort decisions.
+        bool Expired() => budget.IsCancellationRequested || time.GetElapsedTime(started) >= duration;
+        return await ResolveCoreAsync(catalog, preference, definitionDefault, requiresVision, requiresTools, source, safeSignals, execution, budget.Token, ct, Expired).ConfigureAwait(false);
     }
 
     private async ValueTask<SessionModelSelection> ResolveCoreAsync(IModelCatalog catalog, ModelPreference preference,
         ModelPreference? definitionDefault, bool requiresVision, bool requiresTools, string source,
-        IReadOnlyDictionary<string, string> safeSignals, DecisionExecutionPolicy execution, CancellationToken decisionToken, CancellationToken ct)
+        IReadOnlyDictionary<string, string> safeSignals, DecisionExecutionPolicy execution, CancellationToken decisionToken, CancellationToken ct, Func<bool> expired)
     {
         preference.Validate(); definitionDefault?.Validate();
         var effective = preference.Mode == "inherit" ? definitionDefault ?? ModelPreference.Inherit : preference;
@@ -58,7 +64,7 @@ public sealed class AutoModelRouter(IDecisionEngine engine)
                     candidates.Select(m => new DecisionCandidate(m.OfferingId, m.DisplayName,
                         $"Tools={m.Tools}; Vision={m.Vision}; Reasoning={m.Reasoning}; Cost=unknown; Latency=unknown; Context=unknown")).ToArray(),
                     safeSignals, new(), PolicyRevision, policy.MinimumProbability);
-                var result = await DecideWithinBudgetAsync(request, execution, decisionToken, ct).ConfigureAwait(false);
+                var result = await DecideWithinBudgetAsync(request, execution, decisionToken, ct, expired).ConfigureAwait(false);
                 if (result.Status == DecisionStatus.Ready && !execution.ShadowMode)
                 {
                     chosen = candidates.SingleOrDefault(m => m.OfferingId == result.SelectedCandidateId) ?? throw Failure("invalidResult");
@@ -78,7 +84,7 @@ public sealed class AutoModelRouter(IDecisionEngine engine)
         if (effort.Mode == "auto" && chosen.SupportedReasoningEfforts.Count > 1)
         {
             var result = await DecideWithinBudgetAsync(new(DecisionPurpose.ReasoningEffort, DecisionKind.Choice,
-                chosen.SupportedReasoningEfforts.Select(e => new DecisionCandidate(e, e)).ToArray(), safeSignals, new(), PolicyRevision, policy.MinimumProbability), execution, decisionToken, ct).ConfigureAwait(false);
+                chosen.SupportedReasoningEfforts.Select(e => new DecisionCandidate(e, e)).ToArray(), safeSignals, new(), PolicyRevision, policy.MinimumProbability), execution, decisionToken, ct, expired).ConfigureAwait(false);
             if (result.Status == DecisionStatus.Ready && !execution.ShadowMode)
             { selectedEffort = result.SelectedCandidateId; engineId = result.EngineId; version = result.EngineVersion; if (effective.Mode != "auto") basis = "fixedAutoReasoning"; }
             else if (policy.AllowConfiguredDefault) { selectedEffort = chosen.DefaultReasoningEffort; diagnostic ??= result.Status.ToString(); }
@@ -91,16 +97,16 @@ public sealed class AutoModelRouter(IDecisionEngine engine)
     }
 
     private async ValueTask<DecisionResult> DecideWithinBudgetAsync(DecisionRequest request, DecisionExecutionPolicy execution,
-        CancellationToken budget, CancellationToken caller)
+        CancellationToken budget, CancellationToken caller, Func<bool> expired)
     {
         caller.ThrowIfCancellationRequested();
         DecisionResult Timeout() => DecisionResult.Failure(DecisionStatus.Timeout, execution.EngineId, execution.EngineVersion);
-        if (budget.IsCancellationRequested) return Timeout();
+        if (expired()) return Timeout();
         try
         {
             var result = await engine.DecideAsync(request, budget).ConfigureAwait(false);
             caller.ThrowIfCancellationRequested();
-            return budget.IsCancellationRequested ? Timeout() : result;
+            return expired() ? Timeout() : result;
         }
         catch (OperationCanceledException) when (!caller.IsCancellationRequested) { return Timeout(); }
     }
