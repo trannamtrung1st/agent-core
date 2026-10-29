@@ -103,6 +103,10 @@ public sealed partial class TenantSessionAccessTests
                 var memberRole = await access.SaveRoleAsync(actor, tenant, null, "Chat without private procedures", ["agents.read", "agents.chat", "sessions.read", "approvals.read"], await Revision(owner, tenant));
                 var invitation = await access.InviteAsync(actor, tenant, account.LoginKey, memberRole.RoleId, await Revision(owner, tenant));
                 requesterPrincipal = (await access.AcceptInvitationAsync(account.AccountId, tenant, invitation.Invitation.InvitationId, invitation.Token)).PrincipalId;
+                var context = await host.Services.GetRequiredService<ITenantSpaceStore>().FindPrivateSpaceAsync(tenant, instance);
+                var contextRole = await access.SaveRoleAsync(actor, tenant, null, "Requester exact private Skill context", ["spaces.read"], await Revision(owner, tenant));
+                await access.AssignRoleAsync(actor, tenant, requesterPrincipal.Value, contextRole.RoleId,
+                    TenantSpaceService.Scope(tenant, context!.SpaceId), await Revision(owner, tenant));
                 await Login(requester, account.LoginKey, "strong-private-requester-password"); submitter = requester;
             }
             var response = await submitter.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Use the exact private-procedure Skill for this task.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });

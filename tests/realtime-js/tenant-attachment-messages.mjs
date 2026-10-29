@@ -23,7 +23,7 @@ async function connect(h,t,s){const events=[];const hub=new HubConnectionBuilder
 try {
   const owner=new Human();await owner.login();const tenant=(await owner.json('/api/v2/account/tenants')).items[0].tenantId,api=`/api/v2/tenants/${tenant}`;
   const agent=await owner.json(api+'/agents',{templateId:'examiner',version:1,expectedRevision:await owner.revision(tenant)});
-  async function session(t=tenant,a=agent){return (await owner.json(`/api/v2/tenants/${t}/sessions`,{agentInstanceId:a.instance.instanceId,expectedRevision:await owner.revision(t),expectedInstanceRevision:1})).sessionId;}
+  async function session(t=tenant,a=agent){return (await owner.json(`/api/v2/tenants/${t}/sessions`,{retentionKind:'saved',agentInstanceId:a.instance.instanceId,expectedRevision:await owner.revision(t),expectedInstanceRevision:1})).sessionId;}
   const s=await session(),other=await session();
   async function role(name,permissions){return (await owner.json(api+'/roles',{name,permissions,expectedRevision:await owner.revision(tenant)})).roleId;}
   const baseRole=await role('Wire file sender',['sessions.read','agents.chat','agent-runs.read','attachments.create','attachments.delete']);
@@ -33,6 +33,9 @@ try {
   await sender.login('wire-sender@example.test','explicit-wire-sender-password');const principal=(await sender.json(api+'/access/me')).principalId;
   const readRole=await role('Wire file reads',['attachments.read']);const readGrant=await owner.json(api+'/role-assignments',{principalId:principal,roleId:readRole,expectedRevision:await owner.revision(tenant)});
   const agentRole=await role('Wire independent Agent file reads',['sessions.read','attachments.read']);await owner.json(api+'/role-assignments',{principalId:agent.principalId,roleId:agentRole,expectedRevision:await owner.revision(tenant)});
+  const space=await owner.json(api+`/agents/${agent.instance.instanceId}/private-space`);
+  const contextRole=await role('Wire exact Space context',['spaces.read']);
+  for(const reader of [agent.principalId,principal])await owner.json(api+'/role-assignments',{principalId:reader,roleId:contextRole,resourceType:'space',resourceId:space.spaceId,expectedRevision:await owner.revision(tenant)});
   const id=await sender.upload(tenant,s),foreignSession=await owner.upload(tenant,other);
   const beta=(await owner.json('/api/v2/system/tenants',{name:'Wire beta',slug:'wire-beta-files'})).tenantId;
   const betaAgent=await owner.json(`/api/v2/tenants/${beta}/agents`,{templateId:'examiner',version:1,expectedRevision:await owner.revision(beta)});

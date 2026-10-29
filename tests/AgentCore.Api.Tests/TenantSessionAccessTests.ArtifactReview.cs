@@ -66,6 +66,10 @@ public sealed partial class TenantSessionAccessTests
                 {
                     services.Replace(ServiceDescriptor.Singleton<IAgentBrain>(new ModelPreparationBrain(modelPreparation)));
                     services.Replace(ServiceDescriptor.Singleton<ITenantRunStore>(p => new ModelPreparationRuns((ITenantRunStore)p.GetRequiredService<IIamStore>(), modelPreparation)));
+                    // The authority consumer needs the real store's Session port;
+                    // retain the Run history fault at the model preparation boundary.
+                    services.Replace(ServiceDescriptor.Singleton<TenantToolAuthorization>(p => ActivatorUtilities.CreateInstance<TenantToolAuthorization>(p,
+                        (ITenantRunStore)p.GetRequiredService<IIamStore>())));
                 }
                 if (proof) services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new ArtifactProofClock()));
                 if (proof) ((IdentityHttpOptions)services.Single(d => d.ServiceType == typeof(IdentityHttpOptions)).ImplementationInstance!).AllowedOrigins = ["http://127.0.0.1:5216"];

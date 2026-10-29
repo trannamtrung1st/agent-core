@@ -58,6 +58,7 @@ public sealed partial class TenantAgentAccessTests
         await using var factory = new RequestIsolationFactory(sqlite, clock: clock);
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, isolation) = await IsolationAgent(client); var api = $"/api/v2/tenants/{tenant}";
+        await TenantSessionAccessTests.GrantNativePrivateSpaceRead(client, tenant, instance);
         var early = variant == "relaxed" ? (await Json(await client.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedInstanceRevision = 1, expectedRevision = await Revision(client, tenant) }))).GetProperty("sessionId").GetGuid() : (Guid?)null;
         var preview = await Json(await client.PostAsync(isolation + "/presets/Stateless", null));
         Assert.Equal(HttpStatusCode.OK, (await ApplyIsolation(client, isolation, preview)).StatusCode);

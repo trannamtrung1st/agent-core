@@ -77,7 +77,7 @@ public sealed class SelfManagementAuthorityTests
     {
         var root = Path.Combine(Path.GetTempPath(), "management-adoption-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        Guid id;
+        Guid id; int adoptedVersion;
         try
         {
             await using (AgentCoreApiFactory factory = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory())
@@ -96,7 +96,10 @@ public sealed class SelfManagementAuthorityTests
                 Assert.True(reset.Effective.BuiltInSkills!.ConfigurationAssistance);
                 changed = await NativeInstanceConfigurationSeed.PolicyAsync(service, id, reset.InstanceRevision, new(new(HarnessManagementMode.Assisted),
                     new([HarnessManagementScope.Settings])), frozen: true);
-                await NativeInstanceConfigurationSeed.AdoptAsync(admin, id, 23, changed.InstanceRevision);
+                var target = await NativeInstanceConfigurationSeed.PublicationAsync(admin, "general-assistant", 35,
+                    new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources], [], []));
+                adoptedVersion = target.Version;
+                await NativeInstanceConfigurationSeed.AdoptAsync(admin, id, adoptedVersion, changed.InstanceRevision);
                 var adopted = await NativeInstanceConfigurationSeed.PolicyViewAsync(service, id);
                 Assert.True(adopted.Effective.Frozen);
                 Assert.Equal(HarnessManagementMode.Assisted, adopted.Effective.Mode);
@@ -106,7 +109,7 @@ public sealed class SelfManagementAuthorityTests
             {
                 await using var reopened = new HarnessSqliteFactory(root);
                 Assert.True((await NativeInstanceConfigurationSeed.PolicyViewAsync(reopened.Services, id)).Effective.Frozen);
-                Assert.Equal(23, (await reopened.Services.GetRequiredService<IAgentInstanceStore>().FindAsync(id))!.ActiveVersion);
+                Assert.Equal(adoptedVersion, (await reopened.Services.GetRequiredService<IAgentInstanceStore>().FindAsync(id))!.ActiveVersion);
             }
         }
         finally { Directory.Delete(root, true); }

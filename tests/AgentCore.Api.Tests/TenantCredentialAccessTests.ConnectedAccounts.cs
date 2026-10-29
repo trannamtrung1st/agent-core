@@ -31,7 +31,7 @@ public sealed partial class TenantCredentialAccessTests
             ["state"] = Uri.UnescapeDataString(url.Split("?state=")[1]), ["decision"] = "authorize" }))).StatusCode);
         var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = tools ? "general-assistant" : "examiner", version = tools ? 36 : 1, expectedRevision = await Revision(owner, tenant) })))
             .GetProperty("instance").GetProperty("instanceId").GetGuid();
-        await TenantSessionAccessTests.GrantNativePrivateSpaceRead(owner, tenant, instance);
+        if (tools) await TenantSessionAccessTests.GrantNativePrivateSpaceRead(owner, tenant, instance);
         const string alias = "exact-account";
         var binding = (await Json(await owner.PostAsJsonAsync(api + $"/agents/{instance}/credential-bindings", new TenantBindCredentialRequest(credential, alias, await Revision(owner, tenant), 1, 2))))
             .GetProperty("binding").GetProperty("bindingId").GetGuid();

@@ -114,6 +114,10 @@ public sealed partial class TenantSessionAccessTests
                 var member = await access.AcceptInvitationAsync(account.AccountId, tenant, invitation.Invitation.InvitationId, invitation.Token); expectedHuman = member.PrincipalId;
                 var invoke = await access.SaveRoleAsync(human, tenant, null, "Invoke without Chat", ["agents.read", "automations.read", "automations.run", "sessions.create", "agent-runs.create"], await Revision(owner, tenant));
                 requesterRead = await access.AssignRoleAsync(human, tenant, member.PrincipalId, invoke.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
+                var context = (await factory.Services.GetRequiredService<ITenantSpaceStore>().FindPrivateSpaceAsync(tenant, parent.Owner.AgentInstanceId))!;
+                var contextRole = await access.SaveRoleAsync(human, tenant, null, "Independent wait invoker exact context", ["spaces.read"], await Revision(owner, tenant));
+                await access.AssignRoleAsync(human, tenant, member.PrincipalId, contextRole.RoleId,
+                    TenantSpaceService.Scope(tenant, context.SpaceId), await Revision(owner, tenant));
                 invoker = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
                 await Login(invoker, account.LoginKey, "strong-wait-invoker-password");
             }

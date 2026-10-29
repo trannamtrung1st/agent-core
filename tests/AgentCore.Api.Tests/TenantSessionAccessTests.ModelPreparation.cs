@@ -237,6 +237,10 @@ public sealed partial class TenantSessionAccessTests
             {
                 services.Replace(ServiceDescriptor.Singleton<IAgentBrain>(new ModelPreparationBrain(gate)));
                 services.Replace(ServiceDescriptor.Singleton<ITenantRunStore>(p => new ModelPreparationRuns((ITenantRunStore)p.GetRequiredService<IIamStore>(), gate)));
+                    // The authority consumer needs the real store's Session port;
+                    // retain the Run history fault at the model preparation boundary.
+                    services.Replace(ServiceDescriptor.Singleton<TenantToolAuthorization>(p => ActivatorUtilities.CreateInstance<TenantToolAuthorization>(p,
+                        (ITenantRunStore)p.GetRequiredService<IIamStore>())));
             }
             await using WebApplicationFactory<Program> host = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
             host.UseKestrel(0); using var ready = host.CreateClient(); var cookies = new CookieContainer();

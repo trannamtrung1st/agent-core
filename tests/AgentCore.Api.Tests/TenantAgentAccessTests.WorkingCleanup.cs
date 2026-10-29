@@ -24,6 +24,7 @@ public sealed partial class TenantAgentAccessTests
         await using var factory = new RequestIsolationFactory(sqlite);
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, isolation) = await IsolationAgent(client); var api = $"/api/v2/tenants/{tenant}";
+        await TenantSessionAccessTests.GrantNativePrivateSpaceRead(client, tenant, instance);
         var preview = await WorkingRetention(client, isolation, afterTerminal);
         Assert.Equal(HttpStatusCode.OK, (await ApplyIsolation(client, isolation, preview)).StatusCode);
         var agent = await Json(await client.GetAsync(api + $"/agents/{instance}"));
