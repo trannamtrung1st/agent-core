@@ -147,6 +147,7 @@ public sealed partial class TenantCredentialIntegrationTests
             {
                 if (sqlite)
                 {
+                    await CurrentSqliteTestDatabase.SeedAsync(Path.Combine(f.Root, "store.db"));
                     f.Contexts = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f.Root}/store.db;Foreign Keys=True;Default Timeout=10").AddInterceptors(new TaskDatabaseFailureCapture(f.DatabaseErrors)).Options);
                     await using (var db = f.Contexts.CreateDbContext()) { await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); }
                     if (attachmentAuthority) f.Attachments = new SqliteAttachmentStore(f.Contexts, f.Clock, Path.Combine(f.Root, "attachments"));

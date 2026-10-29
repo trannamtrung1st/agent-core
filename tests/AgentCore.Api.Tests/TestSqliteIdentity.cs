@@ -13,6 +13,12 @@ internal static class TestSqliteIdentity
     // Explicit fixture setup before application startup. Production never bootstraps SQLite implicitly.
     internal static void Configure(IServiceCollection services, string connectionString, string keyRoot)
     {
+        var source = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString);
+        if (source.Mode == Microsoft.Data.Sqlite.SqliteOpenMode.ReadWriteCreate && Path.IsPathFullyQualified(source.DataSource) && !File.Exists(source.DataSource))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(source.DataSource))!);
+            CurrentSqliteTestDatabase.SeedAsync(source.DataSource).GetAwaiter().GetResult();
+        }
         var options = (PersistenceOptions)services.Last(d => d.ServiceType == typeof(PersistenceOptions)).ImplementationInstance!;
         options.Provider = "Sqlite"; options.ConnectionString = connectionString; options.CredentialProtectionKeyRoot = keyRoot;
         services.TryAddSingleton<SqliteArtifactStore>(p => new(p.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),

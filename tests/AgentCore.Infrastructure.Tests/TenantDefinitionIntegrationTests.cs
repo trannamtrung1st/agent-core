@@ -136,6 +136,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             if (sqlite)
             {
                 f._path = Path.Combine(Path.GetTempPath(), $"tenant-definition-{Guid.NewGuid():N}.db");
+                if (targetMigration is null) await CurrentSqliteTestDatabase.SeedAsync(f._path);
                 f.Content = new FileDefinitionResourceContentStore(f._path + ".resources");
                 f.Contexts = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f._path};Foreign Keys=True;Default Timeout=10").Options);
                 await using (var db = f.Contexts.CreateDbContext()) await Microsoft.EntityFrameworkCore.Infrastructure.AccessorExtensions.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>(db).MigrateAsync(targetMigration);

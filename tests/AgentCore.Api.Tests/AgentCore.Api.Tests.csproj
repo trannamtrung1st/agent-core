@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Compile Include="../Shared/CurrentSqliteTestDatabase.cs" Link="CurrentSqliteTestDatabase.cs" />
     <EmbeddedResource Include="Fixtures/retired-http-routes.json" />
     <EmbeddedResource Include="Fixtures/tenant-permission-policy-inventory.json" />
     <Using Include="AgentCore.Application.Execution" />

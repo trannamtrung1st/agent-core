@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Compile Include="../Shared/CurrentSqliteTestDatabase.cs" Link="CurrentSqliteTestDatabase.cs" />
     <Compile Include="../Shared/SessionRuntimeFixture.cs" Link="SessionRuntimeFixture.cs" />
     <Compile Include="../Shared/AgentRunTestFixtures.cs" Link="AgentRunTestFixtures.cs" />
     <Using Include="AgentCore.Tests.Shared" />
