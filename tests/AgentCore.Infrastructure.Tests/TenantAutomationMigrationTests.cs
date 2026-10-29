@@ -47,7 +47,7 @@ public sealed class TenantAutomationMigrationTests
         }
         finally { SqliteConnection.ClearAllPools(); File.Delete(path); File.Delete(path + "-wal"); File.Delete(path + "-shm"); }
     }
-    private static async Task InsertLegacy(AgentCoreDbContext db, Automation automation)
+    internal static async Task InsertLegacy(AgentCoreDbContext db, Automation automation)
     {
         await db.Database.OpenConnectionAsync();
         var record = TriggerStoreMapping.ToRecord(automation);

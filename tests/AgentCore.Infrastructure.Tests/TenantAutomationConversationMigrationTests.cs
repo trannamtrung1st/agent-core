@@ -23,12 +23,13 @@ public sealed class TenantAutomationConversationMigrationTests
             var legacy = new Automation(Guid.NewGuid(), new(Guid.NewGuid(), Guid.NewGuid()), AutomationStatus.Active, "Retain exact legacy report destination", new ScheduleTrigger(schedule), schedule.AtUtc,
                 null, 0, 1, 1, new(TriggerAuthorizationOrigin.AdminOwner, null, null, at, at), null,
                 executionTarget: AutomationExecutionTarget.Existing(Guid.NewGuid()));
-            var store = new SqliteTriggerStore(factory); await store.CreateAsync(legacy);
+            var store = new SqliteTriggerStore(factory); await TenantAutomationMigrationTests.InsertLegacy(db, legacy);
             const string conversationMigration = "20261021060000_TenantAutomationConversation";
             await db.GetService<IMigrator>().MigrateAsync(conversationMigration);
             var latest = await Guards(db); Assert.Equal(83, latest.Length); Assert.All(previous, name => Assert.Contains(name, latest));
             Assert.Contains("TR_TenantConversation_Automation_Insert", latest); Assert.Contains("TR_TenantConversation_Occurrence_Update", latest);
-            Assert.Equal(legacy.ExecutionTarget, (await store.GetAsync(legacy.Owner, legacy.AutomationId))!.ExecutionTarget);
+            Assert.Equal((int)legacy.ExecutionTarget.Kind, await db.Database.SqlQueryRaw<int>("SELECT ExecutionTargetKind AS Value FROM Automations").SingleAsync());
+            Assert.Equal(legacy.ExecutionTarget.SessionId!.Value.ToString("D"), await db.Database.SqlQueryRaw<string>("SELECT TargetSessionId AS Value FROM Automations").SingleAsync());
             await db.GetService<IMigrator>().MigrateAsync("20261021050000_TenantAutomationCompletionDestination"); Assert.Equal(previous, await Guards(db));
             await db.GetService<IMigrator>().MigrateAsync(conversationMigration); Assert.Equal(latest, await Guards(db));
             await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
