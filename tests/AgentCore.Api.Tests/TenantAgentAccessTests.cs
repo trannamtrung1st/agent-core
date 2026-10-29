@@ -94,7 +94,8 @@ public sealed partial class TenantAgentAccessTests
     private static async Task Login(HttpClient client, string login, string password)
     {
         await Csrf(client, "before-login");
-        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/api/v2/auth/login", new { login, password })).StatusCode);
+        using var response = await client.PostAsJsonAsync("/api/v2/auth/login", new { login, password });
+        Assert.True(response.StatusCode == HttpStatusCode.OK, $"Login {response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
         await Csrf(client, "after-login");
     }
     private static async Task Csrf(HttpClient client, string phase = "explicit")

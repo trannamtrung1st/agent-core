@@ -94,7 +94,7 @@ public sealed partial class TenantAgentAccessTests
         foreach (var host in factory.Services.GetServices<IHostedService>().Where(s => s is AgentCore.Api.AgentRunHostedService or AgentCore.Api.TriggerSchedulerHostedService)) await host.StopAsync(CancellationToken.None);
         (Guid tenant, Guid instance) owned;
         try { owned = await OwnedMemoryAgent(owner, enabled: false, automation: true, events: events, automationMutations: true); }
-        catch (Xunit.Sdk.XunitException error) when (error.Message.StartsWith("CSRF ", StringComparison.Ordinal))
+        catch (Xunit.Sdk.XunitException error) when (error.Message.StartsWith("CSRF ", StringComparison.Ordinal) || error.Message.StartsWith("Login ", StringComparison.Ordinal))
         {
             Assert.Fail(error.Message + "; HTTP diagnostics=" + factory.HttpFailures.Describe());
             throw;

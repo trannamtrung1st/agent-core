@@ -6,6 +6,7 @@ using AgentCore.Infrastructure.Persistence;
 using AgentCore.Application.Ports;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace AgentCore.Api.Tests;
 
@@ -18,6 +19,16 @@ public class AgentCoreApiFactory : WebApplicationFactory<Program>
     }
     protected virtual IReadOnlyDictionary<string, string?> ExtraConfiguration =>
         new Dictionary<string, string?>();
+
+    protected override IHost CreateHost(IHostBuilder builder)
+    {
+        var host = base.CreateHost(builder);
+        // Minimal-host test teardown can race the entry point's own disposal.
+        // Resolve the lazy ingress snapshot while DI is live; Elsa's real drain
+        // still runs at shutdown without first resolving sources from a retired provider.
+        _ = host.Services.GetRequiredService<Elsa.Workflows.Runtime.IIngressSourceRegistry>().Snapshot();
+        return host;
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
