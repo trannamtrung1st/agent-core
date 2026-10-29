@@ -25,6 +25,7 @@ public sealed partial class TenantAgentAccessTests
     {
         await using var factory = new RequestIsolationFactory(sqlite); using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, _) = await IsolationAgent(client); var api = $"/api/v2/tenants/{tenant}";
+        await TenantSessionAccessTests.GrantNativePrivateSpaceRead(client, tenant, instance);
         var agent = await Json(await client.GetAsync(api + $"/agents/{instance}"));
         var role = await Json(await client.PostAsJsonAsync(api + "/roles", new { name = "Unrelated dispatch executor", permissions = new[] { "agents.chat" }, expectedRevision = await Revision(client, tenant) }));
         await Json(await client.PostAsJsonAsync(api + "/role-assignments", new { principalId = agent.GetProperty("principalId").GetGuid(), roleId = role.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(client, tenant) }));

@@ -46,7 +46,7 @@ public sealed partial class TenantSessionAccessTests
                 if (scenario == "configured_off") s.Replace(ServiceDescriptor.Singleton<IToolConfigurationGate>(new HarnessSelectionUnavailable())); }));
             using var owner = host.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
             var logs = new ManagementMutationLogs(); host.Services.GetRequiredService<ILoggerFactory>().AddProvider(logs);
-            var (tenant, instance) = await SetupManagementRead(host, owner, false, attachmentRead: operation == "configure");
+            var (tenant, instance) = await SetupManagementRead(host, owner, false, attachmentRead: operation == "configure", inheritedResource: operation == "inherited_remove", inheritedResourceKind: 1);
             var api = $"/api/v2/tenants/{tenant}"; var path = api + $"/agents/{instance}";
             var scope = knowledge ? "KnowledgeResources" : operation == "instructions" ? "Instructions" : "ToolSelection";
             Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(path + "/self-management", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2,

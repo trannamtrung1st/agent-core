@@ -25,6 +25,7 @@ public sealed partial class TenantCredentialAccessTests
         var api = $"/api/v2/tenants/{tenant}";
         var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
         var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
+        await TenantSessionAccessTests.GrantNativePrivateSpaceRead(owner, tenant, instance);
         return (tenant, instance, human);
     }
     private static JsonNode AuthoringSchedule(string kind, DateTimeOffset now)
@@ -67,7 +68,7 @@ public sealed partial class TenantCredentialAccessTests
             var reopened = new SqliteIamStore(factory.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>());
             Assert.True(TenantAutomationRules.Same(retained, (await reopened.FindTenantAutomationAsync(tenant, id))!));
         }
-        // There was deliberately no executor authority while the due edit was made.
+        // There was deliberately no execution permission while the due edit was made.
         // Supply ordinary current rights only after the exact retained state is checked.
         var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
         var access = factory.Services.GetRequiredService<TenantAccessService>();

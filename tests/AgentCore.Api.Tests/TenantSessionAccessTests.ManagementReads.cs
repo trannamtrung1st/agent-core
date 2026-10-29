@@ -46,7 +46,7 @@ public sealed partial class TenantSessionAccessTests
             yield return new ModelCompleted(ModelStopReason.Completed);
         }
     }
-    private static async Task<(Guid Tenant, Guid Instance)> SetupManagementRead(WebApplicationFactory<Program> host, HttpClient owner, bool preferences, bool read = true, bool attachmentRead = false, bool inheritedResource = false)
+    private static async Task<(Guid Tenant, Guid Instance)> SetupManagementRead(WebApplicationFactory<Program> host, HttpClient owner, bool preferences, bool read = true, bool attachmentRead = false, bool inheritedResource = false, int inheritedResourceKind = 2)
     {
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
@@ -64,7 +64,7 @@ public sealed partial class TenantSessionAccessTests
         {
             using var bound = await owner.PostAsJsonAsync(api + $"/definition-drafts/{draftId}/resources/batch", new {
                 expectedRevision = await Revision(owner, tenant), expectedDraftRevision = draftRevision,
-                items = new[] { new { logicalPath = "fixture-inherited-policy.md", kind = 2, mediaType = "text/plain",
+                items = new[] { new { logicalPath = "fixture-inherited-policy.md", kind = inheritedResourceKind, mediaType = "text/plain",
                     content = System.Text.Encoding.UTF8.GetBytes("A test-owned inherited policy reference.") } } });
             Assert.Equal(HttpStatusCode.OK, bound.StatusCode); draftRevision++;
         }

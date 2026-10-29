@@ -120,7 +120,7 @@ public sealed partial class TenantSessionAccessTests
                 var receipts = factory.Services.GetRequiredService<ITenantApprovedOperationStore>();
                 Assert.Null(await receipts.FindOperationReceiptAsync(tenant, request.Operation.OperationId));
                 var state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!;
-                var assignment = Assert.Single(state.Assignments, a => a.PrincipalId == executor);
+                var assignment = Assert.Single(state.Assignments, a => a.PrincipalId == executor && a.RoleId == role.RoleId);
                 await access.RevokeAssignmentAsync(human, tenant, assignment.AssignmentId, state.Tenant.Revision);
                 // Stop the complete host with the native effect retained but its receipt unavailable.
                 await factory.DisposeAsync();
