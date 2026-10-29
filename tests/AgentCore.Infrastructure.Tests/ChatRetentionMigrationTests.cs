@@ -43,10 +43,11 @@ public sealed class ChatRetentionMigrationTests
     [Fact]
     public async Task Downgrade_refuses_to_discard_a_governed_tenant_policy()
     {
-        await using var f = await Fixture.Create(true);
-        await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
+        await using var f = await Fixture.Create(true, targetMigration: "20261026080000_ChatRetention");
         await using var db = f.Contexts!.CreateDbContext();
-        await db.Database.ExecuteSqlRawAsync("UPDATE Tenants SET SavedChatRetentionDays=7");
+        // A bounded physical fixture exercises this guard without crossing later
+        // forward-only cutovers or using today's ORM against predecessor columns.
+        await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO Tenants (TenantId,Name,Slug,Status,Revision,CreatedAt,SavedChatRetentionDays) VALUES ({Guid.NewGuid()},{"Alpha"},{"alpha"},{0},{1L},{0L},{7})");
         var error = await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261026010000_CanonicalSelfManagement"));
         Assert.Contains("RetentionDowngradeRequiresExplicitExport", error.Message);
         Assert.Equal("20261026080000_ChatRetention", (await db.Database.GetAppliedMigrationsAsync()).Last());

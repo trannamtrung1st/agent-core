@@ -21,7 +21,8 @@ public sealed partial class TenantOperationAuthorizationTests
     [Fact]
     public async Task Tenant_workspace_search_SQLite_upgrade_reopen_and_guarded_rollback_retain_exact_consent()
     {
-        await using var f = await Fixture.Create(true, builtInAuthority: true);
+        await using var f = await Fixture.Create(true, builtInAuthority: true,
+            targetMigration: "20261018225721_TenantWorkspaceSearchReview");
         await using (var db = f.Contexts!.CreateDbContext())
         { await db.GetService<IMigrator>().MigrateAsync("20261018221227_TenantWorkspaceReadReview"); await db.Database.MigrateAsync(); }
         var v = await WorkspaceReviewFixture(f, search: true);

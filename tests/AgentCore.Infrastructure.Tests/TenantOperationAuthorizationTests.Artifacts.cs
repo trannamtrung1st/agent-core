@@ -186,7 +186,8 @@ public sealed partial class TenantOperationAuthorizationTests
     [Fact]
     public async Task Owned_Artifact_migration_preserves_unowned_historical_bytes_without_adoption()
     {
-        await using var f = await Fixture.Create(true, artifactAuthority: true);
+        await using var f = await Fixture.Create(true, artifactAuthority: true,
+            targetMigration: "20261018123638_TenantCredentialMetadataReview");
         await using (var db = f.Contexts!.CreateDbContext())
             await db.GetService<IMigrator>().MigrateAsync("20261018123638_TenantCredentialMetadataReview");
         var sid = f.Ids.NewId(); var id = f.Ids.NewId(); var rid = f.Ids.NewId(); var bytes = "historical private report"u8.ToArray();

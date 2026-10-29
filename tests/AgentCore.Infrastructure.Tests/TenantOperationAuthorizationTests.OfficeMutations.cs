@@ -51,16 +51,9 @@ public sealed partial class TenantOperationAuthorizationTests
     [Fact]
     public async Task Tenant_Office_mutation_SQLite_upgrade_preserves_prior_consent_and_rejects_forgery_or_unsafe_rollback()
     {
-        await using var f = await Fixture.Create(true, builtInAuthority: true); var prior = await WorkspaceReviewFixture(f);
-        await using (var db = f.Contexts!.CreateDbContext())
-        {
-            var migrator = db.GetService<IMigrator>();
-            await migrator.MigrateAsync("20261023180000_TenantPublicDownloads");
-            await Assert.ThrowsAsync<SqliteException>(() => migrator.MigrateAsync("20261019035251_TenantWorkspaceOfficeReadReview"));
-            Assert.Contains("20261023180000_TenantPublicDownloads", await db.Database.GetAppliedMigrationsAsync());
-            await db.Database.MigrateAsync();
-            Assert.False(db.Database.HasPendingModelChanges());
-        }
+        await using var f = await Fixture.Create(true, builtInAuthority: true); var prior = await WorkspaceReviewFixture(f, working: true);
+        await HistoricalTenantDatabase.AssertApprovalUpgradeAsync(f.Contexts!,
+            "20261019035251_TenantWorkspaceOfficeReadReview", "20261019041906_TenantWorkspaceOfficeMutation");
         Assert.Equal(prior.Request, await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(prior.Setup.Tenant, prior.Request.RequestId));
         var s = prior.Setup;
         var session = await f.Sessions.CreateAsync(s.Tenant, s.Agent.Instance.InstanceId, s.Owner, AgentCore.Domain.Conversation.SessionMode.Text, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1);
@@ -84,8 +77,8 @@ public sealed partial class TenantOperationAuthorizationTests
             if (change == "hash") payload["Operation"]!["WorkspaceMutation"]!["ObservationHash"] = new string('z', 64);
             row.PayloadJson = payload.ToJsonString(); Assert.Equal(275, Assert.IsType<SqliteException>((await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync())).InnerException).SqliteExtendedErrorCode);
         }
-        await using (var db = f.Contexts!.CreateDbContext()) await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261019035251_TenantWorkspaceOfficeReadReview"));
-        await using (var restored = f.Contexts!.CreateDbContext()) await restored.Database.MigrateAsync();
+        await HistoricalTenantDatabase.AssertApprovalDowngradeRefusedAsync(f.Contexts!,
+            "20261019041906_TenantWorkspaceOfficeMutation", "20261019035251_TenantWorkspaceOfficeReadReview", "RetainedRows = 0");
         Assert.Equal(v.Request, await ((ITenantApprovalStore)reopened).FindApprovalAsync(v.Setup.Tenant, v.Request.RequestId));
     }
     [Theory] [InlineData(false, "office.document.create")] [InlineData(true, "office.document.create")]

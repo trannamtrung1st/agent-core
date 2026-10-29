@@ -109,7 +109,8 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Tenant_workspace_effects_SQLite_shape_reopen_and_rollback_guards_preserve_dispatch()
     {
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-19T02:00:00Z"));
-        await using var f = await Fixture.Create(true, clock, builtInAuthority: true);
+        await using var f = await Fixture.Create(true, clock, builtInAuthority: true,
+            targetMigration: "20261019013030_TenantWorkspaceDirectEffects");
         await using (var db = f.Contexts!.CreateDbContext()) { await db.GetService<IMigrator>().MigrateAsync("20261018225721_TenantWorkspaceSearchReview"); await db.Database.MigrateAsync(); }
         var v = await WorkspaceEffectCase(f); var fence = await StageWorkspaceFence(f, v.Frame, v.Call);
         foreach (var field in new[] { "sourceCallId", "toolName", "operationId", "parametersHash", "instanceRevision", "argumentsJson" })

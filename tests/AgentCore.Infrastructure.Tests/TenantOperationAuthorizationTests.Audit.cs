@@ -111,11 +111,15 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(true); var setup = await Setup(f);
         var legacy = await f.Iam.ReadAuditAsync(setup.Tenant, 200);
-        await using (var db = await f.Contexts!.CreateDbContextAsync())
+        await using (var historical = await HistoricalTenantDatabase.CreateAsync(f.Contexts!,
+            "20261017052609_TenantDirectLocalOperationReceipts", HistoricalTenantDatabase.AdmissionTables))
         {
+            var db = historical.Db;
             var migrator = db.GetService<IMigrator>();
-            await migrator.MigrateAsync("20261017052609_TenantDirectLocalOperationReceipts");
-            await migrator.MigrateAsync();
+            await migrator.MigrateAsync("20261017071356_TenantExecutionAuthorizationAudit");
+            var retained = await db.Set<AuthorizationAudit>().AsNoTracking().Where(a => a.TenantId == setup.Tenant).ToArrayAsync();
+            Assert.Equal(legacy.OrderBy(a => a.AuditId), retained.OrderBy(a => a.AuditId));
+            Assert.All(retained, a => Assert.Null(a.Execution));
         }
         Assert.Equal(legacy, await f.Iam.ReadAuditAsync(setup.Tenant, 200));
         Assert.All(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => Assert.Null(a.Execution));

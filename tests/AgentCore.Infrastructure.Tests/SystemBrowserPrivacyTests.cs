@@ -18,12 +18,22 @@ public sealed class SystemBrowserPrivacyTests
         public async ValueTask<bool> TrySaveSystemBrowserPrivacyAsync(HumanSessionReference human, SystemBrowserPrivacyChange change, AuthorizationAudit audit, CancellationToken ct = default)
         { await before(); return await inner.TrySaveSystemBrowserPrivacyAsync(human, change, audit, ct); }
     }
-    private static async Task With(bool sqlite, Func<BrowserPrivacyTestHost, IDbContextFactory<AgentCoreDbContext>?, Task> action)
+    private static async Task With(bool sqlite, Func<BrowserPrivacyTestHost, IDbContextFactory<AgentCoreDbContext>?, Task> action, bool historicalRoundtrip = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "system-privacy-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try {
             IDbContextFactory<AgentCoreDbContext>? contexts = sqlite ? new Contexts(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={root}/store.db;Foreign Keys=True;Default Timeout=10").Options) : null;
-            if (contexts is not null) { await using var db = await contexts.CreateDbContextAsync(); await db.Database.MigrateAsync(); }
+            if (contexts is not null)
+            {
+                await using var db = await contexts.CreateDbContextAsync();
+                if (historicalRoundtrip)
+                {
+                    var migrator = db.GetService<IMigrator>();
+                    await migrator.MigrateAsync("20261020080000_SystemBrowserPrivacyAuthority");
+                    await migrator.MigrateAsync("20261020060000_TenantBrowserProfileReset");
+                }
+                await db.Database.MigrateAsync();
+            }
             await action(await BrowserPrivacyTestHost.Create(new(true, true, ["https://allowed.test"], ["https://graphics.test"]), contexts), contexts);
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
@@ -65,13 +75,22 @@ public sealed class SystemBrowserPrivacyTests
     });
     [Fact]
     public async Task System_privacy_SQLite_shape_guards_and_downgrade_preserve_canonical_policy_and_audit() => await With(true, async (f, contexts) => {
-        await using var db = await contexts!.CreateDbContextAsync(); await db.GetService<IMigrator>().MigrateAsync("20261020060000_TenantBrowserProfileReset"); await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
+        await using var db = await contexts!.CreateDbContextAsync(); Assert.False(db.Database.HasPendingModelChanges());
         await f.SaveAsync(0, "Unmasked", ["https://allowed.test"], [], true);
         foreach (var sql in new[] { "UPDATE BrowserPrivacy SET Revision=2,PolicyJson=json_set(PolicyJson,'$.Mode',9,'$.Revision',2)", "UPDATE BrowserPrivacy SET Revision=2,PolicyJson=json_set(PolicyJson,'$.Revision',2,'$.Extra','forged')", "UPDATE BrowserPrivacy SET Revision=2,PolicyJson=json_set(PolicyJson,'$.Revision',2,'$.UnmaskedOrigins[0]','https://allowed.test/private')", "DELETE FROM BrowserPrivacy" })
             await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.Database.ExecuteSqlRawAsync(sql));
-        await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261020060000_TenantBrowserProfileReset"));
+        await using (var historical = await HistoricalTenantDatabase.CreateAsync(contexts,
+            "20261020080000_SystemBrowserPrivacyAuthority", ["BrowserPrivacy"]))
+        {
+            var before = (await historical.Db.Database.GetAppliedMigrationsAsync()).ToArray();
+            var refusal = await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() =>
+                historical.Db.GetService<IMigrator>().MigrateAsync("20261020060000_TenantBrowserProfileReset"));
+            Assert.Contains("OwnedRows=0", refusal.Message);
+            Assert.Equal(before, await historical.Db.Database.GetAppliedMigrationsAsync());
+            Assert.Equal(1, await historical.Db.Database.SqlQueryRaw<int>("SELECT Revision AS Value FROM BrowserPrivacy").SingleAsync());
+        }
         Assert.Equal(1, (await f.ReadAsync()).Saved.Revision); Assert.Single(await Audits(f, contexts)); await db.Database.MigrateAsync();
         var reopened = await BrowserPrivacyTestHost.Create(new(true, false, [], []), contexts); await reopened.ActivateAtStartupAsync(); Assert.Equal(BrowserScreenshotPrivacyMode.Protected, reopened.Effective.Mode);
         Assert.Equal(1, (await reopened.ReadAsync()).Saved.Revision); Assert.True((await reopened.ReadAsync()).ConstrainedByDeployment);
-    });
+    }, historicalRoundtrip: true);
 }

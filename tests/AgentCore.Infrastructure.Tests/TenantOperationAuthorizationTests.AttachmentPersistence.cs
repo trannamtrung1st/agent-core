@@ -19,9 +19,10 @@ public sealed partial class TenantOperationAuthorizationTests
     [Fact]
     public async Task Tenant_attachment_migration_preserves_legacy_rows_without_adoption_and_can_narrow_when_no_owned_rows_exist()
     {
-        await using var f = await Fixture.Create(true, builtInAuthority: true, attachmentAuthority: true);
+        await using var f = await Fixture.Create(true, builtInAuthority: true, attachmentAuthority: true,
+            targetMigration: "20261019085021_TenantArtifactResourceSourceReview");
         var id = Guid.NewGuid().ToString("D"); var session = Guid.NewGuid().ToString("D");
-        await using var db = f.Contexts!.CreateDbContext(); var migrations = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
+        await using var db = f.Contexts!.CreateDbContext(); var migrations = db.Database.GetMigrations().ToArray();
         var own = Array.FindIndex(migrations, m => m.EndsWith("TenantAttachmentOwnership", StringComparison.Ordinal)); Assert.True(own > 0);
         await db.GetService<IMigrator>().MigrateAsync(migrations[own - 1]);
         await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO Attachments (AttachmentId,SessionId,BlobKey,DisplayName,ContentType,ByteSize,Sha256Hex,State,Readable,StageForNextTurn,CreatedAtUtc,ExpiresAtUtc) VALUES ({id},{session},'legacy/source','legacy.txt','text/plain',3,{new string('a',64)},'Pending',1,0,1,3600001)");

@@ -17,12 +17,8 @@ public sealed partial class TenantOperationAuthorizationTests
         var service = ApprovalService(f);
         var request = (await service.PreparePersonaAsync(new(setup.Tenant, setup.Run.AgentRunId),
             setup.Agent.Instance.Persona with { Name = "Canonical migration consent" }, setup.Run.Revision)).Request!;
-        await using (var db = await f.Contexts!.CreateDbContextAsync())
-        {
-            var migrator = db.GetService<IMigrator>();
-            await migrator.MigrateAsync("20261023140000_TenantConfigurationRemedyAuthoring");
-            await migrator.MigrateAsync();
-        }
+        await HistoricalTenantDatabase.AssertApprovalUpgradeAsync(f.Contexts!,
+            "20261023140000_TenantConfigurationRemedyAuthoring", "20261023160000_RetireEmbeddedRunApproval");
         var reopened = new SqliteIamStore(f.Contexts!, clock: f.Clock);
         var runs = (ITenantRunStore)reopened; service = ApprovalService(f, reopened);
         var waiting = (await runs.FindTenantRunAsync(setup.Tenant, setup.Run.AgentRunId))!;

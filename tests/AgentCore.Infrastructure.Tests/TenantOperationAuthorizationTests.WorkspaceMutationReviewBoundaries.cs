@@ -150,7 +150,8 @@ public sealed partial class TenantOperationAuthorizationTests
     [Fact]
     public async Task Tenant_workspace_mutation_Review_SQLite_upgrade_reopen_shapes_and_downgrade_preserve_exact_consent()
     {
-        await using var f = await Fixture.Create(true, builtInAuthority: true);
+        await using var f = await Fixture.Create(true, builtInAuthority: true,
+            targetMigration: "20261019023004_TenantWorkspaceMutationReview");
         await using (var db = f.Contexts!.CreateDbContext()) { await db.GetService<IMigrator>().MigrateAsync("20261019013030_TenantWorkspaceDirectEffects"); await db.Database.MigrateAsync(); }
         var v = await MutationReviewFixture(f, false, false); var s = v.Setup;
         var reopened = new SqliteIamStore(f.Contexts!, builtIns: f.BuiltIns, clock: f.Clock);

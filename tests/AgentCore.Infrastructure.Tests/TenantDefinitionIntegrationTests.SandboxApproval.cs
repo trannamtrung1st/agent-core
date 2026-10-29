@@ -188,8 +188,8 @@ public sealed partial class TenantDefinitionIntegrationTests
             var row = await db.Set<TenantApprovalRecord>().AsNoTracking().SingleAsync(); var json = JsonNode.Parse(row.PayloadJson)!;
             json["Operation"]!.AsObject().Remove("SandboxCommand"); json["Snapshot"]!.AsObject().Remove("Sandbox"); var priorJson = json.ToJsonString();
             await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson={priorJson} WHERE RequestId={request.RequestId}");
-            await db.GetService<IMigrator>().MigrateAsync("20261017213309_TenantSandboxRuntimeOwnership");
-            await db.Database.MigrateAsync();
+            await HistoricalTenantDatabase.AssertApprovalUpgradeAsync(f.Contexts!,
+                "20261017213309_TenantSandboxRuntimeOwnership", "20261017220217_TenantSandboxCommandApprovals");
             Assert.Equal(priorJson, (await db.Set<TenantApprovalRecord>().AsNoTracking().SingleAsync()).PayloadJson);
         }
         var reopened = new SqliteIamStore(f.Contexts!, f.Content);

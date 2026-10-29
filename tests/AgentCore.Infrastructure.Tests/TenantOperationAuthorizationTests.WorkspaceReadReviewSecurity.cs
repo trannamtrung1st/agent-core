@@ -49,7 +49,8 @@ public sealed partial class TenantOperationAuthorizationTests
     [Fact]
     public async Task Workspace_read_Review_SQLite_upgrade_reopen_shape_and_downgrade_guards_preserve_saved_consent()
     {
-        await using var f = await Fixture.Create(true, builtInAuthority: true);
+        await using var f = await Fixture.Create(true, builtInAuthority: true,
+            targetMigration: "20261018221227_TenantWorkspaceReadReview");
         await using (var db = f.Contexts!.CreateDbContext())
         { await db.GetService<IMigrator>().MigrateAsync("20261018183653_TenantArtifactVerification"); await db.Database.MigrateAsync(); }
         var v = await WorkspaceReviewFixture(f); var s = v.Setup;

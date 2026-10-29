@@ -50,10 +50,12 @@ public sealed partial class TenantOperationAuthorizationTests
         await Policies(f).SaveAsync(s.Tenant, s.Owner, "artifacts.create", new(OperationApprovalMode.Always, false), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 0);
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
         var prior = (await ApprovalService(f).PrepareArtifactAsync(new(s.Tenant, run.AgentRunId), PublicationArguments, run.Revision, frame.Generation)).Request!;
-        await using (var db = f.Contexts!.CreateDbContext())
-        { await db.GetService<IMigrator>().MigrateAsync("20261019041906_TenantWorkspaceOfficeMutation"); await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); }
+        await HistoricalTenantDatabase.AssertApprovalUpgradeAsync(f.Contexts!,
+            "20261019041906_TenantWorkspaceOfficeMutation", "20261019053112_TenantArtifactWorkspaceSourceReview");
         Assert.Equal(prior, await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(s.Tenant, prior.RequestId));
         var sourceAgent = await f.AgentsAtRelease(35).CreateAsync(s.Owner.PrincipalId, s.Tenant, "general-assistant", 35, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
+        var sourceSpace = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(s.Tenant, sourceAgent.Instance.InstanceId))!;
+        await GrantExactSpaceRead(f, s, sourceAgent.PrincipalId, sourceSpace.SpaceId);
         var session = await f.Sessions.CreateAsync(s.Tenant, sourceAgent.Instance.InstanceId, s.Owner, SessionMode.Text, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, sourceAgent.Instance.Revision);
         var submission = await f.RunService().SubmitTextAsync(s.Tenant, session.Owner.SessionId, s.Owner, f.Ids.NewId(), "Publish exact source", (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1);
         s = s with { Agent = sourceAgent, Run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, submission.RunId))! }; frame = await ClaimArtifactRun(f, s);

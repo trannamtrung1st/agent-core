@@ -14,16 +14,21 @@ public sealed partial class TenantPreferenceOperationTests
     {
         await using var f = await Fixture.Create(true);
         var setup = await Setup(f);
-        await using var db = f.Contexts!.CreateDbContext();
         const string predecessor = "20261025090000_CanonicalModelIdentity";
-        await db.GetService<IMigrator>().MigrateAsync(predecessor);
-        var row = await db.AgentInstances.SingleAsync(x => x.InstanceId == setup.Agent.Instance.InstanceId.ToString("D"));
-        var body = JsonNode.Parse(row.HarnessManagementJson!)!.AsObject(); body.Remove("overrides");
-        var legacy = body.ToJsonString(); row.HarnessManagementJson = legacy; await db.SaveChangesAsync();
+        string original;
+        await using (var source = f.Contexts!.CreateDbContext())
+            original = (await source.AgentInstances.SingleAsync(x => x.InstanceId == setup.Agent.Instance.InstanceId.ToString("D"))).HarnessManagementJson!;
+        await using var historical = await HistoricalTenantDatabase.CreateAsync(f.Contexts!, predecessor, HistoricalTenantDatabase.SpaceAdmissionTables);
+        var db = historical.Db;
+        var body = JsonNode.Parse(original)!.AsObject(); body.Remove("overrides");
+        var legacy = body.ToJsonString();
+        var instance = setup.Agent.Instance.InstanceId.ToString("D");
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE AgentInstances SET HarnessManagementJson={legacy} WHERE InstanceId={instance}");
         var error = await Assert.ThrowsAsync<SqliteException>(() => db.Database.MigrateAsync());
         Assert.Contains("SelfManagementNormalizationRequired_StopHost_SettleRunsAndApprovals", error.Message);
         Assert.Equal(predecessor, (await db.Database.GetAppliedMigrationsAsync()).Last());
-        Assert.Equal(legacy, (await db.AgentInstances.AsNoTracking().SingleAsync(x => x.InstanceId == row.InstanceId)).HarnessManagementJson);
-        Assert.Equal(setup.Run.Revision, (await db.AgentRuns.SingleAsync(x => x.AgentRunId == setup.Run.AgentRunId.ToString("D"))).Revision);
+        Assert.Equal(legacy, await db.Database.SqlQuery<string>($"SELECT HarnessManagementJson AS Value FROM AgentInstances WHERE InstanceId={instance}").SingleAsync());
+        var run = setup.Run.AgentRunId.ToString("D");
+        Assert.Equal(setup.Run.Revision, await db.Database.SqlQuery<long>($"SELECT Revision AS Value FROM AgentRuns WHERE AgentRunId={run}").SingleAsync());
     }
 }

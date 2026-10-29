@@ -77,7 +77,8 @@ public sealed partial class TenantOperationAuthorizationTests
     [Fact]
     public async Task Artifact_verification_SQLite_upgrade_reopen_and_shape_guards_preserve_exact_metadata_consent()
     {
-        await using var f = await Fixture.Create(true, builtInAuthority: true, artifactAuthority: true);
+        await using var f = await Fixture.Create(true, builtInAuthority: true, artifactAuthority: true,
+            targetMigration: "20261018183653_TenantArtifactVerification");
         await using (var db = f.Contexts!.CreateDbContext())
         {
             await db.GetService<IMigrator>().MigrateAsync("20261018153150_TenantArtifactReview");

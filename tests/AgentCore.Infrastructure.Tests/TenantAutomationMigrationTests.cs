@@ -16,24 +16,29 @@ public sealed class TenantAutomationMigrationTests
         var factory = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite("Data Source=" + path + ";Foreign Keys=True").Options);
         try
         {
-            await using var db = factory.CreateDbContext(); await db.Database.MigrateAsync();
+            await using var db = factory.CreateDbContext();
+            var migrator = db.GetService<IMigrator>();
+            const string target = "20261021010000_TenantAutomationAdmissionApproval";
+            await migrator.MigrateAsync(target);
             Assert.False(db.Database.HasPendingModelChanges());
             var at = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             var schedule = new OneShotSchedule(at.AddDays(1), "UTC");
             var legacy = new Automation(Guid.NewGuid(), new(Guid.NewGuid(), Guid.NewGuid()), AutomationStatus.Active, "Retain legacy source bytes", new ScheduleTrigger(schedule), schedule.AtUtc,
                 null, 0, 1, 1, new(TriggerAuthorizationOrigin.AdminOwner, null, null, at, at), null);
-            await new SqliteTriggerStore(factory).CreateAsync(legacy);
-            var latestGuards = await Guards(db);
-            await db.GetService<IMigrator>().MigrateAsync("20261021010000_TenantAutomationAdmissionApproval");
+            // Today's store INSERT contains later model/context columns. Seed the
+            // actual frozen columns of this unowned historical Automation instead.
+            await InsertLegacy(db, legacy);
+            var targetGuards = await Guards(db);
             var guards = await Guards(db); Assert.Contains("TR_TenantOccurrences_Source_Insert", guards); Assert.Contains("TR_TenantSessions_Creator_Insert", guards);
             Assert.Contains("TR_TenantApprovals_IndependentTask_Insert", guards); Assert.Contains("TR_TenantApprovals_IndependentTask_Update", guards);
             Assert.Contains("TR_TenantApprovals_AutomationAdmission_INSERT", guards); Assert.Contains("TR_TenantReceipts_BrowserArtifacts_Insert", guards); Assert.Equal(46, guards.Length);
             await db.GetService<IMigrator>().MigrateAsync("20261020200000_TenantIndependentChildControls");
             Assert.Equal(guards.Length - 3, (await Guards(db)).Length);
-            await db.Database.MigrateAsync(); Assert.Equal(latestGuards, await Guards(db));
+            await migrator.MigrateAsync(target); Assert.Equal(targetGuards, await Guards(db));
             await db.GetService<IMigrator>().MigrateAsync("20261020170000_TenantAccountOperationRead");
             var previousGuards = await Guards(db); Assert.Equal(guards.Length - 10, previousGuards.Length);
-            await db.Database.MigrateAsync(); Assert.Equal(latestGuards, await Guards(db));
+            await migrator.MigrateAsync(target); Assert.Equal(targetGuards, await Guards(db));
+            await db.Database.MigrateAsync();
             var read = (await new SqliteTriggerStore(factory).GetAsync(legacy.Owner, legacy.AutomationId))!;
             Assert.Equal(legacy.Owner, read.Owner); Assert.Null(read.Owner.TenantId); Assert.Equal(legacy.Instructions, read.Instructions);
             Assert.Equal(legacy.NextOccurrenceAtUtc, read.NextOccurrenceAtUtc); Assert.Equal(legacy.Triggers.Single().TriggerId, read.Triggers.Single().TriggerId);
@@ -41,6 +46,32 @@ public sealed class TenantAutomationMigrationTests
             using var rows = await command.ExecuteReaderAsync(); Assert.False(await rows.ReadAsync());
         }
         finally { SqliteConnection.ClearAllPools(); File.Delete(path); File.Delete(path + "-wal"); File.Delete(path + "-shm"); }
+    }
+    private static async Task InsertLegacy(AgentCoreDbContext db, Automation automation)
+    {
+        await db.Database.OpenConnectionAsync();
+        var record = TriggerStoreMapping.ToRecord(automation);
+        var columns = new HashSet<string>(StringComparer.Ordinal);
+        using (var query = db.Database.GetDbConnection().CreateCommand())
+        {
+            query.CommandText = "PRAGMA table_info(Automations)";
+            using var rows = await query.ExecuteReaderAsync();
+            while (await rows.ReadAsync()) columns.Add(rows.GetString(1));
+        }
+        var properties = db.Model.FindEntityType(typeof(AutomationRecord))!.GetProperties()
+            .Where(property => columns.Contains(property.GetColumnName())).ToArray();
+        using (var insert = db.Database.GetDbConnection().CreateCommand())
+        {
+            insert.CommandText = "INSERT INTO Automations (" + string.Join(',', properties.Select(p => "\"" + p.GetColumnName() + "\""))
+                + ") VALUES (" + string.Join(',', properties.Select((_, i) => "$p" + i)) + ")";
+            for (var i = 0; i < properties.Length; i++)
+            {
+                var parameter = insert.CreateParameter(); parameter.ParameterName = "$p" + i;
+                parameter.Value = properties[i].PropertyInfo!.GetValue(record) ?? DBNull.Value; insert.Parameters.Add(parameter);
+            }
+            await insert.ExecuteNonQueryAsync();
+        }
+        db.AddRange(record.Triggers); await db.SaveChangesAsync();
     }
     private static async Task<string[]> Guards(AgentCoreDbContext db)
     {
