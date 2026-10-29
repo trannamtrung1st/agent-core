@@ -25,7 +25,7 @@ public sealed class AdaptiveBrowserEvidenceTests(Xunit.Abstractions.ITestOutputH
             var url = browser.HostPolicy.NavigationOrigins.Single() + "/adaptive-browser.html?mode=weak";
             Assert.Null((await browser.ExecuteAsync(new(id, new BrowserNavigate(url)))).ErrorCode);
             var shot = await browser.ExecuteAsync(new(id, new BrowserScreenshot())); Assert.Null(shot.ErrorCode);
-            Assert.True(JsonSerializer.Deserialize<JsonElement>(shot.DataJson!).GetProperty("coordinateEvidence").GetBoolean());
+            Assert.True(JsonSerializer.Deserialize<JsonElement>(shot.DataJson!).GetProperty("coordinateEvidence").GetBoolean(), shot.DataJson);
             // Ordinary semantic refresh does not consume still-current visual evidence.
             Assert.Null((await browser.ExecuteAsync(new(id, new BrowserObserve()))).ErrorCode);
             var page = browser.ContextFor(id)!.Pages.Single();
@@ -257,5 +257,5 @@ public sealed class AdaptiveBrowserEvidenceTests(Xunit.Abstractions.ITestOutputH
         Assert.Throws<ArgumentException>(() => new NativePlaywrightBrowser(new() { TrustedVisualCaptureOrigins = [origin] }, null));
 
     private static NativePlaywrightBrowser NewBrowser() => new(new BrowserOptions { Enabled = true, Headless = true, FixtureEnabled = true,
-        FixturePort = 0, InteractionMode = "InteractiveDemo", NavigationOrigins = ["http://127.0.0.1:5091"], InteractionOrigins = ["http://127.0.0.1:5091"] }, loggerFactory: null);
+        FixturePort = 0, Limits = new() { AutomaticSettleMs = 5000 }, InteractionMode = "InteractiveDemo", NavigationOrigins = ["http://127.0.0.1:5091"], InteractionOrigins = ["http://127.0.0.1:5091"] }, loggerFactory: null);
 }

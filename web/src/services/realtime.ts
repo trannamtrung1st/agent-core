@@ -247,7 +247,7 @@ async function invoke(
     // A retired attachment is a transport fence, including when the server reports it as
     // Authorization. Reattach without replaying this command; actual access is checked again.
     void recoverFromSequenceGap('explicit');
-  } else if (chatTenantId && result.error?.category === 'Authorization'
+  } else if (chatTenantId && !(method === 'AttachTenant' && isTransientAttachError(result)) && result.error?.category === 'Authorization'
     && !(method === 'SendText' && ['attachment_unavailable', 'interruption_unavailable'].includes(result.error.code ?? ''))
     && !['receipt_unavailable', 'receipt_out_of_bounds', 'UnknownResponse', 'tenant_runtime_unavailable', 'voice_attachment_in_use', 'voice_lease_unavailable'].includes(result.error.code ?? '')) {
     // A queued receipt can lose to Stop's interrupted-row commit. That refusal (and an
@@ -688,7 +688,7 @@ function markConnectionFailed(message: string, options?: { force?: boolean }): v
 
 function isTransientAttachError(ack: { error?: { code?: string } } | null | undefined): boolean {
   const code = ack?.error?.code;
-  return code === "SessionInUse" || code === "SessionBusy";
+  return code === "SessionInUse" || code === "SessionBusy" || code === "stale_revision";
 }
 
 async function attachWithBusyRetry(): Promise<boolean> {

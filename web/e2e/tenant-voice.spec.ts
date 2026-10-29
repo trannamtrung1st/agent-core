@@ -25,41 +25,22 @@ for (const width of [1440, 390]) test(`tenant voice keeps capture active, credit
   const wire: unknown[] = []; const protocol = new MessagePackHubProtocol();
   let receiptInvocation: string | null = null, receiptHeld = false, receiptReleased = false;
   let releaseReceipt = () => { receiptReleased = true; };
-  // Delay one real receipt ACK, while forwarding every other hub message in
-  // order. Real PCM frames provide the progress barrier; no sleep or retry.
+  // Hold one real rendered receipt before server admission. Its ACK cannot
+  // unblock the command chain while real PCM continues and Mute is queued.
   await page.routeWebSocket('**/hubs/session*', route => {
     const server = route.connectToServer();
-    let handshakeReceived = false;
     route.onMessage(data => {
-      if (typeof data !== 'string') {
-        for (const parsed of protocol.parseMessages(new Uint8Array(data).buffer, { log() {} })) {
-          const message = parsed as { target?: string; invocationId?: string };
-          if (receiptInvocation === null && message.target === 'ResponseReceived' && message.invocationId)
-            receiptInvocation = message.invocationId;
-        }
-      }
-      server.send(data);
-    });
-    server.onMessage(data => {
-      if (typeof data === 'string') { handshakeReceived = true; route.send(data); return; }
-      let binary = new Uint8Array(data);
-      if (!handshakeReceived) {
-        // SignalR sends its JSON handshake as binary before switching to MessagePack.
-        const separator = binary.indexOf(0x1e);
-        expect(separator, 'complete SignalR handshake').toBeGreaterThanOrEqual(0);
-        route.send(Buffer.from(binary.slice(0, separator + 1)));
-        handshakeReceived = true; binary = binary.slice(separator + 1);
-      }
-      if (binary.length === 0) return;
-      for (const parsed of protocol.parseMessages(binary.buffer as ArrayBuffer, { log() {} })) {
-        const message = parsed as { type: number; invocationId?: string };
+      if (typeof data === 'string') { server.send(data); return; }
+      for (const parsed of protocol.parseMessages(new Uint8Array(data).buffer, { log() {} })) {
+        const message = parsed as { target?: string; invocationId?: string };
         const encoded = Buffer.from(protocol.writeMessage(parsed));
-        if (!receiptReleased && message.type === 3 && message.invocationId === receiptInvocation) {
-          receiptHeld = true;
-          releaseReceipt = () => { if (receiptReleased) return; receiptReleased = true; route.send(encoded); };
-        } else route.send(encoded);
+        if (!receiptReleased && receiptInvocation === null && message.target === 'ResponseReceived' && message.invocationId) {
+          receiptInvocation = message.invocationId; receiptHeld = true;
+          releaseReceipt = () => { if (receiptReleased) return; receiptReleased = true; server.send(encoded); };
+        } else server.send(encoded);
       }
     });
+    server.onMessage(data => route.send(data));
   });
   page.on('websocket', socket => {
     for (const direction of ['framesent', 'framereceived'] as const) socket.on(direction, frame => {

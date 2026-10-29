@@ -268,7 +268,8 @@ public sealed class LoopbackBrowserFixtureHostTests
     }
 }
 
-[CollectionDefinition(BrowserChromiumCollection.Name)]
+// Native browser deadlines should not compete with parallel migration/store cases.
+[CollectionDefinition(BrowserChromiumCollection.Name, DisableParallelization = true)]
 public sealed class BrowserChromiumCollection
 {
     public const string Name = "browser-chromium";

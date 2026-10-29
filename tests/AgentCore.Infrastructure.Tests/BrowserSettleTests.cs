@@ -163,6 +163,9 @@ public sealed class BrowserSettleTests(BrowserHostFixture fixture, ITestOutputHe
     {
         var origin = fixture.Session.Fixture.Origin!;
         var id = Guid.NewGuid();
+        // Measure navigation/settlement on an existing context; Chromium context
+        // creation is a separate cold-start cost and has no three-second contract.
+        Assert.Null((await fixture.Session.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(origin + "/")))).ErrorCode);
         var started = Stopwatch.GetTimestamp();
         var home = await fixture.Session.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(origin + "/")));
         var elapsed = Stopwatch.GetElapsedTime(started);

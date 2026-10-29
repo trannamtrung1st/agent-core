@@ -27,6 +27,31 @@ function pcmFrame(samples = 480): Uint8Array {
 
 describe("realtime race handling", () => {
   beforeEach(() => { window.history.replaceState(null, "", "/t/11111111-1111-1111-1111-111111111111"); vi.mocked(endSession).mockResolvedValue(undefined); });
+  it("rebuilds an attach snapshot after exact stale_revision without retiring the current chat", async () => {
+    const invoke = vi.fn().mockResolvedValueOnce({ accepted: false,
+      error: { category: "Authorization", code: "stale_revision", message: "Tenant subscription is unavailable.", retryAfterMs: 0 } })
+      .mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn(), off: vi.fn(), stop: vi.fn().mockResolvedValue(undefined) } as never);
+    useSessionStore.setState({ ...emptySession(), connection: "reconnecting", sessionId: "s1", draft: "My preserved draft" });
+    await hooks.attachAfterReconnect();
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(invoke.mock.calls.every(([method]) => method === "AttachTenant")).toBe(true);
+    expect(useSessionStore.getState().sessionId).toBe("s1");
+    expect(useSessionStore.getState().draft).toBe("My preserved draft");
+    expect(useSessionStore.getState().error).toBeNull();
+  });
+
+  it("still retires actual authorization denial without retrying attach", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: false,
+      error: { category: "Authorization", code: "initiator_unavailable", message: "Tenant subscription is unavailable." } });
+    hooks.setConnection({ invoke, send: vi.fn(), off: vi.fn(), stop: vi.fn().mockResolvedValue(undefined) } as never);
+    useSessionStore.setState({ ...emptySession(), connection: "reconnecting", sessionId: "s1", draft: "My preserved draft" });
+    await hooks.attachAfterReconnect();
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(useSessionStore.getState().sessionId).toBeNull();
+    expect(useSessionStore.getState().connection).toBe("failed");
+  });
+
   it("coalesces slow rendered receipts without starving Unmute or losing the final rendered prefix", async () => {
     const receipts: Array<(ack: { accepted: boolean }) => void> = [];
     const invoke = vi.fn().mockImplementation((method: string) => method === "ResponseReceived"

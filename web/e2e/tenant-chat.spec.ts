@@ -1,5 +1,6 @@
 import { canonicalFetch, grantPrivateSpaceRead, signInTenant } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext, type Page, type WebSocketRoute } from '@playwright/test';
+import { MessagePackHubProtocol } from '@microsoft/signalr-protocol-msgpack';
 
 // Public HTTP is fixture setup; all conversation commands below use visible product controls.
 const login = 'tenant-chat-owner@example.test';
@@ -154,13 +155,33 @@ test('tenant attachment-only input retains the original file after reload', asyn
 });
 
 test('real websocket reconnect preserves unsent draft and does not duplicate admitted text', async ({ page }) => {
-  const f = await fixture(); let socket: WebSocketRoute | undefined, connections = 0;
-  await page.routeWebSocket('**/hubs/session*', route => { connections++; socket = route; route.connectToServer(); });
+  const f = await fixture(); let socket: WebSocketRoute | undefined, connections = 0, staleInjected = false;
+  const protocol = new MessagePackHubProtocol();
+  await page.routeWebSocket('**/hubs/session*', route => {
+    connections++; socket = route; const server = route.connectToServer();
+    route.onMessage(data => {
+      if (typeof data === 'string') { server.send(data); return; }
+      for (const parsed of protocol.parseMessages(new Uint8Array(data).buffer, { log() {} })) {
+        const message = parsed as { target?: string; invocationId?: string; arguments?: { eventId: string }[] };
+        if (connections === 2 && !staleInjected && message.target === 'AttachTenant' && message.invocationId) {
+          // A failed read captured no authorized snapshot. The next attach must
+          // reach the real host; never replay SendText or fabricate session.ready.
+          staleInjected = true;
+          route.send(Buffer.from(protocol.writeMessage({ type: 3, invocationId: message.invocationId,
+            result: { eventId: message.arguments![0].eventId, accepted: false,
+              error: { category: 'Authorization', code: 'stale_revision', message: 'Tenant subscription is unavailable.', fatal: false } } })));
+        } else server.send(Buffer.from(protocol.writeMessage(parsed)));
+      }
+    });
+    server.onMessage(data => route.send(data));
+  });
   try {
     await signIn(page); await page.goto(f.path); await send(page, 'Admitted before reconnect'); await reply(page);
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('My preserved draft');
     const initial = connections; await socket!.close({ code: 1012, reason: 'Synthetic reconnect verification' });
     await expect.poll(() => connections).toBeGreaterThan(initial);
+    await expect.poll(() => staleInjected).toBe(true);
+    await expect(page.getByTestId('connection')).toHaveText('Ready');
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeEnabled();
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveText('My preserved draft');
     await expect(page.getByText('Admitted before reconnect', { exact: true })).toHaveCount(1);
