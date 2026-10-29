@@ -1,4 +1,3 @@
-using AgentCore.Application.Admin;
 using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -7,10 +6,10 @@ using AgentCore.Application.Triggers;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Triggers;
 
-namespace AgentCore.Application;
+namespace AgentCore.Application.Admin;
 
 /// <summary>
-/// Admin effective-configuration projection and the shared memory-policy default.
+/// Admin effective-configuration projection with its memory-policy default.
 /// This is not the universal runtime configuration object. Session bind, durable work,
 /// and draft evaluation compose their own state from the same resolution primitives.
 /// </summary>
