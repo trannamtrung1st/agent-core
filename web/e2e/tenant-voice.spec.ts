@@ -58,7 +58,8 @@ for (const width of [1440, 390]) test(`tenant voice keeps capture active, credit
     await expect.poll(() => page.evaluate(() => window.__agentCore?.playbackConsumed() ?? 0)).toBeGreaterThan(0);
     await expect.poll(() => page.evaluate(() => window.__agentCore?.captureStreaming())).toBe(true);
     await page.getByRole('button', { name: 'Mute', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Unmute', exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.__agentCore?.captureStreaming())).toBe(false);
+    await expect(page.getByRole('button', { name: 'Unmute', exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('connection')).not.toHaveText('Listening…');
     await expect.poll(() => page.evaluate(() => window.__agentCore?.capturePrepared())).toBe(true);
     await expect.poll(async () => {

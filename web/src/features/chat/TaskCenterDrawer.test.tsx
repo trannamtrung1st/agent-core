@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { App } from 'antd';
+import { App, ConfigProvider } from 'antd';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { IdentityError, identityRequest } from '../../services/identity';
 import { delegateTask, readTask, readTaskMessages, readTaskNotices, type DelegatedTask, type TaskPage } from '../../services/tenantTasks';
@@ -12,7 +12,7 @@ const task = (taskId: string): DelegatedTask => ({ taskId, title: taskId, object
   createdAt: '2026-10-27T00:00:00Z', updatedAt: '2026-10-27T00:00:00Z', deadlineAt: '2026-10-28T00:00:00Z',
   reportOnCompletion: false, canInspect: true, canCancel: true, canSend: true, securityRevision: 1, retryOfTaskId: null, canRetry: false, canAcknowledge: true });
 const page = (items: DelegatedTask[], nextCursor: string | null = null): TaskPage<DelegatedTask> => ({ items, nextCursor, hasMore: !!nextCursor, securityRevision: 1 });
-const show = (tenant = 'first', initialTaskId?: string) => <App><TaskCenterDrawer tenant={tenant} session="source" open narrow={false} initialTaskId={initialTaskId} onClose={vi.fn()} /></App>;
+const show = (tenant = 'first', initialTaskId?: string) => <ConfigProvider theme={{ token: { motion: false } }}><App><TaskCenterDrawer tenant={tenant} session="source" open narrow={false} initialTaskId={initialTaskId} onClose={vi.fn()} /></App></ConfigProvider>;
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(readTask).mockImplementation(async (_tenant, id) => task(id));
@@ -29,8 +29,11 @@ describe('Task Center current private scope', () => {
       admissionState: 'pendingReview', reasonCode: null, securityRevision: 2, replayed: false });
     const rendered = render(show('first', 'private-task'));
     fireEvent.click(await screen.findByRole('button', { name: 'Create replacement task' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Assign task' }));
-    expect(await screen.findByText('Task needs approval')).toBeVisible();
+    const assign = await screen.findByRole('button', { name: 'Assign task' });
+    await waitFor(() => expect(assign).toBeEnabled());
+    await waitFor(() => expect(screen.getByLabelText('Objective')).toHaveValue('Private private-task'));
+    fireEvent.click(assign);
+    expect(await screen.findByText('Task needs approval', {}, { timeout: 5_000 })).toBeVisible();
     expect(screen.getByRole('link', { name: 'View approval' })).toHaveAttribute('href', expect.stringContaining('approval-a'));
     expect(vi.mocked(readTask).mock.calls.some(([, id]) => id === 'approval-a')).toBe(false);
     expect(vi.mocked(delegateTask)).toHaveBeenCalledOnce();

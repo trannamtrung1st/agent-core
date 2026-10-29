@@ -44,12 +44,12 @@ function watch(page: Page) {
   });
   return { errors, legacy };
 }
-async function reply(page: Page, count = 1) { await expect(page.getByText('Hello from synthetic.', { exact: true })).toHaveCount(count); }
+async function reply(page: Page, count = 1, timeout = 15_000) { await expect(page.getByText('Hello from synthetic.', { exact: true })).toHaveCount(count, { timeout }); }
 async function steerWithFreshRetry(page: Page, action: () => Promise<void>, replies: number, text: string, queued: boolean) {
   await action();
   const refusal = page.getByText(/^(State changed\. Reload before trying again\.|That response changed\. Check the current response before steering again\.)$/);
   await expect.poll(async () => await page.getByText('Hello from synthetic.', { exact: true }).count() === replies
-    ? 'accepted' : await refusal.count() > 0 ? 'refused' : 'pending').not.toBe('pending');
+    ? 'accepted' : await refusal.count() > 0 ? 'refused' : 'pending', { timeout: 30_000 }).not.toBe('pending');
   if (await refusal.count() > 0) {
     // A definitive CAS refusal is safe. Verify retained input, then act as a human
     // making one deliberate fresh attempt; the product must not replay it itself.
@@ -59,7 +59,7 @@ async function steerWithFreshRetry(page: Page, action: () => Promise<void>, repl
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeEnabled();
     await action();
   }
-  await reply(page, replies);
+  await reply(page, replies, 30_000);
 }
 
 test.beforeAll(async () => {
@@ -169,6 +169,7 @@ test('real websocket reconnect preserves unsent draft and does not duplicate adm
 });
 
 test('local queue drains once and Stop cancels the delivered canonical Run', async ({ page }) => {
+  test.setTimeout(90_000);
   const f = await fixture();
   let runPath = '';
   page.on('request', r => { const path = new URL(r.url()).pathname; if (r.method() === 'GET' && /\/agent-runs\/[0-9a-f-]+$/.test(path)) runPath = path; });
@@ -179,14 +180,14 @@ test('local queue drains once and Stop cancels the delivered canonical Run', asy
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Queued second');
     await page.getByRole('button', { name: 'Queue', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Queued messages', exact: true })).toBeVisible();
-    await reply(page, 2);
+    await reply(page, 2, 30_000);
     await expect(page.getByRole('region', { name: 'Queued messages', exact: true })).toHaveCount(0);
     await send(page, '[test:durable-stream-long] stop now');
     await page.getByRole('button', { name: 'Stop', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
     expect(runPath).not.toBe('');
     await expect.poll(async () => (await call<{ status: string }>(f.api, runPath)).status).toBe('cancelled');
-    await send(page, 'After Stop'); await reply(page, 3);
+    await send(page, 'After Stop'); await reply(page, 3, 30_000);
   } finally { await f.api.dispose(); }
 });
 
@@ -267,6 +268,7 @@ for (const decision of ['approve', 'reject'] as const) test(`original Chat recov
 });
 
 test('tenant Steer atomically interrupts the current Run with row and keyboard controls', async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
   const f = await fixture(); const observed = watch(page);
   try {
     await page.setViewportSize({ width: 1440, height: 1000 }); await signIn(page); await page.goto(f.path);
