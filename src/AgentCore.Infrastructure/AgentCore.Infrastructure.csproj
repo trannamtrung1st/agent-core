@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <!-- Preserve frozen SQL sources while keeping the constrained user-string heap below its reserve gate. -->
+    <Features>$(Features);experimental-data-section-string-literals=500000</Features>
+  </PropertyGroup>
+
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\AgentCore.Application\AgentCore.Application.csproj" />

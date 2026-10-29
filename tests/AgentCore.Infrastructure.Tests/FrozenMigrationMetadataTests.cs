@@ -67,6 +67,27 @@ public sealed class FrozenMigrationMetadataTests
         { "20261021185601_TenantMemoryOperations", "CK_TenantApprovalRequest_Values", "092a998ca09d3b65d4e321e15d472c94718cc70e4e0853eb7dc85b64a03a934c" },
         { "20261021201045_TenantContinuityRead", "CK_TenantApprovalRequest_Values", "1a1c84603d84d6e31b9a3d3aa4cb7d900d9dc33078399f8f80db3d07cfbf32d3" },
         { "20261021212948_TenantExperience", "CK_TenantApprovalRequest_Values", "1a1c84603d84d6e31b9a3d3aa4cb7d900d9dc33078399f8f80db3d07cfbf32d3" },
+        // Captured from the baseline assembly before data-section emission.
+        { "20261028172742_FormalWorkflowAutomations", "CK_TenantApprovalRequest_Values", "feb4b92304b417bc86dfab20ec0fe59dd9d84ef70c4224b78cc6bd40f94af1d2" },
+    };
+
+    // Exact current transitions from canonical model identity, Task/source
+    // ownership and Workflow migrations; every other incumbent guard stays byte-identical.
+    private static readonly IReadOnlyDictionary<string, string> CurrentGuardTransitions = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["trigger:TR_TenantApprovals_AutomationAdmission_INSERT"] = "71631cc9cf4e9408c7994b4e22d04650c652b9ad090dca4f2a505150b163ca88",
+        ["trigger:TR_TenantApprovals_ConfigurationRemedy_INSERT"] = "44432c1b9b6a2f3b7e51fbcc0321c331d298b2790a7c227fa453a2d8343ad861",
+        ["trigger:TR_TenantApprovals_CredentialBinding_INSERT"] = "b51e9f1e91caa9b5f1e26d275ff63e45d5323f4bb8daf158fa625c5bdba36a30",
+        ["trigger:TR_TenantApprovals_IndependentTask_Insert"] = "cfa755d9804e7f164eb396fdb08a44e0cba29bb0bd10047a5c267762190edc8f",
+        ["trigger:TR_TenantApprovals_IndependentTask_Update"] = "a96aea3475d454da4a7aadb53fb9255bc05a74dc344d8768616d42c534e4b7db",
+        ["trigger:TR_TenantApprovals_Space_INSERT"] = "9c899685bd071be9c338cde332639b6b4a7e09919bb6cdefe1f0f48f3a8906b8",
+        ["trigger:TR_TenantApprovals_Space_Workspace_INSERT"] = "2a0da27769ab4214b09ac26917b515bd3f5cde84a4c0c69f0e2425be775a16e8",
+        ["trigger:TR_TenantCompletion_Occurrence_Insert"] = "be368aae76ce8db3ac6a5db61f4d81888c2ff5cc8a745eb124b9cac739731ed0",
+        ["trigger:TR_TenantCompletion_Occurrence_Update"] = "abc53b995b78130f096061e82b9f2ae54273d0fef0cbf2107bf08e2426db6964",
+        ["trigger:TR_TenantCore_Fact_Insert"] = "6c5a86fcfcda68b2a8faeb0299874a879d28d00d7eaabaf3614953163b422756",
+        ["trigger:TR_TenantCore_RunCausation_Insert"] = "ad6b00c4105ef4e984ad71e826707acd0b8dc45e7b673e0c8e1fc22072e95fed",
+        ["trigger:TR_TenantOccurrences_Source_Insert"] = "f94fc274529f1522f16d858f34959702f250224e37d3bc287bb1ab1de4787eb3",
+        ["trigger:TR_TenantOccurrences_Source_Update"] = "3add8c7210b73c03d59e8c54c2d726a953beb646602330b9d35b989d8fb54396",
     };
 
     [Theory]
@@ -81,7 +102,7 @@ public sealed class FrozenMigrationMetadataTests
     }
 
     [Fact]
-    public async Task Historical_to_current_SQLite_roundtrip_preserves_actual_guards_indexes_and_current_model()
+    public async Task Bounded_historical_SQLite_roundtrip_and_current_upgrade_preserve_actual_guards_indexes_and_model()
     {
         var path = Path.Combine(Path.GetTempPath(), "frozen-migration-metadata-" + Guid.NewGuid().ToString("N") + ".db");
         try
@@ -111,10 +132,20 @@ public sealed class FrozenMigrationMetadataTests
             var modelPredecessor = await Schema(db);
             foreach (var guard in spaces.Where(item => item.Key.StartsWith("trigger:", StringComparison.Ordinal)))
                 Assert.Equal(guard.Value, modelPredecessor[guard.Key]);
+            // Exercise reversible history before the later, deliberately irreversible
+            // UnifiedEvaluations cutover, whose Down requires a matched backup.
+            await migrator.MigrateAsync(historical);
+            SameSchema(original, await Schema(db));
+            await migrator.MigrateAsync("20261025085000_TenantDynamicModels");
+            SameSchema(modelPredecessor, await Schema(db));
             await migrator.MigrateAsync();
             var current = await Schema(db);
-            Assert.Equal(190, current.Keys.Count(k => k.StartsWith("trigger:", StringComparison.Ordinal)));
-            foreach (var guard in modelPredecessor.Where(item => item.Key.StartsWith("trigger:", StringComparison.Ordinal)))
+            Assert.Equal(226, current.Keys.Count(k => k.StartsWith("trigger:", StringComparison.Ordinal)));
+            var transitionHashes = modelPredecessor
+                .Where(item => item.Key.StartsWith("trigger:", StringComparison.Ordinal) && item.Value != current[item.Key])
+                .ToDictionary(item => item.Key, item => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(current[item.Key]))));
+            Assert.Equal(CurrentGuardTransitions.OrderBy(pair => pair.Key), transitionHashes.OrderBy(pair => pair.Key));
+            Assert.All(modelPredecessor.Where(item => item.Key.StartsWith("trigger:", StringComparison.Ordinal)), guard =>
             {
                 // Canonical identity changes these four field references. The
                 // dedicated cutover fixture checks their new closed identities.
@@ -124,11 +155,12 @@ public sealed class FrozenMigrationMetadataTests
                     Assert.NotEqual(guard.Value, current[guard.Key]);
                     Assert.DoesNotContain("CatalogKey", current[guard.Key]); Assert.DoesNotContain("ProviderAlias", current[guard.Key]);
                 }
-                else Assert.Equal(guard.Value, current[guard.Key]);
-            }
+                else if (CurrentGuardTransitions.ContainsKey(guard.Key)) Assert.NotEqual(guard.Value, current[guard.Key]);
+                else Assert.True(guard.Value == current[guard.Key], guard.Key + " changed unexpectedly.");
+            });
             Assert.False(db.Database.HasPendingModelChanges());
-            await migrator.MigrateAsync(historical);
-            SameSchema(original, await Schema(db));
+            // Reapplying the current target is idempotent; it does not promise an
+            // unsupported downgrade across the matched-backup cutover.
             await migrator.MigrateAsync();
             SameSchema(current, await Schema(db));
             Assert.False(db.Database.HasPendingModelChanges());
