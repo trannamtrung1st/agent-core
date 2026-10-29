@@ -13,8 +13,9 @@ public sealed class CurrentSqliteTestDatabaseTests
         Directory.CreateDirectory(root);
         try
         {
-            var first = Path.Combine(root, "first.db"); var second = Path.Combine(root, "second.db");
-            await Task.WhenAll(CurrentSqliteTestDatabase.SeedAsync(first), CurrentSqliteTestDatabase.SeedAsync(second));
+            var copies = Enumerable.Range(0, 8).Select(i => Path.Combine(root, $"copy-{i}.db")).ToArray();
+            await Task.WhenAll(copies.Select(CurrentSqliteTestDatabase.SeedAsync));
+            var first = copies[0]; var second = copies[1];
             await using var a = Open(first); await using var b = Open(second); await using var fresh = Open(Path.Combine(root, "fresh.db"));
             await fresh.Database.MigrateAsync();
             Assert.Equal(await Schema(fresh), await Schema(a)); Assert.Equal(await Schema(fresh), await Schema(b));

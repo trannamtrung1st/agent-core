@@ -9,6 +9,7 @@ namespace AgentCore.Tests.Shared;
 internal static class CurrentSqliteTestDatabase
 {
     private static readonly Lazy<Task<string>> Template = new(CreateTemplateAsync);
+    private static readonly SemaphoreSlim CopyGate = new(1, 1);
 
     internal static async Task SeedAsync(string destination)
     {
@@ -17,12 +18,19 @@ internal static class CurrentSqliteTestDatabase
         try
         {
             var sourcePath = await Template.Value.ConfigureAwait(false);
-            await using var source = new SqliteConnection(new SqliteConnectionStringBuilder
-            { DataSource = sourcePath, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString());
-            await using var target = new SqliteConnection(new SqliteConnectionStringBuilder
-            { DataSource = destination, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString());
-            await source.OpenAsync().ConfigureAwait(false); await target.OpenAsync().ConfigureAwait(false);
-            source.BackupDatabase(target);
+            // Opening several WAL readers at once can race SQLite recovery.
+            // Serialize only the short copy, never the independently owned cases.
+            await CopyGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await using var source = new SqliteConnection(new SqliteConnectionStringBuilder
+                { DataSource = sourcePath, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString());
+                await using var target = new SqliteConnection(new SqliteConnectionStringBuilder
+                { DataSource = destination, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString());
+                await source.OpenAsync().ConfigureAwait(false); await target.OpenAsync().ConfigureAwait(false);
+                source.BackupDatabase(target);
+            }
+            finally { CopyGate.Release(); }
         }
         catch
         {
