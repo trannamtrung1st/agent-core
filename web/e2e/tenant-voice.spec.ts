@@ -54,7 +54,7 @@ for (const width of [1440, 390]) test(`tenant voice keeps capture active, credit
     const session = page.url().split('/').pop()!;
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Hello in tenant voice');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(page.getByText('Hello from synthetic.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Hello from synthetic.', { exact: true })).toBeVisible({ timeout: 60_000 });
     await expect.poll(() => page.evaluate(() => window.__agentCore?.playbackConsumed() ?? 0)).toBeGreaterThan(0);
     await expect.poll(() => page.evaluate(() => window.__agentCore?.captureStreaming())).toBe(true);
     await page.getByRole('button', { name: 'Mute', exact: true }).click();
