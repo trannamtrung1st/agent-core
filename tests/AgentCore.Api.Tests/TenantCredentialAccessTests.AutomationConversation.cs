@@ -86,6 +86,7 @@ public sealed partial class TenantCredentialAccessTests
         var access = factory.Services.GetRequiredService<TenantAccessService>();
         // Existing execution needs no Agent Session-create authority.
         var profileBoundary = mode is "manual" or "scheduled";
+        await TenantSessionAccessTests.GrantNativePrivateSpaceRead(owner, tenant, instance);
         string[] permissions = ["automations.run", "agent-runs.create", "sessions.read", "agent-runs.read", "agents.chat", ..profileBoundary ? new[] { "memory.read" } : Array.Empty<string>()];
         var role = await access.SaveRoleAsync(human, tenant, null, "Existing conversation executor", permissions, await Revision(owner, tenant));
         var assignment = await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
@@ -96,7 +97,7 @@ public sealed partial class TenantCredentialAccessTests
                 expectedProfileRevision = profile.GetProperty("profile").GetProperty("revision").GetInt64(), values = new { preferredName = "PRIVATE_AUTOMATION_CREATOR_PROFILE" } })).StatusCode);
         }
         var explicitModel = mode is "conversation-model" or "conflicting-model";
-        var destination = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, mode = "text", offeringId = explicitModel ? "dca30000-0000-4000-8000-000000000002" : null, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+        var destination = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, mode = "text", modelPreference = explicitModel ? new { mode = "fixed", offeringId = "dca30000-0000-4000-8000-000000000002" } : null, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
         var sessions = factory.Services.GetRequiredService<ITenantSessionStore>(); var runs = factory.Services.GetRequiredService<ITenantRunStore>();
         var execution = factory.Services.GetRequiredService<ITenantRunExecution>();
         if (mode == "retirement")
@@ -134,7 +135,7 @@ public sealed partial class TenantCredentialAccessTests
         }
         var route = api + $"/agents/{instance}/automations";
         object Body(Guid target, Guid? report = null, long revision = 0) => new { enabled = true, name = "Use the exact conversation", instructions = "Return the bounded result in the selected conversation.", targetSessionId = target, reportToSessionId = report,
-            schedule = new { kind = "oneShot", timeZone = "UTC", atUtc = clock.GetUtcNow().AddMinutes(2).ToString("O") }, expectedRevision = Revision(owner, tenant).GetAwaiter().GetResult(), expectedInstanceRevision = 1, expectedAutomationRevision = revision, requiresTools = true, offeringId = mode == "conflicting-model" ? "dca30000-0000-4000-8000-000000000001" : null };
+            schedule = new { kind = "oneShot", timeZone = "UTC", atUtc = clock.GetUtcNow().AddMinutes(2).ToString("O") }, expectedRevision = Revision(owner, tenant).GetAwaiter().GetResult(), expectedInstanceRevision = 1, expectedAutomationRevision = revision, requiresTools = true, modelPreference = mode == "conflicting-model" ? new { mode = "fixed", offeringId = "dca30000-0000-4000-8000-000000000001" } : null };
         if (mode == "foreign")
         {
             var foreign = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();

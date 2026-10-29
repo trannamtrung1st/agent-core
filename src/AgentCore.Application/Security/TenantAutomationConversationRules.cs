@@ -43,6 +43,7 @@ public static partial class TenantAutomationConversationRules
 
     public static async ValueTask<ExecutionModelPin> ModelAsync(AutoModelRouter routing, Automation value, TenantSession target, AgentDefinition definition, IModelCatalog models, CancellationToken ct)
     {
+        RequireConsistentFixedModel(value, target);
         var preference = ExecutionModelPolicy.MergePreference(target.Snapshot.ModelPreference, value.ModelPreference);
         var selection = await routing.ResolveAsync(models, preference, definition.ModelDefaults, value.RequiresVision, true, "automation",
             RoutingTaskSignals.Project(value.Instructions, "automationExistingSession", requiresVision: value.RequiresVision), ct);
@@ -53,6 +54,7 @@ public static partial class TenantAutomationConversationRules
     public static void RequireSelectable(Automation value, TenantSession target, AgentDefinition definition, IModelCatalog models)
     {
         Require(value, target);
+        RequireConsistentFixedModel(value, target);
         var preference = ExecutionModelPolicy.MergePreference(
             ExecutionModelPolicy.MergePreference(definition.ModelDefaults, target.Snapshot.ModelPreference), value.ModelPreference);
         ExecutionModelPolicy.RequireSelectable(models, preference);
@@ -62,6 +64,16 @@ public static partial class TenantAutomationConversationRules
                 && (preference.Mode != "fixed" || m.OfferingId == preference.OfferingId)
                 && (!value.RequiresTools || m.Tools) && (!value.RequiresVision || m.Vision))))
             throw new AccessDeniedException("automation_model_unavailable");
+    }
+
+    private static void RequireConsistentFixedModel(Automation value, TenantSession target)
+    {
+        // An Automation cannot replace an explicitly fixed conversation route.
+        // Check saved intent before ranking as well as at authoring time.
+        if (value.ModelPreference is { Mode: "fixed", OfferingId: { } requested }
+            && target.Snapshot.ModelPreference is { Mode: "fixed", OfferingId: { } selected }
+            && requested != selected)
+            throw new AccessDeniedException("automation_conversation_model_conflict");
     }
 
     public static ExecutionModelPin Model(Automation value, TenantSession target, AgentDefinition definition, IModelCatalog models)
