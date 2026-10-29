@@ -122,7 +122,7 @@ public sealed partial class TenantCredentialAccessTests
             throw new Xunit.Sdk.XunitException($"{current.Status}; {current.Failure?.Code}; calls={model.Requests.Count}; logs={string.Join("\n", diagnostics.Failures.TakeLast(5))}");
         }
         if (choice.EndsWith("final-family", StringComparison.Ordinal) || choice.EndsWith("final-metadata", StringComparison.Ordinal)) {
-            Assert.Equal(AgentRunStatus.Failed, finished.Status); Assert.Equal("protected-output-unavailable", finished.Failure!.Code); Assert.Null(finished.Result);
+            Assert.Equal(AgentRunStatus.Failed, finished.Status); Assert.Equal("provider-authentication", finished.Failure!.Code); Assert.Null(finished.Result);
             Assert.DoesNotContain((await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(s.Tenant, session))!.Snapshot.Entries,
                 e => e.Role == ConversationRole.Assistant && e.Status == EntryStatus.Completed && e.Text.Contains("Exact connected account", StringComparison.Ordinal));
         }
@@ -165,7 +165,7 @@ public sealed partial class TenantCredentialAccessTests
             expectedRevision = await Revision(owner, s.Tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
         var finished = await AwaitCredentialRun(factory.Services.GetRequiredService<ITenantRunStore>(), s.Tenant, initial, false);
         Assert.Equal(revoke ? AgentRunStatus.Failed : AgentRunStatus.Completed, finished.Status);
-        if (revoke) { Assert.Equal("protected-output-unavailable", finished.Failure!.Code); Assert.Null(finished.Result); }
+        if (revoke) { Assert.Equal("provider-authentication", finished.Failure!.Code); Assert.Null(finished.Result); }
         var text = Assert.Single(model.Requests.Last().Messages, m => m.Role == ModelRole.Tool && m.Name == TenantCredentialDiscoveryContract.Tool(family)).Text;
         using var result = JsonDocument.Parse(text); var root = result.RootElement;
         Assert.True(root.GetProperty("hasMore").GetBoolean()); Assert.Equal("exact-account", root.GetProperty("nextCursor").GetString());

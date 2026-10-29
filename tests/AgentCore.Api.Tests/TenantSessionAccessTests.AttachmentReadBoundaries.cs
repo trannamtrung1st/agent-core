@@ -81,7 +81,7 @@ trailer<< /Root 1 0 R >>
             Assert.Equal(AgentRunStatus.Completed, (await AttachmentTerminal(runs, v.Tenant, admitted.RunId)).Status);
             var target = v.Session;
             if (boundary == "other-session") target = (await Json(await owner.PostAsJsonAsync($"/api/v2/tenants/{v.Tenant}/sessions", new {
-                agentInstanceId = value.Instance, expectedRevision = await Revision(owner, v.Tenant), expectedInstanceRevision = 1, offeringId = "dca30000-0000-4000-8000-000000000003" }))).GetProperty("sessionId").GetGuid();
+                agentInstanceId = value.Instance, expectedRevision = await Revision(owner, v.Tenant), expectedInstanceRevision = 1, modelPreference = new { mode = "fixed", offeringId = "dca30000-0000-4000-8000-000000000003" } }))).GetProperty("sessionId").GetGuid();
             if (boundary == "other-session")
             {
                 using var body = new MultipartFormDataContent();

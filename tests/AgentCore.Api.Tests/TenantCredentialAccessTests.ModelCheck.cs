@@ -95,6 +95,7 @@ public sealed partial class TenantCredentialAccessTests
             expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2, overrides = new { mode = new { value = "Disabled" } } })).StatusCode);
         var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
         var access = factory.Services.GetRequiredService<TenantAccessService>();
+        await TenantSessionAccessTests.GrantNativePrivateSpaceRead(owner, tenant, instance);
         var role = await access.SaveRoleAsync(principal, tenant, null, "Model credential", use ? ["credentials.read", "credentials.use"] : ["credentials.read"], await Revision(owner, tenant));
         await access.AssignRoleAsync(principal, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForResource(tenant, "credential", credential.ToString("D")), await Revision(owner, tenant));
         var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision })))

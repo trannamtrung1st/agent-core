@@ -45,6 +45,24 @@
     "systemOnly": false
   },
   {
+    "permission": "agent-messages.read",
+    "resourceType": "agent-thread",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "agent-messages.send",
+    "resourceType": "agent-thread",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
     "permission": "agent-runs.cancel",
     "resourceType": "agent-run",
     "approvalClass": "Mutation",
@@ -387,6 +405,96 @@
     "systemOnly": false
   },
   {
+    "permission": "environments.activate",
+    "resourceType": "space",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "environments.manage",
+    "resourceType": "space",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "environments.read",
+    "resourceType": "space",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "evaluations.manage",
+    "resourceType": "evaluation-suite",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "evaluations.read",
+    "resourceType": "evaluation-suite",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "evaluations.review",
+    "resourceType": "evaluation-suite",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "evaluations.run",
+    "resourceType": "evaluation-suite",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "goals.accept",
+    "resourceType": "session",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "goals.manage",
+    "resourceType": "session",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "goals.read",
+    "resourceType": "session",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
     "permission": "http.request",
     "resourceType": "agent",
     "approvalClass": "Sensitive",
@@ -477,6 +585,51 @@
     "systemOnly": false
   },
   {
+    "permission": "model-connections.manage",
+    "resourceType": "model-connection",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "model-connections.read",
+    "resourceType": "model-connection",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "model-connections.test",
+    "resourceType": "model-connection",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "models.manage",
+    "resourceType": "model-offering",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "models.read",
+    "resourceType": "model-offering",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
     "permission": "resources.delete",
     "resourceType": "resource",
     "approvalClass": "Sensitive",
@@ -528,6 +681,60 @@
     "minimum": "None",
     "humanOnly": false,
     "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "scripts.execute",
+    "resourceType": "script",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "scripts.manage",
+    "resourceType": "script",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "scripts.read",
+    "resourceType": "script",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "secrets.manage",
+    "resourceType": "secret",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "secrets.read",
+    "resourceType": "secret",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "secrets.use",
+    "resourceType": "secret",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
     "systemOnly": false
   },
   {
@@ -594,6 +801,60 @@
     "systemOnly": false
   },
   {
+    "permission": "space-memberships.manage",
+    "resourceType": "space",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "space-memberships.read",
+    "resourceType": "space",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "spaces.create",
+    "resourceType": "space",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "spaces.delete",
+    "resourceType": "space",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "spaces.manage",
+    "resourceType": "space",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "spaces.read",
+    "resourceType": "space",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
     "permission": "system.accounts.manage",
     "resourceType": "account",
     "approvalClass": "Mutation",
@@ -607,6 +868,24 @@
     "resourceType": "system",
     "approvalClass": "Mutation",
     "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": true
+  },
+  {
+    "permission": "system.model-presets.manage",
+    "resourceType": "model-preset",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": true
+  },
+  {
+    "permission": "system.model-presets.read",
+    "resourceType": "model-preset",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
     "humanOnly": true,
     "delegatable": false,
     "systemOnly": true
@@ -639,6 +918,33 @@
     "systemOnly": true
   },
   {
+    "permission": "tasks.cancel",
+    "resourceType": "task",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "tasks.delegate",
+    "resourceType": "task",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "tasks.read",
+    "resourceType": "task",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
     "permission": "tenant.governance.manage",
     "resourceType": "tenant",
     "approvalClass": "Mutation",
@@ -650,6 +956,33 @@
   {
     "permission": "tenant.governance.read",
     "resourceType": "tenant",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "variables.manage",
+    "resourceType": "space",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "variables.read",
+    "resourceType": "space",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "variables.resolve",
+    "resourceType": "space",
     "approvalClass": "ReadOnly",
     "minimum": "None",
     "humanOnly": false,
@@ -672,6 +1005,78 @@
     "minimum": "None",
     "humanOnly": false,
     "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "workflows.cancel",
+    "resourceType": "workflow",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "workflows.create",
+    "resourceType": "workflow",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "workflows.decide",
+    "resourceType": "workflow",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "workflows.monitor",
+    "resourceType": "workflow",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "workflows.publish",
+    "resourceType": "workflow",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "workflows.read",
+    "resourceType": "workflow",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "workflows.start",
+    "resourceType": "workflow",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "workflows.update",
+    "resourceType": "workflow",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
     "systemOnly": false
   },
   {

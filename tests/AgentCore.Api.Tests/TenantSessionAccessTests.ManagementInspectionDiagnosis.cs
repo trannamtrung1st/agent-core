@@ -51,6 +51,7 @@ public sealed partial class TenantSessionAccessTests
                 var view=(await Json(await owner.GetAsync(api+$"/agents/{instance}/settings"))).GetProperty("items").EnumerateArray().Single(s=>s.GetProperty("section").GetString()=="capabilities");
                 var selected=view.GetProperty("effective").GetProperty("selected").EnumerateArray().Select(v=>v.GetString()!).Where(v=>v!=ToolCatalog.WebFetch).ToArray();
                 Assert.Equal(HttpStatusCode.OK,(await owner.PatchAsJsonAsync(api+$"/agents/{instance}/settings/capabilities",new { expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=6,set=new { selected },clear=Array.Empty<string>() })).StatusCode);revision++;
+                await GrantNativePrivateSpaceRead(owner,tenant,instance);
                 model.ArgumentsOverride=JsonSerializer.Serialize(new { target=ToolCatalog.WebFetch });
             }
             if(scenario=="definition_limit")
@@ -68,6 +69,7 @@ public sealed partial class TenantSessionAccessTests
                     overrides=new { mode=new { value="Managed" },scopes=new { value=new[] { "Settings" } } } })).StatusCode);revision=2;
                 var state=(await host.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!;var targetAgent=(await host.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant,instance))!;
                 await host.Services.GetRequiredService<TenantAccessService>().AssignRoleAsync(state.Users.Single().PrincipalId,tenant,targetAgent.PrincipalId,state.Roles.Single(r=>r.Name=="Exact management reader").RoleId,AccessScope.ForResource(tenant,"agent",instance.ToString("D")),state.Tenant.Revision);
+                await GrantNativePrivateSpaceRead(owner,tenant,instance);
                 model.ArgumentsOverride=JsonSerializer.Serialize(new { target=ToolCatalog.WebFetch });
             }
             var session=(await Json(await owner.PostAsJsonAsync(api+"/sessions",new { retentionKind="saved", agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=revision }))).GetProperty("sessionId").GetGuid();

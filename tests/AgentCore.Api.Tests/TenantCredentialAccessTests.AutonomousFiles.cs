@@ -138,6 +138,7 @@ public sealed partial class TenantCredentialAccessTests
         Assert.True(saved.TryGetProperty("revision", out _), saved.GetRawText());
         await Json(await owner.PostAsJsonAsync(api + $"/definition-drafts/{draftId}/publish", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = saved.GetProperty("revision").GetInt64() }));
         var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = draft.GetProperty("definitionId").GetString(), version = 1, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
+        await TenantSessionAccessTests.GrantNativePrivateSpaceRead(owner, tenant, instance);
         var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
         var access = factory.Services.GetRequiredService<TenantAccessService>();
         var permissions = new List<string> { "automations.run", "sessions.create", "agent-runs.create", "agents.read", "sessions.read", "artifacts.read" };
@@ -231,7 +232,7 @@ public sealed partial class TenantCredentialAccessTests
             var artifact = Assert.Single(artifacts.Items); Assert.Equal(final.AgentRunId, artifact.AgentRunId);
             var bytes = await owner.GetByteArrayAsync(api + $"/sessions/{initial.SessionId}/artifacts/{artifact.ArtifactId}/content");
             var path = "/home/independent." + (kind == "text" ? "txt" : kind);
-            Assert.Equal(await owner.GetByteArrayAsync(api + $"/agents/{instance}/workspace/content?path={Uri.EscapeDataString(path)}"), bytes);
+            Assert.Equal(await owner.GetByteArrayAsync(await TenantSessionAccessTests.PrivateWorkspacePath(owner, tenant, instance) + $"/content?path={Uri.EscapeDataString(path)}"), bytes);
             if (kind == "text") Assert.Equal(AutonomousFileBody, Encoding.UTF8.GetString(bytes));
             Assert.Contains(model.Requests.SelectMany(r => r.Messages), m => m.Role == ModelRole.Tool && m.Text.Contains("Independent task bytes", StringComparison.Ordinal));
         }

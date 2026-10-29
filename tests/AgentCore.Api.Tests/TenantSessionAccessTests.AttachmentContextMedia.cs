@@ -26,8 +26,9 @@ public sealed partial class TenantSessionAccessTests
             var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
+            await GrantNativePrivateSpaceRead(owner, tenant, instance);
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
-                offeringId = format == "png" ? "dca30000-0000-4000-8000-000000000003" : null }))).GetProperty("sessionId").GetGuid();
+                modelPreference = format == "png" ? new { mode = "fixed", offeringId = "dca30000-0000-4000-8000-000000000003" } : null }))).GetProperty("sessionId").GetGuid();
             var office = factory.Services.GetRequiredService<IOfficeProcessor>(); byte[] bytes; string name, type;
             if (format == "docx") { bytes = office.CreateDocument(new("Private Office input", [new(null, ["Private Office input"], null)]), default).Bytes; name = "source.docx"; type = OfficeLimits.DocumentMime; }
             else if (format == "xlsx") { bytes = office.CreateWorkbook(new([new("Data", [[new("number", Number: 0), new("text", Text: "Private Office input")]])]), default).Bytes; name = "source.xlsx"; type = OfficeLimits.SpreadsheetMime; }
@@ -40,8 +41,23 @@ public sealed partial class TenantSessionAccessTests
             var state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!; var human = state.Users.Single(); var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human.PrincipalId, tenant, null, "Agent media reads", ["sessions.read", "attachments.read"], state.Tenant.Revision);
             await access.AssignRoleAsync(human.PrincipalId, tenant, agent.GetProperty("principalId").GetGuid(), role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
-            var receipt = await factory.Services.GetRequiredService<TenantRunService>().SubmitMessageAsync(tenant, session,
-                new(human.AccountId, login.Session.SessionId, human.PrincipalId), Guid.NewGuid(), "Inspect the provided file", [id], await Revision(owner, tenant), 1);
+            var service = factory.Services.GetRequiredService<TenantRunService>();
+            var admissionRevision = await Revision(owner, tenant); var messageId = Guid.NewGuid();
+            Task<TenantRunReceipt> Submit() => service.SubmitMessageAsync(tenant, session,
+                new(human.AccountId, login.Session.SessionId, human.PrincipalId), messageId, "Inspect the provided file", [id], admissionRevision, 1).AsTask();
+            if (format == "png-no-vision")
+            {
+                var refusal = await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(Submit);
+                Assert.Equal("ModelCapabilityUnsupported", refusal.Code);
+                Assert.Empty(model.Requests);
+                Assert.Empty(await factory.Services.GetRequiredService<ITenantRunStore>().ListTenantRunIdsAsync(tenant, session));
+                var pending = (await factory.Services.GetRequiredService<ITenantAttachmentStore>().FindTenantAsync(tenant, session, id))!;
+                Assert.Equal(AttachmentState.Pending, pending.State);
+                Assert.Equal(bytes, await owner.GetByteArrayAsync(path + $"/{id}/content"));
+                Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
+                return;
+            }
+            var receipt = await Submit();
             AgentRun? run = null; using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
             while (!timeout.IsCancellationRequested) { run = await factory.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, receipt.RunId, timeout.Token); if (run?.IsTerminal == true) break; await Task.Delay(50, timeout.Token); }
             Assert.NotNull(run); Assert.True(run.Status == AgentRunStatus.Completed, $"{run.Status}: {run.Failure?.Code}: {run.Failure?.Summary}"); Assert.NotEmpty(model.Requests);
@@ -49,7 +65,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Contains(name, prompt);
             var images = model.Requests.SelectMany(r => r.Messages).SelectMany(m => m.Parts ?? []).OfType<ModelImageContent>().ToArray();
             if (format == "png") { var image = Assert.Single(images); Assert.Equal("image/png", image.ContentType); using var bitmap = SKBitmap.Decode(image.Bytes.ToArray()); Assert.Equal(2, bitmap.Width); Assert.Equal(2, bitmap.Height); }
-            else { Assert.Empty(images); if (format is "docx" or "xlsx") Assert.Contains("Private Office input", prompt); else if (format == "pdf") Assert.Contains("Private PDF input", prompt); else if (format == "png-no-vision") Assert.Contains("cannot inspect image content", prompt); else Assert.Contains("no automatic content reader", prompt); }
+            else { Assert.Empty(images); if (format is "docx" or "xlsx") Assert.Contains("Private Office input", prompt); else if (format == "pdf") Assert.Contains("Private PDF input", prompt); else Assert.Contains("no automatic content reader", prompt); }
             Assert.Equal(bytes, await owner.GetByteArrayAsync(path + $"/{id}/content")); Assert.False(Directory.Exists(AgentWorkspacePhysicalPaths.AgentRoot(Path.Combine(root, "workspaces"), instance)));
             Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
         }

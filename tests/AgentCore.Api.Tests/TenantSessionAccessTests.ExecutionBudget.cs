@@ -98,7 +98,7 @@ public sealed partial class TenantSessionAccessTests
                 if (mode == "capacity") Assert.InRange(writes.Length, 20, 49);
             }
             else Assert.Null(reason);
-            var workspace = api + $"/agents/{instance}/workspace/content?path=";
+            var workspace = await PrivateWorkspacePath(owner, tenant, instance) + "/content?path=";
             for (var index = 0; index < writes.Length; index++)
                 Assert.Equal(model.Content(index), Encoding.UTF8.GetString(await owner.GetByteArrayAsync(workspace + Uri.EscapeDataString("/home/part-" + index + ".txt"))));
             Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(workspace + Uri.EscapeDataString("/home/part-" + writes.Length + ".txt"))).StatusCode);

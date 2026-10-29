@@ -101,7 +101,7 @@ public sealed partial class TenantSessionAccessTests
             {
                 var reads = await access.SaveRoleAsync(human, tenant, null, "Independent wait source reader", ["agents.read", "sessions.read", "workspaces.read"], await Revision(owner, tenant));
                 sourceRead = await access.AssignRoleAsync(human, tenant, parent.Owner.ExecutorPrincipalId, reads.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
-                Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(api + $"/agents/{parent.Owner.AgentInstanceId}/workspace/content?path=%2Fhome%2Fwait-source.txt&expectedRevision={await Revision(owner, tenant)}",
+                Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(await PrivateWorkspacePath(owner, tenant, parent.Owner.AgentInstanceId) + $"/content?path=%2Fhome%2Fwait-source.txt&expectedRevision={await Revision(owner, tenant)}",
                     new ByteArrayContent("Immutable independent pre-wait evidence"u8.ToArray()))).StatusCode);
                 Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/workspaces.read", new { mode = "always", independentReview = false,
                     expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);

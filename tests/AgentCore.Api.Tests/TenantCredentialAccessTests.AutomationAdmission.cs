@@ -40,6 +40,7 @@ public sealed partial class TenantCredentialAccessTests
         var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
         var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
         var access = factory.Services.GetRequiredService<TenantAccessService>();
+        await GrantAutomationPrivateContext(factory, owner, tenant, human, agent);
         var missing = mode switch { "grant-run" => "agent-runs.create", "grant-session" => "sessions.create", "grant-automation" => "automations.run", _ => "" };
         var permissions = new[] { "automations.run", "sessions.create", "agent-runs.create" }.Where(p => p != missing && (mode != "two-missing" || p == "automations.run")).ToArray();
         var role = await access.SaveRoleAsync(human, tenant, null, "Admission executor", permissions, await Revision(owner, tenant));

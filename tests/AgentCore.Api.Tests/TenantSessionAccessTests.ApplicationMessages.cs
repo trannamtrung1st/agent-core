@@ -125,16 +125,18 @@ public sealed partial class TenantSessionAccessTests
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
+            await GrantNativePrivateSpaceRead(owner, tenant, instance);
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
-            var workspace = api + $"/agents/{instance}/workspace/content?path=%2Fhome%2Fprogress.txt&expectedRevision=";
+            var workspace = await PrivateWorkspacePath(owner, tenant, instance) + "/content?path=%2Fhome%2Fprogress.txt&expectedRevision=";
             Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(workspace + await Revision(owner, tenant), new ByteArrayContent(Encoding.UTF8.GetBytes(ProgressSource)))).StatusCode);
             var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, tenant, null, "Progress source read", ["agents.read", "sessions.read", "workspaces.read"], await Revision(owner, tenant));
             var assignment = await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
-            var text = mode == "source-changed" ? "Read @homeFile:" + instance.ToString("D") + "/home/progress.txt" : "Read the file, report progress, then finish";
-            object[]? parts = mode == "source-changed" ? [new { kind = "text", text = "Read " }, new { kind = "reference", reference = new { kind = "homeFile", agentInstanceId = instance, path = "/home/progress.txt" } }] : null;
+            var spaceId = await NativePrivateSpaceId(owner, tenant, instance);
+            var text = mode == "source-changed" ? "Read @homeFile:" + spaceId.ToString("D") + "/home/progress.txt" : "Read the file, report progress, then finish";
+            object[]? parts = mode == "source-changed" ? [new { kind = "text", text = "Read " }, new { kind = "reference", reference = new { kind = "homeFile", spaceId, path = "/home/progress.txt" } }] : null;
             var sent = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text, parts, expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
-            Assert.Equal(HttpStatusCode.Accepted, sent.StatusCode); var id = (await Json(sent)).GetProperty("runId").GetGuid();
+            Assert.True(sent.StatusCode == HttpStatusCode.Accepted, await sent.Content.ReadAsStringAsync()); var id = (await Json(sent)).GetProperty("runId").GetGuid();
             await model.Entered.Task.WaitAsync(TimeSpan.FromSeconds(25));
             var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var running = (await runs.FindTenantRunAsync(tenant, id))!;
             try

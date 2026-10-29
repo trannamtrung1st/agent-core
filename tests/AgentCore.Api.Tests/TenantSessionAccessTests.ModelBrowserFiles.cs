@@ -38,7 +38,7 @@ public sealed partial class TenantSessionAccessTests
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
             await GrantNativePrivateSpaceRead(owner, tenant, instance); var executor = agent.GetProperty("principalId").GetGuid();
-            var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1, offeringId = "dca30000-0000-4000-8000-000000000003" }));
+            var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1, modelPreference = new { mode = "fixed", offeringId = "dca30000-0000-4000-8000-000000000003" } }));
             var sessionId = session.GetProperty("sessionId").GetGuid(); var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, tenant, null, "Transfer browser", ["browser.read", "browser.use"], await Revision(owner, tenant));
             await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForResource(tenant, "agent", instance.ToString("D")), await Revision(owner, tenant));

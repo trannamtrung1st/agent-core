@@ -57,8 +57,9 @@ public sealed partial class TenantSessionAccessTests
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
+            await GrantNativePrivateSpaceRead(owner, tenant, instance);
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
-            var workspace = api + (working ? $"/sessions/{session}/workspace" : $"/agents/{instance}/workspace");
+            var workspace = working ? api + $"/sessions/{session}/workspace" : await PrivateWorkspacePath(owner, tenant, instance);
             const string body = "Private Office content thử nghiệm";
             var processor = factory.Services.GetRequiredService<IOfficeProcessor>();
             var bytes = working ? processor.CreateWorkbook(new([new("試験", [[new("text", Text: body), new("number", Number: 7)]]), new("Second", [[new("text", Text: "Second sheet private content")]])]), default).Bytes

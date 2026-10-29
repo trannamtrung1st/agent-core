@@ -38,7 +38,7 @@ public sealed partial class TenantSessionAccessTests
             if (factory is ApprovalExecutionFactory memory) Volatile.Write(ref memory.Enabled, true);
             var run = await AwaitManagementRun(host.Services.GetRequiredService<ITenantRunStore>(), tenant, id);
             Assert.True(run.Status == AgentRunStatus.Completed, $"{run.Status}: {run.Failure?.Code}: {run.Failure?.Summary}");
-            var pin = Assert.Single(run.PinnedSkillCatalog, s => s.Key == key); Assert.Equal("32", pin.SourceRevision);
+            var pin = Assert.Single(run.PinnedSkillCatalog, s => s.Key == key); Assert.Equal("1", pin.SourceRevision);
             Assert.Contains(key, run.ActiveSkillKeys); Assert.Equal(1, run.SkillLoadCount);
             Assert.DoesNotContain(pin.Procedure, model.Requests.First().Context!.Text(ContextSectionId.Skills));
             Assert.Contains(pin.Procedure, model.Requests.Last().Context!.Text(ContextSectionId.Skills));

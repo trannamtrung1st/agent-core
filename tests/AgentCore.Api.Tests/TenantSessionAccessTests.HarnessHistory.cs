@@ -62,7 +62,7 @@ public sealed partial class TenantSessionAccessTests
             var historyBytes = JsonSerializer.Serialize(original.HarnessManagement!.Preparation);
             Assert.Contains(sentinel, historyBytes);
             var publicRoutes = new[] { "/agents", $"/agents/{instance}", $"/agents/{instance}/editor", $"/agents/{instance}/configuration-controls",
-                $"/agents/{instance}/settings", $"/agents/{instance}/self-management", $"/agents/{instance}/versions", $"/agents/{instance}/active-version/preview?version=32",
+                $"/agents/{instance}/settings", $"/agents/{instance}/self-management", $"/agents/{instance}/versions", $"/agents/{instance}/active-version/preview?version=1",
                 $"/agents/{instance}/state-isolation", $"/agents/{instance}/execution-budgets", $"/agents/{instance}/skills/editor", $"/agents/{instance}/resources/editor" };
             foreach (var route in publicRoutes)
             {
@@ -75,7 +75,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync(api + $"/approvals/{historicalApproval}/decision", new { decision = "approve", actionHash = new string('a', 64), expectedRevision = await Revision(owner, tenant), expectedRequestRevision = 1 })).StatusCode);
             model.Arguments = tool == "management.policy.update"
                 ? JsonSerializer.Serialize(new { expectedInstanceRevision = original.Revision, mode = "Assisted", scopes = new[] { "Instructions", "ManagementPolicy" }, managedAutoApply = Array.Empty<string>() })
-                : JsonSerializer.Serialize(new { expectedVersion = 32, expectedInstanceRevision = original.Revision, policyRevision = original.HarnessManagement.PolicyRevision,
+                : JsonSerializer.Serialize(new { expectedVersion = 1, expectedInstanceRevision = original.Revision, policyRevision = original.HarnessManagement.PolicyRevision,
                     content = "CURRENT-EXACT-HARNESS-INSTRUCTIONS", expected = "Next Run uses the current reviewed instruction.", observed = "Prepared the current draft, not historical consent." });
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = original.Revision }))).GetProperty("sessionId").GetGuid();
             var sent = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Review the current exact Harness instruction update.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });

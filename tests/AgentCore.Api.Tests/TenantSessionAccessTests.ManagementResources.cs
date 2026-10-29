@@ -56,7 +56,7 @@ public sealed partial class TenantSessionAccessTests
             await using var host = factory.WithWebHostBuilder(b => { b.ConfigureLogging(l => l.SetMinimumLevel(LogLevel.Warning)); b.ConfigureTestServices(s => s.Replace(ServiceDescriptor.Singleton<ILanguageModel>(model))); });
             using var owner = host.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
             var logs = new ManagementMutationLogs(); host.Services.GetRequiredService<ILoggerFactory>().AddProvider(logs);
-            var (tenant, instance) = await SetupManagementRead(host, owner, false); var api = $"/api/v2/tenants/{tenant}"; var path = api + $"/agents/{instance}";
+            var (tenant, instance) = await SetupManagementRead(host, owner, false, inheritedResource: operation.StartsWith("inherited_", StringComparison.Ordinal) || operation == "copy"); var api = $"/api/v2/tenants/{tenant}"; var path = api + $"/agents/{instance}";
             Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(path + "/self-management", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2,
                 overrides = new { mode = new { value = "Managed" }, scopes = new { value = new[] { "Resources", "Settings" } }, autoApply = new { value = scenario.StartsWith("auto", StringComparison.Ordinal) ? new[] { "TextResources" } : Array.Empty<string>() } } })).StatusCode);
             var uploaded = await Json(await owner.PostAsJsonAsync(path + "/resources", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3,

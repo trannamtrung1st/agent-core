@@ -80,7 +80,7 @@ public sealed partial class TenantSessionAccessTests
                     Assert.Equal(HttpStatusCode.OK, skill.StatusCode); instanceRevision++;
                 }
                 session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
-                Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(api + $"/agents/{instance}/workspace/content?path=%2Fhome%2Fbilling.txt&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent("Exact saved billing total: 91."u8.ToArray()))).StatusCode);
+                Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(await PrivateWorkspacePath(owner, tenant, instance) + $"/content?path=%2Fhome%2Fbilling.txt&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent("Exact saved billing total: 91."u8.ToArray()))).StatusCode);
                 var access = first.Services.GetRequiredService<TenantAccessService>();
                 var role = await access.SaveRoleAsync(human, tenant, null, "Exact source and missed Skill", ["agents.read", "sessions.read", "workspaces.read", "skills.read"], await Revision(owner, tenant));
                 await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));

@@ -54,6 +54,7 @@ public sealed partial class TenantCredentialAccessTests
         var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = draft.GetProperty("definitionId").GetString(), version = 1, expectedRevision = await Revision(owner, tenant) }))).GetProperty("instance").GetProperty("instanceId").GetGuid();
         var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
         var access = factory.Services.GetRequiredService<TenantAccessService>();
+        await TenantSessionAccessTests.GrantNativePrivateSpaceRead(owner, tenant, instance);
         var role = await access.SaveRoleAsync(human, tenant, null, "Completion recovery executor",
             ["automations.run", "sessions.create", "agent-runs.create", "agents.read", "agents.chat", "sessions.read", "agent-runs.read", "workspaces.read", "workspaces.write", "artifacts.read", "artifacts.create"], await Revision(owner, tenant));
         await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
@@ -138,7 +139,7 @@ public sealed partial class TenantCredentialAccessTests
             var artifact = Assert.Single(artifacts.Items);
             var api = $"/api/v2/tenants/{setup.Tenant}";
             Assert.Equal("verified fixture", System.Text.Encoding.UTF8.GetString(await owner.GetByteArrayAsync(api + $"/sessions/{retained.SessionId}/artifacts/{artifact.ArtifactId}/content")));
-            Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(api + $"/agents/{setup.Instance}/workspace/content?path=%2Fhome%2Freplay.txt")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(await TenantSessionAccessTests.PrivateWorkspacePath(owner, setup.Tenant, setup.Instance) + "/content?path=%2Fhome%2Freplay.txt")).StatusCode);
             var code = mode switch { "prose" => "completion-required", "semantic" => "semantic-response-invalid", "incomplete-tool" => "tool-call-invalid", "authentication" => "provider-authentication", _ when mode.EndsWith("twice", StringComparison.Ordinal) => "completion-invalid", _ => null };
             if (code is not null) Assert.Equal(code, retained.Failure!.Code);
             var diagnostics = RunDiagnosticProjection.From(retained)!;

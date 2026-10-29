@@ -70,7 +70,7 @@ public sealed partial class TenantSessionAccessTests
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
             await GrantNativePrivateSpaceRead(owner, tenant, instance); var executor = agent.GetProperty("principalId").GetGuid();
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
-                offeringId = vision ? "dca30000-0000-4000-8000-000000000003" : null }))).GetProperty("sessionId").GetGuid();
+                modelPreference = vision ? new { mode = "fixed", offeringId = "dca30000-0000-4000-8000-000000000003" } : null }))).GetProperty("sessionId").GetGuid();
             var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, tenant, null, "Current native journey authority", ["agents.read", "sessions.read", "browser.read", "browser.use", "artifacts.create", "artifacts.read"], await Revision(owner, tenant));
             await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));

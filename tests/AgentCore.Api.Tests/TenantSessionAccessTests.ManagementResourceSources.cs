@@ -124,7 +124,7 @@ public sealed partial class TenantSessionAccessTests
             }
             else
             {
-                var workspace = api + (source == "home" ? $"/agents/{instance}/workspace" : $"/sessions/{session}/workspace");
+                var workspace = source == "home" ? await PrivateWorkspacePath(owner, tenant, instance) : api + $"/sessions/{session}/workspace";
                 Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(workspace + $"/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent(bytes))).StatusCode);
                 model.SourceArguments = JsonSerializer.Serialize(new { path });
             }

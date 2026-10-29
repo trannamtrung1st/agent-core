@@ -247,7 +247,7 @@ public sealed partial class TenantSessionAccessTests
                 if (operation == "delete") Assert.DoesNotContain(source.Skills.InstanceSkills, s => s.SkillId == "authored-source");
                 if (operation == "customize")
                 {
-                    Assert.Contains(source.Skills.InstanceSkills, s => s.SourceDefinitionSkillId == "browser.record.lookup" && s.SourceDefinitionId == "general-assistant" && s.SourceDefinitionVersion == 32);
+                    Assert.Contains(source.Skills.InstanceSkills, s => s.SourceDefinitionSkillId == "browser.record.lookup" && s.SourceDefinitionId == source.Agent.Instance.DefinitionId && s.SourceDefinitionVersion == 1);
                     Assert.False(source.Skills.DefinitionStates.Single(s => s.DefinitionSkillId == "browser.record.lookup").EnabledOverride);
                 }
             }

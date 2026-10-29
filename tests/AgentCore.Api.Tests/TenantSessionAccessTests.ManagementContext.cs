@@ -95,7 +95,7 @@ public sealed partial class TenantSessionAccessTests
                 {
                     var run = (await runs.FindTenantRunAsync(tenant, await runIdentity.Task.WaitAsync(ct), ct))!;
                     var context = await host.Services.GetRequiredService<TenantRunExecutionAuthority>().CurrentHarnessContextAsync(run, ct);
-                    Assert.NotNull(context); Assert.Equal(2, context.PolicyRevision); Assert.Equal(32, context.ActiveVersion);
+                    Assert.NotNull(context); Assert.Equal(2, context.PolicyRevision); Assert.Equal(36, context.ActiveVersion);
                     Assert.True(context.Policy.Allows(HarnessManagementScope.KnowledgeResources));
                 }
                 if (transition == "freeze_before_load" ? step != 1 : step != 2) return;

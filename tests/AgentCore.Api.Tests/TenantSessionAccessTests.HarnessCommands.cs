@@ -28,7 +28,7 @@ public sealed partial class TenantSessionAccessTests
         var access = host.Services.GetRequiredService<TenantAccessService>(); var agent = (await host.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
         var role = await access.SaveRoleAsync(human, tenant, null, "Harness instruction author", ["agents.read", "agents.update"], await Revision(owner, tenant));
         await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
-        model.Arguments = JsonSerializer.Serialize(new { expectedVersion = 32, expectedInstanceRevision = 3, policyRevision = agent.Instance.HarnessManagement!.PolicyRevision,
+        model.Arguments = JsonSerializer.Serialize(new { expectedVersion = 1, expectedInstanceRevision = 3, policyRevision = agent.Instance.HarnessManagement!.PolicyRevision,
             content = "Retained exact Harness instructions.", expected = "The next Run uses these instructions.", observed = "Prepared a literal instruction draft; no production task executed." });
         var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 }))).GetProperty("sessionId").GetGuid();
         var sent = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Update your complete Harness instructions after exact review.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });

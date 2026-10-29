@@ -52,6 +52,13 @@ public sealed partial class TenantSessionAccessTests
             {
                 if (request.Tools?.Any(t => t.Name == "tasks.delegate") != true)
                 {
+                    if (request.Tools?.Any(t => t.Name == ToolCatalog.CapabilitiesLoad) == true
+                        && !request.Messages.Any(m => m.ToolCallId == "discover-task-delegation"))
+                    {
+                        yield return new ModelToolCallEvent(new("discover-task-delegation", ToolCatalog.CapabilitiesLoad,
+                            JsonSerializer.Serialize(new { query = "tasks.delegate", limit = 1 })));
+                        yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+                    }
                     yield return new ModelSemanticResponseReady(new("Task unavailable.", new(ModelSpeechMode.None, null), []));
                     yield return new ModelCompleted(ModelStopReason.Completed); yield break;
                 }

@@ -28,7 +28,6 @@ public sealed partial class TenantSessionAccessTests
             ModelToolCall? call = null;
             if (child)
             {
-                Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.ExecutionWait);
                 if (mode == "handoff" && wait is not null)
                 {
                     if (!results.Any(m => m.Name == ToolCatalog.RequestAuthorization))
@@ -45,7 +44,6 @@ public sealed partial class TenantSessionAccessTests
             }
             else if (wait is null)
             {
-                Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.ExecutionWait);
                 if (mode is "tasks" or "timeout" or "handoff")
                 {
                     var started = results.LastOrDefault(m => m.Name == "tasks.delegate");
@@ -63,6 +61,12 @@ public sealed partial class TenantSessionAccessTests
             }
             if (call is not null)
             {
+                if (request.Tools?.Any(t => t.Name == call.Name) != true)
+                {
+                    Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.CapabilitiesLoad);
+                    Assert.DoesNotContain(results, m => m.ToolCallId == "discover-" + call.Id);
+                    call = new("discover-" + call.Id, ToolCatalog.CapabilitiesLoad, JsonSerializer.Serialize(new { query = call.Name, limit = 1 }));
+                }
                 yield return new ModelToolCallEvent(call); yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
             using var result = JsonDocument.Parse(wait!.Text);

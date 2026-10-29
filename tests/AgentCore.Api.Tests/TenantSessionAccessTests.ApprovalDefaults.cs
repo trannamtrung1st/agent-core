@@ -65,7 +65,7 @@ public sealed partial class TenantSessionAccessTests
             // This audits defaults, not the owning-resource/effect matrix.
             using var inventory = JsonDocument.Parse(typeof(TenantSessionAccessTests).Assembly.GetManifestResourceStream("AgentCore.Api.Tests.Fixtures.tenant-permission-policy-inventory.json")!);
             var entries = inventory.RootElement.EnumerateArray().ToArray();
-            Assert.Equal(78, entries.Length); Assert.Equal(PermissionCatalog.All.Select(p => p.Key).Order(StringComparer.Ordinal), entries.Select(p => p.GetProperty("permission").GetString()));
+            Assert.Equal(123, entries.Length); Assert.Equal(PermissionCatalog.All.Select(p => p.Key).Order(StringComparer.Ordinal), entries.Select(p => p.GetProperty("permission").GetString()));
             foreach (var entry in entries)
             {
                 var key = entry.GetProperty("permission").GetString()!; var metadata = PermissionCatalog.Get(key);

@@ -30,7 +30,7 @@ public sealed partial class TenantSessionAccessTests
         var skill = await Json(await owner.PostAsJsonAsync(path + "/skills/commands", new { operation = "create", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3,
             input = new { id = "metadata-private", name = "Review <script>literal Skill</script>", description = "Scoped private metadata", procedure = "PRIVATE-INSPECTION-PROCEDURE-SENTINEL", projection = "OnDemand", enabled = true, requiredCapabilities = new[] { "chat.respond" } } }));
         var resource = await Json(await owner.PostAsJsonAsync(path + "/resources", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 4,
-            input = new { logicalPath = "private/metadata.txt", kind = 2, mediaType = "text/plain", content = System.Text.Encoding.UTF8.GetBytes("PRIVATE-INSPECTION-RESOURCE-BYTES-SENTINEL") } }));
+            input = new { logicalPath = "private/metadata.txt", kind = 1, mediaType = "text/plain", content = System.Text.Encoding.UTF8.GetBytes("PRIVATE-INSPECTION-RESOURCE-BYTES-SENTINEL") } }));
         var credential = await Json(await owner.PostAsJsonAsync(api + "/credentials", new TenantCredentialCreateRequest("Inspection credential <literal>", "Password", "General", await Revision(owner, tenant), ProtectedValue: "PRIVATE-INSPECTION-SECRET-SENTINEL")));
         var credentialId = credential.GetProperty("credential").GetProperty("credentialId").GetGuid();
         _ = await Json(await owner.PostAsJsonAsync(path + "/credential-bindings", new TenantBindCredentialRequest(credentialId, "inspection-account", await Revision(owner, tenant), 5, 1)));

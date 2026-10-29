@@ -81,8 +81,11 @@ public sealed partial class TenantCredentialAccessTests
             : new { kind = "oneShot", timeZone = "UTC", atUtc = at.ToString("O") };
         object Body(long security, long revision = 0) => new { enabled = mode != "disabled", name = "Exact owned automation", instructions = "Finish the exact owned task.",
             schedule = Schedule(), expectedRevision = security,
-            expectedInstanceRevision = agent.Instance.Revision, expectedAutomationRevision = revision, requiresTools = true,
-            tenantId = Guid.NewGuid(), executorPrincipalId = Guid.NewGuid() }; // Cannot supply authority through extra DTO fields.
+            expectedInstanceRevision = agent.Instance.Revision, expectedAutomationRevision = revision, requiresTools = true };
+        // Authority fields are rejected by the current strict DTO before creating work.
+        var forged = JsonSerializer.SerializeToNode(Body(await Revision(owner, tenant)))!.AsObject();
+        forged["tenantId"] = Guid.NewGuid(); forged["executorPrincipalId"] = Guid.NewGuid();
+        using (var rejected = await owner.PostAsJsonAsync(route, forged)) Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
         using var created = await owner.PostAsJsonAsync(route, Body(await Revision(owner, tenant)));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var value = await Json(created); var id = value.GetProperty("automationId").GetGuid();
@@ -215,6 +218,9 @@ public sealed partial class TenantCredentialAccessTests
             var role = await access.SaveRoleAsync(human, tenant, null, "Invoke without Chat", ["agents.read", "automations.read", "automations.run", "sessions.create", "agent-runs.create"], await Revision(owner, tenant));
             var invitation = await access.InviteAsync(human, tenant, account.LoginKey, role.RoleId, await Revision(owner, tenant));
             var member = await access.AcceptInvitationAsync(account.AccountId, tenant, invitation.Invitation.InvitationId, invitation.Token);
+            var invokerSpace = (await factory.Services.GetRequiredService<ITenantSpaceStore>().FindPrivateSpaceAsync(tenant, instance))!;
+            var contextRole = await access.SaveRoleAsync(human, tenant, null, "Read exact invoker context", ["spaces.read"], await Revision(owner, tenant));
+            await access.AssignRoleAsync(human, tenant, member.PrincipalId, contextRole.RoleId, TenantSpaceService.Scope(tenant, invokerSpace.SpaceId), await Revision(owner, tenant));
             separateInvoker = ConnectedClient(factory); await Login(separateInvoker, account.LoginKey, "strong-automation-invoker-password");
             invoker = separateInvoker; expectedInitiator = member.PrincipalId;
         }

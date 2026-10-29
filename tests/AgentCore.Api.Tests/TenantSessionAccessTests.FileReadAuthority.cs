@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Security;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
@@ -31,17 +32,24 @@ public sealed partial class TenantSessionAccessTests
         var root = Path.Combine(Path.GetTempPath(), "tenant-file-final-human-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         var race = new FileFinalReadRace();
+        var diagnostics = new DiagnosticLineLoggerProvider();
         try
         {
             void Configure(IServiceCollection services)
             {
+                services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(diagnostics);
                 if (sqlite) services.Replace(ServiceDescriptor.Singleton<IArtifactStore>(p => new SqliteArtifactStore(
                     p.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), p.GetRequiredService<TimeProvider>(), Path.Combine(root, "artifacts"))));
                 services.Replace(ServiceDescriptor.Singleton<ITenantRunExecution>(p => new MetadataExecutionGate(() => false,
                     new TenantRunExecution(p.GetRequiredService<ITenantRuntimeStore>(), p.GetRequiredService<ITenantRunStore>(),
                         p.GetRequiredService<ITenantRunDispatcher>(), p.GetRequiredService<IIdGenerator>(), p.GetRequiredService<TimeProvider>()))));
                 services.Replace(ServiceDescriptor.Singleton<ITenantSessionStore>(p => new FileFinalReadSessionStore((ITenantSessionStore)p.GetRequiredService<IIamStore>(), race)));
-                services.Replace(ServiceDescriptor.Singleton<ITenantAgentStore>(p => new FileFinalReadAgentStore((ITenantAgentStore)p.GetRequiredService<IIamStore>(), race)));
+                // Observe the consuming read boundary. Runtime configuration keeps its
+                // real multi-port IAM store instead of casting a read-only decorator.
+                ITenantAgentStore Observed(IServiceProvider p) => new FileFinalReadAgentStore((ITenantAgentStore)p.GetRequiredService<IIamStore>(), race);
+                services.Replace(ServiceDescriptor.Singleton<TenantWorkspaceReadService>(p => ActivatorUtilities.CreateInstance<TenantWorkspaceReadService>(p, Observed(p))));
+                services.Replace(ServiceDescriptor.Singleton<TenantWorkspaceMutationService>(p => ActivatorUtilities.CreateInstance<TenantWorkspaceMutationService>(p, Observed(p))));
+                services.Replace(ServiceDescriptor.Singleton<TenantComposerReferenceService>(p => ActivatorUtilities.CreateInstance<TenantComposerReferenceService>(p, Observed(p))));
             }
             await using WebApplicationFactory<Program> factory = sqlite
                 ? new NativeTenantSqliteFactory(root, new ScriptedLanguageModel(), Configure)
@@ -60,7 +68,9 @@ public sealed partial class TenantSessionAccessTests
             string path;
             if (action.StartsWith("artifact-", StringComparison.Ordinal))
             {
-                var runId = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Prepare the exact private fixture", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 2 }))).GetProperty("runId").GetGuid();
+                using var submitted = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Prepare the exact private fixture", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 2 });
+                Assert.True(submitted.IsSuccessStatusCode, await submitted.Content.ReadAsStringAsync() + "\n" + string.Join("\n", diagnostics.Errors));
+                var runId = (await Json(submitted)).GetProperty("runId").GetGuid();
                 var run = (await factory.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, runId))!;
                 var at = factory.Services.GetRequiredService<TimeProvider>().GetUtcNow();
                 run = await factory.Services.GetRequiredService<ITenantRuntimeStore>().ApplyTenantRuntimeCommandAsync(run.Owner, runId, new AgentRunCommand.Claim(run.Revision, at, Guid.NewGuid(), at.AddMinutes(5)), Guid.NewGuid());
@@ -81,13 +91,14 @@ public sealed partial class TenantSessionAccessTests
             {
                 var working = action is "working-list" or "workspace-access";
                 var logical = working ? "/working" : "/home";
+                var privateSpaceId = (await factory.Services.GetRequiredService<ITenantSpaceStore>().FindPrivateSpaceAsync(tenant,instance))!.SpaceId;
                 var physical = working ? AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(root, "workspaces"), instance, session)
-                    : AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(root, "workspaces"), tenant, (await factory.Services.GetRequiredService<ITenantSpaceStore>().FindPrivateSpaceAsync(tenant,instance))!.SpaceId);
+                    : AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(root, "workspaces"), tenant, privateSpaceId);
                 var files = new CanonicalWorkspaceFilesystem(physical, logical); files.Ensure();
                 await files.WriteAsync(logical + "/Private file retirement sentinel.txt", "Private file body retirement sentinel"u8.ToArray(), 1024, 4096);
-                path = action == "composer" ? api + $"/agents/{instance}/composer?category=homeFile"
-                    : api + (working ? $"/sessions/{session}/workspace" : $"/agents/{instance}/workspace") + (action == "workspace-access" ? "/access" : "");
-                race.AgentReads = action == "workspace-access" ? 2 : 3;
+                path = action == "composer" ? api + $"/agents/{instance}/composer?category=homeFile&spaceId={privateSpaceId}"
+                    : (working ? api + $"/sessions/{session}/workspace" : await PrivateWorkspacePath(owner, tenant, instance)) + (action == "workspace-access" ? "/access" : "");
+                race.AgentReads = 2;
             }
             race.AfterRead = async () => {
                 if (boundary == "security")
