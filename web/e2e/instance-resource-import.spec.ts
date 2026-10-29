@@ -8,14 +8,14 @@ async function call(page: Page, path: string, data?: unknown): Promise<any> {
   expect(response.ok(), `${path}: ${response.status()}`).toBeTruthy();
   return response.json();
 }
-async function openResources(page: Page) {
+async function openResources(page: Page, templateId = 'general-assistant', version = 36) {
   expect((await (await page.request.get('/health')).json()).profile).toBe('Synthetic');
   await call(page, '/api/v2/auth/login', { login: 'tenant-chat-owner@example.test', password: 'synthetic-tenant-chat-password' });
   const nonce = crypto.randomUUID().slice(0, 8);
   const tenant = await call(page, '/api/v2/system/tenants', { name: `Resource imports ${nonce}`, slug: `imports-${nonce}` });
   const tenantRoot = `/api/v2/tenants/${tenant.tenantId}`;
   const access = await call(page, tenantRoot + '/access/me');
-  const owner = await call(page, tenantRoot + '/agents', { templateId: 'general-assistant', version: 36, expectedRevision: access.revision });
+  const owner = await call(page, tenantRoot + '/agents', { templateId, version, expectedRevision: access.revision });
   const root = `${tenantRoot}/agents/${owner.instance.instanceId}`;
   await page.goto(`/t/${tenant.tenantId}/admin/agents/${owner.instance.instanceId}/resources`);
   await expect(page.getByRole('region', { name: 'Instance resources', exact: true })).toBeVisible();
@@ -61,10 +61,10 @@ test('Instance imports retry remaining files, preserve folder paths and edit exa
   await writeFile(path.join(packageRoot, 'references', 'guide.pdf'), binary);
   await openImport.click();
   await dialog.locator('input[webkitdirectory]').setInputFiles(packageRoot);
-  await expect(page.getByLabel('Imported resource path 1')).toHaveValue('knowledge/nested/guide.md');
-  await expect(page.getByLabel('Imported resource path 2')).toHaveValue('references/guide.pdf');
-  await expect(dialog.locator('.admin-resource-preview-row').nth(0)).toContainText('Knowledge');
-  await expect(dialog.locator('.admin-resource-preview-row').nth(1)).toContainText('Reference');
+  await expect.poll(() => dialog.getByRole('textbox', { name: /^Imported resource path / }).evaluateAll(nodes =>
+    nodes.map(node => (node as HTMLInputElement).value).sort())).toEqual(['knowledge/nested/guide.md', 'references/guide.pdf']);
+  await expect(dialog.locator('.admin-resource-preview-row').filter({ has: page.locator('input[value="knowledge/nested/guide.md"]') })).toContainText('Knowledge');
+  await expect(dialog.locator('.admin-resource-preview-row').filter({ has: page.locator('input[value="references/guide.pdf"]') })).toContainText('Reference');
   await dialog.getByRole('button', { name: 'Add resources', exact: true }).click();
   await expect(dialog).not.toBeVisible();
   const pdf = (await catalog()).resources.find((resource: { logicalPath: string }) => resource.logicalPath === 'references/guide.pdf');
@@ -101,10 +101,10 @@ test('Instance imports retry remaining files, preserve folder paths and edit exa
 });
 
 test('inherited built-in knowledge can be inspected and disabled while Instance kinds exclude evaluation fixtures', async ({ page }) => {
-  await openResources(page);
+  await openResources(page, 'customer-support', 3);
   const inherited = page.getByRole('region', { name: 'Instance resources', exact: true });
   const row = inherited.getByRole('row').filter({ hasText: 'knowledge/support-order-policy' });
-  await expect(inherited.getByText('knowledge/compliance-retention', { exact: true })).toBeVisible();
+  await expect(inherited.getByText('knowledge/support-order-policy', { exact: true })).toBeVisible();
   await row.getByRole('button', { name: 'Inspect resource', exact: true }).click();
   const details = page.getByRole('dialog', { name: 'Resource inspection' });
   await details.getByRole('button', { name: /^Preview / }).click();
@@ -132,4 +132,6 @@ test('inherited built-in knowledge can be inspected and disabled while Instance 
   await options.filter({ hasText: /^Reference$/ }).click();
   await add.getByRole('button', { name: 'Cancel editing', exact: true }).click();
   await page.getByRole('dialog', { name: 'Discard unsaved changes?' }).getByRole('button', { name: 'Discard changes', exact: true }).click();
+  await openResources(page, 'compliance', 2);
+  await expect(page.getByRole('region', { name: 'Instance resources', exact: true }).getByText('knowledge/compliance-retention', { exact: true })).toBeVisible();
 });

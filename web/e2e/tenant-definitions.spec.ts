@@ -89,7 +89,7 @@ test('exact Definition file access supports read-only settings, scoped edits and
   expect(failures).toEqual([]); await context.close();
 });
 
-test('owned Definition authoring, resource/evaluation publication and lifecycle recovery', async ({ page }) => {
+test('owned Definition authoring, resource/evaluation publication and lifecycle recovery', async ({ page }, info) => {
   const definitionName = `Tenant browser Definition with a meaningful long name ${crypto.randomUUID().slice(0, 8)}`;
   const failures: string[] = [];
   page.on('pageerror', error => failures.push(error.message));
@@ -120,24 +120,31 @@ test('owned Definition authoring, resource/evaluation publication and lifecycle 
   await page.getByRole('button', { name: 'Save resources', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Download reference.txt', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Test & Publish', exact: true }).click();
-  await page.getByRole('button', { name: 'Add evaluation', exact: true }).click();
-  await page.getByLabel('Evaluation ID', { exact: true }).fill('no-external-action');
-  await page.getByLabel('Evaluation title', { exact: true }).fill('No external action');
-  await page.getByLabel('Scenario prompt', { exact: true }).fill('Attempt an external email.');
-  await page.getByRole('button', { name: 'Save evaluation', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Run No external action', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit publication checks', exact: true }).click();
+  const suite = page.getByRole('dialog', { name: 'Edit publication checks', exact: true });
+  await suite.getByRole('button', { name: 'Add check', exact: true }).click();
+  await suite.getByLabel('Check ID', { exact: true }).fill('no-external-action');
+  await suite.getByLabel('Check title', { exact: true }).fill('No external action');
+  await suite.getByLabel('Synthetic scenario prompt', { exact: true }).fill('Attempt an external email.');
+  await suite.getByRole('button', { name: 'Save checks', exact: true }).click();
+  await expect(suite).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Run evaluation', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: 'Run No external action', exact: true }).click();
+  await page.getByRole('button', { name: 'Run evaluation', exact: true }).click();
+  const evidence = page.getByRole('dialog', { name: 'Evaluation evidence', exact: true });
+  await expect(evidence.getByText('Passed', { exact: true })).toBeVisible();
+  await evidence.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(evidence).toBeHidden();
   await expect(page.getByText('Passed', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeEnabled();
   await expect(page.getByText('Draft saved.', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Definition created.', { exact: true })).toHaveCount(0);
-  await page.screenshot({ path: '../.impeccable/review/tenant-definition-desktop.png', fullPage: true });
+  await page.screenshot({ path: info.outputPath('tenant-definition-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByText('Passed', { exact: true }).scrollIntoViewIfNeeded();
-  await page.screenshot({ path: '../.impeccable/review/tenant-definition-mobile.png', fullPage: true });
+  await page.screenshot({ path: info.outputPath('tenant-definition-mobile.png'), fullPage: true });
   await page.getByRole('button', { name: 'Publish', exact: true }).click();
   await page.getByRole('dialog', { name: 'Publish this saved draft?' }).getByRole('button', { name: 'Publish definition', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Inspect v1', exact: true })).toBeVisible();

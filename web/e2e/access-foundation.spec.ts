@@ -59,6 +59,8 @@ test('owner and invited Reader use scoped access UI, with safe mobile drawers an
   await expect(discardDialog).toBeHidden();
   await expect(page.getByRole('textbox', { name: 'Role name' })).toHaveValue('Workspace reviewer');
   await page.getByRole('button', { name: 'Save role', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Create role', exact: true })).toBeHidden();
+  await page.getByRole('textbox', { name: 'Search roles', exact: true }).fill('Workspace reviewer');
   await expect(page.getByRole('button', { name: 'Edit Workspace reviewer' })).toBeVisible();
   await page.getByRole('button', { name: 'Create role', exact: true }).click();
   await page.getByRole('textbox', { name: 'Role name' }).fill('Discarded draft');

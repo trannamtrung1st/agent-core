@@ -40,10 +40,12 @@ test("fake Browser STT listens without PCM STT and keeps the composer", async ({
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.speechDebug?.()?.userTexts ?? []), {
     timeout: 15_000
   }).toEqual(expect.arrayContaining(["hello there"]));
-  await expect(page.getByRole("button", { name: "Queue" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^(Send|Queue)$/ })).toBeVisible();
 
   await page.getByRole("textbox", { name: "Message", exact: true }).fill("Please hold the line");
-  await page.getByRole("button", { name: "Send" }).click();
+  // Recognition may start a response while this draft is being entered. The
+  // current composer queues text during that response instead of relabeling it Send.
+  await page.getByRole("button", { name: /^(Send|Queue)$/ }).click();
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
   expect(await page.evaluate(() => window.__agentCore?.audioFramesSent?.() ?? -1)).toBe(0);
   await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeEnabled();

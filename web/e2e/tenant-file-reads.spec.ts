@@ -77,7 +77,7 @@ for (const width of [1440, 390]) test(`tenant original, working copy and Artifac
       if (!denied) { denied = true; expectedDeniedPath = new URL(route.request().url()).pathname; await route.fulfill({ status: 403, contentType: 'application/problem+json', body: '{"title":"permission_denied"}' }); }
       else await route.continue();
     });
-    await artifact.getByRole('button', { name: `Download ${name}`, exact: true }).click(); await expect(files.getByText('File unavailable', { exact: true })).toBeVisible();
+    await artifact.getByRole('button', { name: `Download ${name}`, exact: true }).click(); await expect(files.getByRole('status').filter({ hasText: /^File unavailable/ })).toBeVisible();
     await expect(files.getByRole('button', { name: `Download ${name}`, exact: true })).toHaveCount(0);
     await files.getByRole('button', { name: 'Retry file', exact: true }).click(); await expect(artifact).toBeVisible();
     const restored = page.waitForEvent('download'); await artifact.getByRole('button', { name: `Download ${name}`, exact: true }).click();
