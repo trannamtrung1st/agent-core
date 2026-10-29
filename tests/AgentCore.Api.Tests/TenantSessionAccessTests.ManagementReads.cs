@@ -87,14 +87,24 @@ public sealed partial class TenantSessionAccessTests
         await access.AssignRoleAsync(actor, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForResource(tenant, "agent", instance.ToString("D")), await Revision(owner, tenant));
         return (tenant, instance);
     }
-    private static async Task<AgentRun> AwaitManagementRun(ITenantRunStore runs, Guid tenant, Guid runId, bool pending = false)
+    private static async Task<AgentRun> AwaitManagementRun(ITenantRunStore runs, Guid tenant, Guid runId, bool pending = false, int timeoutSeconds = 25)
     {
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(25));
-        while (true)
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+        AgentRun? last = null;
+        try
         {
-            var run = (await runs.FindTenantRunAsync(tenant, runId, deadline.Token))!;
-            if (run.IsTerminal || pending && run.Status == AgentRunStatus.WaitingForApproval) return run;
-            await Task.Delay(25, deadline.Token);
+            while (true)
+            {
+                last = await runs.FindTenantRunAsync(tenant, runId, deadline.Token);
+                if (last is not null && (last.IsTerminal || pending && last.Status == AgentRunStatus.WaitingForApproval)) return last;
+                await Task.Delay(25, deadline.Token);
+            }
+        }
+        catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+        {
+            throw new TimeoutException($"Management run did not reach the expected state within {timeoutSeconds}s: " +
+                $"status={last?.Status}; revision={last?.Revision}; attempts={last?.AttemptCount}; " +
+                $"retryAt={last?.NextRetryAtUtc:O}; claimed={last?.Claim is not null}; checkpoint={last?.Checkpoint is not null}.");
         }
     }
     [Theory]

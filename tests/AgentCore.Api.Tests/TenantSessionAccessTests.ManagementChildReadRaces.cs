@@ -83,7 +83,9 @@ public sealed partial class TenantSessionAccessTests
             var submitted = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Read the current child before its authority changes.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, submitted.StatusCode);
             var runId = (await Json(submitted)).GetProperty("runId").GetGuid(); if (factory is ApprovalExecutionFactory memory) Volatile.Write(ref memory.Enabled, true);
-            var final = await AwaitManagementRun(host.Services.GetRequiredService<ITenantRunStore>(), tenant, runId);
+            // This compound scenario checks multiple source reads plus an authority mutation.
+            // Keep its bounded observation budget separate from simpler management reads.
+            var final = await AwaitManagementRun(host.Services.GetRequiredService<ITenantRunStore>(), tenant, runId, timeoutSeconds: 60);
             Assert.Equal(1, race.Applied); Assert.Equal(AgentRunStatus.Failed, final.Status); Assert.Equal(2, model.Requests.Count);
             Assert.NotNull(admittedSkillWitnesses);
             Assert.Equal(admittedSkillWitnesses, TenantManagementReadReferences.Read(final.Checkpoint).Select(r => JsonSerializer.Serialize(r)));

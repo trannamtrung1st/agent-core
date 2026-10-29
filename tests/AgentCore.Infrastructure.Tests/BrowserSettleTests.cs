@@ -78,11 +78,25 @@ public sealed class BrowserSettleTests(BrowserHostFixture fixture, ITestOutputHe
         Assert.DoesNotContain("AC-SETTLE-RESULT", home.Observation!.Content!, StringComparison.Ordinal);
         var search = (await BrowserTestQueries.Find(fixture.Session, id, "Search"));
 
-        var clicked = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, search.Target, null));
-
-        Assert.Null(clicked.ErrorCode);
-        Assert.Contains("AC-SETTLE-RESULT", clicked.Observation!.Content!, StringComparison.Ordinal);
-        Assert.Equal(true, clicked.Observation.Settled);
+        var page = fixture.Session.ContextFor(id)!.Pages[0];
+        // The fetch starts only after the real click. Deliver its asynchronous
+        // result without spending the finite settle budget on a 500 ms timer.
+        await page.RouteAsync("**/settle-hold?*", route => route.FulfillAsync(new()
+        {
+            Body = "AC-SETTLE-RESULT", ContentType = "text/plain"
+        }));
+        try
+        {
+            var clicked = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, search.Target, null));
+            Assert.Null(clicked.ErrorCode);
+            Assert.Contains("AC-SETTLE-RESULT", clicked.Observation!.Content!, StringComparison.Ordinal);
+            Assert.Equal(true, clicked.Observation.Settled);
+        }
+        finally
+        {
+            await page.UnrouteAsync("**/settle-hold?*");
+            await fixture.Session.ExecuteAsync(new(id, new BrowserClose()));
+        }
     }
 
     [Fact]

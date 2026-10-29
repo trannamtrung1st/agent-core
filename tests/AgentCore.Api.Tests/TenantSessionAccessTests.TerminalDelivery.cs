@@ -55,7 +55,7 @@ public sealed partial class TenantSessionAccessTests
                 var response = admission.GetProperty("responseId").GetGuid(); var runId = admission.GetProperty("runId").GetGuid();
                 var token = await blocked.Task.WaitAsync(TimeSpan.FromSeconds(20));
                 Assert.Equal(AgentRunStatus.Completed, (await factory.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, runId))!.Status);
-                var started = events.Single(e => e.Type == "agent.response.started");
+                var started = await AwaitTenantWire(() => events.SingleOrDefault(e => e.Type == "agent.response.started" && e.ResponseId == response.ToString("D")));
                 var auth = (await factory.Services.GetRequiredService<IdentityService>().SignInAsync("owner@example.test", "explicit-synthetic-test-password"))!;
                 var saved = (await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(tenant, session))!;
                 var receipt = host.ReceiveAsync(new(saved.Owner, new(auth.Account.AccountId, auth.Session.SessionId, principal), await Revision(owner, tenant),
