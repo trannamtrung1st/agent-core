@@ -101,16 +101,27 @@ def execute_shard(plan, number, results_root, suite='infrastructure'):
         '--blame-hang-timeout', '5m', '--blame-hang-dump-type', 'none',
         '--results-directory', str(results), '--logger', 'trx;LogFileName=results.trx'], cwd=ROOT)
     receipt['exit_code'] = result.returncode
-    if result.returncode == 0:
+    try:
         counters = ET.parse(results / 'results.trx').getroot().find('.//{*}Counters')
         if counters is None:
-            raise ValueError('Backend TRX has no result counters.')
-        receipt['actual_cases'] = int(counters.attrib['total'])
+            raise ValueError('Missing counters.')
+        total = int(counters.attrib['total'])
+        if total < 0:
+            raise ValueError('Invalid total.')
+        receipt['actual_cases'] = total
+        receipt['outcomes'] = dict(counters.attrib)
+    except (OSError, ET.ParseError, KeyError, ValueError):
+        receipt['trx_error'] = 'unavailable_or_invalid_counters'
+    receipt['case_count_matches'] = receipt['actual_cases'] == expected
     write_json(results / 'receipt.json', receipt)
+    # Failed tests can still account for every selected case. Preserve their
+    # original failure code even when a crash leaves missing/malformed TRX.
     if result.returncode:
         return result.returncode
+    if 'trx_error' in receipt:
+        raise ValueError('Backend TRX has unavailable or invalid result counters.')
     if receipt['actual_cases'] != expected:
-        raise ValueError(f"Infrastructure shard expected {expected} cases but TRX accounted for {receipt['actual_cases']}.")
+        raise ValueError(f"{SUITES[suite]} shard expected {expected} cases but TRX accounted for {receipt['actual_cases']}.")
     print(f'Verified {expected} cases accounted for in TRX (including explicit skips).', flush=True)
     return 0
 

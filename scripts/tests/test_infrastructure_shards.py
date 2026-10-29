@@ -78,13 +78,15 @@ if '--list-tests' in args:
     sys.exit(0)
 pathlib.Path(os.environ['SHARD_CALL']).write_text(json.dumps(args))
 code = int(os.environ.get('SHARD_EXIT', '0'))
-if code: sys.exit(code)
+if code and not os.environ.get('SHARD_EMIT_FAILED_TRX'): sys.exit(code)
 counts = {{'AgentCore.Infrastructure.Tests.A.One': 2, 'AgentCore.Infrastructure.Tests.B.Two': 1, 'AgentCore.Infrastructure.Tests.C.Three': 1}}
 counts = {{name.replace('Infrastructure', os.environ.get('SHARD_NAMESPACE', 'Infrastructure')): count for name, count in counts.items()}}
 selected = args[args.index('--filter') + 1].split('|')
 count = sum(counts[item.removeprefix('FullyQualifiedName=')] for item in selected) + int(os.environ.get('SHARD_COUNT_DELTA', '0'))
 results = pathlib.Path(args[args.index('--results-directory') + 1])
 (results / 'results.trx').write_text('<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010"><ResultSummary><Counters total="' + str(count) + '" /></ResultSummary></TestRun>')
+if os.environ.get('SHARD_INVALID_TRX'): (results / 'results.trx').write_text('<broken')
+sys.exit(code)
 ''')
         executable.chmod(0o755)
         return {**os.environ, 'PATH': str(executable.parent) + os.pathsep + os.environ['PATH'], 'SHARD_CALL': str(root / 'call.json')}
@@ -114,6 +116,37 @@ results = pathlib.Path(args[args.index('--results-directory') + 1])
             self.assertEqual(failed.returncode, 7)
             invalid = self.cli(env, 'run', '--plan', plan, '--shard', 3, '--results-root', results)
             self.assertEqual(invalid.returncode, 2)
+
+    def test_failed_shards_retain_case_counts_without_masking_failures(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); env = self.cli_fixture(root); plan = root / 'plan.json'
+            self.assertEqual(self.cli(env, 'plan', '--shards', 2, '--output', plan).returncode, 0)
+            for variant, options, actual in (
+                ('complete', {'SHARD_EMIT_FAILED_TRX': '1'}, 2),
+                ('partial', {'SHARD_EMIT_FAILED_TRX': '1', 'SHARD_COUNT_DELTA': '-1'}, 1),
+                ('missing', {}, None),
+                ('malformed', {'SHARD_EMIT_FAILED_TRX': '1', 'SHARD_INVALID_TRX': '1'}, None),
+            ):
+                with self.subTest(variant=variant):
+                    results = root / variant
+                    run = self.cli({**env, **options, 'SHARD_EXIT': '7'}, 'run', '--plan', plan, '--shard', 1, '--results-root', results)
+                    self.assertEqual(run.returncode, 7)
+                    receipt = json.loads(next(results.glob('*/receipt.json')).read_text())
+                    self.assertEqual(receipt['exit_code'], 7)
+                    self.assertEqual(receipt['actual_cases'], actual)
+                    self.assertEqual(receipt['case_count_matches'], actual == 2)
+                    self.assertEqual('trx_error' in receipt, actual is None)
+
+    def test_successful_exit_without_valid_counters_is_not_qualified(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); env = self.cli_fixture(root); plan = root / 'plan.json'; results = root / 'results'
+            self.assertEqual(self.cli(env, 'plan', '--shards', 2, '--output', plan).returncode, 0)
+            run = self.cli({**env, 'SHARD_INVALID_TRX': '1'}, 'run', '--plan', plan, '--shard', 1, '--results-root', results)
+            self.assertEqual(run.returncode, 2)
+            receipt = json.loads(next(results.glob('*/receipt.json')).read_text())
+            self.assertIsNone(receipt['actual_cases'])
+            self.assertFalse(receipt['case_count_matches'])
+            self.assertIn('trx_error', receipt)
 
     def test_api_cli_selects_its_project_and_refuses_a_foreign_suite_before_execution(self):
         with tempfile.TemporaryDirectory() as directory:
