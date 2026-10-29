@@ -28,6 +28,10 @@ public sealed class TenantEventMigrationTests
             // This frozen upgrade declares 68 guards. Later migrations may add
             // guards, but neither upgrade nor a roundtrip may drop these owners.
             var converted = await Guards(db); Assert.Equal(68, converted.Length); Assert.All(previous, name => Assert.Contains(name, converted));
+            // Exercise this migration's own reversible boundary before later
+            // cutovers whose Down requires restoring a matched coordinated backup.
+            await db.GetService<IMigrator>().MigrateAsync("20261021020000_TenantWebhookOwnership"); Assert.Equal(previous, await Guards(db));
+            await db.GetService<IMigrator>().MigrateAsync("20261021030000_TenantEventOwnership"); Assert.Equal(converted, await Guards(db));
             await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); var latest = await Guards(db);
             Assert.All(converted, name => Assert.Contains(name, latest));
             Assert.Contains("TR_TenantCore_Fact_Insert", latest); Assert.Contains("TR_TenantEvent_Occurrence_Insert", latest);
@@ -35,8 +39,6 @@ public sealed class TenantEventMigrationTests
             var tagged = JsonSerializer.Serialize(fact with { EventId = Guid.NewGuid(), DedupeKey = "legacy-concealed", Owner = TriggerOwner.ForTenant(Guid.NewGuid(), instance, Guid.NewGuid()) });
             foreach (var concealed in new[] { tagged, tagged.Replace("\"Owner\":", "\"owner\":", StringComparison.Ordinal) })
                 await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO CoreEvents (EventId,DedupeKey,AgentInstanceId,ProfileId,ReceivedAtUtc,PayloadJson,Snapshotted) VALUES ({Guid.NewGuid().ToString("D")},{"legacy-concealed"},{instance.ToString("D")},{profile.ToString("D")},{at.ToUnixTimeMilliseconds()},{concealed},0)"));
-            await db.GetService<IMigrator>().MigrateAsync("20261021020000_TenantWebhookOwnership"); Assert.Equal(previous, await Guards(db));
-            await db.Database.MigrateAsync(); Assert.Equal(latest, await Guards(db)); Assert.False(db.Database.HasPendingModelChanges());
             await db.Database.OpenConnectionAsync(); using var command = db.Database.GetDbConnection().CreateCommand(); command.CommandText = "PRAGMA foreign_key_check"; using var rows = await command.ExecuteReaderAsync(); Assert.False(await rows.ReadAsync());
         }
         finally { SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
