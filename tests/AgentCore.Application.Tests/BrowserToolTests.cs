@@ -396,6 +396,10 @@ public sealed class BrowserToolTests
         var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         var v10 = (await store.GetAsync("general-assistant", 10))!;
         var v11 = (await store.GetAsync("general-assistant", 11))!;
+        v11 = v11 with { Skills = [new SkillSpec("browser.record.lookup", "Record lookup", "Read the requested browser record.",
+            "Inspect the requested record using authorized browser observations.", SkillProjection.OnDemand, true,
+            [ToolCatalog.BrowserNavigate, ToolCatalog.BrowserSnapshot], [])] };
+
         Assert.Equal(11, v11.Version);
         var browserDescription = ToolRegistry.Get(ToolCatalog.BrowserNavigate).ModelDefinition.Description;
         Assert.Contains("target_denied", browserDescription, StringComparison.Ordinal);
