@@ -24,6 +24,7 @@ public sealed partial class TenantCredentialAccessTests
         public TaskCompletionSource<ModelRequest> AfterLookup { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Finish { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Lookup;
+        public string LookupDiagnostic { get; private set; } = "No variable result observed.";
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (Entered.TrySetResult(request)) await Release.Task.WaitAsync(cancellationToken);
@@ -34,6 +35,7 @@ public sealed partial class TenantCredentialAccessTests
                     yield return new ModelToolCallEvent(new("lookup-plain", "variables.resolve", "{\"name\":\"REPORT_REGION\"}"));
                     yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
                 }
+                LookupDiagnostic = VariableResultDiagnostic(resolved.Text);
                 AfterLookup.TrySetResult(request); await Finish.Task.WaitAsync(cancellationToken);
                 using var value = JsonDocument.Parse(resolved.Text);
                 var answer = value.RootElement.GetProperty("result").GetProperty("value").GetString()!;
@@ -42,6 +44,21 @@ public sealed partial class TenantCredentialAccessTests
             }
             await foreach (var item in inner.GenerateAsync(request, cancellationToken)) yield return item;
         }
+    }
+    private static string VariableResultDiagnostic(string text)
+    {
+        try
+        {
+            using var json = JsonDocument.Parse(text); var root = json.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return "Variable result was not an object.";
+            var codes = root.EnumerateObject().Where(p => p.Name is "error" or "code" or "reasonCode" or "decision")
+                .Select(p => p.Name + "=" + (p.Value.ValueKind == JsonValueKind.String && p.Value.GetString() is { Length: > 0 and <= 64 } value
+                    && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-') ? value : "unavailable"));
+            var resultPresent = root.TryGetProperty("result", out var result);
+            var valuePresent = resultPresent && result.ValueKind == JsonValueKind.Object && result.TryGetProperty("value", out _);
+            return $"Variable result lacks the admitted value; resultPresent={resultPresent}; valuePresent={valuePresent}; {string.Join(",", codes)}";
+        }
+        catch (JsonException) { return "Variable result was not valid JSON."; }
     }
     [Theory]
     [InlineData(false, 0)] [InlineData(true, 0)]
@@ -115,7 +132,7 @@ public sealed partial class TenantCredentialAccessTests
             if (lookup)
             {
                 model.Release.TrySetResult(); var observed = await model.AfterLookup.Task.WaitAsync(TimeSpan.FromSeconds(20));
-                Assert.Contains(observed.Messages, m => m.Role == ModelRole.Tool && m.Name == "variables.resolve" && m.Text.Contains("authorized-plain-value", StringComparison.Ordinal));
+                Assert.True(observed.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == "variables.resolve" && m.Text.Contains("authorized-plain-value", StringComparison.Ordinal)), model.LookupDiagnostic);
                 if (recreated)
                 {
                     await environmentService.DeleteVariableAsync(human,tenant,space.SpaceId,profile.EnvironmentId,"REPORT_REGION",await Revision(owner,tenant),space.Revision,profile.Revision,1);

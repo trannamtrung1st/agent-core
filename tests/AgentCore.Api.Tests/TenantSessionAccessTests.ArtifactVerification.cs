@@ -1,4 +1,5 @@
 using System.Net;
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using AgentCore.Api.Security;
 using AgentCore.Application.Execution;
@@ -10,6 +11,7 @@ using AgentCore.Domain.Security;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Api.Tests;
 
@@ -32,8 +34,12 @@ public sealed partial class TenantSessionAccessTests
             var model = new ApprovalRecordingModel { ProposedArtifact = System.Text.Json.JsonSerializer.Serialize(new {
                 displayName = proof ? "Customer support quarterly operations handover metadata verification with a deliberately long exact file name for current scoped review.md" : "verified.md",
                 content = "# Exact unpublished-to-reader body\nUTF-8: thử nghiệm" }), VerifyPublishedArtifact = true };
+            var authorityDiagnostics = new ArtifactAuthorityDiagnostics();
             void Configure(IServiceCollection services)
-            { if (proof) ((IdentityHttpOptions)services.Single(d => d.ServiceType == typeof(IdentityHttpOptions)).ImplementationInstance!).AllowedOrigins = ["http://127.0.0.1:5218"]; }
+            {
+                services.AddSingleton<ILogger<TenantRunExecutionAuthority>>(authorityDiagnostics);
+                if (proof) ((IdentityHttpOptions)services.Single(d => d.ServiceType == typeof(IdentityHttpOptions)).ImplementationInstance!).AllowedOrigins = ["http://127.0.0.1:5218"];
+            }
             await using WebApplicationFactory<Program> initialFactory = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
             WebApplicationFactory<Program> factory = initialFactory;
             if (proof) factory.UseKestrel(0);
@@ -93,7 +99,7 @@ public sealed partial class TenantSessionAccessTests
                 else Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/approvals/{saved.RequestId}/decision", new { decision, actionHash = saved.Operation.ActionHash, expectedRevision = detail.GetProperty("securityRevision").GetInt64(), expectedRequestRevision = saved.Revision })).StatusCode);
             }
             var done = await AwaitBrowserRestartRun(runs, tenant, sourceId, false);
-            Assert.True(done.Status == AgentRunStatus.Completed, $"{done.Status}: {done.Failure?.Code}: {done.Failure?.Summary}");
+            Assert.True(done.Status == AgentRunStatus.Completed, $"{done.Status}: {done.Failure?.Code}: {done.Failure?.Summary}; authority={string.Join(";", authorityDiagnostics.Codes)}");
             var final = model.Requests.Last(); var message = final.Messages.Last(m => m.Role == ModelRole.Tool && m.Name == (review ? ToolCatalog.RequestAuthorization : ToolCatalog.ArtifactsVerify));
             using var output = System.Text.Json.JsonDocument.Parse(message.Text); var result = output.RootElement;
             if (review)
@@ -132,4 +138,22 @@ public sealed partial class TenantSessionAccessTests
         }
         finally { restartedOwner?.Dispose(); if (restartedFactory is not null) await restartedFactory.DisposeAsync(); SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }
+    private sealed class ArtifactAuthorityDiagnostics : ILogger<TenantRunExecutionAuthority>
+    {
+        public ConcurrentQueue<string> Codes { get; } = new();
+        private int emitted;
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel level) => level >= LogLevel.Warning;
+        public void Log<TState>(LogLevel level, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (!IsEnabled(level) || state is not IEnumerable<KeyValuePair<string, object?>> fields) return;
+            var values = fields.Where(pair => pair.Key is "Phase" or "Failure" or "ReasonCode").ToArray();
+            if (values.Length == 0 || Interlocked.Increment(ref emitted) > 16) return;
+            // Only existing machine codes are retained; no formatter, exception, prompt or tool body.
+            static string Code(object? value) => value is string text && text.Length is > 0 and <= 64
+                && text.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '-') ? text : "unavailable";
+            Codes.Enqueue(string.Join(",", values.Select(pair => pair.Key + "=" + Code(pair.Value))));
+        }
+    }
+
 }

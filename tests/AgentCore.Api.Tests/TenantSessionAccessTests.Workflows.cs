@@ -42,16 +42,36 @@ public sealed partial class TenantSessionAccessTests
         var receipt = await Json(await owner.PostAsJsonAsync(root + $"/{workflow}/executions", request));
         var execution = receipt.GetProperty("executionId").GetGuid(); Assert.False(receipt.TryGetProperty("source", out _));
         Assert.Equal(execution, (await Json(await owner.PostAsJsonAsync(root + $"/{workflow}/executions", request))).GetProperty("executionId").GetGuid());
-        var processes = factory.Services.GetRequiredService<TenantWorkflowExecutionService>(); await processes.ReconcileAsync(4, default);
-        var path = api + $"/workflow-executions/{execution}"; var view = await Json(await owner.GetAsync(path));
+        var processes = factory.Services.GetRequiredService<TenantWorkflowExecutionService>();
+        var path = api + $"/workflow-executions/{execution}";
+        async Task<JsonElement> ObserveStatus(string expected)
+        {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            string? status = null;
+            try
+            {
+                while (true)
+                {
+                    await processes.ReconcileAsync(4, deadline.Token);
+                    var observed = await Json(await owner.GetAsync(path, deadline.Token));
+                    status = observed.GetProperty("status").GetString();
+                    if (status == expected) return observed;
+                    await Task.Delay(25, deadline.Token);
+                }
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+            { throw new TimeoutException($"Workflow did not reach {expected}; last status={status}."); }
+        }
+        var view = await ObserveStatus("WaitingForHuman");
         Assert.Equal("WaitingForHuman", view.GetProperty("status").GetString());
         foreach (var field in new[] { "accountId", "bookmarkId", "operationId", "authenticationSessionId", "source", "inputsJson" }) Assert.False(view.TryGetProperty(field, out _));
         var step = view.GetProperty("steps").EnumerateArray().Single(s => s.GetProperty("nodeId").GetString() == "review");
         Assert.True(step.GetProperty("canDecide").GetBoolean());
         await Json(await owner.PostAsJsonAsync(path + "/nodes/review/decision", new { approved = true, rationale = "Reviewed", requestKey = "http-decision",
             expectedRevision = view.GetProperty("revision").GetInt64(), expectedStepRevision = step.GetProperty("revision").GetInt64(), expectedSecurityRevision = await Revision(owner, tenant) }));
-        for (var i = 0; i < 8; i++) await processes.ReconcileAsync(4, default);
-        var complete = await Json(await owner.GetAsync(path)); Assert.Equal("Completed", complete.GetProperty("status").GetString());
+        // Real Elsa bookmark delivery can still be owned by its asynchronous worker.
+        // Observe the required outcome rather than assuming eight immediate polls settle it.
+        var complete = await ObserveStatus("Completed"); Assert.Equal("Completed", complete.GetProperty("status").GetString());
         Assert.Equal(1, complete.GetProperty("provenCount").GetInt32());
         Assert.False(complete.GetProperty("canCancel").GetBoolean());
         Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync("/api/workflow-definitions")).StatusCode);
