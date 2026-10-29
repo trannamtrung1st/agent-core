@@ -1917,6 +1917,613 @@
     {
       "method": "GET",
       "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/composer"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/system/decision-intelligence"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/system/model-presets/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/system/model-presets/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/system/model-presets/{id:guid}"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/system/model-presets/{id:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/access/resources/{resourceType}/{resourceId}/editor"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-threads"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-threads/{threadId:guid}/messages"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{id:guid}/evaluation-bindings"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/chat-visibility"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/context-options"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/cooperation"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/private-space"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/reset-defaults"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/tasks"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/evaluation-suite"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/evaluation-attempts"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/evaluation-attempts"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/evaluation-attempts/recovery"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/evaluation-attempts/{attemptId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/evaluation-attempts/{attemptId:guid}/cancel-sandbox"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/evaluation-attempts/{attemptId:guid}/review"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/evaluation-attempts/{attemptId:guid}/sandbox-executions"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/evaluation-subjects/{kind}/{id:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/evaluation-suites"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/evaluation-suites"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/evaluation-suites/{suiteId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/evaluation-suites/{suiteId:guid}/versions"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/general-assistant/reconcile"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/governance/chat-retention/"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/governance/chat-retention/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/governance/evaluation-policies"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/governance/evaluation-policies"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/model-connections"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/model-connections"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/model-connections/{id:guid}"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/tenants/{tenantId:guid}/model-connections/{id:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/model-connections/{id:guid}/discover"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/model-connections/{id:guid}/references"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/model-connections/{id:guid}/test"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/models"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/models"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/models/default"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/models/default"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/models/routing"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/models/routing/status"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/models/{id:guid}"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/tenants/{tenantId:guid}/models/{id:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/models/{id:guid}/references"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/scripts"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/scripts"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/scripts/{scriptId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/scripts/{scriptId:guid}/versions"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/secrets/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/secrets/"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/secrets/{secretId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/secrets/{secretId:guid}"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/tenants/{tenantId:guid}/secrets/{secretId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/secrets/{secretId:guid}/access"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/secrets/{secretId:guid}/value"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/agent-completion"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/context/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/context/options"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/context/switch"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/goals/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/goals/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/goals/recovery"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/goals/{goalId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/goals/{goalId:guid}/acceptance"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/goals/{goalId:guid}/activity"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/goals/{goalId:guid}/checkpoints/{checkpointId:guid}/progress"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/goals/{goalId:guid}/checkpoints/{checkpointId:guid}/verify"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/goals/{goalId:guid}/continue"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/goals/{goalId:guid}/control"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/goals/{goalId:guid}/focus"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/goals/{goalId:guid}/plan"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/goals/{goalId:guid}/plan-decision"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/model"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/task-targets"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/tasks"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/tasks"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/tasks/recovery"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/access"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/environments/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/environments/"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/environments/{environmentId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/environments/{environmentId:guid}"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/environments/{environmentId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/environments/{environmentId:guid}/variables"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/environments/{environmentId:guid}/variables/{name}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/environments/{environmentId:guid}/variables/{name}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/environments/{environmentId:guid}/variables/{name}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/memberships"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/memberships/{instanceId:guid}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/memberships/{instanceId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/memberships/{instanceId:guid}/bindings"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/resources/"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/resources/{resourceId:guid}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/resources/{resourceId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/resources/{resourceId:guid}/access"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/workspace/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/workspace/access"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/workspace/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/workspace/content"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/workspace/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/workspace/metadata"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/workspace/office-preview"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/spaces/{spaceId:guid}/workspace/search"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/tasks/{taskId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/tasks/{taskId:guid}/cancel"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/tasks/{taskId:guid}/messages"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/tasks/{taskId:guid}/messages"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/tasks/{taskId:guid}/messages/recovery"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/tasks/{taskId:guid}/notifications"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/tasks/{taskId:guid}/notifications/{notificationId:guid}/acknowledge"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/tasks/{taskId:guid}/requests/{requestKey}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflow-executions/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflow-executions/start-requests/{key}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflow-executions/{executionId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflow-executions/{executionId:guid}/cancel"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflow-executions/{executionId:guid}/nodes/{nodeId}/decision"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflows/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflows/available"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflows/editor"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflows/readiness"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflows/requests/{key}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflows/{workflowId:guid}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflows/{workflowId:guid}/draft"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflows/{workflowId:guid}/editor"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflows/{workflowId:guid}/executions"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflows/{workflowId:guid}/publish"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflows/{workflowId:guid}/validate"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/workflows/{workflowId:guid}/versions/{version:int}"
     }
-  ]
+  ],
+  "retiredAfterBaseline": [
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/access"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/content"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/metadata"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/office-preview"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/search"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/evaluation-results"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/evaluation-scenarios"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/evaluation-scenarios/{scenarioId}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/evaluation-scenarios/{scenarioId}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/evaluation-scenarios/{scenarioId}/run"
+    }
+  ],
+  "canonicalInventorySource": "d83bc2944bc2121dd02590df0941fabd85b38c47"
 }

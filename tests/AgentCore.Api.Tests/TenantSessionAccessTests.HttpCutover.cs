@@ -93,7 +93,7 @@ public sealed partial class TenantSessionAccessTests
                     await Refused(platformOperator, beta, HttpStatusCode.Forbidden, "not_member");
                 }
             }
-            Assert.Equal(241, privatePairs); Assert.Equal(227, tenantPairs);
+            Assert.Equal(366, privatePairs); Assert.Equal(347, tenantPairs);
             Assert.Equal(alphaBefore.Tenant.Revision, (await security.ReadTenantAsync(alpha))!.Tenant.Revision);
             Assert.Equal(betaBefore.Tenant.Revision, (await security.ReadTenantAsync(beta))!.Tenant.Revision);
             Assert.Equal(alphaAudit, (await security.ReadAuditAsync(alpha, 200)).Count);
@@ -131,8 +131,12 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(232, retained.Count);
             var added = manifest.RootElement.GetProperty("addedCanonical").EnumerateArray()
                 .Select(item => (method: item.GetProperty("method").GetString()!, route: item.GetProperty("route").GetString()!)).ToHashSet();
-            Assert.Equal(18, added.Count); Assert.DoesNotContain(added, retained.Contains);
-            var supported = retained.Union(added).ToHashSet();
+            Assert.Equal(156, added.Count); Assert.DoesNotContain(added, retained.Contains);
+            var retiredSuccessors = manifest.RootElement.GetProperty("retiredAfterBaseline").EnumerateArray().ToArray();
+            Assert.Equal(13, retiredSuccessors.Length);
+            var retiredPairs = retiredSuccessors.Select(item => (method: item.GetProperty("method").GetString()!, route: item.GetProperty("route").GetString()!)).ToHashSet();
+            Assert.True(retiredPairs.IsSubsetOf(retained));
+            var supported = retained.Except(retiredPairs).Union(added).ToHashSet();
             var mapped = actual.Where(item => item.route.StartsWith("/api/", StringComparison.Ordinal)).ToHashSet();
             Assert.True(supported.SetEquals(mapped), "Canonical route inventory differs. Missing: "
                 + string.Join(", ", supported.Except(mapped).OrderBy(p => p.route).ThenBy(p => p.method))
@@ -149,6 +153,22 @@ public sealed partial class TenantSessionAccessTests
                     if (method is not ("GET" or "HEAD")) request.Content = JsonContent.Create(new { });
                     using var response = await client.SendAsync(request);
                     Assert.True(response.StatusCode == HttpStatusCode.NotFound, $"{method} {route} returned {(int)response.StatusCode}");
+                    Assert.DoesNotContain("text/html", response.Content.Headers.ContentType?.MediaType ?? "");
+                }
+            }
+            var currentTenant = (await Json(await human.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();
+            foreach (var item in retiredSuccessors)
+            {
+                var method = item.GetProperty("method").GetString()!; var route = item.GetProperty("route").GetString()!;
+                Assert.DoesNotContain((method, route), actual);
+                var path = Regex.Replace(route, @"\{([^}]+)\}", match => match.Value.Contains("tenantId", StringComparison.Ordinal) ? currentTenant.ToString("D") : payload);
+                foreach (var client in new[] { anonymous, oldToken, human })
+                {
+                    using var request = new HttpRequestMessage(new HttpMethod(method), path);
+                    if (method is not ("GET" or "HEAD")) request.Content = JsonContent.Create(new { });
+                    using var response = await client.SendAsync(request);
+                    // The current private API fallback authenticates before refusing an unmapped successor path.
+                    Assert.Equal(client == human ? HttpStatusCode.NotFound : HttpStatusCode.Unauthorized, response.StatusCode);
                     Assert.DoesNotContain("text/html", response.Content.Headers.ContentType?.MediaType ?? "");
                 }
             }
