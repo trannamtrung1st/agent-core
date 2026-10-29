@@ -22,10 +22,11 @@ using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Api.Tests;
 
-internal class DurableSqliteHostFactory(string dbPath, bool runScheduler = true, ILanguageModel? languageModel = null) : WebApplicationFactory<Program>
+internal class DurableSqliteHostFactory(string dbPath, bool runScheduler = true, ILanguageModel? languageModel = null) : AgentCoreTestHostFactory
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        base.ConfigureWebHost(builder);
         var repo = FindRepoRoot();
         builder.UseContentRoot(Path.Combine(repo, "src", "AgentCore.Api"));
         builder.UseEnvironment("Development");

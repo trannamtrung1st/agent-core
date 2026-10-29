@@ -32,7 +32,7 @@ public sealed partial class TenantAgentAccessTests
         if (enabled || mode.Contains("-disabled", StringComparison.Ordinal)) json["enabled"] = enabled;
         var model = new AutomationMutationModel { CreateOnly = true, Background = independent, CreateArguments = json.ToJsonString() };
         var verifier = new MutationVerifier(); var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        await using var factory = new RuntimeStateFactory(sqlite, clock, model, semantic: verifier);
+        await using var factory = new RuntimeStateFactory(sqlite, clock, model, semantic: verifier, manualDispatch: true);
         using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, _) = await MutationAgent(factory, owner, events: true, eventSourceRead: !missingSource); var api = $"/api/v2/tenants/{tenant}";
         if (independent) await ExperienceAutomationRights(owner, tenant, instance);
