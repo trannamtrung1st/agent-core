@@ -1,4 +1,4 @@
-import { canonicalFetch } from './support/tenant-auth';
+import { canonicalFetch, prepareOrdinaryChat } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext } from '@playwright/test';
 
 const login = process.env.TENANT_MEMORY_LOGIN ?? 'tenant-chat-owner@example.test';
@@ -36,8 +36,10 @@ for (const viewport of [{ width: 1400, height: 950 }, { width: 390, height: 844 
       const agent = await call<{ instance: { instanceId: string }; principalId: string }>(api, prefix + '/agents', { templateId: 'general-assistant', version: 36, expectedRevision: await revision() });
       const role = await call<{ roleId: string }>(api, prefix + '/roles', { name: 'Memory executor', permissions: ['agents.chat', 'sessions.read', 'agent-runs.read', 'memory.read', 'memory.manage'], expectedRevision: await revision() });
       await call(api, prefix + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await revision() });
+      await prepareOrdinaryChat(api, tenant, agent.instance.instanceId);
+      const space = await call<{ spaceId: string }>(api, `${prefix}/agents/${agent.instance.instanceId}/private-space`);
       const report = '# Vietnam car prices\nResearch retained after closing work.\n';
-      const reportUrl = `${prefix}/agents/${agent.instance.instanceId}/workspace/content?path=%2Fhome%2Fcar-prices.md`;
+      const reportUrl = `${prefix}/spaces/${space.spaceId}/workspace/content?path=%2Fhome%2Fcar-prices.md`;
       const csrf = await (await api.get('/api/v2/auth/csrf')).json();
       expect((await api.put(reportUrl + `&expectedRevision=${await revision()}`, { headers: { 'X-AgentCore-CSRF': csrf.token, 'Content-Type': 'text/plain' }, data: report })).ok()).toBe(true);
       await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(login); await page.getByLabel('Password', { exact: true }).fill(password);

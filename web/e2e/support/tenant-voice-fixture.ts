@@ -1,3 +1,4 @@
+import { prepareOrdinaryChat } from './tenant-auth';
 import { expect, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 
 let identity: Awaited<ReturnType<APIRequestContext['storageState']>>;
@@ -21,6 +22,7 @@ export async function openTenantConversation(page: Page) {
   const tenant = await call<{ tenantId: string }>(page.request, '/api/v2/system/tenants', { name: `Speech ${nonce}`, slug: `speech-${nonce}` });
   const root = `/api/v2/tenants/${tenant.tenantId}`;
   const state = await call<{ revision: number }>(page.request, root + '/access/me');
-  await call(page.request, root + '/agents', { templateId: 'examiner', version: 1, expectedRevision: state.revision });
+  const agent = await call<{ instance: { instanceId: string } }>(page.request, root + '/agents', { templateId: 'examiner', version: 1, expectedRevision: state.revision });
+  await prepareOrdinaryChat(page.request, tenant.tenantId, agent.instance.instanceId);
   await page.goto(`/t/${tenant.tenantId}`);
 }

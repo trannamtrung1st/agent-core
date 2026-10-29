@@ -1,4 +1,4 @@
-import { canonicalFetch, grantPrivateSpaceRead, signInTenant } from './support/tenant-auth';
+import { canonicalFetch, prepareOrdinaryChat, signInTenant } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext } from '@playwright/test';
 const login = process.env.TENANT_MEMORY_LOGIN ?? 'tenant-chat-owner@example.test';
 const password = process.env.TENANT_MEMORY_PASSWORD ?? 'synthetic-tenant-chat-password';
@@ -22,7 +22,7 @@ for (const width of [1440, 390]) for (const decision of ['approve', 'reject']) t
     const changed = await call<{ revision: number }>(api, prefix + `/definition-drafts/${draft.draftId}`, { candidate: draft.candidate, expectedRevision: await revision(), expectedDraftRevision: 1 }, 'PUT');
     await call(api, prefix + `/definition-drafts/${draft.draftId}/publish`, { expectedRevision: await revision(), expectedDraftRevision: changed.revision });
     const agent = await call<{ instance: { instanceId: string }; principalId: string }>(api, prefix + '/agents/from-publication', { definitionId: draft.definitionId, version: 1, expectedRevision: await revision() });
-    await grantPrivateSpaceRead(api, tenant, agent.instance.instanceId);
+    await prepareOrdinaryChat(api, tenant, agent.instance.instanceId);
     const role = await call<{ roleId: string }>(api, prefix + '/roles', { name: 'Configuration reader', permissions: ['agents.chat', 'sessions.read', 'agents.read'], expectedRevision: await revision() });
     await call(api, prefix + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await revision() });
     await call(api, prefix + '/operation-policies/agents.read', { mode: 'always', independentReview: false, expectedRevision: await revision(), expectedPolicyRevision: 0 }, 'PUT');

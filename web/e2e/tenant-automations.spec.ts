@@ -1,4 +1,4 @@
-import { canonicalFetch, signInTenant } from './support/tenant-auth';
+import { canonicalFetch, grantPrivateSpaceRead, signInTenant } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 
 const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password';
@@ -14,6 +14,7 @@ async function fixture() {
   const tenant = (await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Schedule ${nonce}`, slug: `schedule-${nonce}` })).tenantId;
   const root = `/api/v2/tenants/${tenant}`; const revision = async () => (await call<{ revision: number }>(api, root + '/access/me')).revision;
   const agent = await call<{ principalId: string; instance: { instanceId: string } }>(api, root + '/agents', { templateId: 'general-assistant', version: 36, expectedRevision: await revision() });
+  await grantPrivateSpaceRead(api, tenant, agent.instance.instanceId);
   const id = agent.instance.instanceId; const route = `/t/${tenant}/admin/agents/${id}/automations`, resource = root + `/agents/${id}/automations`;
   const role = await call<{ roleId: string }>(api, root + '/roles', { name: 'Independent scheduled executor', permissions: ['automations.run', 'sessions.create', 'agent-runs.create', 'sessions.read', 'agent-runs.read', 'agents.chat'], expectedRevision: await revision() });
   await call(api, root + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await revision() });

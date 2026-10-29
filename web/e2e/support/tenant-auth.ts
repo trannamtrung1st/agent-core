@@ -35,6 +35,25 @@ export async function grantPrivateSpaceRead(api: APIRequestContext, tenant: stri
   const role = await call(root + '/roles', { name: `Read exact context ${principal}`, permissions: ['spaces.read'], expectedRevision: await revision() });
   await call(root + '/role-assignments', { principalId: principal, roleId: role.roleId, resourceType: 'space', resourceId: space.spaceId, expectedRevision: await revision() });
 }
+// Legacy journeys exercise a deliberately authored ordinary Agent. Keep the managed
+// default's own journey separate and select this fixture without changing product defaults.
+export async function prepareOrdinaryChat(api: APIRequestContext, tenant: string, instance: string) {
+  await grantPrivateSpaceRead(api, tenant, instance);
+  const root = `/api/v2/tenants/${tenant}`;
+  async function call(path: string, data?: unknown, method = data === undefined ? 'GET' : 'PUT') {
+    const csrf = await (await api.get('/api/v2/auth/csrf')).json();
+    const response = await canonicalFetch(api, path, { method, data, headers: { 'X-AgentCore-CSRF': csrf.token } });
+    expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy();
+    return response.status() === 204 ? undefined : response.json();
+  }
+  const defaults = await call(root + '/chat/agents');
+  for (const managed of defaults.items.filter((item: { systemManaged: boolean }) => item.systemManaged)) {
+    const editor = await call(`${root}/agents/${managed.instanceId}/editor`);
+    await call(`${root}/agents/${managed.instanceId}/chat-visibility`, { showInChat: false,
+      expectedRevision: editor.securityRevision, expectedInstanceRevision: editor.agent.instance.revision });
+  }
+}
+
 export async function signInTenant(page: Page, login: string, password: string) {
   for (let attempt = 0; attempt < 2; attempt++) {
     // A deliberate fresh form/CSRF after an explicit limiter refusal matches the

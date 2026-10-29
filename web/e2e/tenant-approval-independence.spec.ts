@@ -1,3 +1,4 @@
+import { prepareOrdinaryChat } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 
 const login = process.env.TENANT_MEMORY_LOGIN ?? 'tenant-chat-owner@example.test';
@@ -60,6 +61,7 @@ for (const exceptional of [false, true]) for (const decision of ['approve', 'rej
       const changed = await call<{ revision: number }>(api, prefix + `/definition-drafts/${draft.draftId}`, { candidate: draft.candidate, expectedRevision: await revision(), expectedDraftRevision: 1 }, 'PUT');
       await call(api, prefix + `/definition-drafts/${draft.draftId}/publish`, { expectedRevision: await revision(), expectedDraftRevision: changed.revision });
       const agent = await call<{ instance: { instanceId: string }; principalId: string }>(api, prefix + '/agents/from-publication', { definitionId: draft.definitionId, version: 1, expectedRevision: await revision() });
+      await prepareOrdinaryChat(api, tenant, agent.instance.instanceId);
       const executorRole = await call<{ roleId: string }>(api, prefix + '/roles', { name: 'Actual executor', permissions: ['agents.chat', 'sessions.read', 'agents.read', ...(exceptional ? [] : ['agents.update'])], expectedRevision: await revision() });
       await call(api, prefix + '/role-assignments', { principalId: agent.principalId, roleId: executorRole.roleId, expectedRevision: await revision() });
       const reviewerRole = await call<{ roleId: string }>(api, prefix + '/roles', { name: 'Independent qualified reviewer', permissions: ['agents.read', 'agents.update', 'sessions.read', 'approvals.read', 'approvals.approve', 'approvals.grant_exception'], expectedRevision: await revision() });

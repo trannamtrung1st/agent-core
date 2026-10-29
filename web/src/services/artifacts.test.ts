@@ -2,7 +2,7 @@ import { waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 beforeEach(() => { vi.resetModules();  });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); window.localStorage.clear(); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 const record = (sessionId = "s1", artifactId = "a1") => ({ sessionId, artifactId,
   displayName: "canonical.md", contentType: "text/markdown", byteSize: 10 });
 const response = (value = record()) => ({ ok: true, status: 200, json: async () => value });

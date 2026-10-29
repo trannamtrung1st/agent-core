@@ -41,10 +41,20 @@ public sealed class SpaceAutomationPinMigrationTests
                 new ScheduleTrigger(timing), timing.AtUtc, null, 0, 1, 1, new(TriggerAuthorizationOrigin.AdminOwner, null, null, at, at), null);
             // Seed the frozen predecessor's physical names; the current ORM uses canonical offering IDs.
             var record = TriggerStoreMapping.ToRecord(legacy);
-            var properties = db.Model.FindEntityType(typeof(AutomationRecord))!.GetProperties().ToArray();
+            var physicalColumns = new HashSet<string>(StringComparer.Ordinal);
+            await using (var columns = db.Database.GetDbConnection().CreateCommand())
+            {
+                columns.CommandText = "PRAGMA table_info(Automations)";
+                await using var reader = await columns.ExecuteReaderAsync();
+                while (await reader.ReadAsync()) physicalColumns.Add(reader.GetString(1));
+            }
+            string PhysicalColumn(Microsoft.EntityFrameworkCore.Metadata.IProperty property) =>
+                property.Name == "ModelOverrideOfferingId" ? "ModelOverrideCatalogKey" : property.GetColumnName();
+            var properties = db.Model.FindEntityType(typeof(AutomationRecord))!.GetProperties()
+                .Where(property => physicalColumns.Contains(PhysicalColumn(property))).ToArray();
             await using (var insert = db.Database.GetDbConnection().CreateCommand())
             {
-                var names = properties.Select(p => "\"" + (p.Name == "ModelOverrideOfferingId" ? "ModelOverrideCatalogKey" : p.GetColumnName()) + "\"");
+                var names = properties.Select(p => "\"" + (PhysicalColumn(p)) + "\"");
                 insert.CommandText = "INSERT INTO Automations (" + string.Join(",", names) + ") VALUES (" + string.Join(",", properties.Select((_, i) => "$p" + i)) + ")";
                 for (var i = 0; i < properties.Length; i++)
                 {

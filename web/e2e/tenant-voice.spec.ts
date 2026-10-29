@@ -1,4 +1,4 @@
-import { canonicalFetch } from './support/tenant-auth';
+import { canonicalFetch, prepareOrdinaryChat } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext } from '@playwright/test';
 import fs from 'node:fs';
 import { MessagePackHubProtocol } from '@microsoft/signalr-protocol-msgpack';
@@ -39,7 +39,8 @@ for (const width of [1440, 390]) test(`tenant voice keeps capture active, credit
     await call(api, '/api/v2/auth/login', { login, password });
     const nonce = crypto.randomUUID().slice(0, 8), tenant = await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Voice ${nonce}`, slug: `voice-${nonce}` });
     const prefix = `/api/v2/tenants/${tenant.tenantId}`, revision = async () => (await call<{ revision: number }>(api, prefix + '/access/me')).revision;
-    await call(api, prefix + '/agents', { templateId: 'examiner', version: 1, expectedRevision: await revision() });
+    const agent = await call<{ instance: { instanceId: string } }>(api, prefix + '/agents', { templateId: 'examiner', version: 1, expectedRevision: await revision() });
+    await prepareOrdinaryChat(api, tenant.tenantId, agent.instance.instanceId);
     await page.setViewportSize({ width, height: 900 }); await page.goto('/sign-in');
     await page.getByLabel('Email', { exact: true }).fill(login); await page.getByLabel('Password', { exact: true }).fill(password);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();

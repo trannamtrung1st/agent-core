@@ -84,24 +84,24 @@ it('reports a committed save when refresh fails and recovers without replaying i
   expect(api.patchInstanceSettings).toHaveBeenCalledTimes(1);
 });
 
-it('uses host-default reasoning choices for an explicit null catalog key and orders effort semantically', async () => {
+it('uses host-default reasoning choices for an explicit inherited preference and orders effort semantically', async () => {
   const model = { tools: true, vision: false, structuredOutput: true, reasoning: true };
   vi.mocked(modelApi.listModels).mockResolvedValue({ defaultOfferingId: 'host', models: [
     { ...model, offeringId: 'host', displayName: 'Host model', supportedReasoningEfforts: ['high', 'low', 'medium'] },
     { ...model, offeringId: 'definition', displayName: 'Definition model', supportedReasoningEfforts: ['max'] }
   ] });
   vi.mocked(api.listInstanceSettings).mockResolvedValue([{ section: 'modelDefaults', instanceRevision: 1,
-    definitionId: 'agent', definitionVersion: 1, overrides: { offeringId: null, reasoningEffort: null },
-    effective: { offeringId: null, reasoningEffort: null }, definitionDefaults: { offeringId: 'definition', reasoningEffort: 'max' },
-    sources: { offeringId: 'instance', reasoningEffort: 'instance' }, configurationHash: 'hash' }]);
+    definitionId: 'agent', definitionVersion: 1, overrides: { preference: { mode: 'inherit', reasoning: { mode: 'modelDefault' } } },
+    effective: { preference: { mode: 'inherit', reasoning: { mode: 'modelDefault' } } }, definitionDefaults: { preference: { mode: 'fixed', offeringId: 'definition', reasoning: { mode: 'fixed', effort: 'max' } } },
+    sources: { preference: 'instance' }, configurationHash: 'hash' }]);
   render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
   fireEvent.click(await screen.findByRole('button', { name: /^Model defaults/ }));
-  const effort = screen.getByRole('combobox', { name: 'Reasoning effort' });
+  const effort = screen.getByRole('combobox', { name: 'Instance reasoning' });
   await waitFor(() => expect(effort).toBeEnabled());
   fireEvent.mouseDown(effort);
-  await screen.findByRole('option', { name: 'low' });
+  await screen.findByTitle('low');
   const choices = Array.from(document.querySelectorAll('.ant-select-item-option-content')).map(element => element.textContent);
-  expect(choices).toEqual(['low', 'medium', 'high']);
+  expect(choices).toEqual(['Use inherited reasoning', 'Model default', 'Auto reasoning', 'low', 'medium', 'high']);
 });
 
 it('ignores a late settings refresh after switching owners', async () => {
@@ -226,14 +226,14 @@ it('retains unavailable model and effort explicitly without silently choosing th
       reasoning: true, supportedReasoningEfforts: ['low'], defaultReasoningEffort: 'low' }
   ] });
   vi.mocked(api.listInstanceSettings).mockResolvedValue([{ section: 'modelDefaults', instanceRevision: 1,
-    definitionId: 'agent', definitionVersion: 1, overrides: { offeringId: retired, reasoningEffort: 'high' },
-    effective: { offeringId: retired, reasoningEffort: 'high' }, definitionDefaults: { offeringId: null, reasoningEffort: null },
-    sources: { offeringId: 'instance', reasoningEffort: 'instance' }, configurationHash: 'hash' }]);
+    definitionId: 'agent', definitionVersion: 1, overrides: { preference: { mode: 'fixed', offeringId: retired, reasoning: { mode: 'fixed', effort: 'high' } } },
+    effective: { preference: { mode: 'fixed', offeringId: retired, reasoning: { mode: 'fixed', effort: 'high' } } }, definitionDefaults: { preference: { mode: 'inherit' } },
+    sources: { preference: 'instance' }, configurationHash: 'hash' }]);
   render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
   fireEvent.click(await screen.findByRole('button', { name: /^Model defaults/ }));
   expect(await screen.findByText(`Unavailable · ${retired}`, { exact: true })).toBeVisible();
   expect(screen.getByText('high · Unavailable', { exact: true })).toBeVisible();
-  expect(screen.getByRole('combobox', { name: 'Reasoning effort' })).toBeDisabled();
+  expect(screen.getByRole('combobox', { name: 'Instance reasoning' })).toBeDisabled();
   expect(api.patchInstanceSettings).not.toHaveBeenCalled();
 });
 
@@ -244,13 +244,13 @@ it('clears an inherited unsupported effort when explicitly changing the model', 
       structuredOutput: true, reasoning: false, supportedReasoningEfforts: [], defaultReasoningEffort: null }
   ] });
   const section: settingsTypes.SettingsSection = { section: 'modelDefaults', instanceRevision: 1, definitionId: 'agent', definitionVersion: 1,
-    overrides: {}, effective: { offeringId: 'host', reasoningEffort: 'high' }, definitionDefaults: { offeringId: 'host', reasoningEffort: 'high' },
-    sources: { offeringId: 'definition', reasoningEffort: 'definition' }, configurationHash: 'hash' };
+    overrides: {}, effective: { preference: { mode: 'fixed', offeringId: 'host', reasoning: { mode: 'fixed', effort: 'high' } } }, definitionDefaults: { preference: { mode: 'fixed', offeringId: 'host', reasoning: { mode: 'fixed', effort: 'high' } } },
+    sources: { preference: 'definition' }, configurationHash: 'hash' };
   vi.mocked(api.listInstanceSettings).mockResolvedValue([section]); vi.mocked(api.patchInstanceSettings).mockResolvedValue(section);
   render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
   fireEvent.click(await screen.findByRole('button', { name: /^Model defaults/ }));
-  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Default model' }));
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Instance model' }));
   fireEvent.click(await screen.findByTitle('Scripted Beta · Offline Synthetic'));
   fireEvent.click(screen.getByRole('button', { name: 'Save Model defaults' }));
-  await waitFor(() => expect(api.patchInstanceSettings).toHaveBeenCalledWith('owner', expect.anything(), { offeringId: beta, reasoningEffort: null }, []));
+  await waitFor(() => expect(api.patchInstanceSettings).toHaveBeenCalledWith('owner', expect.anything(), { preference: { mode: 'fixed', offeringId: beta, reasoning: { mode: 'modelDefault', effort: null } } }, []));
 });
