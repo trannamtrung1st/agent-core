@@ -98,7 +98,7 @@ public sealed partial class TenantAgentAccessTests
     public async Task Tenant_model_manual_Automation_invocation_commits_one_occurrence_and_factual_receipt_then_executes_with_its_actual_human(bool sqlite)
     {
         var model = new AutomationInvocationModel { Hold = true }; var verifier = new MutationVerifier();
-        await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: verifier); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
+        await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: verifier, manualDispatch: true); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, _, _, original) = await InvocationAgent(factory, owner, model); var submitted = await SubmitProfileRequest(owner, tenant, original.Owner.AgentInstanceId, message: "Inspect this Automation and run it exactly once now.");
         await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8); await model.Observed.Task.WaitAsync(TimeSpan.FromSeconds(25));
         try
@@ -136,7 +136,7 @@ public sealed partial class TenantAgentAccessTests
     [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_model_manual_Automation_invocation_uses_the_saved_conversation_without_Session_creation_authority(bool sqlite, bool review)
     {
-        var model = new AutomationInvocationModel(); await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: new MutationVerifier());
+        var model = new AutomationInvocationModel(); await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: new MutationVerifier(), manualDispatch: true);
         using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, _, original) = await InvocationAgent(factory, owner, model, existingConversation: true); var api = $"/api/v2/tenants/{tenant}";
         if (review) await Json(await owner.PutAsJsonAsync(api + "/operation-policies/automations.run", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 }));
@@ -165,7 +165,7 @@ public sealed partial class TenantAgentAccessTests
     [Fact(Timeout = 120000)]
     public async Task Tenant_model_manual_Automation_pending_consent_survives_actual_SQLite_host_recreation_without_early_or_duplicate_admission()
     {
-        var model = new AutomationInvocationModel(); await using var first = new RuntimeStateFactory(true, model: model, semantic: new MutationVerifier());
+        var model = new AutomationInvocationModel(); await using var first = new RuntimeStateFactory(true, model: model, semantic: new MutationVerifier(), manualDispatch: true);
         using var owner = first.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, _, _) = await InvocationAgent(first, owner, model); var api = $"/api/v2/tenants/{tenant}";
         await Json(await owner.PutAsJsonAsync(api + "/operation-policies/automations.run", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 }));
@@ -174,9 +174,9 @@ public sealed partial class TenantAgentAccessTests
         for (var pass = 0; pass < 500; pass++) { pending = await first.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, submitted.Run); if (pending!.IsTerminal || pending.Status == AgentRunStatus.WaitingForApproval) break; await Task.Delay(25); }
         Assert.Equal(AgentRunStatus.WaitingForApproval, pending!.Status);
         var original = (await first.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, pending.ApprovalRequestId!.Value))!;
-        await first.DisposeAsync(); await using var reopened = new RuntimeStateFactory(true, model: model, root: first.Root, semantic: new MutationVerifier());
+        await first.DisposeAsync(); await using var reopened = new RuntimeStateFactory(true, model: model, root: first.Root, semantic: new MutationVerifier(), manualDispatch: true);
         using var again = reopened.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") }); await Login(again, "owner@example.test", "explicit-synthetic-test-password");
-        foreach (var host in reopened.Services.GetServices<Microsoft.Extensions.Hosting.IHostedService>().Where(s => s is AgentCore.Api.AgentRunHostedService or AgentCore.Api.TriggerSchedulerHostedService)) await host.StopAsync(CancellationToken.None);
+        Assert.DoesNotContain(reopened.Services.GetServices<Microsoft.Extensions.Hosting.IHostedService>(), service => service is AgentCore.Api.AgentRunHostedService or AgentCore.Api.TriggerSchedulerHostedService);
         var saved = (await reopened.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, original.RequestId))!;
         Assert.Equal(original.Operation, saved.Operation); Assert.Null(await reopened.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, saved.Operation.AutomationMutation!.Invocation!.RunId));
         await using (var db = await reopened.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>().CreateDbContextAsync())
@@ -199,7 +199,7 @@ public sealed partial class TenantAgentAccessTests
     public async Task Tenant_model_manual_Automation_invocation_does_not_admit_work_without_secondary_creation_authority_or_actual_intent(bool sqlite, string mode)
     {
         var model = new AutomationInvocationModel(); var verifier = new MutationVerifier(mode == "intent" ? TriggerCommandAuthorizationDecision.Deny : TriggerCommandAuthorizationDecision.Allow);
-        await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: verifier); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
+        await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: verifier, manualDispatch: true); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, _, original) = await InvocationAgent(factory, owner, model, creation: mode != "creation");
         var submitted = await SubmitProfileRequest(owner, tenant, instance, message: mode == "intent" ? "Can this Agent run Automations?" : "Inspect the saved Automation and run it once now.");
         await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8); var parent = await ProfileTerminal(factory, tenant, submitted.Run);
@@ -217,7 +217,7 @@ public sealed partial class TenantAgentAccessTests
     public async Task Tenant_model_manual_Automation_consent_admits_only_the_exact_current_occurrence(bool sqlite, string mode)
     {
         var model = new AutomationInvocationModel(); var verifier = new MutationVerifier(mode == "semantic" ? TriggerCommandAuthorizationDecision.ClassifierUnavailable : TriggerCommandAuthorizationDecision.Allow);
-        await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: verifier); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
+        await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: verifier, manualDispatch: true); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, assignment, original) = await InvocationAgent(factory, owner, model, run: mode != "exception"); var api = $"/api/v2/tenants/{tenant}";
         if (mode is "review" or "reject" or "changed" or "revoked") await Json(await owner.PutAsJsonAsync(api + "/operation-policies/automations.run", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 }));
         var submitted = await SubmitProfileRequest(owner, tenant, instance, message: "Inspect the saved Automation and invoke its task exactly once now.");

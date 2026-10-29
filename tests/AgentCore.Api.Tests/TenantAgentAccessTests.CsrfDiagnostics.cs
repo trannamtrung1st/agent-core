@@ -14,30 +14,28 @@ public sealed partial class TenantAgentAccessTests
     private sealed class HttpSetupFailureLogs : ILoggerProvider
     {
         private readonly ConcurrentQueue<string> _events = new();
-        public ILogger CreateLogger(string categoryName) => new Capture(this,
-            categoryName == typeof(AgentCore.Api.Http.DiagnosticExceptionHandler).FullName);
+        public ILogger CreateLogger(string categoryName) => new Capture(this);
         public void Dispose() { }
         public string Describe() => string.Join(" | ", _events);
 
         private void Record(Exception error)
         {
-            // Only Core's content-free snapshot may render a causal stack. Ordinary
-            // exceptions retain type/HResult, never their message or inner values.
+            // Startup can fail before Core's HTTP handler runs. Capture framework
+            // errors through the same content-free snapshot, never their raw text.
             var safe = error.GetType().Assembly == typeof(DiagnosticLog).Assembly
                 && error.GetType().DeclaringType?.FullName == "AgentCore.Application.Observability.DiagnosticExceptionSnapshot"
                 && error.GetType().Name is "SafeException" or "SafeAggregateException";
-            var text = safe ? error.ToString() : $"{error.GetType().FullName} HResult={error.HResult}";
+            var text = (safe ? error : DiagnosticExceptionSnapshot.Capture(error)).ToString();
             lock (_events)
                 if (_events.Count < 8) _events.Enqueue(text[..Math.Min(text.Length, 4096)]);
         }
-        private sealed class Capture(HttpSetupFailureLogs owner, bool httpHandler) : ILogger
+        private sealed class Capture(HttpSetupFailureLogs owner) : ILogger
         {
             public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-            public bool IsEnabled(LogLevel level) => httpHandler && level >= LogLevel.Error;
+            public bool IsEnabled(LogLevel level) => level >= LogLevel.Error;
             public void Log<TState>(LogLevel level, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
             {
-                if (httpHandler && level >= LogLevel.Error && exception is not null
-                    && formatter(state, null).StartsWith("HTTP request failed.", StringComparison.Ordinal)) owner.Record(exception);
+                if (level >= LogLevel.Error && exception is not null) owner.Record(exception);
             }
         }
     }
@@ -46,7 +44,7 @@ public sealed partial class TenantAgentAccessTests
     public async Task Automation_setup_keeps_CSRF_failure_and_only_content_free_HTTP_exception_evidence()
     {
         const string privateValue = "https://private.test/secret?token=PRIVATE_CSRF_COOKIE body=PRIVATE_SOURCE";
-        await using var factory = new RuntimeStateFactory(false, configure: services =>
+        await using var factory = new RuntimeStateFactory(false, manualDispatch: true, configure: services =>
             services.Replace(ServiceDescriptor.Singleton<IAntiforgery>(new UnavailableAntiforgery(privateValue))));
         using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var failure = await Assert.ThrowsAnyAsync<Xunit.Sdk.XunitException>(() => MutationAgent(factory, owner));

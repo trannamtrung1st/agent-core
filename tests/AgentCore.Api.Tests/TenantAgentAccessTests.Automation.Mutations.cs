@@ -91,7 +91,8 @@ public sealed partial class TenantAgentAccessTests
     }
     private static async Task<(Guid Tenant, Guid Instance, Guid Grant)> MutationAgent(RuntimeStateFactory factory, HttpClient owner, bool write = true, bool events = false, bool eventSourceRead = true)
     {
-        foreach (var host in factory.Services.GetServices<IHostedService>().Where(s => s is AgentCore.Api.AgentRunHostedService or AgentCore.Api.TriggerSchedulerHostedService)) await host.StopAsync(CancellationToken.None);
+        Assert.True(factory.ManualDispatch, "Manual Automation fixtures must disable automatic dispatch before host startup.");
+        Assert.DoesNotContain(factory.Services.GetServices<IHostedService>(), service => service is AgentCore.Api.AgentRunHostedService or AgentCore.Api.TriggerSchedulerHostedService);
         (Guid tenant, Guid instance) owned;
         try { owned = await OwnedMemoryAgent(owner, enabled: false, automation: true, events: events, automationMutations: true); }
         catch (Xunit.Sdk.XunitException error) when (error.Message.StartsWith("CSRF ", StringComparison.Ordinal) || error.Message.StartsWith("Login ", StringComparison.Ordinal))
@@ -112,7 +113,7 @@ public sealed partial class TenantAgentAccessTests
     public async Task Tenant_model_Automation_mutations_create_inspect_edit_enable_disable_and_finish_through_the_real_Runtime_without_legacy_authority(bool sqlite)
     {
         var model = new AutomationMutationModel(); var verifier = new MutationVerifier();
-        await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: verifier); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
+        await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: verifier, manualDispatch: true); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, _) = await MutationAgent(factory, owner);
         const string task = "Create a disabled background task in one hour, inspect it, rename it, enable it and disable it again.";
         var submitted = await SubmitProfileRequest(owner, tenant, instance, message: task); await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
@@ -144,7 +145,7 @@ public sealed partial class TenantAgentAccessTests
     public async Task Tenant_model_Automation_semantic_denial_keeps_owned_state_unchanged_and_creates_no_effect(bool sqlite)
     {
         var model = new AutomationMutationModel { CreateOnly = true }; var verifier = new MutationVerifier(TriggerCommandAuthorizationDecision.Deny);
-        await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: verifier); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
+        await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: verifier, manualDispatch: true); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, _) = await MutationAgent(factory, owner); var submitted = await SubmitProfileRequest(owner, tenant, instance, message: "Does this agent support Automation?");
         await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8); var run = await ProfileTerminal(factory, tenant, submitted.Run);
         Assert.Equal(AgentRunStatus.Completed, run.Status); Assert.True(model.Blocked); Assert.Single(verifier.Requests);
@@ -157,7 +158,7 @@ public sealed partial class TenantAgentAccessTests
     public async Task Tenant_model_Automation_exact_consent_resumes_once_or_truthfully_refuses_without_creating_work(bool sqlite, string mode)
     {
         var model = new AutomationMutationModel { CreateOnly = true }; var verifier = new MutationVerifier(mode == "semantic" ? TriggerCommandAuthorizationDecision.ClassifierUnavailable : TriggerCommandAuthorizationDecision.Allow);
-        await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: verifier); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
+        await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: verifier, manualDispatch: true); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, _) = await MutationAgent(factory, owner, mode != "exception"); var api = $"/api/v2/tenants/{tenant}";
         if (mode is "review" or "reject") await Json(await owner.PutAsJsonAsync(api + "/operation-policies/automations.create", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 }));
         var submitted = await SubmitProfileRequest(owner, tenant, instance, message: "Create a disabled background task in one hour.");
@@ -186,7 +187,7 @@ public sealed partial class TenantAgentAccessTests
     [Theory(Timeout = 120000)] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_model_Automation_own_change_receipts_do_not_waive_revoked_read_authority_before_output(bool sqlite)
     {
-        var model = new AutomationMutationModel { Hold = true }; await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: new MutationVerifier());
+        var model = new AutomationMutationModel { Hold = true }; await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: new MutationVerifier(), manualDispatch: true);
         using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") }); var (tenant, instance, assignment) = await MutationAgent(factory, owner);
         var submitted = await SubmitProfileRequest(owner, tenant, instance, message: "Create, inspect, rename, enable and disable a background task in one hour.");
         await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8); await model.Observed.Task.WaitAsync(TimeSpan.FromSeconds(25));
@@ -205,7 +206,7 @@ public sealed partial class TenantAgentAccessTests
     public async Task Tenant_independent_Automation_authors_a_new_disabled_task_using_its_actual_admitted_intent_and_own_IAM(bool sqlite)
     {
         var model = new AutomationMutationModel { Background = true }; var verifier = new MutationVerifier(); var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
-        await using var factory = new RuntimeStateFactory(sqlite, clock, model, semantic: verifier); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
+        await using var factory = new RuntimeStateFactory(sqlite, clock, model, semantic: verifier, manualDispatch: true); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance, _) = await MutationAgent(factory, owner); await ExperienceAutomationRights(owner, tenant, instance);
         const string intent = "Create a disabled background task in one hour, inspect, rename, enable and disable it using this admitted task.";
         var run = await ExperienceAutomation(factory, owner, clock, tenant, instance, 1, scheduled: true, instructions: intent);
@@ -218,7 +219,7 @@ public sealed partial class TenantAgentAccessTests
     [Theory(Timeout = 120000)] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_Automation_direct_replay_is_factual_and_same_arguments_cannot_substitute_a_different_mutation_tool(bool sqlite)
     {
-        var model = new AutomationMutationModel { Hold = true }; await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: new MutationVerifier());
+        var model = new AutomationMutationModel { Hold = true }; await using var factory = new RuntimeStateFactory(sqlite, model: model, semantic: new MutationVerifier(), manualDispatch: true);
         using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") }); var (tenant, instance, _) = await MutationAgent(factory, owner);
         var submitted = await SubmitProfileRequest(owner, tenant, instance, message: "Create, inspect, rename, enable and disable a background task in one hour.");
         await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8); await model.Observed.Task.WaitAsync(TimeSpan.FromSeconds(25));
@@ -240,7 +241,7 @@ public sealed partial class TenantAgentAccessTests
     [InlineData(false, "source-review")] [InlineData(true, "source-review")]
     public async Task Tenant_model_existing_Automation_deletion_requires_exact_current_consent_and_preserves_history(bool sqlite, string mode)
     {
-        var verifier = new MutationVerifier(); await using var factory = new RuntimeStateFactory(sqlite, model: new AgentCore.Infrastructure.Providers.Synthetic.ScriptedLanguageModel(), semantic: verifier);
+        var verifier = new MutationVerifier(); await using var factory = new RuntimeStateFactory(sqlite, model: new AgentCore.Infrastructure.Providers.Synthetic.ScriptedLanguageModel(), semantic: verifier, manualDispatch: true);
         using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") }); var (tenant, instance, assignment) = await MutationAgent(factory, owner);
         var api = $"/api/v2/tenants/{tenant}"; var route = api + $"/agents/{instance}/automations";
         var body = new { enabled = false, name = "Retained deletion target", instructions = "Keep <script>literal</script> instructions and history.", requiresTools = false,

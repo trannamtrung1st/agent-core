@@ -108,9 +108,9 @@ public sealed partial class TenantAgentAccessTests
         {
             var root = json?.RootElement ?? default;
             var reason = "unavailable";
-            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("reasonCode", out var code)
+            if (root.ValueKind == JsonValueKind.Object && (root.TryGetProperty("reasonCode", out var code) || root.TryGetProperty("code", out code))
                 && code.ValueKind == JsonValueKind.String && code.GetString() is { Length: > 0 and <= 64 } value
-                && value.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '-')) reason = value;
+                && value.All(c => c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '_' or '-')) reason = value;
             // Failed authentication setup must never print CSRF tokens, cookies or response bodies.
             Assert.True(response.StatusCode == HttpStatusCode.OK, $"CSRF request status={(int)response.StatusCode}; phase={phase}; reasonCode={reason}");
             JsonElement token = default;

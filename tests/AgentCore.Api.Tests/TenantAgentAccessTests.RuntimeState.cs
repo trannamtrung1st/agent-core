@@ -119,11 +119,12 @@ public sealed partial class TenantAgentAccessTests
             return Pending is { } pending ? await pending : new("browser", "available", "isolated", DateTimeOffset.UtcNow, LiveContexts: 0, OpenPages: CountPages ? Calls : 0);
         }
     }
-    private sealed class RuntimeStateFactory(bool sqlite, TimeProvider? clock = null, ILanguageModel? model = null, string? root = null, IModelCatalog? catalog = null, AgentCore.Application.Triggers.ITriggerCommandAuthorizer? semantic = null, Action<IServiceCollection>? configure = null, bool nativeDefinitions = false) : AgentCoreApiFactory
+    private sealed class RuntimeStateFactory(bool sqlite, TimeProvider? clock = null, ILanguageModel? model = null, string? root = null, IModelCatalog? catalog = null, AgentCore.Application.Triggers.ITriggerCommandAuthorizer? semantic = null, Action<IServiceCollection>? configure = null, bool nativeDefinitions = false, bool manualDispatch = false) : AgentCoreApiFactory
     {
         protected override bool EnableTenantRunExecution => model is not null;
         public RuntimeBrowserProbe Browser { get; } = new(); public string Root { get; } = root ?? Path.Combine(Path.GetTempPath(), "tenant-runtime-state-" + Guid.NewGuid().ToString("N"));
         public HttpSetupFailureLogs HttpFailures { get; } = new();
+        public bool ManualDispatch { get; } = manualDispatch;
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             base.ConfigureWebHost(builder);
@@ -146,6 +147,11 @@ public sealed partial class TenantAgentAccessTests
                 if (catalog is not null) services.Replace(ServiceDescriptor.Singleton<IModelCatalog>(catalog));
                 if (clock is not null) services.Replace(ServiceDescriptor.Singleton(clock));
                 configure?.Invoke(services);
+                if (ManualDispatch)
+                    foreach (var descriptor in services.Where(d => d.ServiceType == typeof(Microsoft.Extensions.Hosting.IHostedService)
+                        && (d.ImplementationType == typeof(AgentCore.Api.AgentRunHostedService)
+                            || d.ImplementationType == typeof(AgentCore.Api.TriggerSchedulerHostedService))).ToArray())
+                        services.Remove(descriptor);
             });
         }
     }
