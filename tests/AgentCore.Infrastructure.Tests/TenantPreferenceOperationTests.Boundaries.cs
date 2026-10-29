@@ -105,7 +105,7 @@ public sealed partial class TenantPreferenceOperationTests
             if (boundary == "role")
             {
                 var state = (await f.Iam.ReadTenantAsync(setup.Tenant))!;
-                await f.Access.RevokeAssignmentAsync(setup.Owner.PrincipalId, setup.Tenant, state.Assignments.Single(a => a.PrincipalId == setup.Agent.PrincipalId).AssignmentId, state.Tenant.Revision);
+                await f.Access.RevokeAssignmentAsync(setup.Owner.PrincipalId, setup.Tenant, state.Assignments.Single(a => a.PrincipalId == setup.Agent.PrincipalId && state.Roles.Single(r => r.RoleId == a.RoleId).Permissions.Contains("agents.update")).AssignmentId, state.Tenant.Revision);
             }
             if (boundary == "lease") clock.Advance(TimeSpan.FromMinutes(5));
             if (boundary == "cancel") cancellation.Cancel();

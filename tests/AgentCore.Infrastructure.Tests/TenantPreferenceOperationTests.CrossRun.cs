@@ -38,6 +38,7 @@ public sealed partial class TenantPreferenceOperationTests
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow.AddSeconds(1));
         await using var f = await Fixture.Create(sqlite, clock); var setup = await CrossRunSetup(f, review);
         var owner = setup.Environment.Owner; var tenant = setup.Request.TenantId; var source = setup.Waiting;
+        var assignmentsBefore = (await f.Iam.ReadTenantAsync(tenant))!.Assignments.OrderBy(a => a.AssignmentId).ToArray();
         var session = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(tenant, source.SessionId))!;
         var later = await f.RunService().SubmitTextAsync(tenant, source.SessionId, owner, f.Ids.NewId(), "Later independent input", (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision, session.Snapshot.Revision);
         var runtime = (ITenantRuntimeStore)f.Iam;
@@ -91,7 +92,7 @@ public sealed partial class TenantPreferenceOperationTests
         Assert.Single(await reopened.ReadAuditAsync(tenant, 200), a => a.Action == "operations.preferences.apply");
         Assert.Single(await reopened.ReadAuditAsync(tenant, 200), a => a.Action == "agent-runs.approval-continuation");
         Assert.Equal(3, (await ((ITenantAgentStore)reopened).FindTenantAgentAsync(tenant, next.AgentInstanceId))!.Instance.Revision);
-        if (!review) Assert.DoesNotContain((await reopened.ReadTenantAsync(tenant))!.Assignments, a => a.PrincipalId == request.ExecutorPrincipalId);
+        if (!review) Assert.Equal(assignmentsBefore, (await reopened.ReadTenantAsync(tenant))!.Assignments.OrderBy(a => a.AssignmentId).ToArray());
     }
 
     [Theory]

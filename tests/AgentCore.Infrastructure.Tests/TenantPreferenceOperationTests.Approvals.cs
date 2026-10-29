@@ -46,6 +46,7 @@ public sealed partial class TenantPreferenceOperationTests
     public async Task Approved_preferences_apply_the_saved_typed_change_once_and_replay_after_reopen_without_broadening_authority(bool sqlite, bool review)
     {
         await using var f = await Fixture.Create(sqlite); var setup = await ApprovedPreference(f, review); var run = setup.Claimed; var request = setup.Request;
+        var assignmentsBefore = (await f.Iam.ReadTenantAsync(request.TenantId))!.Assignments.OrderBy(a => a.AssignmentId).ToArray();
         var result = await ApprovedEffects(f).ExecuteAsync(new(request.TenantId, run.AgentRunId), request.RequestId, request.Operation.OperationId, run.Claim!.Generation, request.Operation.ActionHash);
         Assert.Equal(TenantOperationOutcome.Completed, result.Outcome); Assert.Equal(request.RequestId, result.RequestId);
         var target = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(request.TenantId, run.AgentInstanceId))!.Instance;
@@ -54,7 +55,7 @@ public sealed partial class TenantPreferenceOperationTests
         Assert.Equal(result, await ApprovedEffects(f, reopened).ExecuteAsync(new(request.TenantId, run.AgentRunId), request.RequestId, request.Operation.OperationId, run.Claim.Generation, request.Operation.ActionHash));
         Assert.Single(await reopened.ReadAuditAsync(request.TenantId, 200), a => a.Action == "operations.preferences.apply");
         var grant = await ((ITenantApprovalStore)reopened).FindOperationGrantAsync(request.TenantId, request.RequestId);
-        if (review) Assert.Null(grant); else { Assert.Equal(OperationGrantStatus.Consumed, grant!.Status); Assert.DoesNotContain((await reopened.ReadTenantAsync(request.TenantId))!.Assignments, a => a.PrincipalId == request.ExecutorPrincipalId); }
+        if (review) Assert.Null(grant); else { Assert.Equal(OperationGrantStatus.Consumed, grant!.Status); Assert.Equal(assignmentsBefore, (await reopened.ReadTenantAsync(request.TenantId))!.Assignments.OrderBy(a => a.AssignmentId).ToArray()); }
     }
 
     [Theory]

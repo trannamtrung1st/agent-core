@@ -153,11 +153,11 @@ public sealed partial class TenantPreferenceOperationTests
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f, permissions: false);
         var persona = setup.Agent.Instance.Persona with { Name = "Tiếng Việt \"quoted\" <tag>" };
         var request = (await Approvals(f).PreparePersonaAsync(new(setup.Tenant, setup.Run.AgentRunId), persona, setup.Run.Revision, setup.Run.Claim!.Generation)).Request!;
-        var changedWitness = TenantApprovalRules.Prepare(f.Ids.NewId(), request.Operation.InstanceId, persona, 99, 98);
+        var changedWitness = TenantApprovalRules.ForRun(TenantApprovalRules.Prepare(f.Ids.NewId(), request.Operation.InstanceId, persona, 99, 98), setup.Run);
         Assert.NotEqual(request.Operation.ActionHash, changedWitness.ActionHash); Assert.Equal(request.Fingerprint, changedWitness.OperationFingerprint);
         var store = (ITenantApprovalStore)f.Iam;
         Assert.Equal(request.RequestId, (await store.FindRootApprovalAsync(setup.Tenant, request.RootActivationId, request.ExecutorPrincipalId, changedWitness))!.RequestId);
-        var materialChange = TenantApprovalRules.Prepare(f.Ids.NewId(), request.Operation.InstanceId, persona with { Tone = "Different tone" }, 99, 98);
+        var materialChange = TenantApprovalRules.ForRun(TenantApprovalRules.Prepare(f.Ids.NewId(), request.Operation.InstanceId, persona with { Tone = "Different tone" }, 99, 98), setup.Run);
         Assert.Null(await store.FindRootApprovalAsync(setup.Tenant, request.RootActivationId, request.ExecutorPrincipalId, materialChange));
         Assert.Null(await store.FindRootApprovalAsync(setup.Tenant, f.Ids.NewId(), request.ExecutorPrincipalId, changedWitness));
     }
@@ -169,7 +169,7 @@ public sealed partial class TenantPreferenceOperationTests
     {
         await using var f = await Fixture.Create(sqlite); var setup = await ApprovedPreference(f, false);
         var request = setup.Request; var run = setup.Claimed;
-        var priorOperation = TenantApprovalRules.PreparePreferences(f.Ids.NewId(), request.Operation.InstanceId, request.Operation.Preferences!, 1, 1);
+        var priorOperation = TenantApprovalRules.ForRun(TenantApprovalRules.PreparePreferences(f.Ids.NewId(), request.Operation.InstanceId, request.Operation.Preferences!, 1, 1), run);
         var prior = request with { RequestId = f.Ids.NewId(), Operation = priorOperation, Status = TenantApprovalStatus.Rejected,
             Revision = 2, CreatedAt = request.CreatedAt.AddMilliseconds(-1) };
         // Simulate retained history from the old exact-hash root index, including its old serialized getter.

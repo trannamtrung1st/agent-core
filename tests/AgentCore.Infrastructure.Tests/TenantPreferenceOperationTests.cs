@@ -48,6 +48,8 @@ public sealed partial class TenantPreferenceOperationTests
             var role = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Chat requester", ["agents.read", "agents.chat", "sessions.create", "sessions.read"], await Revision());
             var invitation = await f.Access.InviteAsync(human.PrincipalId, owner.TenantId, account.LoginKey, role.RoleId, await Revision());
             var member = await f.Access.AcceptInvitationAsync(account.AccountId, owner.TenantId, invitation.Invitation.InvitationId, invitation.Token);
+            await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, member.PrincipalId, context.RoleId,
+                TenantSpaceService.Scope(owner.TenantId, ownSpace.SpaceId), await Revision());
             var auth = (await f.Identity.SignInAsync(account.LoginKey, "strong-requester-password"))!.Session;
             human = new(account.AccountId, auth.SessionId, member.PrincipalId);
         }
