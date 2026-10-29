@@ -54,9 +54,11 @@ public sealed partial class TenantDefinitionIntegrationTests
         var attempt = new SandboxVerificationAttempt(Guid.NewGuid(), owner.TenantId, profile.Id, 1, false, 2, SandboxVerificationStatus.Succeeded, now.AddSeconds(-1), now,
             human.AccountId, human.AuthenticationSessionId, human.PrincipalId, revision, p.Host.Scope, Result: observation);
         var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        await using (var db = f.Contexts!.CreateDbContext())
+        await using var historical = await HistoricalTenantDatabase.CreateAsync(f.Contexts!,
+            "20261017203239_TenantSandboxVerificationOwnership",
+            [.. HistoricalTenantDatabase.AdmissionTables, "TenantSandboxProfiles", "SandboxProfiles"]);
         {
-            await db.GetService<IMigrator>().MigrateAsync("20261017203239_TenantSandboxVerificationOwnership");
+            var db = historical.Db;
             var receipt = JsonSerializer.Serialize(attempt, json);
             await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO TenantSandboxVerificationAttempts (AttemptId,TenantId,ProfileId,ProfileRevision,Revision,SecurityRevision,Active,LeaseExpiresAt,StartedAt,Json) VALUES ({attempt.AttemptId},{owner.TenantId},{profile.Id},{1L},{2L},{revision},{false},{now.ToUnixTimeMilliseconds()},{attempt.StartedAt.ToUnixTimeMilliseconds()},{receipt})");
             var value = JsonSerializer.Serialize(observation, json);
@@ -67,12 +69,14 @@ public sealed partial class TenantDefinitionIntegrationTests
             await db.GetService<IMigrator>().MigrateAsync("20261017205857_TenantSandboxInstanceVerification");
             Assert.Equal(securityRevision, await db.Set<AgentCore.Domain.Security.Tenant>().AsNoTracking()
                 .Where(t => t.TenantId == owner.TenantId).Select(t => t.Revision).SingleAsync());
-            await db.GetService<IMigrator>().MigrateAsync();
+            Assert.Equal("20261017205857_TenantSandboxInstanceVerification", (await db.Database.GetAppliedMigrationsAsync()).Last());
         }
-        var reopened = new SqliteIamStore(f.Contexts!, f.Content);
+        var reopened = new SqliteIamStore(historical, f.Content);
         var retained = (await reopened.FindSandboxVerificationAsync(owner.TenantId, profile.Id, attempt.AttemptId))!;
         Assert.Equal(SandboxVerificationStatus.Succeeded, retained.Status); Assert.True(retained.Result!.Passed); Assert.Null(retained.InstanceId);
         Assert.True((await reopened.ReadSandboxVerificationAsync(owner.TenantId, profile.Id, 1)).Observation!.Passed);
-        Assert.True((await p.Images.InspectAsync(profile)).Eligible);
+        var images = new AgentCore.Infrastructure.Sandbox.SandboxImageAuthority(p.Options, new InMemorySandboxStore(), TimeProvider.System,
+            tenantCredentials: reopened, tenantVerifications: reopened, verificationHost: p.Host);
+        Assert.True((await images.InspectAsync(profile)).Eligible);
     }
 }

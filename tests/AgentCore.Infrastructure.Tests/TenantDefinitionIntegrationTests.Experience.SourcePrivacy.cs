@@ -38,6 +38,9 @@ public sealed partial class TenantDefinitionIntegrationTests
         var peer = new HumanSessionReference(account.AccountId, login.SessionId, member.PrincipalId); var reviews = (ITenantExperienceReviewStore)f.Iam;
         await Assert.ThrowsAsync<AccessDeniedException>(() => reviews.ObserveOwnTenantExperienceReviewAsync(owner.Tenant, owner.Agent.Instance.InstanceId, peer, ExperienceSourceKind.AgentRun, completed.AgentRunId).AsTask());
         Assert.Equal(owner.Human.PrincipalId, (await reviews.ObserveOwnTenantExperienceReviewAsync(owner.Tenant, owner.Agent.Instance.InstanceId, owner.Human, ExperienceSourceKind.AgentRun, completed.AgentRunId)).Witness.PrivateUserPrincipalId);
+        var space = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(owner.Tenant, owner.Agent.Instance.InstanceId))!;
+        await f.Access.AssignRoleAsync(owner.Human.PrincipalId, owner.Tenant, member.PrincipalId, owner.ContextRole,
+            TenantSpaceService.Scope(owner.Tenant, space.SpaceId), (await f.Iam.ReadTenantAsync(owner.Tenant))!.Tenant.Revision);
         var peerTurn = await MemoryClaim(f, owner, requester: peer);
         await Assert.ThrowsAsync<AccessDeniedException>(() => experiences.ObserveTenantExperienceSourceAsync(new(owner.Tenant, peerTurn.Run.AgentRunId), peerTurn.Frame.Generation, ExperienceSourceKind.AgentRun, completed.AgentRunId).AsTask());
     }

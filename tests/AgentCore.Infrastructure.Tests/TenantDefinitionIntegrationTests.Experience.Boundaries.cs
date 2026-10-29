@@ -60,19 +60,29 @@ public sealed partial class TenantDefinitionIntegrationTests
     public async Task Tenant_experience_SQLite_upgrade_freezes_owner_source_content_and_consent_and_refuses_lossy_downgrade()
     {
         await using var f = await Fixture.Create(true); var owner = await ExperienceOwner(f); var source = await MemoryClaim(f, owner); await MemoryCommit(f, source, await MemoryPlan(f, source)); var current = await MemoryClaim(f, owner);
-        await using var db = f.Contexts!.CreateDbContext(); var migration = db.GetService<IMigrator>(); await migration.MigrateAsync("20261021201045_TenantContinuityRead");
-        var previous = await db.Database.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type='trigger'").ToArrayAsync();
-        await migration.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); var latest = await db.Database.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type='trigger'").ToArrayAsync(); Assert.All(previous, name => Assert.Contains(name, latest));
+        await using (var historical = await HistoricalTenantDatabase.CreateAsync(f.Contexts!,
+            "20261021201045_TenantContinuityRead", HistoricalTenantDatabase.ExperienceSetupTables))
+        {
+            var previous = await historical.Db.Database.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type='trigger'").ToArrayAsync();
+            await historical.Db.GetService<IMigrator>().MigrateAsync("20261021212948_TenantExperience");
+            var latest = await historical.Db.Database.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type='trigger'").ToArrayAsync();
+            Assert.All(previous, name => Assert.Contains(name, latest));
+        }
+        await using var db = f.Contexts!.CreateDbContext();
         var store = (ITenantExperienceStore)f.Iam; var observed = await store.ObserveTenantExperienceSourceAsync(new(owner.Tenant, current.Frame.RunId), current.Frame.Generation, ExperienceSourceKind.Session, source.Frame.SessionId);
         await SaveExperienceSource(f, current, observed); var fact = (await CommitExperience(f, current, observed)).Observation.Value.ResultExperienceId;
         foreach (var sql in new[] { "DELETE FROM TenantExperiences", "UPDATE TenantExperiences SET OwnerKey='instance', UserPrincipalId=NULL, AccountId=NULL, UserId=NULL", "UPDATE TenantExperiences SET SourceId='00000000-0000-0000-0000-000000000000', Revision=Revision+1", "UPDATE TenantExperiences SET ContentJson='{{}}', Revision=Revision+1", "UPDATE TenantExperiences SET Visibility=2, Revision=Revision+1" })
             await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.Database.ExecuteSqlRawAsync(sql));
-        await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => migration.MigrateAsync("20261021201045_TenantContinuityRead")); await migration.MigrateAsync();
+        await HistoricalTenantDatabase.AssertApprovalDowngradeRefusedAsync(f.Contexts!,
+            "20261021212948_TenantExperience", "20261021201045_TenantContinuityRead", "Rows=0",
+            HistoricalTenantDatabase.ExperienceAdmissionTables);
         Assert.True(await db.Set<TenantExperienceRecord>().AnyAsync(i => i.ExperienceId == fact));
         var reviewTurn = await MemoryClaim(f, owner); await MemoryPolicy(f, owner, "sessions.read", OperationApprovalMode.Always); var s = ExperienceServices(f);
         var request = await PrepareExperienceReview(f, reviewTurn.Frame, new("source", TenantExperienceToolContract.Source, JsonSerializer.Serialize(new { sourceKind = "Session", sourceId = source.Frame.SessionId })), s.Approvals);
         await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson=json_set(PayloadJson,'$.Operation.ExperienceOperation.Source.ThroughCursor',999) WHERE RequestId={request.RequestId}"));
-        await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => migration.MigrateAsync("20261021212948_TenantExperience")); await migration.MigrateAsync();
+        await HistoricalTenantDatabase.AssertApprovalDowngradeRefusedAsync(f.Contexts!,
+            "20261021214545_TenantExperienceConsent", "20261021212948_TenantExperience", "Rows=0",
+            HistoricalTenantDatabase.ExperienceAdmissionTables);
         var reopened = ExperienceServices(f, new SqliteIamStore(f.Contexts, f.Content)); Assert.True((await reopened.Approvals.ReadViewAsync(owner.Tenant, request.RequestId, new(owner.Human.AccountId, owner.Human.AuthenticationSessionId, owner.Human.PrincipalId))).Review!.CanDecide);
         Assert.Empty(await db.Database.SqlQueryRaw<string>("SELECT 'violation' AS Value FROM pragma_foreign_key_check").ToArrayAsync());
     }

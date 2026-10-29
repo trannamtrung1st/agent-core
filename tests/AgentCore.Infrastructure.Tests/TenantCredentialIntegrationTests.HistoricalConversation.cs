@@ -24,7 +24,7 @@ public sealed partial class TenantCredentialIntegrationTests
             var destinationPath = Path.Combine(Root, "historical-conversation.db");
             using (new FileStream(destinationPath, FileMode.CreateNew, FileAccess.Write)) { }
             var destination = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>()
-                .UseSqlite($"Data Source={destinationPath};Foreign Keys=True;Default Timeout=10").Options);
+                .UseSqlite($"Data Source={new Uri(destinationPath).AbsoluteUri};Foreign Keys=True;Default Timeout=10").Options);
             await using (var db = destination.CreateDbContext())
             {
                 await db.GetService<IMigrator>().MigrateAsync(predecessor);
@@ -33,9 +33,10 @@ public sealed partial class TenantCredentialIntegrationTests
                 await using (var attach = connection.CreateCommand())
                 {
                     attach.CommandText = "ATTACH DATABASE $path AS fixtureSource";
-                    attach.Parameters.AddWithValue("$path", Path.Combine(Root, "store.db"));
+                    attach.Parameters.AddWithValue("$path", HistoricalTenantDatabase.ReadOnlyUri(Path.Combine(Root, "store.db")));
                     await attach.ExecuteNonQueryAsync();
                 }
+                Assert.Equal(1, SQLitePCL.raw.sqlite3_db_readonly(connection.Handle, "fixtureSource"));
                 async Task<HashSet<string>> Columns(string schema, string table)
                 {
                     await using var command = connection.CreateCommand();
@@ -66,6 +67,7 @@ public sealed partial class TenantCredentialIntegrationTests
                 }
                 Assert.Equal(1, (await db.Database.SqlQueryRaw<int>("PRAGMA foreign_keys").ToArrayAsync()).Single());
                 Assert.Equal(0, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM pragma_foreign_key_check").SingleAsync());
+                await db.Database.ExecuteSqlRawAsync("DETACH DATABASE fixtureSource");
             }
             Contexts = destination;
             Memory = new SqliteMemoryStore(destination, Clock);

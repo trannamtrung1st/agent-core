@@ -1225,7 +1225,7 @@ public sealed partial class AgentRunAdmissionStoreTests
             var sourcePath = _path!;
             var destinationPath = sourcePath + ".embedded-predecessor";
             var destination = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>()
-                .UseSqlite($"Data Source={destinationPath};Foreign Keys=True").Options);
+                .UseSqlite($"Data Source={new Uri(destinationPath).AbsoluteUri};Foreign Keys=True").Options);
             await using (var db = destination.CreateDbContext())
             {
                 await db.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>().MigrateAsync(BeforeEmbeddedRetirement);
@@ -1234,8 +1234,9 @@ public sealed partial class AgentRunAdmissionStoreTests
                 await using (var attach = connection.CreateCommand())
                 {
                     attach.CommandText = "ATTACH DATABASE $path AS fixtureSource";
-                    attach.Parameters.AddWithValue("$path", sourcePath); await attach.ExecuteNonQueryAsync();
+                    attach.Parameters.AddWithValue("$path", HistoricalTenantDatabase.ReadOnlyUri(sourcePath)); await attach.ExecuteNonQueryAsync();
                 }
+                Assert.Equal(1, SQLitePCL.raw.sqlite3_db_readonly(connection.Handle, "fixtureSource"));
                 async Task<HashSet<string>> Columns(string schema, string table)
                 {
                     await using var command = connection.CreateCommand();
@@ -1257,6 +1258,7 @@ public sealed partial class AgentRunAdmissionStoreTests
                     insert.CommandText = $"INSERT INTO \"{table}\" ({names}) SELECT {names} FROM fixtureSource.\"{table}\"";
                     await insert.ExecuteNonQueryAsync();
                 }
+                await db.Database.ExecuteSqlRawAsync("DETACH DATABASE fixtureSource");
             }
             using (var old = new SqliteConnection($"Data Source={sourcePath}")) SqliteConnection.ClearPool(old);
             _path = destinationPath; _factory = destination;

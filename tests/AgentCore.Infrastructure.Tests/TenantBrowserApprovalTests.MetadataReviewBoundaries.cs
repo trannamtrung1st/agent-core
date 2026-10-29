@@ -83,18 +83,9 @@ public sealed partial class TenantBrowserApprovalTests
         var browser = (await Request(service, s)).Request!; var view = await service.ReadViewAsync(s.Tenant, browser.RequestId, s.Human);
         browser = await service.DecideAsync(s.Tenant, browser.RequestId, s.Human, true, browser.Operation.ActionHash, view.SecurityRevision, browser.Revision);
         var decision = await ((ITenantApprovedOperationStore)f.Iam).FindApprovalDecisionAsync(s.Tenant, browser.RequestId);
-        await using (var db = f.Contexts!.CreateDbContext())
-        {
-            var bytes = (await db.Set<TenantApprovalRecord>().AsNoTracking().SingleAsync()).PayloadJson;
-            var migrator = db.GetService<IMigrator>();
-            // Current Run payloads retain download references which an old schema
-            // cannot represent. Exercise the safe roundtrip and the guarded boundary.
-            await migrator.MigrateAsync("20261023180000_TenantPublicDownloads");
-            await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => migrator.MigrateAsync("20261018053723_TenantBrowserCommandReview"));
-            Assert.Contains("20261023180000_TenantPublicDownloads", await db.Database.GetAppliedMigrationsAsync());
-            await db.Database.MigrateAsync();
-            Assert.False(db.Database.HasPendingModelChanges()); Assert.Equal(bytes, (await db.Set<TenantApprovalRecord>().AsNoTracking().SingleAsync()).PayloadJson);
-        }
+        await HistoricalTenantDatabase.AssertApprovalUpgradeAsync(f.Contexts!,
+            "20261018053723_TenantBrowserCommandReview", "20261018123638_TenantCredentialMetadataReview",
+            HistoricalTenantDatabase.CredentialAdmissionTables);
         Assert.Equal(decision, await ((ITenantApprovedOperationStore)f.Iam).FindApprovalDecisionAsync(s.Tenant, browser.RequestId));
         Assert.Single(await ((ITenantApprovalStore)f.Iam).PendingApprovalSignalsAsync(100));
         await service.DispatchPendingAsync(); var queued = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, s.Run.AgentRunId))!;

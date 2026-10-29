@@ -27,13 +27,13 @@ public sealed partial class TenantDefinitionIntegrationTests
             config, f.Ids, TimeProvider.System, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTenantModelCatalogReader(current), SyntheticProviderAliases.Default, memoryOperations: memory);
         return (memory, approvals, effects, new(runs, (ITenantApprovalStore)current, effects, TimeProvider.System, (ITenantRuntimeStore)current, f.Ids));
     }
-    private static async Task<(MemorySetup Owner, MemoryTurn Turn, TenantLearnedMemory[] Sources)> MemoryOperationFixture(Fixture f)
+    private static async Task<(MemorySetup Owner, MemoryTurn Turn, TenantLearnedMemory[] Sources, AgentRun LearnedRun)> MemoryOperationFixture(Fixture f)
     {
         var owner = await MemoryOwner(f, operations: true); var learned = await MemoryClaim(f, owner);
         var plan = await MemoryPlan(f, learned, Learned("Prefer complete grouped evidence") with { Subject = "Evidence grouping" },
             Learned("Keep exact durable witnesses") with { Subject = "Evidence retention" });
         await MemoryCommit(f, learned, plan); var turn = await MemoryClaim(f, owner);
-        return (owner, turn, plan.Changes.Select(c => c.Value).Where(m => m.Scope == MemoryScope.IdentityUser).OrderBy(i => i.MemoryId).ToArray());
+        return (owner, turn, plan.Changes.Select(c => c.Value).Where(m => m.Scope == MemoryScope.IdentityUser).OrderBy(i => i.MemoryId).ToArray(), learned.Run);
     }
     private static ModelToolCall Consolidate(TenantLearnedMemory[] sources) => new("consolidate", ToolCatalog.MemoryConsolidate,
         JsonSerializer.Serialize(new { sourceMemoryIds = sources.Select(m => m.MemoryId).ToArray(), kind = "Preference", subject = "Evidence practice", content = "Group complete evidence and retain durable witnesses" }));

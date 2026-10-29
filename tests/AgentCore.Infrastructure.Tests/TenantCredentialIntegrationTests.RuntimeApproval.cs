@@ -225,16 +225,9 @@ public sealed partial class TenantCredentialIntegrationTests
             (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision, local.Revision);
         var retainedGrant = await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(setup.Tenant, local.RequestId);
         Assert.NotNull(retainedGrant);
-        await using (var db = await f.Contexts!.CreateDbContextAsync())
-        {
-            var migrator = db.GetService<IMigrator>();
-            // Current Runs retain public-download references. Roundtrip the safe
-            // predecessor, then require the deeper lossy downgrade to preserve them.
-            await migrator.MigrateAsync("20261023180000_TenantPublicDownloads");
-            await Assert.ThrowsAsync<SqliteException>(() => migrator.MigrateAsync("20261017071356_TenantExecutionAuthorizationAudit"));
-            Assert.Contains("20261023180000_TenantPublicDownloads", await db.Database.GetAppliedMigrationsAsync());
-            await migrator.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
-        }
+        await HistoricalTenantDatabase.AssertApprovalUpgradeAsync(f.Contexts!,
+            "20261017071356_TenantExecutionAuthorizationAudit", "20261017090143_TenantCredentialApprovalTargets",
+            HistoricalTenantDatabase.CredentialAdmissionTables);
         Assert.Equal(local, await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(setup.Tenant, local.RequestId));
         Assert.Equal(retainedGrant, await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(setup.Tenant, local.RequestId));
         Assert.Equal(1, await service.DispatchPendingAsync());
@@ -245,8 +238,9 @@ public sealed partial class TenantCredentialIntegrationTests
         await using (var db = await f.Contexts!.CreateDbContextAsync())
         {
             var payload = await db.Database.SqlQuery<string>($"SELECT PayloadJson AS Value FROM TenantApprovalRequests WHERE RequestId={check.RequestId}").SingleAsync();
-            await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261017071356_TenantExecutionAuthorizationAudit"));
-            // Completed safe Down steps remain applied when an older lossy step refuses.
+            await HistoricalTenantDatabase.AssertApprovalDowngradeRefusedAsync(f.Contexts!,
+                "20261017090143_TenantCredentialApprovalTargets", "20261017071356_TenantExecutionAuthorizationAudit", "Valid = 1",
+                HistoricalTenantDatabase.CredentialAdmissionTables);
             Assert.Equal(payload, await db.Database.SqlQuery<string>($"SELECT PayloadJson AS Value FROM TenantApprovalRequests WHERE RequestId={check.RequestId}").SingleAsync());
             Assert.Contains("20261017090143_TenantCredentialApprovalTargets", await db.Database.GetAppliedMigrationsAsync());
             Assert.Contains("20261023180000_TenantPublicDownloads", await db.Database.GetAppliedMigrationsAsync());

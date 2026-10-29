@@ -179,6 +179,18 @@ public sealed partial class TenantCredentialIntegrationTests
             catch { await f.DisposeAsync(); throw; }
         }
         public AuthorizationAudit Audit(Guid tenant, Guid actor, Guid id) => new(Ids.NewId(), tenant, actor, "credentials.update", id.ToString("D"), "allowed", "test", DateTimeOffset.UtcNow);
+        internal async Task UseUpgradedDatabaseAsync(IDbContextFactory<AgentCoreDbContext> contexts, bool builtInAuthority)
+        {
+            await using (var db = contexts.CreateDbContext())
+                Assert.Equal(db.Database.GetMigrations(), await db.Database.GetAppliedMigrationsAsync());
+            Contexts = contexts;
+            Resources = new SqliteAgentDefinitionResourceAdminStore(contexts, RunContent, Ids);
+            Iam = new SqliteIamStore(contexts, definitionContent: RunContent, builtIns: builtInAuthority ? BuiltIns : null,
+                inheritedResources: builtInAuthority ? RunResourceCatalog() : null, clock: Clock);
+            Legacy = new SqliteCredentialStore(contexts); Instances = new SqliteAgentInstanceStore(contexts, Ids);
+            Memory = new SqliteMemoryStore(contexts, Clock); Sandboxes = new SqliteSandboxStore(contexts);
+            EmailDrafts = new SqliteEmailStore(contexts);
+        }
         public ValueTask DisposeAsync() { SqliteConnection.ClearAllPools(); Directory.Delete(Root, true); return ValueTask.CompletedTask; }
     }
     private sealed class ContextFactory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>

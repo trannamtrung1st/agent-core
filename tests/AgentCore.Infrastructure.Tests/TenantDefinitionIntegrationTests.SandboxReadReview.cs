@@ -340,8 +340,11 @@ public sealed partial class TenantDefinitionIntegrationTests
             var row = await db.Set<TenantApprovalRecord>().AsNoTracking().SingleAsync(); var json = JsonNode.Parse(row.PayloadJson)!;
             json["Operation"]!.AsObject().Remove("SandboxRead"); json["Snapshot"]!.AsObject().Remove("SandboxRead"); var prior = json.ToJsonString();
             await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson={prior} WHERE RequestId={request.RequestId}");
-            await db.GetService<IMigrator>().MigrateAsync("20261018021925_TenantSandboxControlReview");
-            await db.Database.MigrateAsync();
+            await HistoricalTenantDatabase.AssertApprovalUpgradeAsync(f.Contexts!,
+                "20261018021925_TenantSandboxControlReview", "20261018025233_TenantSandboxReadReview",
+                [.. HistoricalTenantDatabase.CredentialAdmissionTables.TakeWhile(table => table != "TenantApprovalRequests"),
+                    "TenantSandboxProfiles", "SandboxProfiles", "SandboxSessionLeases", "SandboxExecutions",
+                    .. HistoricalTenantDatabase.CredentialAdmissionTables.SkipWhile(table => table != "TenantApprovalRequests")]);
             Assert.Equal(prior, (await db.Set<TenantApprovalRecord>().AsNoTracking().SingleAsync()).PayloadJson);
             await db.Database.OpenConnectionAsync(); using var command = db.Database.GetDbConnection().CreateCommand(); command.CommandText = "PRAGMA foreign_key_check";
             using var reader = await command.ExecuteReaderAsync(); Assert.False(await reader.ReadAsync());

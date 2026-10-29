@@ -89,13 +89,23 @@ public sealed partial class TenantDefinitionIntegrationTests
     public async Task Tenant_continuity_SQLite_upgrade_preserves_owned_history_and_facts_and_freezes_prepared_sources()
     {
         await using var f = await Fixture.Create(true); var owner = await MemoryOwner(f, operations: true); var source = await MemoryClaim(f, owner); await MemoryCommit(f, source, await MemoryPlan(f, source, Learned())); var current = await MemoryClaim(f, owner);
-        await using var db = f.Contexts!.CreateDbContext(); var migrations = db.GetService<IMigrator>(); await migrations.MigrateAsync("20261021185601_TenantMemoryOperations");
-        var guards = await db.Database.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type='trigger'").ToArrayAsync(); await migrations.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(3, await db.Set<TenantLearnedMemoryRecord>().CountAsync()); Assert.All(guards, name => Assert.Contains(name, db.Database.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type='trigger'").ToArray()));
+        await using (var historical = await HistoricalTenantDatabase.CreateAsync(f.Contexts!,
+            "20261021185601_TenantMemoryOperations", HistoricalTenantDatabase.MemoryAdmissionTables, [source.Run]))
+        {
+            var before = await historical.Db.Database.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type='trigger'").ToArrayAsync();
+            await historical.Db.GetService<IMigrator>().MigrateAsync("20261021201045_TenantContinuityRead");
+            Assert.Equal(3, await historical.Db.Set<TenantLearnedMemoryRecord>().CountAsync());
+            var after = await historical.Db.Database.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type='trigger'").ToArrayAsync();
+            Assert.All(before, name => Assert.Contains(name, after));
+        }
+        await using var db = f.Contexts!.CreateDbContext(); var migrations = db.GetService<IMigrator>();
         await MemoryPolicy(f, owner, "sessions.read", OperationApprovalMode.Always); var s = ContinuityServices(f); var request = await PrepareContinuityReview(f, current.Frame, HistoryCall(source.Frame.SessionId), s.Approvals);
         await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson=json_set(PayloadJson,'$.Operation.ContinuityRead.SessionsJson','[]') WHERE RequestId={request.RequestId}"));
-        await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => migrations.MigrateAsync("20261021185601_TenantMemoryOperations")); Assert.True(await db.Set<TenantApprovalRecord>().AnyAsync(r => r.RequestId == request.RequestId));
-        // A refused multi-step Down may already have removed safe successor columns.
+        await HistoricalTenantDatabase.AssertApprovalDowngradeRefusedAsync(f.Contexts!,
+            "20261021201045_TenantContinuityRead", "20261021185601_TenantMemoryOperations", "Rows=0",
+            HistoricalTenantDatabase.MemoryAdmissionTables, [source.Run]);
+        Assert.True(await db.Set<TenantApprovalRecord>().AnyAsync(r => r.RequestId == request.RequestId));
+        // The isolated historical refusal leaves the current source usable.
         await migrations.MigrateAsync();
         Assert.Equal(db.Database.GetMigrations(), await db.Database.GetAppliedMigrationsAsync());
         Assert.False(db.Database.HasPendingModelChanges());

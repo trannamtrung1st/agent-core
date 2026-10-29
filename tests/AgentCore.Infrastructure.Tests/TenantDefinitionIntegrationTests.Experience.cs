@@ -48,6 +48,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             TenantExperienceToolContract.Parse(TenantExperienceToolContract.Record, ExperienceRecordArguments(source.Witness, goal)));
         var state = (await f.Iam.ReadTenantAsync(observed.Reader.Security.Tenant.TenantId))!; var run = observed.Reader.Run;
         var prepared = TenantApprovalRules.PrepareExperience(f.Ids.NewId(), run.AgentInstanceId, observed.Value, observed.Reader.Agent.Instance.Revision, observed.Reader.Agent.Instance.PersonaRevision);
+        prepared = TenantApprovalRules.ForRun(prepared, run);
         var commit = new TenantExperienceCommit(prepared.OperationId, run.AgentRunId, current.Frame.Generation, run.Revision, call,
             TenantMemoryOperationRules.Hash(observed.Arguments.CanonicalArguments), observed.Value, observed.Reader.Agent.Instance.Revision, prepared.ActionHash);
         var audit = new AuthorizationAudit(f.Ids.NewId(), state.Tenant.TenantId, observed.Reader.Agent.PrincipalId, "operations.experience.record", run.AgentInstanceId.ToString("D"), "allowed", TenantExperienceRules.Recorded, DateTimeOffset.UtcNow);

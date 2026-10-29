@@ -33,18 +33,21 @@ public sealed partial class TenantDefinitionIntegrationTests
     public async Task Tenant_learned_memory_explicit_empty_upgrade_preserves_installed_identity_and_global_rows_without_adopting_them()
     {
         await using var f = await Fixture.Create(true); var owner = await MemoryOwner(f); var turn = await MemoryClaim(f, owner);
-        await using var db = f.Contexts!.CreateDbContext();
-        await db.GetService<IMigrator>().MigrateAsync("20261021144350_TenantUserProfiles");
+        await using var source = f.Contexts!.CreateDbContext();
         var id = Guid.NewGuid().ToString("D"); var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        db.Profiles.Add(new() { ProfileId = Guid.NewGuid().ToString("D"), PreferencesJson = "{}", Revision = 1, UpdatedAtUtc = now });
-        db.StructuredMemories.Add(new() { MemoryId = id, SessionId = turn.Frame.SessionId.ToString("D"), Kind = 0, Status = 0,
+        source.Profiles.Add(new() { ProfileId = Guid.NewGuid().ToString("D"), PreferencesJson = "{}", Revision = 1, UpdatedAtUtc = now });
+        source.StructuredMemories.Add(new() { MemoryId = id, SessionId = turn.Frame.SessionId.ToString("D"), Kind = 0, Status = 0,
             Subject = "Old global source", SubjectKey = "old global source", Content = "DO_NOT_ADOPT_GLOBAL_MEMORY", Source = "test",
             SourceEntryIdsJson = "[]", ProvenanceRecordedAtUtc = now, CreatedAtUtc = now, UpdatedAtUtc = now, Scope = 0 });
-        await db.SaveChangesAsync(); db.ChangeTracker.Clear();
-        await db.GetService<IMigrator>().MigrateAsync();
+        await source.SaveChangesAsync();
+        await using var historical = await HistoricalTenantDatabase.CreateAsync(f.Contexts!,
+            "20261021144350_TenantUserProfiles", [.. HistoricalTenantDatabase.AdmissionTables, "UserProfiles", "StructuredMemories"]);
+        var db = historical.Db;
+        await db.GetService<IMigrator>().MigrateAsync("20261021164125_TenantLearnedMemory");
         Assert.Single(await db.StructuredMemories.ToArrayAsync()); Assert.Single(await db.Profiles.ToArrayAsync());
         Assert.True(await db.Set<AuthenticationSession>().AnyAsync(s => s.SessionId == owner.Human.AuthenticationSessionId));
-        Assert.Empty(await db.Set<TenantLearnedMemoryRecord>().ToArrayAsync()); Assert.Empty((await ((ITenantLearnedMemoryStore)f.Iam).ReadTenantRunMemoryAsync(turn.Frame)).Items);
+        Assert.Equal(0, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM TenantLearnedMemories").SingleAsync());
+        Assert.Empty((await ((ITenantLearnedMemoryStore)f.Iam).ReadTenantRunMemoryAsync(turn.Frame)).Items);
         Assert.False(db.Database.HasPendingModelChanges());
     }
 }
