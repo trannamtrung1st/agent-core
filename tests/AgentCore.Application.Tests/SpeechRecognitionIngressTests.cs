@@ -67,6 +67,62 @@ public sealed class SpeechRecognitionIngressTests
         await ingress.DisposeAsync();await ingress.DisposeAsync();Assert.Equal(1,session.Completed);Assert.Equal(1,session.Disposed);Assert.False(ingress.TryAdmitAudio(Frame(1,0),stream));
         session.Events.Writer.TryWrite(new SpeechStarted(Guid.NewGuid()));session.Events.Writer.TryComplete();await session.ReaderFinished.Task.WaitAsync(TimeSpan.FromSeconds(5));Assert.Empty(evidence);Assert.Empty(faults);
     }
+    [Fact]
+    public async Task Queued_input_is_authorized_before_audio_and_boundaries_reach_the_provider()
+    {
+        var session = new ControlledSession(); var stream = Guid.NewGuid();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var checks = 0;
+        await using var ingress = new SpeechRecognitionIngress(session, stream, (_, _) => {}, (_, _) => Assert.Fail("Unexpected input fault"),
+            authorize: async ct => { Interlocked.Increment(ref checks); entered.TrySetResult(); await release.Task.WaitAsync(ct); });
+        ingress.Start();
+        Assert.True(ingress.TryAdmitAudio(Frame(1, 0), stream));
+        var utterance = Guid.NewGuid();
+        Assert.True(ingress.TryAdmitBoundary(utterance, SpeechBoundary.Started, .9, 480, 0, stream));
+        Assert.True(ingress.TryAdmitBoundary(utterance, SpeechBoundary.Ended, .1, 480, 20, stream));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(session.PushEntered.Task.IsCompleted); Assert.Empty(session.Boundaries);
+        release.TrySetResult(); session.Release.TrySetResult();
+        await session.BothBoundaries.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Single(session.Audio); Assert.Equal(2, session.Boundaries.Count); Assert.Equal(3, checks);
+    }
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Denied_queued_input_releases_no_audio_or_boundary_to_the_provider(bool boundary)
+    {
+        var session = new ControlledSession(); var stream = Guid.NewGuid();
+        var fault = new TaskCompletionSource<(string Code, string Message)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var ingress = new SpeechRecognitionIngress(session, stream, (_, _) => Assert.Fail("Denied input emitted evidence"),
+            (code, message) => fault.TrySetResult((code, message)),
+            authorize: _ => ValueTask.FromException(new InvalidOperationException("private-authority-detail")));
+        ingress.Start();
+        if (boundary) Assert.True(ingress.TryAdmitBoundary(Guid.NewGuid(), SpeechBoundary.Started, .9, 0, 0, stream));
+        else Assert.True(ingress.TryAdmitAudio(Frame(1, 0), stream));
+        var error = await fault.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("SpeechRecognitionFailed", error.Code); Assert.DoesNotContain("private-authority-detail", error.Message);
+        Assert.False(session.PushEntered.Task.IsCompleted); Assert.Empty(session.Audio); Assert.Empty(session.Boundaries);
+        Assert.False(ingress.TryAdmitAudio(Frame(2, 480), stream));
+    }
+    [Fact]
+    public async Task Slow_authority_keeps_the_existing_sample_budget_and_overflow_cannot_resume_provider_input()
+    {
+        var session = new ControlledSession(); var stream = Guid.NewGuid();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fault = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var returned = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var ingress = new SpeechRecognitionIngress(session, stream, (_, _) => Assert.Fail("Overflowed input emitted evidence"),
+            (code, _) => fault.TrySetResult(code), authorize: async ct =>
+            { entered.TrySetResult(); await release.Task.WaitAsync(ct); returned.TrySetResult(); });
+        ingress.Start(); Assert.True(ingress.TryAdmitAudio(Frame(1, 0), stream));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        for (var index = 1; index <= 25; index++) Assert.True(ingress.TryAdmitAudio(Frame(index + 1, index * 480), stream));
+        Assert.False(ingress.TryAdmitAudio(Frame(27, 12480), stream));
+        Assert.Equal("AudioDiscontinuity", await fault.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+        release.TrySetResult(); await returned.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await ingress.DisposeAsync();
+        Assert.False(session.PushEntered.Task.IsCompleted); Assert.Empty(session.Audio);
+    }
     private sealed class ControlledSession : ISpeechRecognitionSession
     {
         public bool ThrowPush,ThrowRead,IgnoreReaderCancellation;

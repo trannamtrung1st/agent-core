@@ -77,22 +77,26 @@ public sealed partial class TenantSessionLiveDelivery
         }, ct);
     private static bool Finite(double? n) => n is null || double.IsFinite(n.Value) && n is >= 0 and <= 1;
 
-    public async Task<bool> VoiceAudioAsync(string connection, InputAudioDto dto, TenantSessionRuntimeHost host, CancellationToken ct)
+    internal Func<CancellationToken, Task>? BeforeVoiceAudioAuthorization { get; set; }
+    internal async ValueTask AuthorizeVoiceAudioAsync(TenantVoiceLease lease, Guid stream, CancellationToken ct)
+    {
+        if (BeforeVoiceAudioAuthorization is { } before) await before(ct).ConfigureAwait(false);
+        await RequireVoiceRecipientAsync(lease, ct).ConfigureAwait(false);
+        if (!lease.InputActive || lease.StreamId != stream || lease.Retiring)
+            throw new AccessDeniedException("voice_lease_unavailable");
+    }
+    public Task<bool> VoiceAudioAsync(string connection, InputAudioDto dto, TenantSessionRuntimeHost host, CancellationToken ct)
     {
         if (!_connections.TryGetValue(connection, out var state) || state.Closed || state.Current is not { } sub
             || sub.Voice is not { InputActive: true } lease || dto.ProtocolVersion != 1
             || !Guid.TryParse(dto.SessionId, out var session) || session != sub.Session
             || !Guid.TryParse(dto.AttachmentId, out var attachment) || attachment != sub.Attachment
-            || !Guid.TryParse(dto.StreamId, out var stream) || stream != lease.StreamId) return false;
-        try
-        {
-            await RequireVoiceRecipientAsync(lease, ct).ConfigureAwait(false);
-            if (state.Current != sub || state.Closed) return false;
-            host.AdmitVoiceAudio(lease, stream, new(dto.FrameSequence, dto.SampleOffset, dto.Data));
-        }
-        catch (AccessDeniedException) { RetireVoice(sub); }
-        catch (SecurityConflictException) { RetireVoice(sub); }
-        return false;
+            || !Guid.TryParse(dto.StreamId, out var stream) || stream != lease.StreamId) return Task.FromResult(false);
+        // Raw PCM reaches the existing bounded ingress before any asynchronous authority read.
+        // Its worker revalidates this exact lease immediately before provider I/O, so slow reads
+        // cannot occupy every SignalR invocation slot ahead of Mute or receipt commands.
+        host.AdmitVoiceAudio(lease, stream, new(dto.FrameSequence, dto.SampleOffset, dto.Data));
+        return Task.FromResult(false);
     }
     public Task<CommandAck> VoicePlaybackAsync(string connection, ClientCommand<PlaybackPayload> command, TenantSessionRuntimeHost host, string kind, CancellationToken ct)
         => ExecuteAsync(connection, command, "playback." + kind, _ => null, (_, _, _) => Task.CompletedTask, async (sub, _, token) =>

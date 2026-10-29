@@ -4,7 +4,8 @@ using AgentCore.Application.Observability;
 namespace AgentCore.Application.Audio;
 
 // A provider-stream resource, not a conversation controller or execution authority.
-// Only normalized evidence/faults leave it. The owner still authorizes each ingress call.
+// Only normalized evidence/faults leave it. Current authority may be checked by
+// the bounded input worker, immediately before each provider call.
 public sealed class SpeechRecognitionIngress : IAsyncDisposable
 {
     public const int MaxPendingBoundaries = 32;
@@ -15,6 +16,7 @@ public sealed class SpeechRecognitionIngress : IAsyncDisposable
     private readonly Action<string, string> _fault;
     private readonly CancellationTokenSource _lifetime;
     private readonly AudioIngress _queue = new();
+    private readonly Func<CancellationToken, ValueTask>? _authorize;
     private readonly List<PendingBoundary> _pending = [];
     private long _nextSequence = 1, _nextOffset;
     private bool _started, _failed, _stopped;
@@ -22,10 +24,11 @@ public sealed class SpeechRecognitionIngress : IAsyncDisposable
     private sealed record PendingBoundary(Guid Utterance, SpeechBoundary Boundary, double? Score, long Offset);
 
     public SpeechRecognitionIngress(ISpeechRecognitionSession session, Guid stream,
-        Action<SpeechRecognitionEvent, double?> evidence, Action<string, string> fault, CancellationToken lifetime = default)
+        Action<SpeechRecognitionEvent, double?> evidence, Action<string, string> fault, CancellationToken lifetime = default,
+        Func<CancellationToken, ValueTask>? authorize = null)
     {
         if (stream == Guid.Empty) throw new ArgumentException("Use a fresh input stream identity.", nameof(stream));
-        _session = session; _stream = stream; _evidence = evidence; _fault = fault;
+        _session = session; _stream = stream; _evidence = evidence; _fault = fault; _authorize = authorize;
         _lifetime = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
     }
     public void Start()
@@ -97,20 +100,25 @@ public sealed class SpeechRecognitionIngress : IAsyncDisposable
     }
     private async Task PumpInputAsync()
     {
+        var token = _lifetime.Token;
         try
         {
-            await foreach (var message in _queue.Reader.ReadAllAsync(_lifetime.Token).ConfigureAwait(false))
+            await foreach (var message in _queue.Reader.ReadAllAsync(token).ConfigureAwait(false))
             {
                 lock (_gate) { if (_stopped || _failed) return; }
-                if (message is IngressAudio audio) await _session.PushAudioAsync(audio.Frame, _lifetime.Token).ConfigureAwait(false);
+                if (_authorize is not null) await _authorize(token).ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+                // A slow or noncooperative authority check cannot revive a retired/overflowed stream.
+                lock (_gate) { if (_stopped || _failed) return; }
+                if (message is IngressAudio audio) await _session.PushAudioAsync(audio.Frame, token).ConfigureAwait(false);
                 else if (message is IngressBoundary boundary)
                 {
                     Emit(boundary.Boundary == SpeechBoundary.Started ? new SpeechStarted(boundary.UtteranceId) : new SpeechEnded(boundary.UtteranceId), boundary.ActivityScore);
-                    await _session.ObserveBoundaryAsync(boundary.UtteranceId, boundary.Boundary, _lifetime.Token).ConfigureAwait(false);
+                    await _session.ObserveBoundaryAsync(boundary.UtteranceId, boundary.Boundary, token).ConfigureAwait(false);
                 }
             }
         }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception) { lock (_gate) Fail("SpeechRecognitionFailed", "Speech input became unavailable. Start a fresh stream."); }
     }
     private async Task PumpEvidenceAsync()

@@ -165,7 +165,8 @@ public sealed partial class TenantSessionRuntimeHost
             ?? throw new AccessDeniedException("resource_unavailable");
         var provider = await factory.OpenTenantRecognitionAsync(new(CanonicalAudio.Format, SpeechLocale.Resolve(saved.Snapshot).Effective), ct).ConfigureAwait(false);
         voice.Ingress = new(provider, stream, (e, score) => QueueVoice(voice, new VoiceEvidence(stream, e, score)),
-            (code, _) => QueueVoice(voice, new VoiceFault(stream, code)), voice.Lifetime.Token);
+            (code, _) => QueueVoice(voice, new VoiceFault(stream, code)), voice.Lifetime.Token,
+            authorize: token => delivery.AuthorizeVoiceAudioAsync(voice.Lease, stream, token));
     }
     private void QueueVoice(VoiceInput voice, VoiceWork work)
     {
