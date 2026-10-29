@@ -25,6 +25,9 @@ public sealed partial class TenantSessionAccessTests
         void Execute(IServiceCollection services) => services.Replace(ServiceDescriptor.Singleton<ITenantRunExecution, TenantRunExecution>());
         var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={Path.Combine(root, "store.db")};Foreign Keys=True").Options;
         Guid tenant, principal, session; string account, history;
+        HistoricalTenantDatabase? historical = null;
+        var historicalRoot = Path.Combine(root, "predecessor"); Directory.CreateDirectory(historicalRoot);
+        var historicalOptions = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={Path.Combine(historicalRoot, "store.db")};Foreign Keys=True").Options;
         try
         {
             await using (var first = new NativeTenantSqliteFactory(root, new ScriptedLanguageModel(), Execute))
@@ -35,32 +38,59 @@ public sealed partial class TenantSessionAccessTests
                 tenant = membership.GetProperty("tenantId").GetGuid(); principal = membership.GetProperty("principalId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
                 var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new {templateId="examiner", version=1, expectedRevision=await Revision(owner, tenant)}))).GetProperty("instance").GetProperty("instanceId").GetGuid();
                 await GrantNativePrivateSpaceRead(owner, tenant, instance);
-                session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new {agentInstanceId=instance, expectedRevision=await Revision(owner, tenant), expectedInstanceRevision=1}))).GetProperty("sessionId").GetGuid();
+                session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new {retentionKind="saved", agentInstanceId=instance, expectedRevision=await Revision(owner, tenant), expectedInstanceRevision=1}))).GetProperty("sessionId").GetGuid();
                 var admitted = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new {messageId=Guid.NewGuid(), text="Preserve this tenant conversation across credential retirement", expectedRevision=await Revision(owner, tenant), expectedSessionRevision=1});
                 Assert.Equal(HttpStatusCode.Accepted, admitted.StatusCode); var run = (await Json(admitted)).GetProperty("runId").GetGuid();
                 await first.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
                 Assert.Equal(AgentCore.Domain.Conversation.AgentRunStatus.Completed, (await AwaitCancelledTenantRun(first.Services.GetRequiredService<ITenantRunStore>(), tenant, run)).Status);
                 history = (await Json(await owner.GetAsync(api + $"/sessions/{session}/messages"))).GetProperty("items").GetRawText();
+                historical = await HistoricalTenantDatabase.CreateAsync(first.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                    "20261021060000_TenantAutomationConversation", HistoricalTenantDatabase.AdmissionTables,
+                    destinationPath: Path.Combine(historicalRoot, "store.db"));
             }
-            // Only this generated disposable database is selected. Stage the preceding
-            // canonical schema to prove retirement of an actually persisted old hash.
-            await using (var staged = new AgentCoreDbContext(options))
+            // Recreate the real predecessor in an isolated graph; later protected
+            // cutovers must never be crossed by downgrading the current source.
+            await historical.Db.Database.CloseConnectionAsync();
+            await using (var staged = new AgentCoreDbContext(historicalOptions))
             {
-                await staged.GetService<IMigrator>().MigrateAsync("20261021060000_TenantAutomationConversation");
                 var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(RetiredOwnerHeader.Token))).ToLowerInvariant();
                 await staged.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO OwnerCapabilities (TokenHash, CreatedAtUtc) VALUES ({hash}, {123456L})");
             }
-            await using (var refused = new NativeTenantSqliteFactory(root, new ScriptedLanguageModel(), Execute))
+            await using (var refused = new NativeTenantSqliteFactory(historicalRoot, new ScriptedLanguageModel(), Execute))
             {
                 var error = Assert.Throws<AgentCore.Application.Sessions.AgentCoreException>(() => refused.CreateClient());
                 Assert.Contains("data_reset_required", error.Message, StringComparison.Ordinal);
             }
-            await using (var migration = new AgentCoreDbContext(options))
+            await using (var migration = new AgentCoreDbContext(historicalOptions))
             {
                 await migration.Database.OpenConnectionAsync(); using (var count = migration.Database.GetDbConnection().CreateCommand())
                 { count.CommandText = "SELECT count(*) FROM OwnerCapabilities"; Assert.Equal(1L, Convert.ToInt64(await count.ExecuteScalarAsync())); }
-                await migration.Database.MigrateAsync();
+                async Task<string[]> PreservedRows()
+                {
+                    var rows = new List<string>();
+                    foreach (var table in HistoricalTenantDatabase.AdmissionTables)
+                    {
+                        await using var read = migration.Database.GetDbConnection().CreateCommand();
+                        read.CommandText = $"SELECT * FROM {table}";
+                        await using var reader = await read.ExecuteReaderAsync();
+                        while (await reader.ReadAsync())
+                        {
+                            var values = new object[reader.FieldCount]; reader.GetValues(values);
+                            rows.Add(table + ":" + System.Text.Json.JsonSerializer.Serialize(values.Select(value => value is DBNull ? null : value)));
+                        }
+                    }
+                    return rows.Order(StringComparer.Ordinal).ToArray();
+                }
+                var retained = await PreservedRows();
+                await migration.GetService<IMigrator>().MigrateAsync("20261021102840_RetireOwnerCapabilityStore");
+                Assert.Equal("20261021102840_RetireOwnerCapabilityStore", (await migration.Database.GetAppliedMigrationsAsync()).Last());
+                Assert.Equal(retained, await PreservedRows());
+                Assert.Equal(0, await migration.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM sqlite_master WHERE type='table' AND name='OwnerCapabilities'").SingleAsync());
             }
+            // Qualify retirement at its own migration boundary. Later populated
+            // cutovers intentionally refuse automatic upgrades (ExistingAgents=0).
+            // Recreate the current source host independently and retain all identity,
+            // conversation and retired-authority HTTP assertions below.
             await using (var reopened = new NativeTenantSqliteFactory(root, new ScriptedLanguageModel(), Execute))
             {
                 using var legacy = RetiredOwnerHeader.CreateClient(reopened);
@@ -83,6 +113,6 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Null(typeof(AgentCore.Contracts.Http.HealthResponse).Assembly.GetType("AgentCore.Contracts.Http.OwnerCapabilityHeaders"));
             }
         }
-        finally { SqliteConnection.ClearAllPools(); try { Directory.Delete(root, true); } catch (IOException) { } }
+        finally { if (historical is not null) await historical.DisposeAsync(); SqliteConnection.ClearAllPools(); try { Directory.Delete(root, true); } catch (IOException) { } }
     }
 }

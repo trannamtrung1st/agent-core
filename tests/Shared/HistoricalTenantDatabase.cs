@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage;
 
-namespace AgentCore.Infrastructure.Tests;
+namespace AgentCore.Tests.Shared;
 
 // Projects an explicitly selected test graph into a fresh, real migration target.
 // The current source stays intact; neither migration history nor guards are copied.
@@ -60,13 +60,13 @@ internal sealed class HistoricalTenantDatabase : IAsyncDisposable, IDbContextFac
 
     public static async Task<HistoricalTenantDatabase> CreateAsync(
         IDbContextFactory<AgentCoreDbContext> source, string target, IReadOnlyList<string> tables,
-        IReadOnlyList<AgentRun>? factAdmissionRuns = null)
+        IReadOnlyList<AgentRun>? factAdmissionRuns = null, string? destinationPath = null)
     {
         await using var sourceDb = source.CreateDbContext();
         var sourceName = new SqliteConnectionStringBuilder(sourceDb.Database.GetConnectionString()).DataSource;
         var sourcePath = Uri.TryCreate(sourceName, UriKind.Absolute, out var sourceUri) && sourceUri.IsFile
             ? sourceUri.LocalPath : Path.GetFullPath(sourceName);
-        var fixture = new HistoricalTenantDatabase(sourcePath + ".historical-" + Guid.NewGuid().ToString("N"));
+        var fixture = new HistoricalTenantDatabase(destinationPath ?? sourcePath + ".historical-" + Guid.NewGuid().ToString("N"));
         fixture.sourcePath = sourcePath;
         using (new FileStream(fixture.path, FileMode.CreateNew, FileAccess.Write)) { }
         try
@@ -248,8 +248,10 @@ internal sealed class HistoricalTenantDatabase : IAsyncDisposable, IDbContextFac
 
     public async ValueTask DisposeAsync()
     {
+        // Clear the actual URI-based pool before returning its connection.
+        // A plain path creates a different pool identity.
+        SqliteConnection.ClearPool((SqliteConnection)Db.Database.GetDbConnection());
         await Db.DisposeAsync();
-        using (var connection = new SqliteConnection("Data Source=" + path)) SqliteConnection.ClearPool(connection);
         foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix);
     }
 }
