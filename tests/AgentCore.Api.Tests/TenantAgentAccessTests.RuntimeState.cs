@@ -22,8 +22,9 @@ public sealed partial class TenantAgentAccessTests
     {
         await using var factory = new RuntimeStateFactory(sqlite); using var owner = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
         var (tenant, id, isolation) = await IsolationAgent(owner); var api = $"/api/v2/tenants/{tenant}"; var root = isolation.Replace("state-isolation", "runtime-state");
-        async Task<Guid> Session(Guid agent) => (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = agent,
+        async Task<Guid> Session(Guid agent) => (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = agent,
             expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+        await TenantSessionAccessTests.GrantNativePrivateSpaceRead(owner, tenant, id);
         var a = await Session(id); var b = await Session(id);
         foreach (var session in new[] { a, b })
             Assert.Equal(HttpStatusCode.Accepted, (await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Private runtime count sentinel",

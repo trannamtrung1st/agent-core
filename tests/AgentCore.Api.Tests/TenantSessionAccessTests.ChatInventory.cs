@@ -36,6 +36,9 @@ public sealed partial class TenantSessionAccessTests
             var role = await access.SaveRoleAsync(principal, tenant, null, "Conversation member", ["sessions.read", "sessions.create"], await Revision(owner, tenant));
             var invitation = await access.InviteAsync(principal, tenant, account.LoginKey, role.RoleId, await Revision(owner, tenant));
             var member = await access.AcceptInvitationAsync(account.AccountId, tenant, invitation.Invitation.InvitationId, invitation.Token);
+            var contextRole = await access.SaveRoleAsync(principal, tenant, null, "Member exact Chat context", ["spaces.read"], await Revision(owner, tenant));
+            await access.AssignRoleAsync(principal, tenant, member.PrincipalId, contextRole.RoleId,
+                TenantSpaceService.Scope(tenant, await NativePrivateSpaceId(owner, tenant, instance)), await Revision(owner, tenant));
             var cookies = new CookieContainer(); using var reader = new HttpClient(new HttpClientHandler { CookieContainer = cookies }) { BaseAddress = ready.BaseAddress };
             await Login(reader, account.LoginKey, "strong-chat-member-password");
             var path = api + "/chat/agents";
@@ -56,7 +59,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(HttpStatusCode.BadRequest, (await reader.GetAsync(path + "?page=-1")).StatusCode);
             Assert.Equal(HttpStatusCode.BadRequest, (await reader.GetAsync(path + "?pageSize=101")).StatusCode);
             Assert.Equal(HttpStatusCode.BadRequest, (await reader.GetAsync(path + "?q=" + new string('x', 201))).StatusCode);
-            var created = await Json(await reader.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = selected.GetProperty("instanceId").GetGuid(),
+            var created = await Json(await reader.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = selected.GetProperty("instanceId").GetGuid(),
                 expectedRevision = page.GetProperty("securityRevision").GetInt64(), expectedInstanceRevision = selected.GetProperty("revision").GetInt64() }));
             var session = created.GetProperty("sessionId").GetGuid(); Assert.Equal(member.PrincipalId, created.GetProperty("createdByPrincipalId").GetGuid());
             Assert.False(created.GetProperty("canManage").GetBoolean());

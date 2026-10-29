@@ -42,7 +42,7 @@ public sealed partial class TenantCredentialAccessTests
         var access = factory.Services.GetRequiredService<TenantAccessService>();
         var role = await access.SaveRoleAsync(human, tenant, null, "Existing context executor", ["automations.run", "agent-runs.create", "sessions.read", "agents.chat"], await Revision(owner, tenant));
         await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
-        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, mode = "text",
+        var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { retentionKind = "saved", agentInstanceId = instance, mode = "text",
             expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision }))).GetProperty("sessionId").GetGuid();
         var route = api + $"/agents/{instance}/automations";
         var created = await owner.PostAsJsonAsync(route, new { enabled = true, name = "Private default", instructions = "Stay in the exact configured context.",

@@ -133,9 +133,33 @@ public sealed partial class TenantSessionAccessTests
             var model = new AttachmentReadModel(); var diagnostics = new DiagnosticLineLoggerProvider();
             void Configure(IServiceCollection services) => services.AddLogging(logs => logs.AddProvider(diagnostics));
             await using WebApplicationFactory<Program> factory = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
-            using var owner = factory.CreateClient(); var value = await PrepareAttachmentRead(factory.Services, owner, format); var v = value.Execution;
+            using var owner = factory.CreateClient(); var value = await PrepareAttachmentRead(factory.Services, owner, format == "png-no-vision" ? "png" : format); var v = value.Execution;
             var bound = await factory.Services.GetRequiredService<TenantRunService>().SubmitMessageAsync(v.Tenant, v.Session, v.Human, Guid.NewGuid(), "Keep this file available", [v.Id], await Revision(owner, v.Tenant), 1);
             Assert.Equal(AgentRunStatus.Completed, (await AttachmentTerminal(factory.Services.GetRequiredService<ITenantRunStore>(), v.Tenant, bound.RunId)).Status);
+            if (format == "png-no-vision")
+            {
+                // Bind the image with a capable model first; this case exercises
+                // a later nonvision reader, rather than invalid image admission.
+                var current = (await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(v.Tenant, v.Session))!;
+                using var switchDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                while (true)
+                {
+                    using var response = await owner.PutAsJsonAsync($"/api/v2/tenants/{v.Tenant}/sessions/{v.Session}/model", new {
+                        expectedRevision = await Revision(owner, v.Tenant), expectedSessionRevision = current.Snapshot.Revision,
+                        modelPreference = new { mode = "fixed", offeringId = "dca30000-0000-4000-8000-000000000001" } }, switchDeadline.Token);
+                    var switched = await Json(response);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        // A preference edit preserves the preceding Run's observed
+                        // model; the next admitted Run resolves the new preference.
+                        Assert.Equal("dca30000-0000-4000-8000-000000000001", switched.GetProperty("modelPreference").GetProperty("offeringId").GetString());
+                        break;
+                    }
+                    Assert.Equal(System.Net.HttpStatusCode.Conflict, response.StatusCode);
+                    Assert.Contains("session_in_use", switched.GetRawText());
+                    await Task.Delay(25, switchDeadline.Token);
+                }
+            }
             model.Requests.Clear(); model.ReadEnabled = true;
             model.Arguments = format == "docx" ? JsonSerializer.Serialize(new { attachmentId = v.Id, offset = 0, limit = 1 })
                 : format == "xlsx-range" ? JsonSerializer.Serialize(new { attachmentId = v.Id, sheet = "Data", range = "A1:B1" }) : JsonSerializer.Serialize(new { attachmentId = v.Id });
@@ -144,6 +168,8 @@ public sealed partial class TenantSessionAccessTests
                 messageId = Guid.NewGuid(), text = "Read that earlier file", expectedRevision = await Revision(owner, v.Tenant), expectedSessionRevision = session.Snapshot.Revision }));
             var run = await AttachmentTerminal(factory.Services.GetRequiredService<ITenantRunStore>(), v.Tenant, sent.GetProperty("runId").GetGuid());
             Assert.True(run.Status == AgentRunStatus.Completed, $"{run.Status}: {run.Failure?.Code}: {run.Failure?.Summary}; requests={model.Requests.Count}; tools={string.Join(",", model.Requests.FirstOrDefault()?.Tools?.Select(t => t.Name) ?? [])}; diagnostics={string.Join("\n", diagnostics.Lines)}; errors={string.Join("\n", diagnostics.Errors.Select(e => e.ToString()))}"); Assert.Equal(2, model.Requests.Count);
+            if (format == "png-no-vision")
+                Assert.Equal("dca30000-0000-4000-8000-000000000001", run.PinnedModel.OfferingId);
             var first = model.Requests.First(); Assert.DoesNotContain("Private read body", string.Join("\n", first.Messages.Select(m => m.Text)));
             Assert.Contains(first.Tools!, t => t.Name == ToolCatalog.AttachmentsRead && t.Description.Contains("current Agent Session/Attachment"));
             var result = model.Requests.Last().Messages.Single(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.AttachmentsRead);
