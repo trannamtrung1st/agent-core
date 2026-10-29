@@ -33,6 +33,7 @@ public sealed partial class TenantCredentialAccessTests
             new FormUrlEncodedContent(new Dictionary<string, string> { ["state"] = Uri.UnescapeDataString(url.Split("?state=")[1]), ["decision"] = "authorize" }))).StatusCode);
         var instance = (await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 36, expectedRevision = await Revision(owner, tenant) })))
             .GetProperty("instance").GetProperty("instanceId").GetGuid();
+        await TenantSessionAccessTests.GrantNativePrivateSpaceRead(owner, tenant, instance);
         Assert.Equal(HttpStatusCode.Created, (await owner.PostAsJsonAsync(api + $"/agents/{instance}/credential-bindings",
             new TenantBindCredentialRequest(credentialId, "work-drive", await Revision(owner, tenant), 1, 2))).StatusCode);
         var access = factory.Services.GetRequiredService<TenantAccessService>();

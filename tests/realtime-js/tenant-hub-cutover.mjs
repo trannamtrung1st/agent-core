@@ -49,8 +49,13 @@ try {
   const tenant = (await json('/api/v2/account/tenants')).items[0].tenantId, api = `/api/v2/tenants/${tenant}`;
   const revision = async () => (await json(api + '/access/me')).revision;
   const creator = (await json(api + '/access/me')).principalId;
-  const instance = (await json(api + '/agents', { templateId: 'examiner', version: 1, expectedRevision: await revision() })).instance.instanceId;
-  const session = (await json(api + '/sessions', { agentInstanceId: instance, expectedRevision: await revision(), expectedInstanceRevision: 1 })).sessionId;
+  const agent = await json(api + '/agents', { templateId: 'examiner', version: 1, expectedRevision: await revision() });
+  const instance = agent.instance.instanceId;
+  const space = await json(api + `/agents/${instance}/private-space`);
+  const role = await json(api + '/roles', { name: 'Exact canonical Hub context', permissions: ['spaces.read'], expectedRevision: await revision() });
+  await json(api + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId,
+    resourceType: 'space', resourceId: space.spaceId, expectedRevision: await revision() });
+  const session = (await json(api + '/sessions', { retentionKind: 'saved', agentInstanceId: instance, expectedRevision: await revision(), expectedInstanceRevision: 1 })).sessionId;
   const before = await json(api + `/sessions/${session}`);
   const command = (type, payload, sequence = 1, extra = {}) => ({ protocolVersion: 1, type, sessionId: session,
     eventId: crypto.randomUUID(), sequence, timestamp: new Date().toISOString(), attachmentId: crypto.randomUUID(), payload, ...extra });

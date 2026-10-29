@@ -124,8 +124,11 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Equal(1, defaultReferences.GetProperty("total").GetInt32());
         Assert.Equal(offeringId, defaultReferences.GetProperty("items")[0].GetProperty("offeringId").GetGuid());
         var instanceReferences = await Json(await owner.GetAsync(root + $"/model-connections/{connectionId}/references?kind=instances"));
-        Assert.Equal(1, instanceReferences.GetProperty("total").GetInt32());
-        Assert.Equal(instance, instanceReferences.GetProperty("items")[0].GetProperty("resourceId").GetGuid());
+        var directory = await Json(await owner.GetAsync(root + "/chat/agents"));
+        var managed = Assert.Single(directory.GetProperty("items").EnumerateArray(), item => item.GetProperty("systemManaged").GetBoolean())
+            .GetProperty("instanceId").GetGuid();
+        Assert.Equal(2, instanceReferences.GetProperty("total").GetInt32());
+        Assert.Equal(new[] { instance, managed }.Order(), instanceReferences.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("resourceId").GetGuid()).Order());
         Safe(instanceReferences);
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.GetAsync(root + $"/models/{offeringId}/references?kind=unsupported")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.GetAsync(root + $"/models/{offeringId}/references?kind=instances&page=-1")).StatusCode);
