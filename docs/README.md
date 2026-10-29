@@ -4,7 +4,7 @@ Start here for current contracts. The [root README](../README.md) introduces the
 
 ## Current baseline
 
-Source baseline: `e9994fed2cc33c277d4cda114c95a59e8fec71b7`, inspected 2026-10-29. The implementation includes tenant IAM, Spaces/Environments, dynamic models, self-management, Saved/Temporary Chat, Decision Intelligence S1/S2, Evaluation, Goals, bounded Task communication, General Assistant v36 and Formal Workflows. Five production .NET assemblies and one React/Vite app remain the ownership boundaries. Local evidence is scoped to its recorded source; production load, live providers, physical devices and deployment qualification require their own proof. [Refactoring delivery](reports/project-refactoring-delivery-2026-10-29.md) records this initiative’s actual results and missing gates.
+Qualified executable/test source: `7ccccf0deaa0dabd1892c8edca29001daa04c16f`, 2026-10-30; closing documentation is a descendant with no executable changes. The implementation includes tenant IAM, Spaces/Environments, dynamic models, self-management, Saved/Temporary Chat, Decision Intelligence S1/S2, Evaluation, Goals, bounded Task communication, General Assistant v36 and Formal Workflows. Five production .NET assemblies and one React/Vite app remain the ownership boundaries. Local evidence is scoped to its recorded source; production load, live providers, physical devices and deployment qualification require their own proof. [Refactoring delivery](reports/project-refactoring-delivery-2026-10-30.md) records the complete automated qualification, source integrity and remaining external limits. Production Hardening is next.
 
 | Question | Current authoritative owner |
 | --- | --- |

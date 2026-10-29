@@ -1782,7 +1782,7 @@ The [delivery ledger](reports/formal-workflows-delivery-2026-10-28.md) owns exac
 
 ## Structural refactoring test selection
 
-[Refactoring design](proposals/project-refactoring-architecture-stabilization.md) and its [delivery ledger](reports/project-refactoring-delivery-2026-10-29.md) own the 2026-10-29 initiative’s full acceptance. Ordinary work uses the smallest affected path first:
+[Refactoring design](proposals/project-refactoring-architecture-stabilization.md) and its [delivery ledger](reports/project-refactoring-delivery-2026-10-30.md) own the 2026-10-29 initiative’s full acceptance. Ordinary work uses the smallest affected path first:
 
 | Changed owner | First local proof | Escalation |
 | --- | --- | --- |

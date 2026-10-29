@@ -1,6 +1,6 @@
 # Project refactoring and architecture stabilization
 
-Authorized 2026-10-29 against `e9994fed2cc33c277d4cda114c95a59e8fec71b7`. This is the design and decision record for the owner’s local proposal. [Delivery evidence](../reports/project-refactoring-delivery-2026-10-29.md) owns observed checks and remaining gates. Production Hardening follows this initiative; historical milestones remain unchanged.
+Authorized 2026-10-29 against `e9994fed2cc33c277d4cda114c95a59e8fec71b7`. This is the design and decision record for the owner’s local proposal. [Delivery evidence](../reports/project-refactoring-delivery-2026-10-30.md) records completed automated qualification on 2026-10-30 and remaining external limits. Production Hardening is next; historical milestones remain unchanged.
 
 ## Ownership and move map
 

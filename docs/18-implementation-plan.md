@@ -2,7 +2,7 @@
 
 ## Project refactoring and architecture stabilization
 
-Authorized 2026-10-29 on `e9994fed2cc33c277d4cda114c95a59e8fec71b7`, immediately before comprehensive Production Hardening in [TODO](../TODO.md#prioritized-roadmap). The [reviewed design and move map](proposals/project-refactoring-architecture-stabilization.md) preserve the existing ownership/transaction graph and reject an unjustified persistence assembly split. The [delivery ledger](reports/project-refactoring-delivery-2026-10-29.md) owns exact commands, source, counts, independent review and missing acceptance gates. This initiative explicitly includes complete automated suites and authorized CI; ordinary task verification remains focused and CI opt-in. No historical milestone or Production Hardening acceptance is implied.
+Authorized 2026-10-29 on `e9994fed2cc33c277d4cda114c95a59e8fec71b7`, immediately before comprehensive Production Hardening in [TODO](../TODO.md#prioritized-roadmap). The [reviewed design and move map](proposals/project-refactoring-architecture-stabilization.md) preserve the existing ownership/transaction graph and reject an unjustified persistence assembly split. The [delivery ledger](reports/project-refactoring-delivery-2026-10-30.md) records completion on 2026-10-30 for the available automated environment, with exact source, counts, review and external qualification limits. All 62 CI jobs passed at `7ccccf0deaa0dabd1892c8edca29001daa04c16f` and all 8,720 partition cases were accounted exactly once. This initiative explicitly includes complete automated suites and authorized CI; ordinary task verification remains focused and CI opt-in. No historical milestone or Production Hardening acceptance is implied.
 
 ## Formal Workflows
 

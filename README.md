@@ -71,6 +71,8 @@ Start with the [current documentation map](docs/README.md); [dated delivery repo
 
 ## Implementation baseline
 
+The [project refactoring delivery](docs/reports/project-refactoring-delivery-2026-10-30.md) qualifies executable/test source `7ccccf0deaa0dabd1892c8edca29001daa04c16f` with complete available Synthetic CI and exact partition accounting. Five acyclic production assemblies remain; the persistence split is NO-GO. Production Hardening is next. Live-provider, physical-device and customer deployment qualification remain separate.
+
 The [clean baseline delivery](docs/reports/clean-baseline-delivery-2026-10-26.md) records the canonical configuration cutover, retained Google grant/reconnect policy, General Assistant v34 and real local Sandbox PNG publication proof. Follow the [cutover runbook](docs/clean-baseline-cutover.md) before deploying this binary with existing configuration and state. MarkItDown remains deferred and absent from runtime dependencies.
 
 The Space/Environment successor replaces persistent Instance home ownership with tenant Spaces, protected Private Spaces, per-Session context and immutable Run captures. Membership controls contextual resource availability; optional Environments contain on-demand typed variables, and Secrets remain protected tenant resources. [Current implementation evidence](docs/reports/space-environment-implementation-2026-10-25.md) tracks qualification and remaining integration; [operator cutover](docs/space-environment-cutover.md) covers matching code/schema/root deployment and recoverable backups. Historical IAM/MVP delivery reports do not accept this successor.
