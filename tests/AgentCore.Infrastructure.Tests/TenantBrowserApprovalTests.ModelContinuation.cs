@@ -238,7 +238,7 @@ public sealed partial class TenantBrowserApprovalTests
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Prepare(f); var probe = new EffectProbe(Probe(s));
         (s, var first) = await BrowserModelApproval(f, s, probe); var service = BrowserContinuations(f, probe); await service.PrepareExternalEffectAsync(s.Run);
         var saved = (await service.ResumeAsync(s.Run)).Run; Assert.True(AgentRunToolCallCheckpoint.TryRead(saved.Checkpoint, out var messages));
-        var secondCall = BrowserModelCall("http://127.0.0.1:5091/second");
+        var secondCall = BrowserModelCall("http://127.0.0.1:5091/second") with { Id = "second-browser-call" };
         var nextCheckpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write(messages!.Append(new(ModelRole.Assistant, "", ToolCalls: [secondCall])).ToArray()),
             saved.Checkpoint!.StepCount + 1, saved.Checkpoint.OutputBytes, saved.Checkpoint.RemainingOverallBudgetMs, saved.Checkpoint.ActiveExecutionMs, saved.Checkpoint.BudgetRecordedAtUtc);
         saved = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(saved.Owner, saved.AgentRunId,

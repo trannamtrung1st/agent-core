@@ -71,7 +71,8 @@ public sealed partial class TenantOperationAuthorizationTests
             forged.RequestId = f.Ids.NewId(); forged.OperationId = f.Ids.NewId(); forged.Fingerprint = new string('0', 64); forged.SessionId = f.Ids.NewId().ToString("D");
             db.Add(forged);
             var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
-            Assert.Equal(787, Assert.IsType<SqliteException>(error.InnerException).SqliteExtendedErrorCode);
+            // The current ownership trigger rejects the invented Session before the FK check.
+            Assert.Equal(1811, Assert.IsType<SqliteException>(error.InnerException).SqliteExtendedErrorCode);
         }
         Assert.Null(await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(setup.Tenant, request.RequestId));
         await using (var db = await f.Contexts!.CreateDbContextAsync())

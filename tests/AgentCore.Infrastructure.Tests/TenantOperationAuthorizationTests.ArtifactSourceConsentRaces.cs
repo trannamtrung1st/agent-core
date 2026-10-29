@@ -68,6 +68,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var requester = await User(f, s, "requester-source-policy@example.test", ["agents.read", "agents.chat", "sessions.create", "sessions.read", "artifacts.create"]);
+        await GrantExactSpaceRead(f, s, requester.PrincipalId, SpaceId(s));
         var session = await f.Sessions.CreateAsync(s.Tenant, s.Agent.Instance.InstanceId, requester, SessionMode.Text, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, s.Agent.Instance.Revision);
         var submitted = await f.RunService().SubmitTextAsync(s.Tenant, session.Owner.SessionId, requester, f.Ids.NewId(), "Publish the protected source", (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1);
         s = s with { Run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, submitted.RunId))! }; var frame = await ClaimArtifactRun(f, s);

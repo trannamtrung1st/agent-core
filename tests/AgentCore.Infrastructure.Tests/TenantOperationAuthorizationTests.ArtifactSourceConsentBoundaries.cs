@@ -22,7 +22,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await GrantPublication(f, s, grant ? ["sessions.read"] : null);
         var reads = await GrantWorkspaceRuntimeReads(f, s, resource ? ["sessions.read", "agents.read", "resources.read"] : null);
         var reviewer = independent ? await User(f, s, "source-reviewer@example.test",
-            ["sessions.read", "agents.read", resource ? "resources.read" : "workspaces.read", "artifacts.create", "approvals.read", "approvals.approve", "approvals.grant_exception"]) : s.Owner;
+            ["sessions.read", resource ? "agents.read" : "spaces.read", resource ? "resources.read" : "workspaces.read", "artifacts.create", "approvals.read", "approvals.approve", "approvals.grant_exception"]) : s.Owner;
         await Policies(f).SaveAsync(s.Tenant, s.Owner, policy, new(OperationApprovalMode.Always, independent), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision,
             (await f.Iam.ReadTenantAsync(s.Tenant))!.OperationPolicies.SingleOrDefault(p => p.PermissionKey == policy)?.Revision ?? 0);
         var args = JsonSerializer.Serialize(new { path = bound?.Path ?? (working ? "/working/" : "/home/") + "source.bin", displayName = "published.bin" });
@@ -55,7 +55,7 @@ public sealed partial class TenantOperationAuthorizationTests
             await Assert.ThrowsAsync<AccessDeniedException>(() => v.Approvals.ReadViewAsync(s.Tenant, v.Request.RequestId, reader).AsTask());
         }
         await Hidden(); var workspace = TenantWorkspaceRules.Home(s.Tenant, SpaceId(s)); await Allow("workspaces.read", workspace); await Hidden();
-        await Allow("agents.read", AccessScope.ForResource(s.Tenant, "agent", s.Agent.Instance.InstanceId.ToString("D")));
+        await Allow("spaces.read", TenantSpaceService.Scope(s.Tenant, SpaceId(s)));
         var visible = await v.Approvals.ListAsync(s.Tenant, reader, new(0, 1)); Assert.Equal(1, visible.Total); Assert.Single(visible.Items); Assert.False(visible.Items[0].Review!.CanDecide);
         await Allow("approvals.approve", TenantSessionRules.Scope(s.Tenant, v.Frame.SessionId));
         Assert.False((await v.Approvals.ReadViewAsync(s.Tenant, v.Request.RequestId, reader)).Review!.CanDecide);
@@ -67,22 +67,23 @@ public sealed partial class TenantOperationAuthorizationTests
     }
 
     [Theory] [InlineData(false, "sessions.read")] [InlineData(true, "sessions.read")]
-    [InlineData(false, "agents.read")] [InlineData(true, "agents.read")]
+    [InlineData(false, "spaces.read")] [InlineData(true, "spaces.read")]
     [InlineData(false, "workspaces.read")] [InlineData(true, "workspaces.read")]
     public async Task Tenant_Artifact_source_consent_never_substitutes_a_creation_exception_for_missing_raw_source_reads(bool sqlite, string permission)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
-        await GrantWorkspaceRuntimeReads(f, s, new[] { "sessions.read", "agents.read", "workspaces.read" }.Where(k => k != permission).ToArray());
+        await GrantWorkspaceRuntimeReads(f, s, new[] { "sessions.read", "spaces.read", "workspaces.read" }.Where(k => k != permission).ToArray());
+        if (permission == "spaces.read") await RevokeExactContextRead(f, s);
         await SeedRuntimeWorkspace(f, s, false, "source.bin", [0, 255, 128, 3]);
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
-        Assert.Equal("executor_read_required", (await Assert.ThrowsAsync<AccessDeniedException>(() => ApprovalService(f, artifactSources: ArtifactSources(f))
+        Assert.Equal(permission == "spaces.read" ? "permission_denied" : "executor_read_required", (await Assert.ThrowsAsync<AccessDeniedException>(() => ApprovalService(f, artifactSources: ArtifactSources(f))
             .PrepareWorkspaceArtifactAsync(new(s.Tenant, frame.RunId), """{"path":"/home/source.bin","displayName":"published.bin"}""", run.Revision, frame.Generation).AsTask())).ReasonCode);
         Assert.Empty((await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(s.Tenant, null, null, new(0, 20))).Items);
         Assert.Empty((await ((ITenantArtifactStore)f.Artifacts).ListTenantAsync(s.Tenant, frame.SessionId, null, null, 20)).Items);
     }
 
     [Theory] [InlineData(false, "sessions.read")] [InlineData(true, "sessions.read")]
-    [InlineData(false, "agents.read")] [InlineData(true, "agents.read")]
+    [InlineData(false, "spaces.read")] [InlineData(true, "spaces.read")]
     [InlineData(false, "workspaces.read")] [InlineData(true, "workspaces.read")]
     public async Task Tenant_Artifact_source_consent_combines_each_current_source_policy_with_primary_creation(bool sqlite, string permission)
     {

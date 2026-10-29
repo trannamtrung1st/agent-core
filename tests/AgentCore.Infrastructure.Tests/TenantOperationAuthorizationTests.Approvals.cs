@@ -65,7 +65,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Single(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Action == "approvals.request");
         Assert.Single(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Action == "approvals.decide");
         Assert.Equal(setup.Agent.Instance.Persona, (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(setup.Tenant, setup.Agent.Instance.InstanceId))!.Instance.Persona);
-        Assert.DoesNotContain((await f.Iam.ReadTenantAsync(setup.Tenant))!.Assignments, a => a.PrincipalId == setup.Agent.PrincipalId);
+        AssertOnlyContextAssignment((await f.Iam.ReadTenantAsync(setup.Tenant))!, setup);
     }
 
     private static TenantApprovalService ApprovalService(Fixture f, IIamStore? security = null, ITenantApprovalStore? store = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationTarget? workspaceMutations = null, TenantArtifactSourceTarget? artifactSources = null, TenantTaskDelegationTarget? taskTargets = null, TenantPublicWebOperationTarget? webTargets = null)

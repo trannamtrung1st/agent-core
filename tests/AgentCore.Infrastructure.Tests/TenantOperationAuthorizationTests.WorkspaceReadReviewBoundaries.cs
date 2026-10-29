@@ -17,7 +17,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, working); await GrantWorkspaceRuntimeReads(f, s);
         if (search) await SeedRuntimeWorkspace(f, s, working, "nonmatch.txt", System.Text.Encoding.UTF8.GetBytes("No matching information."));
-        var peer = independent ? await User(f, s, "independent-workspace-reviewer@example.test", ["approvals.read", "approvals.approve", "agents.read", "sessions.read", "workspaces.read"]) : null;
+        var peer = independent ? await User(f, s, "independent-workspace-reviewer@example.test", ["approvals.read", "approvals.approve", "spaces.read", "sessions.read", "workspaces.read"]) : null;
         await Policies(f).SaveAsync(s.Tenant, s.Owner, permission, new(OperationApprovalMode.Always, independent), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 0);
         var path = working ? "/working" : "/home"; if (!list && !search) path += "/private.txt";
         var tool = search ? ToolCatalog.WorkspaceSearch : list ? ToolCatalog.WorkspaceList : ToolCatalog.WorkspaceRead; var reads = WorkspaceRuntimeReads(f); var approvals = ApprovalService(f, workspaceReads: reads);
@@ -63,8 +63,8 @@ public sealed partial class TenantOperationAuthorizationTests
         var page = await v.Approvals.ListAsync(s.Tenant, reader, new(0, 1)); Assert.Equal(working ? 1 : 0, page.Total);
         if (!working)
         {
-            var parent = await f.Access.SaveRoleAsync(s.Owner.PrincipalId, s.Tenant, null, "Inspect owning Instance", ["agents.read"], (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
-            await f.Access.AssignRoleAsync(s.Owner.PrincipalId, s.Tenant, reader.PrincipalId, parent.RoleId, AccessScope.ForResource(s.Tenant, "agent", s.Agent.Instance.InstanceId.ToString("D")), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
+            var parent = await f.Access.SaveRoleAsync(s.Owner.PrincipalId, s.Tenant, null, "Inspect owning Space", ["spaces.read"], (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
+            await f.Access.AssignRoleAsync(s.Owner.PrincipalId, s.Tenant, reader.PrincipalId, parent.RoleId, TenantSpaceService.Scope(s.Tenant, SpaceId(s)), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
         }
         page = await v.Approvals.ListAsync(s.Tenant, reader, new(0, 1)); Assert.Single(page.Items); Assert.Equal(1, page.Total); Assert.False(page.Items[0].Review!.CanDecide);
         await f.Access.RevokeAssignmentAsync(s.Owner.PrincipalId, s.Tenant, grant.AssignmentId, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);

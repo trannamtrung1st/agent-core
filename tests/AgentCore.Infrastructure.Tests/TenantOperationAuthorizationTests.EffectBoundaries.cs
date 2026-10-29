@@ -23,7 +23,7 @@ public sealed partial class TenantOperationAuthorizationTests
         if (boundary is "grantor" or "executor")
         {
             var principal = boundary == "grantor" ? setup.Grantor.PrincipalId : request.ExecutorPrincipalId;
-            var state = (await f.Iam.ReadTenantAsync(tenant))!; var assignment = state.Assignments.Single(a => a.PrincipalId == principal);
+            var state = (await f.Iam.ReadTenantAsync(tenant))!; var assignment = state.Assignments.Single(a => a.PrincipalId == principal && state.Roles.Single(r => r.RoleId == a.RoleId).Permissions.Contains("agents.update"));
             await f.Access.RevokeAssignmentAsync(setup.Environment.Owner.PrincipalId, tenant, assignment.AssignmentId, state.Tenant.Revision);
         }
         else if (boundary is "freeze" or "witness")

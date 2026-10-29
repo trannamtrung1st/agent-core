@@ -15,7 +15,10 @@ public sealed partial class TenantOperationAuthorizationTests
         var service = Policies(f); var before = (await f.Iam.ReadTenantAsync(setup.Tenant))!;
         var page = await service.ListAsync(setup.Tenant, reader, pageSize: 100);
         Assert.Equal(PermissionCatalog.All.Count(p => !p.SystemOnly), page.Total);
-        Assert.Equal(page.Total, page.Items.Count); Assert.All(page.Items, p => { Assert.False(p.CanManage); Assert.Equal(before.Tenant.Revision, p.SecurityRevision); });
+        var tail = await service.ListAsync(setup.Tenant, reader, page: 1, pageSize: 100);
+        Assert.Equal(page.Total, page.Items.Count + tail.Items.Count);
+        Assert.Equal(PermissionCatalog.All.Where(p => !p.SystemOnly).Select(p => p.Key).Order(StringComparer.Ordinal),
+            page.Items.Concat(tail.Items).Select(p => p.Permission)); Assert.All(page.Items, p => { Assert.False(p.CanManage); Assert.Equal(before.Tenant.Revision, p.SecurityRevision); });
         Assert.Equal(page.Items.OrderBy(p => p.Permission, StringComparer.Ordinal), page.Items);
         Assert.True(page.Items.Single(p => p.Permission == "tenant.governance.manage").HumanOnly);
         Assert.False(page.Items.Single(p => p.Permission == "browser.use").Delegatable);

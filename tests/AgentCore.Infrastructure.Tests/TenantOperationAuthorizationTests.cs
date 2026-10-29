@@ -79,6 +79,21 @@ public sealed partial class TenantOperationAuthorizationTests
         var receipt = await f.RunService().SubmitTextAsync(owner.TenantId, session.Owner.SessionId, actor, f.Ids.NewId(), "Inspect access", (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision, 1);
         return new(owner.TenantId, actor, agent, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(owner.TenantId, receipt.RunId))!);
     }
+    private static async Task RevokeExactContextRead(Fixture f, Environment setup)
+    {
+        var state = (await f.Iam.ReadTenantAsync(setup.Tenant))!;
+        var assignment = Assert.Single(state.Assignments, a => a.PrincipalId == setup.Agent.PrincipalId
+            && a.Scope == TenantSpaceService.Scope(setup.Tenant, SpaceId(setup)));
+        Assert.Equal("spaces.read", Assert.Single(state.Roles.Single(r => r.RoleId == assignment.RoleId).Permissions));
+        await f.Access.RevokeAssignmentAsync(setup.Owner.PrincipalId, setup.Tenant, assignment.AssignmentId, state.Tenant.Revision);
+    }
+    private static void AssertOnlyContextAssignment(TenantSecurityState state, Environment setup)
+    {
+        var assignment = Assert.Single(state.Assignments, a => a.PrincipalId == setup.Agent.PrincipalId);
+        Assert.Equal(TenantSpaceService.Scope(setup.Tenant, SpaceId(setup)), assignment.Scope);
+        var role = Assert.Single(state.Roles, r => r.RoleId == assignment.RoleId);
+        Assert.Equal("spaces.read", Assert.Single(role.Permissions));
+    }
     private static async Task<RoleAssignment> Grant(Fixture f, Environment setup, Guid principal, string name, string[] permissions)
     {
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, name, permissions, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);

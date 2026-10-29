@@ -52,6 +52,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var setup = await Setup(f, "customer-support", 3);
         var requester = await User(f, setup, "requester-publish@example.test", ["agents.read", "agents.chat", "sessions.create", "sessions.read"]);
+        await GrantExactSpaceRead(f, setup, requester.PrincipalId, SpaceId(setup));
         var session = await f.Sessions.CreateAsync(setup.Tenant, setup.Agent.Instance.InstanceId, requester, AgentCore.Domain.Conversation.SessionMode.Text,
             (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision, setup.Agent.Instance.Revision);
         var admission = await f.RunService().SubmitTextAsync(setup.Tenant, session.Owner.SessionId, requester, f.Ids.NewId(), "Publish this report",

@@ -68,12 +68,12 @@ public sealed partial class TenantOperationAuthorizationTests
     [Theory] [InlineData(false, "workspaces.write")] [InlineData(true, "workspaces.write")]
     [InlineData(false, "workspaces.read")] [InlineData(true, "workspaces.read")]
     [InlineData(false, "sessions.read")] [InlineData(true, "sessions.read")]
-    [InlineData(false, "agents.read")] [InlineData(true, "agents.read")]
+    [InlineData(false, "spaces.read")] [InlineData(true, "spaces.read")]
     public async Task Tenant_workspace_mutation_Review_requires_current_compound_independent_reviewer(bool sqlite, string permission)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 35); var frame = await ClaimArtifactRun(f, s);
         await SeedRuntimeWorkspace(f, s, false); await GrantWorkspaceRuntimeReads(f, s, ["agents.read", "sessions.read", "workspaces.read", "workspaces.write"]);
-        var peer = await User(f, s, "independent-mutation-reviewer@example.test", ["approvals.read", "approvals.approve", "agents.read", "sessions.read", "workspaces.read", "workspaces.write"]);
+        var peer = await User(f, s, "independent-mutation-reviewer@example.test", ["approvals.read", "approvals.approve", "spaces.read", "sessions.read", "workspaces.read", "workspaces.write"]);
         await Policies(f).SaveAsync(s.Tenant, s.Owner, permission, new(OperationApprovalMode.Always, true), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 0);
         var service = ApprovalService(f, workspaceMutations: MutationTargets(f)); var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
         var request = (await service.PrepareWorkspaceMutationAsync(new(s.Tenant, frame.RunId), new("independent-copy-review", ToolCatalog.WorkspaceCopy,
@@ -139,7 +139,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var page = await service.ListAsync(s.Tenant, reader, new(0, 1)); Assert.Equal(0, page.Total); Assert.Empty(page.Items);
         await Grant("workspaces.read", TenantWorkspaceRules.Home(s.Tenant, SpaceId(s)));
         page = await service.ListAsync(s.Tenant, reader, new(0, 1)); Assert.Equal(0, page.Total); Assert.Empty(page.Items);
-        var parent = await Grant("agents.read", AccessScope.ForResource(s.Tenant, "agent", s.Agent.Instance.InstanceId.ToString("D")));
+        var parent = await Grant("spaces.read", TenantSpaceService.Scope(s.Tenant, SpaceId(s)));
         page = await service.ListAsync(s.Tenant, reader, new(0, 1)); Assert.Equal(1, page.Total); Assert.Equal(request.RequestId, Assert.Single(page.Items).Request.RequestId);
         Assert.False(page.Items[0].Review!.CanDecide);
         await f.Access.RevokeAssignmentAsync(s.Owner.PrincipalId, s.Tenant, parent.AssignmentId, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);

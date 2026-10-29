@@ -49,8 +49,8 @@ public sealed partial class TenantDefinitionIntegrationTests
         Assert.Equal(SandboxLeaseState.Ready, saved.Lease!.State); Assert.Null(saved.Lease.CleanupReason);
         // A factual observation revision changes while the protected target remains the same.
         Assert.True(await store.TrySaveTenantSandboxLeaseFactsAsync(s.Tenant, saved.Lease with { Revision = saved.Lease.Revision + 1, SafeMessage = "Observed Ready" }, saved.Lease.Revision));
-        var correlated = TenantApprovalRules.PrepareSandboxControl(f.Ids.NewId(), request.Operation.InstanceId,
-            request.Operation.SandboxControl with { ObservedLeaseRevision = saved.Lease.Revision + 1 }, request.Operation.ExpectedInstanceRevision, request.Operation.ExpectedPersonaRevision);
+        var correlated = TenantApprovalRules.ForRun(TenantApprovalRules.PrepareSandboxControl(f.Ids.NewId(), request.Operation.InstanceId,
+            request.Operation.SandboxControl with { ObservedLeaseRevision = saved.Lease.Revision + 1 }, request.Operation.ExpectedInstanceRevision, request.Operation.ExpectedPersonaRevision), s.Run);
         var approvals = (ITenantApprovalStore)f.Iam;
         Assert.Equal(request.RequestId, (await approvals.FindRootApprovalAsync(s.Tenant, request.RootActivationId, request.ExecutorPrincipalId, correlated))!.RequestId);
         var changed = correlated with { SandboxControl = correlated.SandboxControl! with { Generation = f.Ids.NewId() } };

@@ -13,16 +13,17 @@ public sealed partial class TenantOperationAuthorizationTests
 {
     [Theory]
     [InlineData(false, "sessions.read", false)] [InlineData(true, "sessions.read", false)]
-    [InlineData(false, "agents.read", false)] [InlineData(true, "agents.read", false)]
+    [InlineData(false, "spaces.read", false)] [InlineData(true, "spaces.read", false)]
     [InlineData(false, "workspaces.read", false)] [InlineData(true, "workspaces.read", false)]
     [InlineData(false, "sessions.read", true)] [InlineData(true, "sessions.read", true)]
-    [InlineData(false, "agents.read", true)] [InlineData(true, "agents.read", true)]
+    [InlineData(false, "spaces.read", true)] [InlineData(true, "spaces.read", true)]
     [InlineData(false, "workspaces.read", true)] [InlineData(true, "workspaces.read", true)]
     public async Task Tenant_workspace_Artifact_commit_independently_requires_each_raw_source_read_and_its_policy(bool sqlite, string permission, bool policy)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 35);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s, ["artifacts.create"]);
-        await GrantWorkspaceRuntimeReads(f, s, new[] { "sessions.read", "agents.read", "workspaces.read" }.Where(p => policy || p != permission).ToArray());
+        await GrantWorkspaceRuntimeReads(f, s, new[] { "sessions.read", "spaces.read", "workspaces.read" }.Where(p => policy || p != permission).ToArray());
+        if (!policy && permission == "spaces.read") await RevokeExactContextRead(f, s);
         await SeedRuntimeWorkspace(f, s, false, "source.bin", [0, 255, 128, 3]);
         var source = await WorkspaceReader(f).CaptureArtifactSourceTenantAsync(WorkspaceOwner(s), "/home/source.bin");
         if (policy) await Policies(f).SaveAsync(s.Tenant, s.Owner, permission, new(OperationApprovalMode.Always, false),
@@ -35,7 +36,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var error = await Assert.ThrowsAsync<AccessDeniedException>(() => ((ITenantArtifactOperationStore)f.Iam).TryCommitArtifactAsync(
             state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } }, state.Tenant.Revision, commit,
             new(f.Ids.NewId(), s.Tenant, s.Agent.PrincipalId, TenantArtifactOperationRules.AuditAction, frame.SessionId.ToString("D"), "allowed", "operation_completed", f.Clock.GetUtcNow())).AsTask());
-        Assert.Equal(policy ? "artifact_source_review_required" : "executor_read_required", error.ReasonCode);
+        Assert.Equal(policy ? "artifact_source_review_required" : permission == "spaces.read" ? "permission_denied" : "executor_read_required", error.ReasonCode);
         Assert.Empty((await ((ITenantArtifactStore)f.Artifacts).ListTenantAsync(s.Tenant, frame.SessionId, null, null, 20)).Items);
         Assert.Null(await ((ITenantArtifactOperationStore)f.Iam).FindDirectOperationReceiptAsync(s.Tenant, frame.RunId, commit.SourceCallId));
         Assert.Equal(run.Revision, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!.Revision);

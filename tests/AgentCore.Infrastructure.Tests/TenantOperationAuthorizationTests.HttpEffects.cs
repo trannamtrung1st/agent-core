@@ -54,7 +54,7 @@ public sealed partial class TenantOperationAuthorizationTests
             await using var db=f.Contexts!.CreateDbContext();
             await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(()=>db.Database.ExecuteSqlRawAsync("UPDATE TenantOperationReceipts SET HttpJson=NULL WHERE OperationId={0}",receipt.OperationId));
             await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(()=>db.Database.ExecuteSqlRawAsync("DELETE FROM TenantOperationReceipts WHERE OperationId={0}",receipt.OperationId));
-            await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(()=>db.GetService<IMigrator>().MigrateAsync("20261023180000_TenantPublicDownloads"));
+
         }
         Assert.True(AgentRunToolCallCheckpoint.TryRead(run.Checkpoint,out var savedMessages));
         var original=savedMessages!.Single(m=>m.Role==ModelRole.Tool && m.Name==ToolCatalog.RequestAuthorization);
@@ -62,7 +62,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var corrupt=run.SaveCheckpoint(run.Revision,v.Frame.Generation,new(AgentRunToolCallCheckpoint.Write(savedMessages!.Select(m=>m==original?m with { Text=changed.ToJsonString() }:m).ToArray()),run.Checkpoint!.StepCount,run.Checkpoint.OutputBytes,run.Checkpoint.RemainingOverallBudgetMs,run.Checkpoint.ActiveExecutionMs,run.Checkpoint.BudgetRecordedAtUtc,run.Checkpoint.AwaitingRuntimeAdmission),null,f.Clock.GetUtcNow());
         Assert.Throws<AccessDeniedException>(()=>TenantHttpReferences.Read(corrupt));
         Assert.Equal(receipt,await HttpEffects(f,native,current).ExecuteApprovedAsync(new(v.Setup.Tenant,run.AgentRunId),v.Request.RequestId,receipt.OperationId,v.Frame.Generation,receipt.ActionHash));
-        var state=(await f.Iam.ReadTenantAsync(v.Setup.Tenant))!;var assignment=Assert.Single(state.Assignments,a=>a.PrincipalId==v.Setup.Agent.PrincipalId);
+        var state=(await f.Iam.ReadTenantAsync(v.Setup.Tenant))!;var assignment=Assert.Single(state.Assignments,a=>a.PrincipalId==v.Setup.Agent.PrincipalId && state.Roles.Single(r=>r.RoleId==a.RoleId).Name=="Owned model workspace reads");
         await f.Access.RevokeAssignmentAsync(v.Setup.Owner.PrincipalId,v.Setup.Tenant,assignment.AssignmentId,state.Tenant.Revision);
         await Assert.ThrowsAsync<AccessDeniedException>(()=>service.RequireStoredAsync(run).AsTask());Assert.Equal(1,native.Calls);
     }

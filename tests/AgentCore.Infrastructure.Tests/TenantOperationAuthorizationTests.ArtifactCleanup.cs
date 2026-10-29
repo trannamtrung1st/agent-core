@@ -175,6 +175,9 @@ public sealed partial class TenantOperationAuthorizationTests
 
     private static async Task<Environment> NewArtifactCleanupSession(Fixture f, Guid tenant, TenantSessionInitiator actor, TenantAgent agent)
     {
+        var space = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(tenant, agent.Instance.InstanceId))!;
+        var role = await f.Access.SaveRoleAsync(actor.PrincipalId, tenant, null, "Read cleanup Agent context", ["spaces.read"], (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision);
+        await f.Access.AssignRoleAsync(actor.PrincipalId, tenant, agent.PrincipalId, role.RoleId, TenantSpaceService.Scope(tenant, space.SpaceId), (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision);
         var session = await f.Sessions.CreateAsync(tenant, agent.Instance.InstanceId, actor, SessionMode.Text, (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision, agent.Instance.Revision);
         var accepted = await f.RunService().SubmitTextAsync(tenant, session.Owner.SessionId, actor, f.Ids.NewId(), "Publish a private file", (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision, 1);
         return new(tenant, actor, agent, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(tenant, accepted.RunId))!);

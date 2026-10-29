@@ -65,8 +65,8 @@ public sealed partial class TenantBrowserApprovalTests
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Prepare(f, password: true, credentialUseAllowed: false);
         await RequireReadReview(f, s, "credentials.read"); var service = Service(f, Probe(s));
         var request = (await service.PrepareCredentialReadAsync(new(s.Tenant, s.Run.AgentRunId), "{}", s.Run.Revision, s.Run.Claim!.Generation)).Request!;
-        var changed = TenantApprovalRules.PrepareCredentialRead(f.Ids.NewId(), s.Agent.Instance.InstanceId,
-            request.Operation.CredentialRead! with { CredentialId = null, ReferencesJson = "[]" }, 99, 99);
+        var changed = TenantApprovalRules.ForRun(TenantApprovalRules.PrepareCredentialRead(f.Ids.NewId(), s.Agent.Instance.InstanceId,
+            request.Operation.CredentialRead! with { CredentialId = null, ReferencesJson = "[]" }, 99, 99), s.Run);
         Assert.NotEqual(request.Operation.ActionHash, changed.ActionHash); Assert.Equal(request.Fingerprint, changed.OperationFingerprint);
         Assert.Equal(request.RequestId, (await ((ITenantApprovalStore)f.Iam).FindRootApprovalAsync(s.Tenant, request.RootActivationId, s.Agent.PrincipalId, changed))!.RequestId);
         await f.Service.ReplaceAsync(s.Human.PrincipalId, s.Tenant, s.Password!.Credential.Value.CredentialId, "rotated-private-password",

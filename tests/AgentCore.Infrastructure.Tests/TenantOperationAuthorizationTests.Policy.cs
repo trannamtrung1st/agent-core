@@ -48,6 +48,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision;
         var requester = await User(f, setup, "requester@example.test", ["agents.chat", "sessions.read"]);
+        await GrantExactSpaceRead(f, setup, requester.PrincipalId, SpaceId(setup));
         var receipt = await f.RunService().SubmitTextAsync(setup.Tenant, setup.Run.SessionId, requester, f.Ids.NewId(), "New request", await Revision(), 2);
         var reference = new TenantRunReference(setup.Tenant, receipt.RunId); var target = setup.Agent.Instance.InstanceId.ToString("D"); var operations = Operations(f);
         var executor = await Grant(f, setup, setup.Agent.PrincipalId, "Executor action", ["agents.read", "agents.update"]);
@@ -64,7 +65,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Empty(await operations.EffectiveAsync(reference, "agent", target));
         var user = (await f.Iam.ReadTenantAsync(setup.Tenant))!.Users.Single(u => u.PrincipalId == requester.PrincipalId);
         await f.Access.SetMemberStatusAsync(setup.Owner.PrincipalId, setup.Tenant, user.UserId, IdentityStatus.Suspended, await Revision());
-        Assert.Equal("requester_unavailable", (await Assert.ThrowsAsync<AccessDeniedException>(() => operations.CheckAsync(reference, "agents.read", "agent", target).AsTask())).ReasonCode);
+        Assert.Equal("not_member", (await Assert.ThrowsAsync<AccessDeniedException>(() => operations.CheckAsync(reference, "agents.read", "agent", target).AsTask())).ReasonCode);
     }
 
     private static TenantOperationPolicyService Policies(Fixture f, ITenantOperationPolicyStore? store = null) => new(f.Iam, store ?? (ITenantOperationPolicyStore)f.Iam, f.Authorizer, f.Identity, f.Ids, f.Clock);

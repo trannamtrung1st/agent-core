@@ -132,7 +132,7 @@ public sealed partial class TenantBrowserApprovalTests
         probe.Context = Guid.NewGuid(); probe.CommandRevision++;
         var changedTarget = request.Operation.BrowserCommand! with { TargetJson = TenantApprovalRules.BrowserTarget(new(new(s.Tenant, s.Agent.Instance.InstanceId, s.Agent.PrincipalId, s.Run.SessionId),
             Guid.NewGuid(), 0, 10, BrowserProfileMode.EphemeralSession, Guid.NewGuid(), "pg_changed", 2, null, null, ""), "http://127.0.0.1:5091") };
-        var correlated = TenantApprovalRules.PrepareBrowser(f.Ids.NewId(), s.Agent.Instance.InstanceId, changedTarget, 99, 99);
+        var correlated = TenantApprovalRules.ForRun(TenantApprovalRules.PrepareBrowser(f.Ids.NewId(), s.Agent.Instance.InstanceId, changedTarget, 99, 99), s.Run);
         Assert.Equal(request.Fingerprint, correlated.OperationFingerprint); Assert.NotEqual(request.Operation.ActionHash, correlated.ActionHash);
         Assert.Equal(request.RequestId, (await ((ITenantApprovalStore)reopened).FindRootApprovalAsync(s.Tenant, request.RootActivationId, s.Agent.PrincipalId, correlated))!.RequestId);
     }

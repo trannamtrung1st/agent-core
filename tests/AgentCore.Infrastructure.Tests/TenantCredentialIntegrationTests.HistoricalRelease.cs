@@ -12,7 +12,7 @@ public sealed partial class TenantCredentialIntegrationTests
         // Current-release creation still uses Agents and enforces the public template rule.
         public TenantAgentService AgentsAtRelease(int version) => new(Iam, (ITenantAgentStore)Iam,
             new HistoricalRelease(BuiltIns, version), Authorizer, Ids, Clock, ownedDefinitions: (ITenantDefinitionStore)Iam);
-        private sealed class HistoricalRelease(IBuiltInAgentDefinitionStore source, int version) : IBuiltInAgentDefinitionStore
+        internal sealed class HistoricalRelease(IBuiltInAgentDefinitionStore source, int version) : IBuiltInAgentDefinitionStore
         {
             public async ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken ct = default) =>
                 (await source.ListAsync(ct)).Where(d => d.Id != ManagedGeneralAssistant.DefinitionId || d.Version <= version).ToArray();

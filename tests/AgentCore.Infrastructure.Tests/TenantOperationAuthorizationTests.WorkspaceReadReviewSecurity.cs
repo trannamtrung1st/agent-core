@@ -15,7 +15,7 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantOperationAuthorizationTests
 {
-    [Theory] [InlineData(false, "agents.read")] [InlineData(true, "agents.read")]
+    [Theory] [InlineData(false, "spaces.read")] [InlineData(true, "spaces.read")]
     [InlineData(false, "sessions.read")] [InlineData(true, "sessions.read")]
     [InlineData(false, "workspaces.read")] [InlineData(true, "workspaces.read")]
     public async Task Workspace_read_Review_enforces_current_compound_independent_reviewer_policy(bool sqlite, string permission)

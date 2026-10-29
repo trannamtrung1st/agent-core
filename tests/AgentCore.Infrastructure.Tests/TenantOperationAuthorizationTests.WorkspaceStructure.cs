@@ -33,7 +33,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var other = WorkspaceOwner(s, !working);
         ValueTask Gate(CancellationToken ct) => WorkspacePrimitiveAuthority(f, s, [owner], ct);
         var root = owner.LogicalRoot;
-        await WorkspaceMutations(f, files).WriteAsync(s.Tenant, working ? s.Run.SessionId : s.Agent.Instance.InstanceId, working,
+        await WorkspaceMutations(f, files).WriteAsync(s.Tenant, working ? s.Run.SessionId : SpaceId(s), working,
             s.Owner, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, root + "/note.txt", Encoding.UTF8.GetBytes("original: thử nghiệm"));
         var patched = await files.PatchTenantAsync(owner, root + "/note.txt", [new("original", "updated")], Gate);
         Assert.Equal(1, patched.EditsApplied); Assert.DoesNotContain("thử nghiệm", JsonSerializer.Serialize(patched));

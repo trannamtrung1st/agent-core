@@ -286,7 +286,7 @@ public sealed partial class IamIdentityIntegrationTests
         var a = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var system = (await f.Store.ReadSystemAsync()).Principals.Single();
         var b = await f.Access.CreateTenantAsync(system.PrincipalId, a.AccountId, "Beta", "beta");
-        var service = f.AgentService();
+        var service = f.AgentService(generalAssistantRelease: 35);
         var first = await service.CreateAsync(a.OwnerPrincipalId, a.TenantId, "examiner", 1, 1);
         var state = (await f.Store.ReadTenantAsync(a.TenantId))!;
         Assert.DoesNotContain(state.Assignments, x => x.PrincipalId == first.PrincipalId);
@@ -422,11 +422,12 @@ public sealed partial class IamIdentityIntegrationTests
             Access = new(Store, Authorizer, Identity, Tokens, Ids, Time);
             Instances = instances ?? new SqliteAgentInstanceStore(contexts!, Ids);
         }
-        public TenantAgentService AgentService()
+        public TenantAgentService AgentService(int? generalAssistantRelease = null)
         {
             var directory = new DirectoryInfo(AppContext.BaseDirectory);
             while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "agents"))) directory = directory.Parent;
-            var templates = new FileAgentDefinitionStore(Path.Combine(directory!.FullName, "agents"), SyntheticProviderAliases.Default);
+            IBuiltInAgentDefinitionStore templates = new FileAgentDefinitionStore(Path.Combine(directory!.FullName, "agents"), SyntheticProviderAliases.Default);
+            if (generalAssistantRelease is { } release) templates = new TenantCredentialIntegrationTests.Fixture.HistoricalRelease(templates, release);
             return new(Store, (ITenantAgentStore)Store, templates, Authorizer, Ids, Time);
         }
         public async ValueTask<Principal> CreateAgentAsync(Guid actor, Guid tenant, Guid instanceId, long expected)

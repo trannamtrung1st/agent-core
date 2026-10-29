@@ -74,7 +74,7 @@ public sealed partial class TenantOperationAuthorizationTests
                 await f.Sessions.ChangeAsync(setup.Tenant, setup.Owner, new(frame.SessionId, current.Snapshot.Revision, TenantSessionAction.Delete), (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
             }
         });
-        var attempt = WorkspaceService(f, hook).ReadAsync(setup.Tenant, working ? setup.Run.SessionId : setup.Agent.Instance.InstanceId, working, read.Reader, read.Path).AsTask();
+        var attempt = WorkspaceService(f, hook).ReadAsync(setup.Tenant, working ? setup.Run.SessionId : SpaceId(setup), working, read.Reader, read.Path).AsTask();
         if (change == "source") Assert.Equal("workspace_source_changed", (await Assert.ThrowsAsync<SecurityConflictException>(() => attempt)).ReasonCode);
         else await Assert.ThrowsAsync<AccessDeniedException>(() => attempt);
     }
@@ -85,7 +85,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f); var read = await WorkspaceReadCase(f, setup, working);
         var processed = false;
         await Assert.ThrowsAsync<AccessDeniedException>(() => WorkspaceService(f, WorkspaceReader(f)).ProjectAsync(setup.Tenant,
-            working ? setup.Run.SessionId : setup.Agent.Instance.InstanceId, working, read.Reader, read.Path, _ => 1024, async (content, token) =>
+            working ? setup.Run.SessionId : SpaceId(setup), working, read.Reader, read.Path, _ => 1024, async (content, token) =>
             {
                 var text = Encoding.UTF8.GetString(content.Bytes); processed = true;
                 await f.Access.RevokeAssignmentAsync(setup.Owner.PrincipalId, setup.Tenant, read.Grant.AssignmentId, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision, token);
@@ -125,7 +125,8 @@ public sealed partial class TenantOperationAuthorizationTests
         var beta = await f.Access.CreateTenantAsync(system.PrincipalId, setup.Owner.AccountId, "Beta", "beta");
         var betaActor = setup.Owner with { PrincipalId = beta.Users.Single().PrincipalId };
         var betaAgent = await f.Agents.CreateAsync(betaActor.PrincipalId, beta.Tenant.TenantId, "examiner", 1, beta.Tenant.Revision);
-        var betaScope = TenantWorkspaceRules.Home(beta.Tenant.TenantId, betaAgent.Instance.InstanceId);
+        var betaSpace = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(beta.Tenant.TenantId, betaAgent.Instance.InstanceId))!;
+        var betaScope = TenantWorkspaceRules.Home(beta.Tenant.TenantId, betaSpace.SpaceId);
         var forged = betaScope with { TenantId = setup.Tenant };
         Assert.True(await f.Iam.OwnsResourceAsync(betaScope)); Assert.False(await f.Iam.OwnsResourceAsync(forged));
         await Assert.ThrowsAsync<AccessDeniedException>(() => f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, read.Reader.PrincipalId, read.Grant.RoleId, forged, (f.Iam.ReadTenantAsync(setup.Tenant).Result)!.Tenant.Revision).AsTask());
@@ -134,10 +135,10 @@ public sealed partial class TenantOperationAuthorizationTests
         await Assert.ThrowsAsync<ArgumentException>(() => f.Iam.TrySaveTenantAsync(state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 }, Assignments = state.Assignments.Append(injection).ToArray() },
             state.Tenant.Revision, new(f.Ids.NewId(), setup.Tenant, setup.Owner.PrincipalId, "iam.roles.assign", "test", "allowed", "test", f.Clock.GetUtcNow())).AsTask());
         var service = WorkspaceService(f, WorkspaceReader(f));
-        await Assert.ThrowsAsync<AccessDeniedException>(() => service.ListAsync(setup.Tenant, betaAgent.Instance.InstanceId, false, setup.Owner).AsTask());
-        await Assert.ThrowsAsync<AccessDeniedException>(() => service.ListAsync(beta.Tenant.TenantId, betaAgent.Instance.InstanceId, false, setup.Owner).AsTask());
-        await Assert.ThrowsAsync<AccessDeniedException>(() => service.ListAsync(beta.Tenant.TenantId, betaAgent.Instance.InstanceId, false, read.Reader).AsTask());
-        Assert.Empty((await service.ListAsync(beta.Tenant.TenantId, betaAgent.Instance.InstanceId, false, betaActor)).Items);
+        await Assert.ThrowsAsync<AccessDeniedException>(() => service.ListAsync(setup.Tenant, betaSpace.SpaceId, false, setup.Owner).AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => service.ListAsync(beta.Tenant.TenantId, betaSpace.SpaceId, false, setup.Owner).AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => service.ListAsync(beta.Tenant.TenantId, betaSpace.SpaceId, false, read.Reader).AsTask());
+        Assert.Empty((await service.ListAsync(beta.Tenant.TenantId, betaSpace.SpaceId, false, betaActor)).Items);
         var sibling = await f.Sessions.CreateAsync(setup.Tenant, setup.Agent.Instance.InstanceId, setup.Owner, SessionMode.Text, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision, setup.Agent.Instance.Revision);
         await Assert.ThrowsAsync<AccessDeniedException>(() => service.ListAsync(setup.Tenant, sibling.Owner.SessionId, true, read.Reader).AsTask());
         await Assert.ThrowsAsync<AccessDeniedException>(() => WorkspaceReader(f).ListTenantAsync(new TenantWorkspaceReference.SessionWorking(beta.Tenant.TenantId, setup.Run.SessionId), "/working", null, 10).AsTask());
@@ -183,6 +184,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Exact workspace read", ["workspaces.read"], (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         var grant = await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, reader.PrincipalId, role.RoleId,
             working ? TenantWorkspaceRules.Working(setup.Tenant, setup.Run.SessionId) : TenantWorkspaceRules.Home(setup.Tenant, SpaceId(setup)), (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
+        if (!working) await GrantExactSpaceRead(f, setup, reader.PrincipalId, SpaceId(setup));
         return (reader, grant, files, file);
     }
     private sealed class WorkspaceReadHook(ITenantWorkspaceReadStore inner, Func<Task> afterRead) : ITenantWorkspaceReadStore

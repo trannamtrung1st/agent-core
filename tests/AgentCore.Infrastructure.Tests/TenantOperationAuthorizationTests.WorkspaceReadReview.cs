@@ -36,7 +36,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var prepared = await new TenantToolAuthorization(runs, Operations(f), f.Clock, approvals, f.RunConfiguration(), workspaceReads: reads).PrepareAsync(run.SessionId, call,
             new(false, TriggerKind.UserTurn, AgentInstanceId: s.Agent.Instance.InstanceId, OwnedSessionId: run.SessionId, SupportsTools: true, AgentRunId: run.AgentRunId, TenantId: s.Tenant, AgentRunGeneration: frame.Generation), default);
         var request = Assert.IsType<TenantApprovalRequest>(prepared.Request); Assert.Equal(ApprovalKind.Review, request.Kind); Assert.Equal(TenantOperationKind.WorkspaceRead, request.Operation.Kind);
-        Assert.Equal(working ? "working:" + frame.SessionId.ToString("D") : "home:" + s.Agent.Instance.InstanceId.ToString("D"), request.ResourceId);
+        Assert.Equal(working ? "working:" + frame.SessionId.ToString("D") : "home:" + SpaceId(s).ToString("D"), request.ResourceId);
         Assert.DoesNotContain("Private model bytes", JsonSerializer.Serialize(request));
         var waiting = (await runs.FindTenantRunAsync(s.Tenant, frame.RunId))!; Assert.Equal(AgentRunStatus.WaitingForApproval, waiting.Status); Assert.Null(waiting.Claim);
         var view = await approvals.ReadViewAsync(s.Tenant, request.RequestId, s.Owner); Assert.True(view.Review!.CanDecide);

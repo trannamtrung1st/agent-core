@@ -37,7 +37,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(result, replay);
         Assert.Equal(3, (await ((ITenantAgentStore)reopened).FindTenantAgentAsync(request.TenantId, request.Operation.InstanceId))!.Instance.Revision);
         Assert.Single(await f.Iam.ReadAuditAsync(request.TenantId, 200), a => a.Action == "operations.persona.apply");
-        if (!review) Assert.DoesNotContain((await f.Iam.ReadTenantAsync(request.TenantId))!.Assignments, a => a.PrincipalId == request.ExecutorPrincipalId);
+        if (!review) AssertOnlyContextAssignment((await f.Iam.ReadTenantAsync(request.TenantId))!, setup.Environment);
         ICoreEventStore events = f.Contexts is null ? ((InMemoryAgentInstanceStore)f.Instances).CoreEvents : new SqliteCoreEventStore(f.Contexts);
         Assert.DoesNotContain(await events.PendingAsync(), e => e.Event.Owner.AgentInstanceId == request.Operation.InstanceId && e.Event.Key == "instance.config_changed");
     }

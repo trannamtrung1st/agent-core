@@ -66,7 +66,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson=json_set(PayloadJson,'$.Operation.SandboxRead.ProfileReferencesJson','{{}}') WHERE RequestId={request.RequestId}"));
         }
         Assert.Equal(s.Lease.Profile.Id, Assert.Single(TenantApprovalRules.ReadProfiles(request.Operation.SandboxRead!)).Id);
-        var correlated = TenantApprovalRules.PrepareSandboxRead(f.Ids.NewId(), request.Operation.InstanceId, request.Operation.SandboxRead!, 2, 2);
+        var correlated = TenantApprovalRules.ForRun(TenantApprovalRules.PrepareSandboxRead(f.Ids.NewId(), request.Operation.InstanceId, request.Operation.SandboxRead!, 2, 2), s.Run);
         Assert.Equal(request.Fingerprint, correlated.OperationFingerprint);
         Assert.Equal(request.RequestId, (await ((ITenantApprovalStore)f.Iam).FindRootApprovalAsync(s.Tenant, request.RootActivationId, request.ExecutorPrincipalId, correlated))!.RequestId);
         var view = await services.Approvals.ReadViewAsync(s.Tenant, request.RequestId, SandboxHuman(s)); Assert.True(view.Review!.CanDecide);
