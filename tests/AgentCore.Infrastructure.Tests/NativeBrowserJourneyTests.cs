@@ -84,12 +84,16 @@ public sealed class NativeBrowserJourneyTests(Xunit.Abstractions.ITestOutputHelp
             var originalPage = browser.ContextFor(id)!.Pages[0];
             var recoveryUrl = originalPage.Url;
             var recoveryEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var recoveryReleased = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Microsoft.Playwright.IPage? abandonedRestore = null;
             if (withholdFirstCapture)
                 await browser.ContextFor(id)!.RouteAsync(recoveryUrl, async route =>
                 {
+                    abandonedRestore = route.Request.Frame.Page;
                     recoveryEntered.TrySetResult();
                     await releaseRecovery.Task;
-                    try { await route.ContinueAsync(); } catch (Microsoft.Playwright.PlaywrightException) { }
+                    try { await route.AbortAsync(); } catch (Microsoft.Playwright.PlaywrightException) { }
+                    finally { recoveryReleased.TrySetResult(); }
                 });
             var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             browser.ActionStartedProbe = () => started.TrySetResult();
@@ -103,9 +107,12 @@ public sealed class NativeBrowserJourneyTests(Xunit.Abstractions.ITestOutputHelp
             Assert.True(originalPage.IsClosed);
             if (withholdFirstCapture)
             {
+                Assert.True(abandonedRestore?.IsClosed == true, "The timed-out restoration page must be retired.");
                 releaseRecovery.TrySetResult();
+                await recoveryReleased.Task.WaitAsync(TimeSpan.FromSeconds(10));
                 await browser.ContextFor(id)!.UnrouteAsync(recoveryUrl);
-                Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(recoveryUrl)))).ErrorCode);
+                var navigation = await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(recoveryUrl)));
+                Assert.True(navigation.ErrorCode is null, $"Fresh navigation: {navigation.ErrorCode}; {navigation.DataJson}");
             }
             var recovered = await Run("browser.snapshot", new { }); Assert.Null(recovered.ErrorCode);
             Assert.Contains("Nothing selected", recovered.Observation!.Content!);

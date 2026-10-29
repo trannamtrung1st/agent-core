@@ -22,7 +22,16 @@ public sealed partial class NativePlaywrightBrowser
             RememberPage(session, session.Page); AdvanceGeneration(session);
             if (IsAllowed(session, url))
                 try { await session.Page.GotoAsync(url, new() { Timeout = 1000, WaitUntil = WaitUntilState.DOMContentLoaded }); }
-                catch (Exception ex) when (ex is PlaywrightException or TimeoutException) { }
+                catch (Exception ex) when (ex is PlaywrightException or TimeoutException)
+                {
+                    // A navigation timeout leaves its request alive. Retire that
+                    // page too, so later work cannot inherit its unfinished load.
+                    var abandoned = session.Page;
+                    await abandoned.CloseAsync(); ForgetPage(session, abandoned);
+                    AdvanceGeneration(session);
+                    session.Page = await session.Context.NewPageAsync();
+                    RememberPage(session, session.Page); AdvanceGeneration(session);
+                }
         }
         finally { await EndCallAsync(session, recoveryCall); }
     }
