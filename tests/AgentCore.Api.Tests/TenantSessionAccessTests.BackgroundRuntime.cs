@@ -181,7 +181,14 @@ public sealed partial class TenantSessionAccessTests
         var spaceAccess = factory.Services.GetRequiredService<TenantAccessService>();
         var spaceRole = await spaceAccess.SaveRoleAsync(human, tenant, null, "Read exact background fixture context", ["spaces.read"], await Revision(owner, tenant));
         await spaceAccess.AssignRoleAsync(human, tenant, executor, spaceRole.RoleId, AgentCore.Domain.Security.AccessScope.ForResource(tenant, "space", privateSpace.GetProperty("spaceId").GetGuid().ToString("D")), await Revision(owner, tenant));
-        if (auto) Assert.Equal(System.Net.HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/models/routing", new { routing = new { enabled = true, allowConfiguredDefault = false, minimumProbability = .7 }, expectedRevision = await Revision(owner, tenant), expectedSettingsRevision = 0 })).StatusCode);
+        if (auto)
+        {
+            Assert.Equal(System.Net.HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/models/routing", new { routing = new { enabled = true, allowConfiguredDefault = false, minimumProbability = .7 }, expectedRevision = await Revision(owner, tenant), expectedSettingsRevision = 0 })).StatusCode);
+            // A Task selects its worker's own unattended preference independently of the source conversation.
+            Assert.Equal(System.Net.HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + $"/agents/{instance}/unattended-model", new {
+                modelPreference = new { mode = "auto", reasoning = new { mode = "modelDefault" } }, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision })).StatusCode);
+            instanceRevision++;
+        }
         var session=(await Json(await owner.PostAsJsonAsync(api+"/sessions",new{agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=instanceRevision,retentionKind="saved",modelPreference=new { mode=auto?"auto":"inherit",reasoning=new { mode="modelDefault" } }}))).GetProperty("sessionId").GetGuid();
         if(!submit)return(tenant,session,Guid.Empty);
         var result=await Json(await owner.PostAsJsonAsync(api+$"/sessions/{session}/messages",new{messageId=Guid.NewGuid(),text="Start the exact owned background check",expectedRevision=await Revision(owner,tenant),expectedSessionRevision=1}));
@@ -203,8 +210,10 @@ public sealed partial class TenantSessionAccessTests
             if(parent?.IsTerminal==true && child?.IsTerminal==true && (!report||notification?.IsTerminal==true))break;
             await Task.Delay(25,timeout.Token);
         }
-        Assert.True(parent?.Status==AgentRunStatus.Completed,$"Parent {parent?.Status}: {parent?.Failure?.Code} {parent?.Failure?.Summary}");
-        Assert.NotNull(child);Assert.True(child.Status==AgentRunStatus.Completed,$"Child {child.Status}: {child.Failure?.Code} {child.Failure?.Summary}");
+        var model=(TenantBackgroundModel)factory.Services.GetRequiredService<ILanguageModel>();
+        Assert.True(parent?.Status==AgentRunStatus.Completed,$"Parent {parent?.Status}: {parent?.Failure?.Code} {parent?.Failure?.Summary}\n{string.Join('\n',model.Failures)}");
+        Assert.NotNull(child);
+        Assert.True(child.Status==AgentRunStatus.Completed,$"Child {child.Status}: {child.Failure?.Code} {child.Failure?.Summary}; budget={child.Admission.ExecutionBudget?.Class}/{child.Admission.ExecutionBudget?.Profile.MaxSteps}; step={child.Checkpoint?.StepCount}; last tools: {string.Join(',',model.Requests.LastOrDefault()?.Tools?.Select(t=>t.Name)??[])}\n{string.Join('\n',model.Failures)}");
         if(report){Assert.NotNull(notification);Assert.True(notification.Status==AgentRunStatus.Completed,$"Report {notification.Status}: {notification.Failure?.Code} {notification.Failure?.Summary}\n{string.Join('\n',((TenantBackgroundModel)factory.Services.GetRequiredService<ILanguageModel>()).Failures)}");}
         return(child,notification);
     }

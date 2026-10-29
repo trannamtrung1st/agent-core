@@ -49,6 +49,13 @@ public sealed partial class TenantSessionAccessTests
             var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, setup.Tenant, null, "Independent owned background page reads", ["agents.read", "browser.read"], await Revision(owner, setup.Tenant));
             await access.AssignRoleAsync(human, setup.Tenant, parent.Owner.ExecutorPrincipalId, role.RoleId, AccessScope.ForTenant(setup.Tenant), await Revision(owner, setup.Tenant));
+            var current = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(setup.Tenant, parent.Owner.AgentInstanceId))!;
+            // Reserve the parent's own work and both bounded Task/report shares;
+            // the worker's independent Browser ceiling remains 32 steps / 240 seconds.
+            var budget = await owner.PutAsJsonAsync(api + $"/agents/{current.Instance.InstanceId}/execution-budgets", new {
+                expectedRevision = await Revision(owner, setup.Tenant), expectedInstanceRevision = current.Instance.Revision,
+                budgets = new ExecutionBudgetPolicy(InteractiveBrowser: new(88, 660)) });
+            Assert.True(budget.IsSuccessStatusCode, await budget.Content.ReadAsStringAsync());
             var sent = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{setup.Session}/messages", new { messageId = Guid.NewGuid(), text = "Start the exact owned Browser read budget check",
                 expectedRevision = await Revision(owner, setup.Tenant), expectedSessionRevision = 1 }));
             var (child, report) = await WaitTenantBackground(factory, setup.Tenant, setup.Session, sent.GetProperty("runId").GetGuid(), true);

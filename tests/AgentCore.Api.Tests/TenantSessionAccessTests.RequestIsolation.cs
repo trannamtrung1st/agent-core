@@ -55,6 +55,7 @@ public sealed partial class TenantSessionAccessTests
     {
         public TaskCompletionSource ChildEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource ReleaseChild { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ChildReturned { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource ParentEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource ReleaseParent { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public override async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -62,14 +63,18 @@ public sealed partial class TenantSessionAccessTests
             if (Origin(request) == ExecutionOrigin.DelegatedTask) { ChildEntered.TrySetResult(); await ReleaseChild.Task.WaitAsync(cancellationToken); }
             if (childFirst && Origin(request) == ExecutionOrigin.UserMessage && request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == "tasks.delegate"))
             { ParentEntered.TrySetResult(); await ReleaseParent.Task.WaitAsync(cancellationToken); }
-            await foreach (var value in base.GenerateAsync(request, cancellationToken))
+            try
             {
-                if (!report && value is ModelToolCallEvent { Call.Name: "tasks.delegate" } call)
-                    yield return new ModelToolCallEvent(call.Call with { ArgumentsJson = call.Call.ArgumentsJson.Replace("\"reportOnCompletion\":true", "\"reportOnCompletion\":false", StringComparison.Ordinal) });
-                else if (quiet && value is ModelToolCallEvent { Call.Name: ToolCatalog.WorkComplete } complete)
-                    yield return new ModelToolCallEvent(complete.Call with { ArgumentsJson = complete.Call.ArgumentsJson.Replace("\"outcome\":\"Response\"", "\"outcome\":\"NoAction\"", StringComparison.Ordinal) });
-                else yield return value;
+                await foreach (var value in base.GenerateAsync(request, cancellationToken))
+                {
+                    if (!report && value is ModelToolCallEvent { Call.Name: "tasks.delegate" } call)
+                        yield return new ModelToolCallEvent(call.Call with { ArgumentsJson = call.Call.ArgumentsJson.Replace("\"reportOnCompletion\":true", "\"reportOnCompletion\":false", StringComparison.Ordinal) });
+                    else if (quiet && value is ModelToolCallEvent { Call.Name: ToolCatalog.WorkComplete } complete)
+                        yield return new ModelToolCallEvent(complete.Call with { ArgumentsJson = complete.Call.ArgumentsJson.Replace("\"outcome\":\"Response\"", "\"outcome\":\"NoAction\"", StringComparison.Ordinal) });
+                    else yield return value;
+                }
             }
+            finally { if (Origin(request) == ExecutionOrigin.DelegatedTask) ChildReturned.TrySetResult(); }
         }
     }
     [Theory(Timeout = 90000)]
