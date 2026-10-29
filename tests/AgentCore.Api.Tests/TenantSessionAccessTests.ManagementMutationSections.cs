@@ -28,7 +28,7 @@ public sealed partial class TenantSessionAccessTests
     [InlineData(false,"behaviorPolicy","avoidUnsupportedClaims")] [InlineData(true,"behaviorPolicy","avoidUnsupportedClaims")]
     [InlineData(false,"initiativePolicy","enabled")] [InlineData(true,"initiativePolicy","enabled")]
     [InlineData(false,"voice","speakingRate")] [InlineData(true,"voice","speakingRate")]
-    [InlineData(false,"modelDefaults","offeringId")] [InlineData(true,"modelDefaults","offeringId")]
+    [InlineData(false,"modelDefaults","preference")] [InlineData(true,"modelDefaults","preference")]
     [InlineData(false,"memoryPolicy","sessionMemory")] [InlineData(true,"memoryPolicy","sessionMemory")]
     [InlineData(false,"capabilities","selected")] [InlineData(true,"capabilities","selected")]
     [InlineData(false,"triggerPolicy","enabled")] [InlineData(true,"triggerPolicy","enabled")]
@@ -53,7 +53,9 @@ public sealed partial class TenantSessionAccessTests
             var current=(await host.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant,instance))!.Instance;
             var state=(await host.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!;
             var view=(await host.Services.GetRequiredService<TenantAgentConfigurationService>().ReadSettingsAsync(Assert.Single(state.Users).PrincipalId,tenant,instance)).Items.Single(s=>s.Section==section);
-            var value=section=="stateIsolationPolicy"?JsonSerializer.SerializeToElement("ReadOnly"):section=="triggerPolicy"?JsonSerializer.SerializeToElement(false):JsonSerializer.SerializeToElement(view.Effective[field]);
+            var value=section=="stateIsolationPolicy"?JsonSerializer.SerializeToElement("ReadOnly"):section=="triggerPolicy"?JsonSerializer.SerializeToElement(false):JsonSerializer.SerializeToElement(
+                section=="modelDefaults" ? AgentCore.Domain.Models.ModelPreference.Fixed(host.Services.GetRequiredService<IModelCatalog>().DefaultOfferingId) : view.Effective[field],
+                new JsonSerializerOptions(JsonSerializerDefaults.Web));
             model.Arguments=JsonSerializer.Serialize(new { expectedInstanceRevision=current.Revision,section,set=new Dictionary<string,JsonElement> { [field]=value },clear=Array.Empty<string>() });
             var created=await Json(await owner.PostAsJsonAsync(api+"/sessions",new { retentionKind="saved", agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=current.Revision }));var session=created.GetProperty("sessionId").GetGuid();
             var response=await owner.PostAsJsonAsync(api+$"/sessions/{session}/messages",new { messageId=Guid.NewGuid(),text="Inspect and save this exact setting through the shared configuration owner.",expectedRevision=await Revision(owner,tenant),expectedSessionRevision=1 });
