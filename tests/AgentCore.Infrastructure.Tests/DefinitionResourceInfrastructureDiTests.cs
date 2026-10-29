@@ -97,8 +97,9 @@ public sealed class DefinitionResourceInfrastructureDiTests
             Assert.DoesNotContain(currentResources, r => r.ContentSha256 == hash || r.LogicalPath == "private-shadow.txt");
             var owner = await provider.GetRequiredService<IdentityService>().BootstrapAsync("catalog-owner@example.test",
                 "Catalog owner", "synthetic-catalog-password", "Catalog organization", "catalog-organization");
+            var tenant = await provider.GetRequiredService<IIamStore>().ReadTenantAsync(owner.TenantId);
             var agent = await provider.GetRequiredService<TenantAgentService>().CreateAsync(owner.OwnerPrincipalId,
-                owner.TenantId, baseline.Id, baseline.Version, 1);
+                owner.TenantId, baseline.Id, baseline.Version, tenant!.Tenant.Revision);
             var configuration = await provider.GetRequiredService<TenantAgentConfigurationService>()
                 .ReadAsync(owner.OwnerPrincipalId, owner.TenantId, agent.Instance.InstanceId);
             Assert.Equal(expectedResources.Select(r => r.ContentSha256), configuration.Resources.Select(r => r.ContentSha256));
