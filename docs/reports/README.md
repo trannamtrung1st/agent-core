@@ -12,6 +12,7 @@ Reports are dated, source-bound evidence. They preserve the checks performed, ou
 | Evaluation / Goals | [Native scripts](native-evaluation-scripts-2026-10-27.md), [Goals](session-goals-delivery-2026-10-27.md) |
 | Task communication | [Initiative 9](initiative-9-local-verification-2026-10-27.md), [review follow-up](initiative-9-review-fixes-2026-10-28.md) |
 | Managed General Assistant / Formal Workflows | [General Assistant](general-assistant-delivery-2026-10-28.md), [Workflows](formal-workflows-delivery-2026-10-28.md) |
+| Production Hardening | [Selected single-host design, implementation and qualification](production-hardening-delivery-2026-10-30.md) |
 | Project refactoring | [Delivery and final review](project-refactoring-delivery-2026-10-30.md), [design decisions](../proposals/project-refactoring-architecture-stabilization.md) |
 
 ## Inventory and retention

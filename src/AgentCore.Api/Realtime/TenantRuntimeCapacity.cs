@@ -14,13 +14,19 @@ public sealed class TenantRuntimeCapacity(IOptions<AgentCoreOptions> options)
     {
         lock (gate)
         {
-            if (!admitting || reserved >= Math.Max(1, limits.MaxActiveSessions)) return false;
-            reserved++; return true;
+            if (!admitting || reserved >= Math.Max(1, limits.MaxActiveSessions))
+            {
+                AgentCore.Application.Observability.RuntimeTelemetry.RecordRuntimeAdmission(!admitting ? "stopping" : "capacity", 0);
+                return false;
+            }
+            reserved++;
+            AgentCore.Application.Observability.RuntimeTelemetry.RecordRuntimeAdmission("accepted", 1);
+            return true;
         }
     }
     internal void ReleaseTenantRuntime()
     {
-        lock (gate) { if (reserved > 0) reserved--; }
+        lock (gate) { if (reserved > 0) { reserved--; AgentCore.Application.Observability.RuntimeTelemetry.RecordRuntimeAdmission("released", -1); } }
     }
     internal void StopAdmissions()
     {

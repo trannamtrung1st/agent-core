@@ -1,0 +1,533 @@
+{
+  "databaseBuilt": "2026-10-29T06:23:34Z",
+  "databaseValid": true,
+  "frontendModerateAdvisory": {
+    "advisory": "GHSA-w5hq-g745-h8pq",
+    "assessment": "Affected buffer forms of v3/v5/v6 are not called; dependency imports v4 only.",
+    "package": "uuid 8.3.2 via Fortune Sheet"
+  },
+  "image": "sha256:fa33a33230161129290a0473d8bcb593f790dd041c41f1f3eb6065ab5be1a796",
+  "matches": [
+    {
+      "advisory": "CVE-2026-82560",
+      "fixState": "not-fixed",
+      "package": "perl-base",
+      "severity": "Medium",
+      "version": "5.38.2-3.2ubuntu0.6"
+    },
+    {
+      "advisory": "CVE-2026-86145",
+      "fixState": "not-fixed",
+      "package": "libpcre2-8-0",
+      "severity": "Medium",
+      "version": "10.42-4ubuntu2.1"
+    },
+    {
+      "advisory": "CVE-2026-89157",
+      "fixState": "not-fixed",
+      "package": "libpcre2-8-0",
+      "severity": "Medium",
+      "version": "10.42-4ubuntu2.1"
+    },
+    {
+      "advisory": "CVE-2026-8674",
+      "fixState": "not-fixed",
+      "package": "libc-bin",
+      "severity": "Medium",
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "advisory": "CVE-2026-8674",
+      "fixState": "not-fixed",
+      "package": "libc6",
+      "severity": "Medium",
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "advisory": "CVE-2026-89156",
+      "fixState": "not-fixed",
+      "package": "libpcre2-8-0",
+      "severity": "Medium",
+      "version": "10.42-4ubuntu2.1"
+    },
+    {
+      "advisory": "CVE-2026-97399",
+      "fixState": "not-fixed",
+      "package": "libc-bin",
+      "severity": "Medium",
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "advisory": "CVE-2026-97399",
+      "fixState": "not-fixed",
+      "package": "libc6",
+      "severity": "Medium",
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "advisory": "CVE-2026-103111",
+      "fixState": "not-fixed",
+      "package": "libpcre2-8-0",
+      "severity": "Medium",
+      "version": "10.42-4ubuntu2.1"
+    },
+    {
+      "advisory": "CVE-2026-89160",
+      "fixState": "not-fixed",
+      "package": "libpcre2-8-0",
+      "severity": "Medium",
+      "version": "10.42-4ubuntu2.1"
+    },
+    {
+      "advisory": "CVE-2024-10041",
+      "fixState": "wont-fix",
+      "package": "libpam-modules",
+      "severity": "Medium",
+      "version": "1.5.3-5ubuntu5.7"
+    },
+    {
+      "advisory": "CVE-2024-10041",
+      "fixState": "wont-fix",
+      "package": "libpam-modules-bin",
+      "severity": "Medium",
+      "version": "1.5.3-5ubuntu5.7"
+    },
+    {
+      "advisory": "CVE-2024-10041",
+      "fixState": "wont-fix",
+      "package": "libpam-runtime",
+      "severity": "Medium",
+      "version": "1.5.3-5ubuntu5.7"
+    },
+    {
+      "advisory": "CVE-2024-10041",
+      "fixState": "wont-fix",
+      "package": "libpam0g",
+      "severity": "Medium",
+      "version": "1.5.3-5ubuntu5.7"
+    },
+    {
+      "advisory": "CVE-2025-5222",
+      "fixState": "not-fixed",
+      "package": "libicu74",
+      "severity": "Low",
+      "version": "74.2-1ubuntu3.1"
+    },
+    {
+      "advisory": "CVE-2016-2781",
+      "fixState": "wont-fix",
+      "package": "coreutils",
+      "severity": "Low",
+      "version": "9.4-3ubuntu6.3"
+    },
+    {
+      "advisory": "CVE-2024-56433",
+      "fixState": "not-fixed",
+      "package": "login",
+      "severity": "Low",
+      "version": "1:4.13+dfsg1-4ubuntu3.2"
+    },
+    {
+      "advisory": "CVE-2024-56433",
+      "fixState": "not-fixed",
+      "package": "passwd",
+      "severity": "Low",
+      "version": "1:4.13+dfsg1-4ubuntu3.2"
+    },
+    {
+      "advisory": "CVE-2026-89158",
+      "fixState": "not-fixed",
+      "package": "libpcre2-8-0",
+      "severity": "Medium",
+      "version": "10.42-4ubuntu2.1"
+    },
+    {
+      "advisory": "CVE-2026-95209",
+      "fixState": "not-fixed",
+      "package": "libgnutls30t64",
+      "severity": "Medium",
+      "version": "3.8.3-1.1ubuntu3.6"
+    },
+    {
+      "advisory": "CVE-2026-89092",
+      "fixState": "not-fixed",
+      "package": "libc-bin",
+      "severity": "Medium",
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "advisory": "CVE-2026-89092",
+      "fixState": "not-fixed",
+      "package": "libc6",
+      "severity": "Medium",
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "advisory": "CVE-2016-20013",
+      "fixState": "wont-fix",
+      "package": "libc-bin",
+      "severity": "Negligible",
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "advisory": "CVE-2016-20013",
+      "fixState": "wont-fix",
+      "package": "libc6",
+      "severity": "Negligible",
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "advisory": "CVE-2026-76642",
+      "fixState": "not-fixed",
+      "package": "bsdutils",
+      "severity": "Medium",
+      "version": "1:2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-76642",
+      "fixState": "not-fixed",
+      "package": "libblkid1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-76642",
+      "fixState": "not-fixed",
+      "package": "libmount1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-76642",
+      "fixState": "not-fixed",
+      "package": "libsmartcols1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-76642",
+      "fixState": "not-fixed",
+      "package": "libuuid1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-76642",
+      "fixState": "not-fixed",
+      "package": "mount",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-76642",
+      "fixState": "not-fixed",
+      "package": "util-linux",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-88647",
+      "fixState": "not-fixed",
+      "package": "libgnutls30t64",
+      "severity": "Medium",
+      "version": "3.8.3-1.1ubuntu3.6"
+    },
+    {
+      "advisory": "CVE-2026-88648",
+      "fixState": "not-fixed",
+      "package": "libgnutls30t64",
+      "severity": "Medium",
+      "version": "3.8.3-1.1ubuntu3.6"
+    },
+    {
+      "advisory": "CVE-2026-78408",
+      "fixState": "not-fixed",
+      "package": "bsdutils",
+      "severity": "Medium",
+      "version": "1:2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78408",
+      "fixState": "not-fixed",
+      "package": "libblkid1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78408",
+      "fixState": "not-fixed",
+      "package": "libmount1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78408",
+      "fixState": "not-fixed",
+      "package": "libsmartcols1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78408",
+      "fixState": "not-fixed",
+      "package": "libuuid1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78408",
+      "fixState": "not-fixed",
+      "package": "mount",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78408",
+      "fixState": "not-fixed",
+      "package": "util-linux",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78409",
+      "fixState": "not-fixed",
+      "package": "bsdutils",
+      "severity": "Medium",
+      "version": "1:2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78409",
+      "fixState": "not-fixed",
+      "package": "libblkid1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78409",
+      "fixState": "not-fixed",
+      "package": "libmount1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78409",
+      "fixState": "not-fixed",
+      "package": "libsmartcols1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78409",
+      "fixState": "not-fixed",
+      "package": "libuuid1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78409",
+      "fixState": "not-fixed",
+      "package": "mount",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78409",
+      "fixState": "not-fixed",
+      "package": "util-linux",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2022-3219",
+      "fixState": "wont-fix",
+      "package": "gpgv",
+      "severity": "Low",
+      "version": "2.4.4-2ubuntu17.6"
+    },
+    {
+      "advisory": "CVE-2026-95184",
+      "fixState": "not-fixed",
+      "package": "libgnutls30t64",
+      "severity": "Medium",
+      "version": "3.8.3-1.1ubuntu3.6"
+    },
+    {
+      "advisory": "CVE-2026-78410",
+      "fixState": "not-fixed",
+      "package": "bsdutils",
+      "severity": "Medium",
+      "version": "1:2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78410",
+      "fixState": "not-fixed",
+      "package": "libblkid1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78410",
+      "fixState": "not-fixed",
+      "package": "libmount1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78410",
+      "fixState": "not-fixed",
+      "package": "libsmartcols1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78410",
+      "fixState": "not-fixed",
+      "package": "libuuid1",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78410",
+      "fixState": "not-fixed",
+      "package": "mount",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-78410",
+      "fixState": "not-fixed",
+      "package": "util-linux",
+      "severity": "Medium",
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "advisory": "CVE-2026-95210",
+      "fixState": "not-fixed",
+      "package": "libgnutls30t64",
+      "severity": "Medium",
+      "version": "3.8.3-1.1ubuntu3.6"
+    },
+    {
+      "advisory": "CVE-2026-54369",
+      "fixState": "wont-fix",
+      "package": "libacl1",
+      "severity": "Medium",
+      "version": "2.3.2-1build1.1"
+    },
+    {
+      "advisory": "CVE-2026-67693",
+      "fixState": "not-fixed",
+      "package": "libgnutls30t64",
+      "severity": "Medium",
+      "version": "3.8.3-1.1ubuntu3.6"
+    },
+    {
+      "advisory": "CVE-2026-18374",
+      "fixState": "not-fixed",
+      "package": "libc-bin",
+      "severity": "Medium",
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "advisory": "CVE-2026-18374",
+      "fixState": "not-fixed",
+      "package": "libc6",
+      "severity": "Medium",
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "advisory": "CVE-2026-18508",
+      "fixState": "not-fixed",
+      "package": "tar",
+      "severity": "Medium",
+      "version": "1.35+dfsg-3ubuntu0.4"
+    },
+    {
+      "advisory": "CVE-2026-95818",
+      "fixState": "not-fixed",
+      "package": "libc-bin",
+      "severity": "Medium",
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "advisory": "CVE-2026-95818",
+      "fixState": "not-fixed",
+      "package": "libc6",
+      "severity": "Medium",
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "advisory": "CVE-2026-89161",
+      "fixState": "not-fixed",
+      "package": "libpcre2-8-0",
+      "severity": "Medium",
+      "version": "10.42-4ubuntu2.1"
+    },
+    {
+      "advisory": "CVE-2026-102474",
+      "fixState": "not-fixed",
+      "package": "dash",
+      "severity": "Medium",
+      "version": "0.5.12-6ubuntu5"
+    },
+    {
+      "advisory": "CVE-2026-40228",
+      "fixState": "not-fixed",
+      "package": "libsystemd0",
+      "severity": "Low",
+      "version": "255.4-1ubuntu8.18"
+    },
+    {
+      "advisory": "CVE-2026-40228",
+      "fixState": "not-fixed",
+      "package": "libudev1",
+      "severity": "Low",
+      "version": "255.4-1ubuntu8.18"
+    },
+    {
+      "advisory": "CVE-2026-102473",
+      "fixState": "not-fixed",
+      "package": "dash",
+      "severity": "Medium",
+      "version": "0.5.12-6ubuntu5"
+    },
+    {
+      "advisory": "CVE-2026-86805",
+      "fixState": "not-fixed",
+      "package": "libc-bin",
+      "severity": "Medium",
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "advisory": "CVE-2026-86805",
+      "fixState": "not-fixed",
+      "package": "libc6",
+      "severity": "Medium",
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "advisory": "CVE-2026-54370",
+      "fixState": "wont-fix",
+      "package": "libacl1",
+      "severity": "Medium",
+      "version": "2.3.2-1build1.1"
+    },
+    {
+      "advisory": "CVE-2026-18477",
+      "fixState": "not-fixed",
+      "package": "tar",
+      "severity": "Medium",
+      "version": "1.35+dfsg-3ubuntu0.4"
+    },
+    {
+      "advisory": "CVE-2026-105712",
+      "fixState": "not-fixed",
+      "package": "gpgv",
+      "severity": "Low",
+      "version": "2.4.4-2ubuntu17.6"
+    }
+  ],
+  "nugetVulnerablePackagesReported": 0,
+  "scanner": "Grype 0.104.1",
+  "sourceFingerprint": "worktree-f8406168b90150468f850e26aac3149154776395c5cc5d7f446db72cd3ed1f4e"
+}

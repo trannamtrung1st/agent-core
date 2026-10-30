@@ -98,17 +98,21 @@ public sealed class CapabilityProjectionTests
     {
         var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceRead);
         var measurements = new System.Collections.Concurrent.ConcurrentQueue<(long Value, Dictionary<string, object?> Tags)>();
+        using var activity = new System.Diagnostics.Activity("projection-metric-privacy").Start();
         using var listener = new System.Diagnostics.Metrics.MeterListener();
         listener.InstrumentPublished = (instrument, meter) =>
         {
             if (instrument.Meter.Name == AgentCore.Application.Observability.RuntimeTelemetry.Name && instrument.Name == "capability_projection") meter.EnableMeasurementEvents(instrument);
         };
-        listener.SetMeasurementEventCallback<long>((_, value, tags, _) => measurements.Enqueue((value, tags.ToArray().ToDictionary(t => t.Key, t => t.Value))));
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) => {
+            if (ReferenceEquals(System.Diagnostics.Activity.Current, activity))
+                measurements.Enqueue((value, tags.ToArray().ToDictionary(t => t.Key, t => t.Value)));
+        });
         listener.Start();
         var context = Context(d) with { LoadedCapabilityIds = [ToolCatalog.WorkspaceRead] };
         var tools = ToolCatalog.For(d, context, ToolConfigurationGates.AllowAll);
         CapabilityProjectionTelemetry.Record(d, context, ToolConfigurationGates.AllowAll, tools, "capability-test-model", 1);
-        var selected = measurements.Where(m => m.Tags.GetValueOrDefault("model") as string == "capability-test-model").ToArray();
+        var selected = measurements.ToArray();
         long Read(string kind) => Assert.Single(selected, m => m.Tags["kind"] as string == kind).Value;
         Assert.Equal(2, Read("authorizedCapabilityCount"));
         Assert.Equal(2, Read("eligibleCapabilityCount"));
@@ -117,7 +121,8 @@ public sealed class CapabilityProjectionTests
         Assert.Equal(1, Read("loadedProjectedCount"));
         Assert.Equal(1, Read("coreBootstrapCount"));
         Assert.Equal(1, Read("capabilityLoadInvocationCount"));
-        Assert.All(selected, m => Assert.Equal(["kind", "model", "provider"], m.Tags.Keys.Order().ToArray()));
+        Assert.All(selected, m => Assert.Equal(["kind"], m.Tags.Keys.Order().ToArray()));
+        Assert.Equal("capability-test-model", activity.GetTagItem("model.offering.id"));
     }
 
     [Fact]

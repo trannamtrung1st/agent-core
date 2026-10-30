@@ -1,5 +1,11 @@
 # Technology Decisions
 
+## Decision: controlled single-host production hardening
+
+The first deployed posture retains the five-assembly modular monolith: one direct Kestrel HTTPS process, one authoritative local SQLite installation and private matching durable roots. Centralized preflight rejects unsafe deployed configuration; a physical database ownership lease covers host/bootstrap/maintenance writers. Native Development remains explicit and separate. Unqualified Browser/OpenSandbox execution is unavailable outside Development; proxy termination and hostile native tenancy need their own qualification.
+
+Cold coordinated snapshots, immutable-reference/protected-record verification and fresh-target atomic restore belong to the existing offline operator workflow. Optional standard OpenTelemetry HTTP/protobuf export uses incumbent runtime sources, bounded batches and closed metric dimensions; it never owns execution or native retries. [Persistence](15-persistence-and-configuration.md#cold-coordinated-snapshot-contract), [Operations](17-observability-and-operations.md#runtime-export-worker-probes-and-incident-response) and [the delivery ledger](reports/production-hardening-delivery-2026-10-30.md) own contracts, commands and qualification limits.
+
 ## Decision: bounded embedded Formal Workflows
 
 The owner-authorized Formal Workflows implementation permits an embedded Elsa runtime solely for a validated, immutable, closed workflow DAG and durable bookmarks. This is a bounded exception to the generic workflow-engine exclusion below. Session → Activation → AgentRun remains the only agent execution path; existing Task, Goal, Evaluation, Automation and IAM owners retain their authority. Elsa cannot execute models/tools, grant permissions, schedule work, expose vendor endpoints or accept user-authored expressions/definitions. Infrastructure owns vendor dependencies; Domain and Application remain vendor-free. React Flow supplies diagram interaction inside the existing Ant Design v6 UI, with equivalent keyboard-operable outline editing.

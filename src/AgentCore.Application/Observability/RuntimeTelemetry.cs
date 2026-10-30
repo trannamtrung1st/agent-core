@@ -142,6 +142,17 @@ public static class RuntimeTelemetry
     private static readonly Counter<long> SchedulerPasses = Meter.CreateCounter<long>("automation_scheduler_passes");
     private static readonly Counter<long> RunOutcomes = Meter.CreateCounter<long>("agent_run_outcomes");
     public static void RecordSchedulerPass(bool succeeded) => SchedulerPasses.Add(1, new KeyValuePair<string, object?>("outcome", succeeded ? "ready" : "failed"));
+    private static readonly Counter<long> WorkerPasses = Meter.CreateCounter<long>("background_worker_passes");
+    public static void RecordWorkerPass(string worker, bool succeeded) => WorkerPasses.Add(1,
+        new("worker", worker is "runs" or "task-hints" or "workflows" or "email-watch" ? worker : "other"),
+        new("outcome", succeeded ? "ready" : "failed"));
+    private static readonly Counter<long> RuntimeAdmissions = Meter.CreateCounter<long>("runtime_admissions");
+    private static readonly UpDownCounter<long> ActiveRuntimes = Meter.CreateUpDownCounter<long>("active_runtimes");
+    public static void RecordRuntimeAdmission(string outcome, int delta)
+    {
+        RuntimeAdmissions.Add(1, new KeyValuePair<string, object?>("outcome", outcome is "accepted" or "released" or "capacity" or "stopping" ? outcome : "other"));
+        if (delta != 0) ActiveRuntimes.Add(Math.Clamp(delta, -1, 1));
+    }
     public static void RecordRunOutcome(string status, string? reason, bool recovered)
     {
         var boundedReason = reason switch
@@ -181,8 +192,11 @@ public static class RuntimeTelemetry
         CapabilityLoads.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
         CapabilityProjection.Record(matches, new KeyValuePair<string, object?>("kind", "capabilityLoadMatchCount"));
     }
-    public static void RecordCapabilityProjection(string kind, long count, string? provider, string? model) =>
-        CapabilityProjection.Record(count, new KeyValuePair<string, object?>("kind", kind), new("provider", provider), new("model", model));
+    public static void RecordCapabilityProjection(string kind, long count) =>
+        CapabilityProjection.Record(count, new KeyValuePair<string, object?>("kind", kind is
+            "authorizedCapabilityCount" or "eligibleCapabilityCount" or "projectedCapabilityCount" or "projectedToolSchemaBytes"
+            or "capabilityLoadInvocationCount" or "coreBootstrapCount" or "definitionAlwaysCount" or "skillProjectedCount"
+            or "loadedProjectedCount" or "contextProjectedCount" ? kind : "other"));
 
     private static readonly Counter<long> SkillLoads = Meter.CreateCounter<long>("skill_loads");
     private static readonly Counter<long> ApplicationMessages = Meter.CreateCounter<long>("application_messages");
@@ -298,6 +312,9 @@ public sealed class ObservabilityOptions
     public bool LogConversationContent { get; set; }
     public bool OtlpEnabled { get; set; }
     public string? OtlpEndpoint { get; set; }
+    public bool HasValidOtlpEndpoint() => Uri.TryCreate(OtlpEndpoint, UriKind.Absolute, out var uri)
+        && uri.Scheme is "http" or "https" && uri.UserInfo.Length == 0 && uri.Query.Length == 0
+        && uri.Fragment.Length == 0 && uri.AbsolutePath == "/" && uri.Port is >= 1 and <= 65535;
 }
 
 public sealed class HostingOptions

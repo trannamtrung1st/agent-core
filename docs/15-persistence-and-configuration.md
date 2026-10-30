@@ -1,5 +1,22 @@
 # Persistence and Configuration
 
+
+## Cold coordinated snapshot contract
+
+`scripts/data-backup.py` supports the initial `controlled-synthetic` deployment profile only: one stopped, locally owned SQLite installation with five disjoint direct-child durable roots. Browser/OpenSandbox and external native writers are excluded; other topologies need an independently reviewed coordinated recovery procedure. The tool never discovers private external roots or certifies a live cross-root snapshot. It requires an explicit private JSON layout with `version: 1`, `profile: "controlled-synthetic"`, the source SHA, a direct-child `.db` filename and `roots` mapping all of `workspaces`, `attachments`, `artifacts`, `resources`, `keys` to their actual relative directory names. The entire credential directory includes account-session and OAuth-proof key rings. Every undeclared top-level file/root is refused. Release templates remain matching immutable source inputs.
+
+The private backup directory contains `manifest.json` and `payload/`. Its version-1 manifest seals UTC creation, selected layout/source, SHA-256 of the five matching production assemblies, exact Core/Elsa migration lists, verified protected-record count and the complete relative directory/file inventory. Files include byte length, SHA-256, mode and modification timestamp. Ordinary executable bits survive; symlinks, file hard links, special files, privileged mode bits, mixed ownership, omitted/overlapping roots and existing destinations are refused. Filenames, database, keys and manifest are private. Digests detect corruption, not malicious archive replacement; preserve custody and matching binaries. Account-key inventory is preserved, while actual credential/Secret/OAuth ciphertext is cryptographically checked with automatic key generation disabled.
+
+The operator stops **all** writers and confirms the exact physical data root. The tool also takes the canonical host ownership lock, then captures committed WAL content through SQLite's backup API into a normalized standalone database. WAL/SHM and the ownership-lock inode are operational sidecars, excluded from the sealed inventory; required application state is retained. A private staging tree is verified and flushed before atomic rename. Interrupted operations leave a clearly named private `.partial-*` tree and never a completed target. Retain it for diagnosis, then remove only that known fixture when safe.
+
+Verification checks every digest/inventory entry, actual SQLite integrity/foreign keys/schema and protected ciphertext against the exact matching build. Restore checks everything before creating a private staging tree, checks the copied bytes and protected state again, then publishes by rename into an **absent** target. It never merges installations or overwrites an existing destination, performs a migration, creates replacement keys or replays work. Update all configured roots to the restored installation together before starting the matching binary. Outside Development, an existing database's schema/protected state is checked before runtime recovery. Missing/unusable protected keys refuse startup rather than issuing a replacement. An arbitrary valid unrelated account ring cannot be cryptographically tied to the DB without a persisted witness; exact inventory and operator custody remain mandatory, as detailed in Operations.
+
+[Operations](17-observability-and-operations.md#cold-backup-restore-and-rollback) owns commands and the release/rollback sequence; [delivery evidence](reports/production-hardening-delivery-2026-10-30.md) distinguishes tested boundaries and remaining gates.
+
+## Deployed storage preflight
+
+Outside explicit Development, the [controlled-host runbook](17-observability-and-operations.md#controlled-single-host-deployment-preflight) requires SQLite and absolute disjoint durable roots under its private physical database parent. Validation runs before opening persisted state or reconciling workers. Host/bootstrap and explicit context/evaluation/workflow migrations hold the same physical-path database ownership lease until completion. Do not delete the persistent `.owner.lock` inode; it contains no application state and OS ownership ends when its stream/process exits. This single-host guard is not distributed leadership or a substitute for stopping external/native writers. Database hard-link aliases and network filesystems are unsupported.
+
 ## Formal Workflow persistence and cutover
 
 The Formal Workflows successor adds Core catalog, immutable versions, execution bindings, step operations and procedural decisions. Embedded Elsa 3.9.0 uses the same configured SQLite file with separate management/runtime contexts and migration histories: `__FormalWorkflowManagementMigrations` and `__FormalWorkflowRuntimeMigrations`. Core retains `__EFMigrationsHistory`. Both vendor contexts use Core's WAL/busy-timeout interceptor. InMemory remains an explicit disposable storage selection; durable workflow failure never falls back to it.
@@ -908,7 +925,7 @@ Complete conceptual appsettings.json example, **Markdown only**:
     "TimelineCapacity": 500,
     "LogConversationContent": false,
     "OtlpEnabled": false,
-    "OtlpEndpoint": "http://localhost:4317"
+    "OtlpEndpoint": "http://localhost:4318"
   },
   "Logging": {
     "LogLevel": {

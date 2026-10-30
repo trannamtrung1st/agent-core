@@ -11,6 +11,7 @@ public static class FormalWorkflowCutover
     public const string Recovery = "Formal Workflow schema maintenance required. Stop all application writers; back up protected keys and resource roots; run: dotnet run --project src/AgentCore.Api -- migrate-workflows <database-path> <new-backup-path>. Restore the coordinated matching backup if interrupted. See docs/15-persistence-and-configuration.md#formal-workflow-persistence-and-cutover.";
     public static async Task MigrateAsync(string databasePath, string backupPath, CancellationToken ct = default)
     {
+        using var installationLease = AgentCore.Infrastructure.Persistence.SqliteInstallationLease.Acquire(databasePath);
         databasePath = Path.GetFullPath(databasePath); backupPath = Path.GetFullPath(backupPath);
         if (!File.Exists(databasePath) || databasePath == backupPath || File.Exists(backupPath))
             throw new ArgumentException("Use an existing stopped database and a new distinct backup path.");

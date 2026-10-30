@@ -10,6 +10,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        AGENTCORE_SOURCE_REVISION: "${AGENTCORE_SOURCE_REVISION:-unrecorded}"
       # MessagePack stays the default. JSON inspection is a frontend build arg (baked at SPA build):
       # python3 scripts/compose.py -f docker-compose.yml -f docker-compose.https.yml build --build-arg VITE_AGENTCORE_REALTIME_PROTOCOL=json
       # python3 scripts/compose.py -f docker-compose.yml -f docker-compose.https.yml up -d
@@ -18,6 +20,8 @@ services:
     ports:
       - "127.0.0.1:${AGENTCORE_COMPOSE_PORT:-5080}:8080"
     environment:
+      # HTTP-only local inspection is an explicit Development surface.
+      DOTNET_ENVIRONMENT: Development
       AgentCore__Profile: Synthetic
       GoogleDrive__Enabled: "${AGENTCORE_DRIVE_ENABLED:-true}"
       AgentCore__AgentDirectory: /app/agents

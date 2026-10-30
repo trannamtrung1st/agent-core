@@ -199,6 +199,64 @@ public sealed class MemoryStoreContractTests
         Assert.Equal(0, await verify.Sessions.CountAsync());
     }
 
+    [Fact(Timeout = 20000)]
+    public async Task Sqlite_full_during_checkpoint_preserves_the_committed_revision_and_recovers_after_quota_repair()
+    {
+        await using var harness = await SqliteAsync();
+        var original = First();
+        await harness.Store.SaveAsync(original, 0);
+        await using var context = await harness.Factory.CreateDbContextAsync();
+        await context.Database.OpenConnectionAsync();
+        var pages = (await context.Database.SqlQueryRaw<int>("PRAGMA page_count").ToArrayAsync()).Single();
+        await using (var quota = context.Database.GetDbConnection().CreateCommand())
+        {
+            quota.CommandText = "PRAGMA max_page_count=" + pages.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            await quota.ExecuteScalarAsync();
+        }
+        var observed = new StorageFailureObserver();
+        var limited = new SqliteMemoryStore(new TestFactory(new DbContextOptionsBuilder<AgentCoreDbContext>()
+            .UseSqlite(context.Database.GetDbConnection()).AddInterceptors(observed).Options), TimeProvider.System);
+        var changed = original with { Revision = 2, Entries = [Entry(Guid.NewGuid(), 1, EntryStatus.Completed, new string('x', 1024 * 1024))] };
+        await Assert.ThrowsAsync<AgentCoreException>(() => limited.SaveAsync(changed, 1).AsTask());
+        Assert.Equal(13, observed.Code); // actual SQLITE_FULL, not a mocked persistence exception
+        var retained = (await harness.Store.LoadAsync(original.SessionId))!;
+        Assert.Equal(1, retained.Revision); Assert.Empty(retained.Entries);
+        await context.Database.ExecuteSqlRawAsync("PRAGMA max_page_count=1073741823");
+        await limited.SaveAsync(changed, 1);
+        var recovered = (await harness.Store.LoadAsync(original.SessionId))!;
+        Assert.Equal(2, recovered.Revision); Assert.Equal(changed.Entries[0].Text, Assert.Single(recovered.Entries).Text);
+    }
+
+    [Fact(Timeout = 20000)]
+    public async Task Sqlite_busy_writer_is_bounded_while_independent_committed_reads_continue()
+    {
+        await using var harness = await SqliteAsync();
+        var original = First(); await harness.Store.SaveAsync(original, 0);
+        await using var blocker = await harness.Factory.CreateDbContextAsync();
+        await using var transaction = await blocker.Database.BeginTransactionAsync();
+        await using var contender = new SqliteConnection(blocker.Database.GetConnectionString()) { DefaultTimeout = 1 };
+        var bounded = new SqliteMemoryStore(new TestFactory(new DbContextOptionsBuilder<AgentCoreDbContext>()
+            .UseSqlite(contender, options => options.CommandTimeout(1)).Options), TimeProvider.System);
+        var changed = original with { Revision = 2, Title = "Same retained identity after contention" };
+        var failure = await Assert.ThrowsAsync<SqliteException>(() => bounded.SaveAsync(changed, 1).AsTask());
+        Assert.Contains(failure.SqliteErrorCode, new[] { 5, 6 });
+        Assert.Equal(1, (await harness.Store.LoadAsync(original.SessionId))!.Revision);
+        await transaction.RollbackAsync();
+        await bounded.SaveAsync(changed, 1);
+        Assert.Equal(changed.Title, (await harness.Store.LoadAsync(original.SessionId))!.Title);
+    }
+
+    private sealed class StorageFailureObserver : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
+    {
+        public int? Code { get; private set; }
+        public override Task CommandFailedAsync(System.Data.Common.DbCommand command,
+            Microsoft.EntityFrameworkCore.Diagnostics.CommandErrorEventData eventData, CancellationToken ct = default)
+        {
+            if (eventData.Exception is SqliteException sqlite) Code = sqlite.SqliteErrorCode;
+            return Task.CompletedTask;
+        }
+    }
+
     [Fact]
     public async Task Reopen_after_crash_pauses_attached_and_interrupts_streaming()
     {

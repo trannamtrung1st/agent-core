@@ -1,5 +1,7 @@
 # System Architecture
 
+Production Hardening's initial deployed posture is one direct-HTTPS API/SPA process with one local SQLite installation and private matching roots. Startup preflight and a process-held database ownership lease enforce that supported topology before workers start. No reverse-proxy/forwarded-header trust or additional scheduler is introduced. Unqualified Browser/OpenSandbox execution is refused outside Development. [Operations](17-observability-and-operations.md#controlled-single-host-deployment-preflight) owns deployment details; [the evidence ledger](reports/production-hardening-delivery-2026-10-30.md) owns qualification status.
+
 ## Formal Workflows implementation
 
 The owner-authorized successor permits embedded Elsa solely for closed graph traversal/bookmarks while Core retains tenant catalog, Task/Run execution, IAM, Goal/Evaluation evidence and procedural decision ownership. The [architecture contract](formal-workflows-architecture.md) defines the trusted continuation and durable bridge; the [technology decision](10-technology-decisions.md#decision-bounded-embedded-formal-workflows) bounds the exception to generic workflow-engine exclusions. The bounded successor is implemented with [focused local evidence](reports/formal-workflows-delivery-2026-10-28.md); earlier Automation features retain their historical scope and their scheduler remains the occurrence owner.

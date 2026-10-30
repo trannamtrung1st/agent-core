@@ -1,5 +1,22 @@
 # Testing Strategy
 
+## Production Hardening qualification
+
+The [source-bound ledger](reports/production-hardening-delivery-2026-10-30.md) records H0–H4 outcomes for the named profile. Use disposable identities, private roots, certificates and Compose projects; never reset installed data. Hosted CI remains manual and opt-in. Focused local qualification does not imply hosted milestone acceptance or external/customer certification.
+
+| PH scenarios | Required observation / executable evidence |
+| --- | --- |
+| PH-01–02: HTTPS/bootstrap/config | `qualification/production-host.py`: TLS login/CSRF mutation, identity/cookie restart, logout, repeat bootstrap, unsafe Host/HTTP/PFX/config and malformed account-key refusal; `DeploymentPreflightTests` includes no empty root/database substitution |
+| PH-03–04: isolation/abuse | Existing both-store IAM/revocation, real JavaScript MessagePack/JSON Hub, attachment expiry/logout/revoke and DNS/redirect tests; ingress ceilings and browser login-rate recovery. No unrestricted hostile/public abuse certification |
+| PH-05: canonical stop | Existing non-cooperative generation fixture also cancels a Stop observer, awaits repeated Stop and proves no late publication; fake Voice proves capture during output and explicit reconnect activation |
+| PH-06–08: recovery/failure | Existing Workflow Task/receipt/context/Drive lost-acknowledgment and event recovery; actual SQLITE_FULL and bounded busy-writer cases preserve committed checkpoints and recover after repair; reversible missing-store worker fault |
+| PH-09–12: coordinated data/rollback | `scripts/tests/test_data_backup.py`: WAL/path/mode/digest/reference/corruption/partial/occupied-target refusal. `qualification/production-recovery.py`: actual credential/Attachment/history/Elsa bookmark restore, authorized continuation and matching snapshot rollback. `qualification/production-compose.py`: actual release restored into an independent owned volume and rollback to the preserved quiescent volume/image |
+| PH-13: telemetry/privacy | `qualification/production-observability.py`: real OTLP requests, default-off silence, diagnostic/trace correlation, worker fault/recovery, collector outage without failed/replayed Chat, private canaries and identity-free metric dimensions |
+| PH-14: capacity | `qualification/production-capacity.py`: three tenants/six Sessions, max two Runtimes, normal/held-stream overload, actual CPU/memory/GC counters and crash/reopen histories. Small Synthetic text/read evidence does not certify sustained mixed Voice/Task/native/customer load or provider SLA |
+| PH-15–16: packaging/UX | Refreshed non-root image, HTTPS Compose identity/Chat/Attachment recreate; independent-volume protected-state restore/rollback; focused browser/MCP keyboard, denied organization, logout and 390/1440px journeys. No new UI/design system |
+
+Each result records setup/profile/source, actions, expected/observed outcome, cleanup and unverified boundary. A refusal, build, screenshot, health 200 or successful backup alone never proves end-to-end correctness. Native/live provider/device/customer/hostile tenancy lanes remain separate. Do not mark Order 5 accepted with missing mandatory evidence; optional unrequested CI does not block delivery of the locally verified implementation.
+
 ## Model discovery permission and recovery regressions
 
 `TenantCredentialAccessTests.ModelRecovery` checks a metadata-test-only member against the real HTTP owner: Test succeeds, Discover and recovery refuse, and stale/invalid recovery requests cannot mutate an omitted manual default. `TenantCredentialIntegrationTests.ModelDiscovery` exercises explicit recovery in both stores, including default refusal, security conflicts, current-route availability, unchanged admitted Run/Session pins, SQLite reopen and subsequent omission/reappearance. Recovery advances the offering revision; old pins remain stale rather than silently adopting the recovered route.

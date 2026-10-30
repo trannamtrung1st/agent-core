@@ -2,7 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace AgentCore.Contracts.Http;
 
-public sealed record HealthResponse(string Status, string Profile, int ProtocolVersion, string? BuildVersion = null, SchedulerReadinessResponse? Scheduler = null);
+public sealed record HealthResponse(string Status, string Profile, int ProtocolVersion, string? BuildVersion = null, SchedulerReadinessResponse? Scheduler = null,
+    IReadOnlyDictionary<string, SchedulerReadinessResponse>? Workers = null);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record TenantSessionCreateRequest(Guid AgentInstanceId, long ExpectedRevision, long ExpectedInstanceRevision,

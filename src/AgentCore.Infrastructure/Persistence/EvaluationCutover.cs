@@ -14,6 +14,7 @@ public static class EvaluationCutover
     public const string Recovery = "Stop the application and run: dotnet run --project src/AgentCore.Api -- migrate-evaluations <database-path> <new-backup-path>. Restore the matching database backup and previous binary if conversion fails. Do not reset tenant data.";
     public static async Task<int> MigrateAsync(string databasePath, string backupPath, CancellationToken ct = default)
     {
+        using var installationLease = SqliteInstallationLease.Acquire(databasePath);
         databasePath = Path.GetFullPath(databasePath); backupPath = Path.GetFullPath(backupPath);
         if (!File.Exists(databasePath) || databasePath == backupPath || File.Exists(backupPath)) throw new ArgumentException("Use an existing stopped database and a new distinct backup path.");
         var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite(new SqliteConnectionStringBuilder {

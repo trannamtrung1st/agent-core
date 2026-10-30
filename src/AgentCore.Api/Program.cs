@@ -20,6 +20,22 @@ using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.SignalR;
 
+if (args.Length > 0 && args[0] == "verify-protected-state")
+{
+    if (args.Length != 3) throw new ArgumentException("Usage: verify-protected-state <database-path> <existing-key-directory>");
+    try
+    {
+        var count = await ProtectedStateAudit.VerifyAsync(args[1], args[2]);
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { valid = true, protectedRecords = count }));
+    }
+    catch (Exception)
+    {
+        Console.Error.WriteLine("Protected state verification refused. Check matching source/schema, complete database and existing protection keys. No values were printed or repaired.");
+        Environment.ExitCode = 1;
+    }
+    return;
+}
+
 if (args.Length > 0 && args[0] == "migrate-workflows")
 {
     if (args.Length != 3) throw new ArgumentException("Usage: migrate-workflows <database-path> <new-backup-path>");
@@ -63,6 +79,10 @@ if (args.Length > 0 && args[0] == "audit-google-grants")
 var identityBootstrapCommand = args.Length == 1 && args[0] == "bootstrap-identity";
 var builder = WebApplication.CreateBuilder(identityBootstrapCommand ? [] : args);
 AgentCore.Infrastructure.Configuration.ConfigurationCutover.Validate(builder.Configuration);
+AgentCore.Infrastructure.Configuration.ConfigurationCutover.ValidateDeployment(builder.Configuration, builder.Environment.IsDevelopment(), identityBootstrapCommand);
+var configuredPersistence = ResolvePersistenceOptions(builder, builder.Configuration["AgentCore:Profile"] ?? "Synthetic");
+using var installationLease = configuredPersistence.Provider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase)
+    ? SqliteInstallationLease.Acquire(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(configuredPersistence.ConnectionString).DataSource) : null;
 // Hosting request diagnostics include raw query strings. OAuth codes/state must never enter logs.
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 
@@ -101,7 +121,7 @@ builder.Services.AddOptions<ObservabilityOptions>()
     .Bind(builder.Configuration.GetSection("Observability"))
     .Validate(options => options.TimelineCapacity is >= 1 and <= 1000, "Observability:TimelineCapacity must be between 1 and 1000.")
     .Validate(
-        options => !options.OtlpEnabled || Uri.TryCreate(options.OtlpEndpoint, UriKind.Absolute, out _),
+        options => !options.OtlpEnabled || options.HasValidOtlpEndpoint(),
         "Observability:OtlpEndpoint is required when OtlpEnabled is true.")
     .ValidateOnStart();
 builder.Services.AddOptions<HostingOptions>()
@@ -110,6 +130,7 @@ builder.Services.AddOptions<HostingOptions>()
     .ValidateOnStart();
 var observability = builder.Configuration.GetSection("Observability").Get<ObservabilityOptions>() ?? new ObservabilityOptions();
 RuntimeTelemetry.Configure(observability.TimelineCapacity, observability.LogConversationContent);
+builder.Services.AddRuntimeExport(observability);
 builder.Services.AddSingleton<AdminLifecycleCoordinator>();
 builder.Services.AddSingleton<AdminAuthoringOptionsService>();
 builder.Services.AddSingleton<TenantRuntimeCapacity>();
@@ -155,8 +176,27 @@ builder.Services.AddExceptionHandler<DiagnosticExceptionHandler>();
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.XContentTypeOptions = "nosniff";
+    context.Response.Headers.ContentSecurityPolicy = "frame-ancestors 'none'; object-src 'none'";
+    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    if (!app.Environment.IsDevelopment() && context.Request.IsHttps)
+        context.Response.Headers.StrictTransportSecurity = "max-age=31536000";
+    await next(context);
+});
 _ = app.Services.GetRequiredService<AgentCore.Infrastructure.Decisions.DecisionIntelligenceOptions>();
 app.UseExceptionHandler();
+if (!app.Environment.IsDevelopment() && configuredPersistence.Provider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
+{
+    var database = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(configuredPersistence.ConnectionString).DataSource;
+    if (new FileInfo(database) is { Exists: true, Length: > 0 })
+    {
+        try { await ProtectedStateAudit.VerifyAsync(database, configuredPersistence.CredentialProtectionKeyRoot); }
+        catch (Exception)
+        { throw new InvalidOperationException("Deployment preflight refused: protected_state_or_schema_mismatch. Restore matching database, roots and existing keys. No keys were repaired."); }
+    }
+}
 await InitializePersistenceAsync(app.Services).ConfigureAwait(false);
 if (identityBootstrapCommand)
 {
@@ -235,7 +275,7 @@ app.MapGet("/health", (IConfiguration configuration, SchedulerReadiness schedule
         Results.Json(new HealthResponse(
             "healthy",
             configuration["AgentCore:Profile"] ?? "Synthetic",
-            HttpMapping.ProtocolVersion, buildVersion, scheduler.Snapshot())))
+            HttpMapping.ProtocolVersion, buildVersion, scheduler.Snapshot(), scheduler.WorkersSnapshot())))
     .WithName("Health");
 
 MapSpaFallback(app, spaIndex);

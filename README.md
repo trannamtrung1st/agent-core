@@ -71,7 +71,7 @@ Start with the [current documentation map](docs/README.md); [dated delivery repo
 
 ## Implementation baseline
 
-The [project refactoring delivery](docs/reports/project-refactoring-delivery-2026-10-30.md) qualifies executable/test source `7ccccf0deaa0dabd1892c8edca29001daa04c16f` with complete available Synthetic CI and exact partition accounting. Five acyclic production assemblies remain; the persistence split is NO-GO. Production Hardening is next. Live-provider, physical-device and customer deployment qualification remain separate.
+The [project refactoring delivery](docs/reports/project-refactoring-delivery-2026-10-30.md) qualifies executable/test source `7ccccf0deaa0dabd1892c8edca29001daa04c16f` with complete available Synthetic CI and exact partition accounting. Five acyclic production assemblies remain; the persistence split is NO-GO. Production Hardening now has [local implementation and qualification](docs/reports/production-hardening-delivery-2026-10-30.md) for the selected controlled Synthetic single-host profile; hosted milestone acceptance remains pending. Live-provider, physical-device and customer deployment qualification remain separate.
 
 The [clean baseline delivery](docs/reports/clean-baseline-delivery-2026-10-26.md) records the canonical configuration cutover, retained Google grant/reconnect policy, General Assistant v34 and real local Sandbox PNG publication proof. Follow the [cutover runbook](docs/clean-baseline-cutover.md) before deploying this binary with existing configuration and state. MarkItDown remains deferred and absent from runtime dependencies.
 

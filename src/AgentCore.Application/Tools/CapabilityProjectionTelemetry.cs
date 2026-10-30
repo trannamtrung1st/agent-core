@@ -14,7 +14,8 @@ public static class CapabilityProjectionTelemetry
         var skills = (context?.PinnedSkillCatalog ?? []).Where(s => context?.ActiveSkillKeys?.Contains(s.Key) == true).SelectMany(s => s.RequiredCapabilities ?? []).ToHashSet();
         var always = definition.ExecutionPolicy?.Projection?.AlwaysCapabilities ?? [];
         var loaded = context?.LoadedCapabilityIds ?? [];
-        void Measure(string kind, long count) => RuntimeTelemetry.RecordCapabilityProjection(kind, count, null, model);
+        System.Diagnostics.Activity.Current?.SetTag("model.offering.id", model);
+        void Measure(string kind, long count) => RuntimeTelemetry.RecordCapabilityProjection(kind, count);
         Measure("authorizedCapabilityCount", DefinitionExecutionPolicies.Of(definition).ToolList.Count);
         Measure("eligibleCapabilityCount", definition.ExecutionPolicy?.Capabilities is null ? projected.Count : ToolCatalog.Eligible(definition, context, gate).Count);
         Measure("projectedCapabilityCount", projected.Count);

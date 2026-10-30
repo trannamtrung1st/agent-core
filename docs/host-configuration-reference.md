@@ -145,12 +145,12 @@ The active startup preset is [`.env.example`](../.env.example). Optional shapes 
 # Logging__LogLevel__Microsoft.AspNetCore=Warning
 # Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command=Warning
 
-# Observability
+# Observability (opt-in runtime-only OTLP HTTP/protobuf; endpoint is a collector origin)
 # Observability__HttpErrorResponses__Enabled=true
 # Observability__LogConversationContent=false
 # Observability__LogLevel=Information
 # Observability__OtlpEnabled=false
-# Observability__OtlpEndpoint=http://127.0.0.1:4317
+# Observability__OtlpEndpoint=http://127.0.0.1:4318
 # Observability__TimelineCapacity=64
 
 # OpenSandbox
@@ -249,3 +249,5 @@ The active startup preset is [`.env.example`](../.env.example). Optional shapes 
 | `ShadowMode` | `true`; recommendations cannot replace the deterministic allowed default |
 
 Unknown keys and invalid bounds fail startup. Native and Compose examples keep private host configuration separate from tenant protected provider Credentials. `KEV_API_KEY` is the sidecar's private input; match the host key for native serving. The optional Compose overlay explicitly maps this key and an internal endpoint; ordinary Compose does not start inference. See the [lifecycle/migration/qualification runbook](decision-intelligence-runbook.md). AuthorizedLlm uses only the admitted Run route and cannot bootstrap pre-admission Auto. There is no automatic fallback to hosted inference.
+
+Outside explicit Development, the [controlled-host preflight](17-observability-and-operations.md#controlled-single-host-deployment-preflight) requires direct HTTPS, exact AllowedHosts, SQLite and matching absolute private roots, and refuses local HTTP/gateway/ephemeral/private-content/native execution settings. `AGENTCORE_SOURCE_REVISION` is a Compose/Docker **build** input, not a host configuration alias: set it to the recorded `scripts/source-fingerprint.py` result for a qualified uncommitted source or the exact release identity. The image label and loaded assembly buildVersion retain that identity; omitted builds say unrecorded.

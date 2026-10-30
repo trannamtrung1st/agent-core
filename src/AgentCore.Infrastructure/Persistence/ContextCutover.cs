@@ -45,6 +45,7 @@ public static class ContextCutover
 
     public static async Task<int> MigrateAsync(string databasePath, string backupPath, CancellationToken ct = default)
     {
+        using var installationLease = SqliteInstallationLease.Acquire(databasePath);
         databasePath = Path.GetFullPath(databasePath); backupPath = Path.GetFullPath(backupPath);
         if (!File.Exists(databasePath) || databasePath == backupPath || File.Exists(backupPath))
             throw new ArgumentException("Use an existing stopped database and a new, distinct backup path.");

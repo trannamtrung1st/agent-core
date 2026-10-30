@@ -70,6 +70,7 @@ public sealed class TriggerSchedulerHostedService : BackgroundService
 
     internal async Task RunPassAsync(CancellationToken stoppingToken)
     {
+        using var activity = RuntimeTelemetry.Activity.StartActivity("scheduler.pass");
         try
         {
             await _pass(stoppingToken).ConfigureAwait(false);

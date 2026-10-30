@@ -37,6 +37,9 @@ public sealed partial class TenantSessionAccessTests
                 var before = (await runs.FindTenantRunAsync(tenant, runId))!;
                 Assert.Equal(AgentRunStatus.Running, before.Status);
                 var host = factory.Services.GetRequiredService<TenantSessionRuntimeHost>();
+                using var observer = new CancellationTokenSource();
+                observer.Cancel();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => host.StopAsync(observer.Token));
                 await Task.WhenAll(host.StopAsync(), host.StopAsync()).WaitAsync(TimeSpan.FromSeconds(15));
                 Assert.False(factory.Services.GetRequiredService<TenantRuntimeCapacity>().TryReserveTenantRuntime());
                 Assert.False(model.Release.Task.IsCompleted); Assert.Equal(1, model.Calls);

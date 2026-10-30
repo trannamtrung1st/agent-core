@@ -1,0 +1,517 @@
+{
+  "crashReopenPreservedSixHistories": true,
+  "databaseBytesAfter": 5156864,
+  "databaseBytesBefore": 4403200,
+  "duplicateReplies": 0,
+  "fileBytesAfter": 5157885,
+  "limits": "Small local Synthetic text/read workload; no provider, physical audio, hostile native, customer or sustained production SLA claim.",
+  "machine": {
+    "architecture": "arm64",
+    "logicalCpus": 8,
+    "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O"
+  },
+  "maxActiveRuntimes": 2,
+  "nativeSharedRuntime": "10.0.12",
+  "normal": {
+    "admission": {
+      "p50_ms": 908.64,
+      "p95_ms": 2333.74,
+      "p99_ms": 2333.74
+    },
+    "completedTurns": 12,
+    "completion": {
+      "p50_ms": 7277.69,
+      "p95_ms": 14605.08,
+      "p99_ms": 14605.08
+    },
+    "explicitStaleRevisionRefusals": 0,
+    "seconds": 27.92,
+    "turnsPerSecond": 0.43
+  },
+  "overload": {
+    "admission": {
+      "p50_ms": 648.09,
+      "p95_ms": 1015.79,
+      "p99_ms": 1015.79
+    },
+    "completedTurns": 6,
+    "completion": {
+      "p50_ms": 20814.98,
+      "p95_ms": 30952.94,
+      "p99_ms": 30952.94
+    },
+    "httpAccepted": 6,
+    "offeredTurns": 6,
+    "seconds": 31.05,
+    "semantics": "Durable input accepted; excess Runtime dispatch deferred at configured capacity."
+  },
+  "profile": "controlled-synthetic",
+  "runtimeCounters": {
+    "active_runtimes": {
+      "last": 2,
+      "max": 2,
+      "min": 0,
+      "samples": 54
+    },
+    "agent_steps (Count / 1 sec)[action=chat.respond,disposition=Complete,executed=chat,outcome=accepted,rejection=none]": {
+      "last": 0,
+      "max": 2,
+      "min": 0,
+      "samples": 53
+    },
+    "automation_scheduler_passes (Count / 1 sec)[outcome=ready]": {
+      "last": 1,
+      "max": 1,
+      "min": 1,
+      "samples": 57
+    },
+    "background_worker_passes (Count / 1 sec)[outcome=ready,worker=email-watch]": {
+      "last": 0,
+      "max": 1,
+      "min": 0,
+      "samples": 51
+    },
+    "background_worker_passes (Count / 1 sec)[outcome=ready,worker=runs]": {
+      "last": 1,
+      "max": 1,
+      "min": 0,
+      "samples": 57
+    },
+    "background_worker_passes (Count / 1 sec)[outcome=ready,worker=task-hints]": {
+      "last": 1,
+      "max": 1,
+      "min": 1,
+      "samples": 57
+    },
+    "background_worker_passes (Count / 1 sec)[outcome=ready,worker=workflows]": {
+      "last": 1,
+      "max": 1,
+      "min": 1,
+      "samples": 57
+    },
+    "capability_projection[kind=authorizedCapabilityCount,Percentile=50]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 14
+    },
+    "capability_projection[kind=authorizedCapabilityCount,Percentile=95]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 14
+    },
+    "capability_projection[kind=authorizedCapabilityCount,Percentile=99]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 14
+    },
+    "capability_projection[kind=eligibleCapabilityCount,Percentile=50]": {
+      "last": 6,
+      "max": 6,
+      "min": 6,
+      "samples": 14
+    },
+    "capability_projection[kind=eligibleCapabilityCount,Percentile=95]": {
+      "last": 6,
+      "max": 6,
+      "min": 6,
+      "samples": 14
+    },
+    "capability_projection[kind=eligibleCapabilityCount,Percentile=99]": {
+      "last": 6,
+      "max": 6,
+      "min": 6,
+      "samples": 14
+    },
+    "cooperation.recovery_page_size[lane=message,Percentile=50]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 53
+    },
+    "cooperation.recovery_page_size[lane=message,Percentile=95]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 53
+    },
+    "cooperation.recovery_page_size[lane=message,Percentile=99]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 53
+    },
+    "cooperation.recovery_page_size[lane=report,Percentile=50]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 53
+    },
+    "cooperation.recovery_page_size[lane=report,Percentile=95]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 53
+    },
+    "cooperation.recovery_page_size[lane=report,Percentile=99]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 53
+    },
+    "cooperation.recovery_page_size[lane=worker,Percentile=50]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 53
+    },
+    "cooperation.recovery_page_size[lane=worker,Percentile=95]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 53
+    },
+    "cooperation.recovery_page_size[lane=worker,Percentile=99]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 53
+    },
+    "dotnet.assembly.count ({assembly})": {
+      "last": 197,
+      "max": 197,
+      "min": 196,
+      "samples": 57
+    },
+    "dotnet.exceptions ({exception} / 1 sec)[error.type=AccessDeniedException]": {
+      "last": 0,
+      "max": 210,
+      "min": 0,
+      "samples": 54
+    },
+    "dotnet.exceptions ({exception} / 1 sec)[error.type=JsonReaderException]": {
+      "last": 0,
+      "max": 6,
+      "min": 0,
+      "samples": 53
+    },
+    "dotnet.exceptions ({exception} / 1 sec)[error.type=NotSupportedException]": {
+      "last": 0,
+      "max": 4,
+      "min": 0,
+      "samples": 55
+    },
+    "dotnet.exceptions ({exception} / 1 sec)[error.type=OperationCanceledException]": {
+      "last": 0,
+      "max": 6,
+      "min": 0,
+      "samples": 53
+    },
+    "dotnet.exceptions ({exception} / 1 sec)[error.type=SecurityConflictException]": {
+      "last": 0,
+      "max": 3,
+      "min": 0,
+      "samples": 29
+    },
+    "dotnet.exceptions ({exception} / 1 sec)[error.type=TargetInvocationException]": {
+      "last": 0,
+      "max": 2,
+      "min": 0,
+      "samples": 55
+    },
+    "dotnet.exceptions ({exception} / 1 sec)[error.type=TaskCanceledException]": {
+      "last": 0,
+      "max": 2,
+      "min": 0,
+      "samples": 48
+    },
+    "dotnet.gc.collections ({collection} / 1 sec)[gc.heap.generation=gen0]": {
+      "last": 0,
+      "max": 6,
+      "min": 0,
+      "samples": 56
+    },
+    "dotnet.gc.collections ({collection} / 1 sec)[gc.heap.generation=gen1]": {
+      "last": 0,
+      "max": 1,
+      "min": 0,
+      "samples": 56
+    },
+    "dotnet.gc.collections ({collection} / 1 sec)[gc.heap.generation=gen2]": {
+      "last": 0,
+      "max": 1,
+      "min": 0,
+      "samples": 56
+    },
+    "dotnet.gc.heap.total_allocated (By / 1 sec)": {
+      "last": 13525888,
+      "max": 464519664,
+      "min": 7847464,
+      "samples": 56
+    },
+    "dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen0]": {
+      "last": 21744,
+      "max": 514227184,
+      "min": 0,
+      "samples": 57
+    },
+    "dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen1]": {
+      "last": 196224,
+      "max": 3677976,
+      "min": 10320,
+      "samples": 57
+    },
+    "dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen2]": {
+      "last": 4144,
+      "max": 60560,
+      "min": 1368,
+      "samples": 57
+    },
+    "dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=loh]": {
+      "last": 7055240,
+      "max": 8916232,
+      "min": 7055240,
+      "samples": 57
+    },
+    "dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=poh]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 57
+    },
+    "dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen0]": {
+      "last": 1769488,
+      "max": 524213968,
+      "min": 192,
+      "samples": 57
+    },
+    "dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen1]": {
+      "last": 13577768,
+      "max": 46993864,
+      "min": 537192,
+      "samples": 57
+    },
+    "dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen2]": {
+      "last": 55236760,
+      "max": 55236760,
+      "min": 6644736,
+      "samples": 57
+    },
+    "dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=loh]": {
+      "last": 32102832,
+      "max": 32470536,
+      "min": 31971704,
+      "samples": 57
+    },
+    "dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=poh]": {
+      "last": 541944,
+      "max": 541944,
+      "min": 344960,
+      "samples": 57
+    },
+    "dotnet.gc.last_collection.memory.committed_size (By)": {
+      "last": 340623360,
+      "max": 830734336,
+      "min": 340361216,
+      "samples": 57
+    },
+    "dotnet.gc.pause.time (s / 1 sec)": {
+      "last": 0,
+      "max": 0.032355999999999996,
+      "min": 0,
+      "samples": 56
+    },
+    "dotnet.jit.compilation.time (s / 1 sec)": {
+      "last": 0.004144800000000615,
+      "max": 0.7661715000000004,
+      "min": 0,
+      "samples": 56
+    },
+    "dotnet.jit.compiled_il.size (By / 1 sec)": {
+      "last": 539,
+      "max": 361206,
+      "min": 0,
+      "samples": 56
+    },
+    "dotnet.jit.compiled_methods ({method} / 1 sec)": {
+      "last": 9,
+      "max": 3424,
+      "min": 0,
+      "samples": 56
+    },
+    "dotnet.monitor.lock_contentions ({contention} / 1 sec)": {
+      "last": 2,
+      "max": 10,
+      "min": 0,
+      "samples": 56
+    },
+    "dotnet.process.cpu.count ({cpu})": {
+      "last": 8,
+      "max": 8,
+      "min": 8,
+      "samples": 57
+    },
+    "dotnet.process.cpu.time (s / 1 sec)[cpu.mode=system]": {
+      "last": 0.03708799999999979,
+      "max": 0.14063800000000004,
+      "min": 0.011676999999999937,
+      "samples": 56
+    },
+    "dotnet.process.cpu.time (s / 1 sec)[cpu.mode=user]": {
+      "last": 0.10229300000000308,
+      "max": 1.407153000000001,
+      "min": 0.07146099999999933,
+      "samples": 56
+    },
+    "dotnet.process.memory.working_set (By)": {
+      "last": 777699328,
+      "max": 1263665152,
+      "min": 776388608,
+      "samples": 57
+    },
+    "dotnet.thread_pool.queue.length ({work_item} / 1 sec)": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 56
+    },
+    "dotnet.thread_pool.thread.count ({thread} / 1 sec)": {
+      "last": 0,
+      "max": 1,
+      "min": -1,
+      "samples": 56
+    },
+    "dotnet.thread_pool.work_item.count ({work_item} / 1 sec)": {
+      "last": 280,
+      "max": 553,
+      "min": 36,
+      "samples": 56
+    },
+    "dotnet.timer.count ({timer})": {
+      "last": 28,
+      "max": 31,
+      "min": 19,
+      "samples": 57
+    },
+    "runtime_admissions (Count / 1 sec)[outcome=accepted]": {
+      "last": 0,
+      "max": 2,
+      "min": 0,
+      "samples": 54
+    },
+    "runtime_admissions (Count / 1 sec)[outcome=capacity]": {
+      "last": 0,
+      "max": 4,
+      "min": 0,
+      "samples": 54
+    },
+    "runtime_admissions (Count / 1 sec)[outcome=released]": {
+      "last": 0,
+      "max": 2,
+      "min": 0,
+      "samples": 53
+    },
+    "stage_duration_ms[stage=brain,Percentile=50]": {
+      "last": 0.564453125,
+      "max": 53.875,
+      "min": 0.5556640625,
+      "samples": 12
+    },
+    "stage_duration_ms[stage=brain,Percentile=95]": {
+      "last": 0.564453125,
+      "max": 53.875,
+      "min": 0.5556640625,
+      "samples": 12
+    },
+    "stage_duration_ms[stage=brain,Percentile=99]": {
+      "last": 0.564453125,
+      "max": 53.875,
+      "min": 0.5556640625,
+      "samples": 12
+    },
+    "stage_duration_ms[stage=persist,Percentile=50]": {
+      "last": 13.6875,
+      "max": 37.5,
+      "min": 4.5546875,
+      "samples": 17
+    },
+    "stage_duration_ms[stage=persist,Percentile=95]": {
+      "last": 16.15625,
+      "max": 47.125,
+      "min": 4.5546875,
+      "samples": 17
+    },
+    "stage_duration_ms[stage=persist,Percentile=99]": {
+      "last": 16.15625,
+      "max": 47.125,
+      "min": 4.5546875,
+      "samples": 17
+    },
+    "user_text.pending_batch_size[Percentile=50]": {
+      "last": 1,
+      "max": 1,
+      "min": 1,
+      "samples": 10
+    },
+    "user_text.pending_batch_size[Percentile=95]": {
+      "last": 1,
+      "max": 1,
+      "min": 1,
+      "samples": 10
+    },
+    "user_text.pending_batch_size[Percentile=99]": {
+      "last": 1,
+      "max": 1,
+      "min": 1,
+      "samples": 10
+    },
+    "user_text.pending_batch_started (Count / 1 sec)": {
+      "last": 0,
+      "max": 2,
+      "min": 0,
+      "samples": 54
+    },
+    "workflows.recovery_duration_ms (ms)[Percentile=50]": {
+      "last": 1.3671875,
+      "max": 2.08203125,
+      "min": 0.12841796875,
+      "samples": 57
+    },
+    "workflows.recovery_duration_ms (ms)[Percentile=95]": {
+      "last": 1.3671875,
+      "max": 2.08203125,
+      "min": 0.12841796875,
+      "samples": 57
+    },
+    "workflows.recovery_duration_ms (ms)[Percentile=99]": {
+      "last": 1.3671875,
+      "max": 2.08203125,
+      "min": 0.12841796875,
+      "samples": 57
+    },
+    "workflows.recovery_page_size[Percentile=50]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 57
+    },
+    "workflows.recovery_page_size[Percentile=95]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 57
+    },
+    "workflows.recovery_page_size[Percentile=99]": {
+      "last": 0,
+      "max": 0,
+      "min": 0,
+      "samples": 57
+    }
+  },
+  "sampleBoundary": "Native shared developer host; production artifact uses serviced runtime 10.0.14. Later changes were packaging/test/documentation inputs, not Runtime behavior.",
+  "sessions": 6,
+  "sourceFingerprint": "worktree-835a271569bb8c3703ccffb746e7d0a510a6cc3173ea19e0ab23b4f57a6d9d18",
+  "tenants": 3
+}

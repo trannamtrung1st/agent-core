@@ -16,6 +16,7 @@ public sealed class AgentRunHostedService : BackgroundService
     private readonly TimeProvider _time;
     private readonly ILogger<AgentRunHostedService> _logger;
     private readonly IDiagnosticIdSource _diagnostics;
+    private readonly SchedulerReadiness? _readiness;
 
     public AgentRunHostedService(
         TimeProvider time,
@@ -27,7 +28,7 @@ public sealed class AgentRunHostedService : BackgroundService
         ITenantRunExecution tenantExecution, AgentCore.Application.Security.TenantWorkspaceMutationEffectService workspaceEffects,
         AgentCore.Application.Security.TenantAccountEffectService accountEffects, AgentCore.Application.Security.TenantHttpEffectService httpEffects,
         AgentCore.Api.Realtime.TenantSessionLiveDelivery delivery, ITenantTaskStore tasks, ITenantAgentMessageStore messages,
-        AgentCore.Application.Workflows.TenantWorkflowExecutionService workflows)
+        AgentCore.Application.Workflows.TenantWorkflowExecutionService workflows, SchedulerReadiness readiness)
         : this(
             async cancellationToken =>
             {
@@ -47,7 +48,7 @@ public sealed class AgentRunHostedService : BackgroundService
             logger,
             diagnostics,
             cancellationToken => delivery.PublishTaskHintsAsync(tasks, messages, cancellationToken).AsTask(),
-            cancellationToken => workflows.ReconcileAsync(4, cancellationToken).AsTask())
+            cancellationToken => workflows.ReconcileAsync(4, cancellationToken).AsTask(), readiness)
     {
     }
 
@@ -56,12 +57,13 @@ public sealed class AgentRunHostedService : BackgroundService
         TimeProvider time,
         ILogger<AgentRunHostedService> logger,
         IDiagnosticIdSource diagnostics,
-        Func<CancellationToken, Task>? hints = null, Func<CancellationToken, Task>? workflows = null)
+        Func<CancellationToken, Task>? hints = null, Func<CancellationToken, Task>? workflows = null, SchedulerReadiness? readiness = null)
     {
         _pass = pass; _hints = hints; _workflows = workflows;
         _time = time;
         _logger = logger;
         _diagnostics = diagnostics;
+        _readiness = readiness;
     }
 
     internal IDiagnosticIdSource DiagnosticIds => _diagnostics;
@@ -76,9 +78,11 @@ public sealed class AgentRunHostedService : BackgroundService
 
     private async Task RunWorkflowPassAsync(CancellationToken stoppingToken)
     {
-        try { await _workflows!(stoppingToken).ConfigureAwait(false); }
+        using var activity = RuntimeTelemetry.Activity.StartActivity("worker.pass");
+        activity?.SetTag("worker", "workflows");
+        try { await _workflows!(stoppingToken).ConfigureAwait(false); _readiness?.RecordWorker("workflows", true); }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
-        catch (Exception exception) { DiagnosticLog.Warning(_logger, exception, _diagnostics.NewId(), "Workflow recovery pass failed."); }
+        catch (Exception exception) { _readiness?.RecordWorker("workflows", false); DiagnosticLog.Warning(_logger, exception, _diagnostics.NewId(), "Workflow recovery pass failed."); }
     }
 
     // Separately awaited loops in the existing host: slow hint reads never hold up
@@ -109,17 +113,22 @@ public sealed class AgentRunHostedService : BackgroundService
 
     private async Task RunHintPassAsync(CancellationToken stoppingToken)
     {
-        try { await _hints!(stoppingToken).ConfigureAwait(false); }
+        using var activity = RuntimeTelemetry.Activity.StartActivity("worker.pass");
+        activity?.SetTag("worker", "task-hints");
+        try { await _hints!(stoppingToken).ConfigureAwait(false); _readiness?.RecordWorker("task-hints", true); }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
         catch (Exception exception)
-        { DiagnosticLog.Warning(_logger, exception, _diagnostics.NewId(), "Task hint pass failed."); }
+        { _readiness?.RecordWorker("task-hints", false); DiagnosticLog.Warning(_logger, exception, _diagnostics.NewId(), "Task hint pass failed."); }
     }
 
     internal async Task RunPassAsync(CancellationToken stoppingToken)
     {
+        using var activity = RuntimeTelemetry.Activity.StartActivity("worker.pass");
+        activity?.SetTag("worker", "runs");
         try
         {
             await _pass(stoppingToken).ConfigureAwait(false);
+            _readiness?.RecordWorker("runs", true);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -127,6 +136,7 @@ public sealed class AgentRunHostedService : BackgroundService
         }
         catch (Exception exception)
         {
+            _readiness?.RecordWorker("runs", false);
             DiagnosticLog.Warning(
                 _logger,
                 exception,

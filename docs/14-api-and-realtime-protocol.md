@@ -1,5 +1,9 @@
 # HTTP API and Realtime Protocol
 
+## Host liveness and worker readiness
+
+Anonymous `GET /health` retains `status`, `profile`, `protocolVersion`, `buildVersion` and `scheduler`. It additionally returns `workers`, keyed by the closed names `runs`, `task-hints`, `workflows`, `email-watch`; each value uses the existing `{ status, lastPassAt, lastSuccessAt }` shape. Status is starting/ready/degraded/stale, with nullable UTC timestamps. These fields contain no tenant/work identity, content or credential information. `status: healthy` is the compatible process-liveness envelope; worker readiness and tenant-specific optional capabilities must be checked separately. [Operations](17-observability-and-operations.md#runtime-export-worker-probes-and-incident-response) owns probe semantics. No SignalR method/envelope or protocol version changes.
+
 ## Dynamic model administration
 
 PATCH `/api/v2/tenants/{tenantId}/models/{offeringId}` accepts optional `restoreAvailability` (default false). True deliberately clears `NotReturned` to `Unknown` for an enabled, non-retired existing offering; other recovery states refuse with 400. Existing model-management authority, security/offering revision checks and default guards apply. This retains identity and last-observed time while advancing the offering revision, without rewriting historical Run pins. A later discovery can block the offering again. POST registration cannot request recovery. Metadata Test requires connection read/test; Discover additionally requires tenant-wide `models.manage`, represented by `access.canCreateOffering`.
