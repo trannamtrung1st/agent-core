@@ -94,7 +94,17 @@ public sealed partial class TenantRunExecutionAuthority(TenantOperationAuthorize
                     if (contextTools is not null) await contextTools.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     if (credentialReads is not null) await credentialReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     phase = "artifact_read";
-                    if (artifactReads is not null) await artifactReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
+                    try
+                    {
+                        if (artifactReads is not null) await artifactReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (SecurityConflictException error) when (attempt == 0 && error.ReasonCode == "artifact_source_changed")
+                    {
+                        // A checkpoint/lease can race this read. Discard every captured
+                        // witness and recheck the whole current authority once; no effect
+                        // or model call is replayed, and repeated changes still refuse.
+                        continue;
+                    }
                     phase = "public_web_read";
                     if (publicWebReads is not null) await publicWebReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     else if (TenantPublicWebReadService.HasStored(after.Run)) throw new AccessDeniedException("public_web_unavailable");
