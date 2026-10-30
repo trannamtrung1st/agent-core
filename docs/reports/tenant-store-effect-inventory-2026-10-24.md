@@ -202,15 +202,17 @@ Public research/downloads use bounded network/DNS/redirect/content policies and 
 
 ## Worker/recovery ingress
 
+Navigation update — 2026-10-30: the seven API source links below point to this inventory’s recorded commit, preserving its historical provenance.
+
 | Registered entry | Current source/boundary |
 | --- | --- |
-| [OpenSandboxHostedService](../../src/AgentCore.Api/OpenSandboxHostedService.cs) | Refreshes readiness and reconciles durable Sandbox evidence; never admits a model task. |
-| [TenantRequestIsolationHostedService](../../src/AgentCore.Api/TenantRequestIsolationHostedService.cs) | Pages exact tenant request owners; canonical host reservation settles each current quiescent Session. |
-| [SessionShutdownHostedService](../../src/AgentCore.Api/SessionShutdownHostedService.cs) | Drains the same canonical TenantSessionRuntimeHost; no independent registry/authority. |
-| [WorkspaceCleanupHostedService](../../src/AgentCore.Api/WorkspaceCleanupHostedService.cs) | Calls exact Agent decommission, Browser retirement, working-file, Artifact and Attachment cleanup owners. Saved proofs survive commit-to-filesystem gaps. |
-| [TriggerSchedulerHostedService](../../src/AgentCore.Api/TriggerSchedulerHostedService.cs) | Calls TenantAutomationService and TenantEventProcessor; current source/owner admission replaces global live-event authority. |
-| [EmailWatchHostedService](../../src/AgentCore.Api/EmailWatchHostedService.cs) | Uses TenantEmailMonitoringService and current bound account/watch authority; no global author or Profile fallback. |
-| [AgentRunHostedService](../../src/AgentCore.Api/AgentRunHostedService.cs) | Processes current pending approvals, owned credential/Browser/workspace/account/HTTP receipts and ITenantRunExecution; only exact saved operations may resume. |
+| [OpenSandboxHostedService](https://github.com/trannamtrung1st/agent-core/blob/33ab693bccfb0b1e603d8f7b83cb441dbc61c7db/src/AgentCore.Api/OpenSandboxHostedService.cs) | Refreshes readiness and reconciles durable Sandbox evidence; never admits a model task. |
+| [TenantRequestIsolationHostedService](https://github.com/trannamtrung1st/agent-core/blob/33ab693bccfb0b1e603d8f7b83cb441dbc61c7db/src/AgentCore.Api/TenantRequestIsolationHostedService.cs) | Pages exact tenant request owners; canonical host reservation settles each current quiescent Session. |
+| [SessionShutdownHostedService](https://github.com/trannamtrung1st/agent-core/blob/33ab693bccfb0b1e603d8f7b83cb441dbc61c7db/src/AgentCore.Api/SessionShutdownHostedService.cs) | Drains the same canonical TenantSessionRuntimeHost; no independent registry/authority. |
+| [WorkspaceCleanupHostedService](https://github.com/trannamtrung1st/agent-core/blob/33ab693bccfb0b1e603d8f7b83cb441dbc61c7db/src/AgentCore.Api/WorkspaceCleanupHostedService.cs) | Calls exact Agent decommission, Browser retirement, working-file, Artifact and Attachment cleanup owners. Saved proofs survive commit-to-filesystem gaps. |
+| [TriggerSchedulerHostedService](https://github.com/trannamtrung1st/agent-core/blob/33ab693bccfb0b1e603d8f7b83cb441dbc61c7db/src/AgentCore.Api/TriggerSchedulerHostedService.cs) | Calls TenantAutomationService and TenantEventProcessor; current source/owner admission replaces global live-event authority. |
+| [EmailWatchHostedService](https://github.com/trannamtrung1st/agent-core/blob/33ab693bccfb0b1e603d8f7b83cb441dbc61c7db/src/AgentCore.Api/EmailWatchHostedService.cs) | Uses TenantEmailMonitoringService and current bound account/watch authority; no global author or Profile fallback. |
+| [AgentRunHostedService](https://github.com/trannamtrung1st/agent-core/blob/33ab693bccfb0b1e603d8f7b83cb441dbc61c7db/src/AgentCore.Api/AgentRunHostedService.cs) | Processes current pending approvals, owned credential/Browser/workspace/account/HTTP receipts and ITenantRunExecution; only exact saved operations may resume. |
 | [NativePlaywrightBrowser](../../src/AgentCore.Infrastructure/Browser/NativePlaywrightBrowser.cs) | Native process/profile lifecycle implements the current binding/target/retirement contracts. Possessing its instance does not authorize a model operation. |
 | [TenantSandboxVerificationCleanupWorker](../../src/AgentCore.Infrastructure/Security/TenantSandboxVerificationCleanupWorker.cs) | Retires saved technical verification claims independently of catalog/readiness; unknown files/initialization are not repeated. |
 | [CredentialOAuthExpiryWorker](../../src/AgentCore.Infrastructure/Security/CredentialOAuthExpiryWorker.cs) | Only expires private OAuth attempts; carries no copied human or effect grant. |
