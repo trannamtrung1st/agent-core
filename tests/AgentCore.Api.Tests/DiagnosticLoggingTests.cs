@@ -1,4 +1,5 @@
 using AgentCore.Application.Execution;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
@@ -81,6 +82,8 @@ public sealed class DiagnosticLoggingTests
         var service = create(_ => throw failure, logs, diagnostics);
         using var metrics = RuntimeMetricProbe.Start();
         using var listener = DiagnosticActivity.Listen();
+        var stopped = new ConcurrentQueue<Activity>();
+        listener.ActivityStopped = stopped.Enqueue;
         using var activity = RuntimeTelemetry.Activity.StartActivity("hosted-pass");
         Assert.NotNull(activity);
 
@@ -99,8 +102,14 @@ public sealed class DiagnosticLoggingTests
         Assert.DoesNotContain("api_key", entry.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("hosted-secret", entry.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("InvalidOperationException", entry.Message, StringComparison.Ordinal);
-        Assert.Equal(ActivityStatusCode.Error, activity.Status);
+        var failedPass = Assert.Single(stopped, span => span.ParentSpanId == activity.SpanId);
+        Assert.Equal(typeof(TService) == typeof(TriggerSchedulerHostedService) ? "scheduler.pass" : "worker.pass", failedPass.OperationName);
+        Assert.Equal(activity.TraceId, failedPass.TraceId);
+        Assert.Equal(ActivityStatusCode.Error, failedPass.Status);
+        Assert.Equal(ActivityStatusCode.Unset, activity.Status);
         Assert.DoesNotContain(activity.TagObjects, tag => tag.Key is "DiagnosticId" or "TraceId");
+        Assert.DoesNotContain(failedPass.TagObjects, tag => tag.Key is "DiagnosticId" or "TraceId");
+        Assert.DoesNotContain(failedPass.TagObjects, tag => Convert.ToString(tag.Value)?.Contains("hosted-secret", StringComparison.Ordinal) == true);
         Assert.Equal(BusinessId, business.NewId());
         foreach (var tag in metrics.Tags)
         {

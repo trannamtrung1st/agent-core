@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using AgentCore.Api.Http;
 using AgentCore.Api.Realtime;
 using AgentCore.Application.Events;
@@ -54,16 +55,46 @@ public sealed partial class TenantSessionAccessTests
                 await publication.WaitAsync(TimeSpan.FromSeconds(5));
             }
             finally { cancellation.Cancel(); delivery.BeforeRecipientDelivery = null; }
-            var saved = (await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(tenant, session))!;
-            var ack = await hub.InvokeAsync<CommandAck>("SendText", new ClientCommand<UserTextPayload> { ProtocolVersion = 1, Type = "user.text",
-                SessionId = session.ToString("D"), AttachmentId = attached.AttachmentId, Sequence = 1, EventId = Guid.NewGuid().ToString("D"),
-                Payload = new() { Text = "Hello queued successor", Behavior = "queue", ExpectedRevision = await Revision(owner, tenant), ExpectedSessionRevision = saved.Snapshot.Revision } });
-            Assert.True(ack.Accepted, ack.Error?.Code);
+            using var admissionDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            long commandSequence = 0;
+            async Task<JsonElement> Witness()
+            {
+                while (true)
+                {
+                    using var read = await owner.GetAsync(api + $"/sessions/{session}/messages?limit=1", admissionDeadline.Token);
+                    var value = await Json(read);
+                    if (read.StatusCode == HttpStatusCode.Conflict && value.GetProperty("reasonCode").GetString() == "stale_revision")
+                    { await Task.Delay(20, admissionDeadline.Token); continue; }
+                    Assert.Equal(HttpStatusCode.OK, read.StatusCode); return value;
+                }
+            }
+            Task<CommandAck> Send(JsonElement witness, long revision) => hub.InvokeAsync<CommandAck>("SendText",
+                new ClientCommand<UserTextPayload> { ProtocolVersion = 1, Type = "user.text", SessionId = session.ToString("D"),
+                    AttachmentId = attached.AttachmentId, Sequence = ++commandSequence, EventId = Guid.NewGuid().ToString("D"),
+                    Payload = new() { Text = "Hello queued successor", Behavior = "queue",
+                        ExpectedRevision = witness.GetProperty("securityRevision").GetInt64(), ExpectedSessionRevision = revision } }, admissionDeadline.Token);
+            // A delivered prefix can still be checkpointing. An explicit CAS refusal
+            // consumes its command sequence but creates no input; keep this attachment.
+            var staleWitness = await Witness();
+            Assert.True(staleWitness.GetProperty("sessionRevision").GetInt64() > 1);
+            var stale = await Send(staleWitness, staleWitness.GetProperty("sessionRevision").GetInt64() - 1);
+            Assert.False(stale.Accepted); Assert.Equal("stale_revision", stale.Error?.Code);
+            CommandAck ack;
+            while (true)
+            {
+                var witness = await Witness();
+                ack = await Send(witness, witness.GetProperty("sessionRevision").GetInt64());
+                if (ack.Accepted) break;
+                Assert.Equal("stale_revision", ack.Error?.Code);
+                await Task.Delay(20, admissionDeadline.Token);
+            }
             model.Release.TrySetResult();
             var successor = Convert.ToString(ack.Result!["responseId"]);
             await AwaitTenantWire(() => events.FirstOrDefault(e => e.Type == "agent.response.completed" && e.ResponseId == successor));
             Assert.DoesNotContain(events, e => e.EventId == marker.ToString("D"));
             Assert.All(events, e => Assert.Equal(attached.AttachmentId, e.AttachmentId));
+            var history = await Json(await owner.GetAsync(api + $"/sessions/{session}/messages?limit=100"));
+            Assert.Single(history.GetProperty("items").EnumerateArray(), item => item.GetProperty("text").GetString() == "Hello queued successor");
             Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
         }
         finally { model.Release.TrySetResult(); SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
