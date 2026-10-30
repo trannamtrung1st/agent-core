@@ -1,6 +1,6 @@
 # Production Hardening — design and delivery ledger
 
-Status: local implementation and focused qualification complete. **Ready with Minor Improvements** for the controlled Synthetic single-host profile described below; **Order 5 hosted milestone acceptance remains pending**, with no unrestricted production claim. Starting source: `157287695820e9b251f5a4073b846c73f1ec5117`. This ledger owns H0–H4 evidence; the prior refactoring evidence does not qualify these changes. Hosted CI was subsequently authorized on 2026-10-30; the follow-up below records its result.
+Status: **Order 5 accepted for the controlled Synthetic single-host profile**, 2026-10-30. **Ready with Minor Improvements**, with no unrestricted production claim. Qualified executable/test source: `bc8124f7b8a0486dd38fb8364789a0891992df1f`; [final acceptance](#exact-source-acceptance-and-order-5-closure) records all 62 required hosted jobs and exact case accounting. Starting source: `157287695820e9b251f5a4073b846c73f1ec5117`. This ledger owns H0–H4 evidence and retains earlier failed/superseded attempts; prior refactoring evidence does not qualify these changes.
 
 ## H0 design freeze
 
@@ -140,4 +140,31 @@ Verification: **45 Infrastructure cases passed**, selecting `Artifact_projection
 
 Partition 8 separately reported `workspace_source_changed` for an allowed SQLite resource publication. Its full 19-case local matrix passed; its source guard, publication assertions and effect behavior remain unchanged. No causal attribution or repaired-publication claim is made for that isolated refusal. The complete final-source gate must still pass.
 
-The corrected executable/test/build input fingerprint is `worktree-7430aeaaebbe7f5997689549cc80b49c30c61826c183826c7e589afbebc8b35a` (4,282 files). A matching image is being rebuilt and will be recorded with its qualification. The original `9cd780cb1` image mapping above remains historical evidence, not an artifact containing this production correction. Hosted acceptance and Order 5 remain pending until the corrected source passes the full gate.
+The corrected executable/test/build source is `bc8124f7b8a0486dd38fb8364789a0891992df1f`; its fingerprint is `worktree-7430aeaaebbe7f5997689549cc80b49c30c61826c183826c7e589afbebc8b35a` (4,282 files). Independent hashing of committed Git blobs and executable modes reproduces it without worktree inputs. Matching image: `sha256:0c107e573bb3a1766de39a6b5d90ccc2e712841bfd51f3a314ac11619775bb77`, with that exact revision label, user `1654:1654` and .NET/ASP.NET 10.0.14. The original `9cd780cb1` image mapping above remains historical evidence, not an artifact containing this production correction.
+
+The rebuilt image passed `AGENTCORE_COMPOSE_PORT=15880 python3 scripts/qualification/production-compose.py`: actual HTTPS, non-root execution, cold backup, independently restored volume, original cookie/identity/protected credential/history, completed safe Chat after restore and matching-image/quiescent-original-volume rollback. Disposable fixture resources were cleaned up. The default scanner cache was expired and correctly refused; a newly downloaded task-local Grype database built `2026-10-30T06:23:28Z` validated successfully. The unsuppressed final scan found **0 Critical / 0 High / 65 Medium / 8 Low / 2 Negligible**. All Medium matches are vendor not-fixed/wont-fix OS advisories; the one added since the prior feed is gpgv `CVE-2026-118131`, not fixed. [Final image audit](assets/production-hardening-2026-10-30/dependency-audit-final.json) retains every match.
+
+[Run 41040306361](https://github.com/trannamtrung1st/agent-core/actions/runs/41040306361) is pinned to the corrected source above and passed its complete required gate as recorded below. Real-provider/native/sustained-workload and physical-device/customer qualification limits remain unchanged.
+
+Its first System Administration browser attempt timed out waiting 120 seconds for test-server readiness; no product assertion ran. The exact local suite (`CI=1 TENANT_CHAT_API_PORT=15888 TENANT_CHAT_WEB_PORT=15179 pnpm exec playwright test --config playwright.system-administration.config.ts`) passed **1 case** in 1.4 minutes with the existing startup/test limits. No source, limit or assertion was changed. After the other 61 gates passed, the whole job was rerun on the same commit and passed **1 case** in 1.3 minutes. The original timeout remains failed setup evidence; it is not counted as a pass or attributed to a proven cause.
+
+## Exact-source acceptance and Order 5 closure
+
+The owner-authorized [workflow 41040306361](https://github.com/trannamtrung1st/agent-core/actions/runs/41040306361) is **successful** on `bc8124f7b8a0486dd38fb8364789a0891992df1f`. All **62 required latest job results passed**. Attempt 1 passed 61 gates; attempt 2 reran only the setup-failed System Administration job and reused the other successful results. Both complete job ledgers and the original logs are retained. No product test was skipped or assertion weakened to clear a failure. Closing documentation is a descendant with no executable, fixture, dependency, workflow or deployment-input changes.
+
+| Gate | Observed result |
+| --- | --- |
+| Domain / Application | 289 / 2,872 passed; zero failed or skipped |
+| API, all 16 partitions | 3,543 passed / 28 explicit skips; 3,571 accounted |
+| Infrastructure, all 16 partitions | 5,125 passed / 49 explicit skips; 5,174 accounted; all 8 new controlled race cases passed |
+| Frontend | 172 files / 1,466 unit tests passed; both TypeScript/Vite builds passed |
+| Core browser / fake-device Voice | 83 passed across both shards |
+| Named browser acceptance | 21 jobs / 48 cases passed, including the whole-job setup retry above |
+| Trusted local OpenSandbox | Real SDK 18 passed / 1 explicit translated-mount skip; canonical tenant/native filesystem checks passed |
+| Operational Python / Compose | 75 CI Python cases passed; HTTPS cookie/CSRF, tenant isolation, completed Chat, history/Attachment recreation and email cursor/generation recovery passed |
+
+The reconciliation independently checked all 32 receipts against source, plan digest, selected methods, process exit, TRX counters and every discovered method/theory count. **8,745 unique TestIds were accounted exactly once: 8,668 passed, 77 explicitly skipped, zero failed.** API plan: `d8f2e5bf3a4f658777261238946ac520e71cafcdea2a7d0a75c604267f2e62cd`; Infrastructure plan: `ffaa4350a7caf7821001deab0d17aa3d5a9b0e2f83a2615db24c8024b0a26dd4`. Existing discovery remains intact; the eight controlled race cases are the only additions since the first complete hardening candidate. Skips remain optional native-browser/provider/Sandbox/benchmark cases, not passes; the separate mandatory trusted OpenSandbox gate ran.
+
+[Machine-readable acceptance and provenance](assets/production-hardening-2026-10-30/hosted-acceptance.json) binds the committed source, fingerprint, exact qualified image, all required jobs, counts, setup retry, packaged recovery and current scan. Full source-bound plans, receipts, TRX, logs and reconciliation are retained in `local/production-hardening-evidence/2026-10-30/bc8124f7/` in the primary checkout. The final source review checked the one-read budget, fresh claim/authority/source validation, refusal boundaries, no effect replay, fixture assertions and evidence consistency; no unresolved Critical/High defect is identified for this profile. The isolated earlier resource-publication refusal remains recorded without a causal repair claim; its exact matrix and complete final-source partition passed with its guard unchanged.
+
+**Order 5 is closed for this selected profile.** The short Synthetic capacity sample does not qualify sustained Real/native or mixed production load. Physical audio/devices, live providers/SMTP/Drive, hostile public/native tenancy, NVIDIA/other platforms and installed customer cutover/UAT remain separate qualification. Retain the unsuppressed vendor audit and operator custody/backup limits above. Stop general hardening refinement; **Order 6 — Platform-wide UI/UX Polish is next and unstarted**.

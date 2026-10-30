@@ -2,7 +2,7 @@
 
 ## Production Hardening local delivery
 
-Order 5 follows the qualified five-assembly refactoring baseline. Its [design and evidence ledger](reports/production-hardening-delivery-2026-10-30.md) owns the selected single-host profile, centralized preflight/ownership, coordinated recovery, runtime export/worker probes, measured envelope and packaged/browser checks. Local qualification and hosted milestone acceptance remain distinct: CI is opt-in and has not been authorized for this source. Public/native/customer certification and Order 6 are separate gates.
+Order 5 is accepted on 2026-10-30 for the controlled Synthetic single-host profile at `bc8124f7b8a0486dd38fb8364789a0891992df1f`. Its [design and evidence ledger](reports/production-hardening-delivery-2026-10-30.md#exact-source-acceptance-and-order-5-closure) owns centralized preflight/ownership, coordinated recovery, runtime export/worker probes, measured limits, packaged/browser checks and committed source/image provenance. Owner-authorized [CI run 41040306361](https://github.com/trannamtrung1st/agent-core/actions/runs/41040306361) passed all 62 required jobs, with 8,745 partition cases accounted exactly once; one setup-only browser job was rerun unchanged. CI remains manual and opt-in. Sustained Real/native workloads and public/customer/physical-device certification remain separate. Order 6 — Platform-wide UI/UX Polish is next and unstarted.
 
 ## Project refactoring and architecture stabilization
 

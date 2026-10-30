@@ -1,0 +1,353 @@
+{
+  "date": "2026-10-30",
+  "qualifiedProfile": "controlled single-host Synthetic",
+  "source": {
+    "source_sha": "bc8124f7b8a0486dd38fb8364789a0891992df1f",
+    "source_fingerprint": "worktree-7430aeaaebbe7f5997689549cc80b49c30c61826c183826c7e589afbebc8b35a",
+    "files": 4282,
+    "verification": "committed Git blobs and executable modes; no worktree inputs"
+  },
+  "workflow": {
+    "runId": 41040306361,
+    "url": "https://github.com/trannamtrung1st/agent-core/actions/runs/41040306361",
+    "headSha": "bc8124f7b8a0486dd38fb8364789a0891992df1f",
+    "conclusion": "success",
+    "attempt": 2,
+    "requiredJobs": 62,
+    "passedRequiredJobs": 62,
+    "setupRetry": {
+      "job": "Synthetic Playwright acceptance (system-administration)",
+      "firstJobId": 124011749201,
+      "firstOutcome": "test-server readiness timeout at 120 seconds; no product assertion ran",
+      "retryJobId": 124032478590,
+      "retryPassedCases": 1,
+      "sourceLimitsAndAssertionsUnchanged": true,
+      "localReplayPassedCases": 1
+    }
+  },
+  "partitionAccounting": {
+    "uniqueTestIds": 8745,
+    "all32ReceiptsVerified": true,
+    "failedCases": 0,
+    "passedCases": 8668,
+    "explicitSkips": 77,
+    "suites": {
+      "api": {
+        "plan_sha256": "d8f2e5bf3a4f658777261238946ac520e71cafcdea2a7d0a75c604267f2e62cd",
+        "method_count": 570,
+        "expected_cases": 3571,
+        "actual_cases": 3571,
+        "outcomes": {
+          "Passed": 3543,
+          "NotExecuted": 28
+        }
+      },
+      "infrastructure": {
+        "plan_sha256": "ffaa4350a7caf7821001deab0d17aa3d5a9b0e2f83a2615db24c8024b0a26dd4",
+        "method_count": 1926,
+        "expected_cases": 5174,
+        "actual_cases": 5174,
+        "outcomes": {
+          "Passed": 5125,
+          "NotExecuted": 49
+        }
+      }
+    }
+  },
+  "otherGates": {
+    "domainPassed": 289,
+    "applicationPassed": 2872,
+    "operationalPythonPassed": 75,
+    "frontendPassedFiles": 172,
+    "frontendPassedTests": 1466,
+    "frontendBuildsPassed": 2,
+    "coreBrowserAndFakeVoicePassed": 83,
+    "namedBrowserJobsPassed": 21,
+    "namedBrowserCasesPassed": 48,
+    "openSandboxSdkPassed": 18,
+    "openSandboxSdkExplicitSkips": 1,
+    "composeHttpsAndRestartPassed": true
+  },
+  "packagedRecovery": {
+    "image": "sha256:0c107e573bb3a1766de39a6b5d90ccc2e712841bfd51f3a314ac11619775bb77",
+    "sourceFingerprint": "worktree-7430aeaaebbe7f5997689549cc80b49c30c61826c183826c7e589afbebc8b35a",
+    "nonRootUid": 1654,
+    "sharedRuntime": "10.0.14",
+    "actualImageIndependentVolumeRestore": true,
+    "sameCookieIdentityAndProtectedCredential": true,
+    "runtimes": {
+      "Microsoft.AspNetCore.App": "10.0.14",
+      "Microsoft.NETCore.App": "10.0.14"
+    },
+    "safeChatAfterRestore": true,
+    "matchingImageAndQuiescedOriginalVolumeRollback": true
+  },
+  "imageAudit": {
+    "image": "sha256:0c107e573bb3a1766de39a6b5d90ccc2e712841bfd51f3a314ac11619775bb77",
+    "sourceFingerprint": "worktree-7430aeaaebbe7f5997689549cc80b49c30c61826c183826c7e589afbebc8b35a",
+    "scanner": "grype 0.104.1",
+    "databaseBuilt": "2026-10-30T06:23:28Z",
+    "databaseValid": true,
+    "severityCounts": {
+      "Critical": 0,
+      "High": 0,
+      "Medium": 65,
+      "Low": 8,
+      "Negligible": 2
+    }
+  },
+  "latestRequiredJobs": [
+    {
+      "name": "Synthetic API (1/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API (10/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API (11/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API (12/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API (13/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API (14/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API (15/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API (16/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API (2/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API (3/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API (4/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API (5/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API (6/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API (7/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API (8/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API (9/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic API plan",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Compose smoke",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (1/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (10/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (11/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (12/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (13/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (14/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (15/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (16/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (2/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (3/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (4/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (5/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (6/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (7/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (8/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure (9/16)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Infrastructure plan",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (access)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (audit)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (browser-browser)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (browser-stt)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (system-administration)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (system-browser-privacy)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (system-operators)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (tenant-acceptance)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (tenant-agent-access)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (tenant-agent-connections)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (tenant-browser-profile)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (tenant-credentials)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (tenant-definitions)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (tenant-events)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (tenant-file-reads)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (tenant-instance-resources)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (tenant-instance-skills)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (tenant-instance-version)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (tenant-isolation)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (tenant-request-isolation)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright acceptance (tenant-runtime-state)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright core (1/2)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic Playwright core (2/2)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic backend",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic frontend (1/2)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Synthetic frontend (2/2)",
+      "conclusion": "success"
+    },
+    {
+      "name": "Trusted local OpenSandbox acceptance",
+      "conclusion": "success"
+    }
+  ],
+  "limits": [
+    "Short Synthetic capacity sample is not a sustained Real/native workload SLA.",
+    "Physical devices, live providers, public hostile/native tenancy and installed customer cutover require separate qualification."
+  ]
+}

@@ -2,7 +2,7 @@
 
 ## Production Hardening qualification
 
-The [source-bound ledger](reports/production-hardening-delivery-2026-10-30.md) records H0–H4 outcomes for the named profile. Use disposable identities, private roots, certificates and Compose projects; never reset installed data. Hosted CI remains manual and opt-in. Focused local qualification does not imply hosted milestone acceptance or external/customer certification.
+The [source-bound ledger](reports/production-hardening-delivery-2026-10-30.md#exact-source-acceptance-and-order-5-closure) records H0–H4 outcomes and owner-authorized exact-source acceptance for the controlled Synthetic single-host profile at `bc8124f7`: all 62 required jobs passed and 8,745 partition cases were accounted exactly once. Use disposable identities, private roots, certificates and Compose projects; never reset installed data. Hosted CI remains manual and opt-in. Focused local qualification alone does not imply hosted acceptance or external/customer certification.
 
 | PH scenarios | Required observation / executable evidence |
 | --- | --- |
