@@ -1,5 +1,8 @@
 # Delivery evidence
 
+Product Experience Transformation: [accepted local Synthetic delivery](product-experience-delivery-2026-10-30.md), 2026-10-31; [independent review](product-experience-independent-review-2026-10-31.md): Ready with Minor Improvements. Its exact working-source digest and local evidence are separate from the committed Production Hardening CI baseline.
+
+
 Reports are dated, source-bound evidence. They preserve the checks performed, outcomes and limitations at that time; they are not current operational or API contracts. Start with the [documentation map](../README.md) for current owners.
 
 | Evidence family | Main ledger |
@@ -12,6 +15,7 @@ Reports are dated, source-bound evidence. They preserve the checks performed, ou
 | Evaluation / Goals | [Native scripts](native-evaluation-scripts-2026-10-27.md), [Goals](session-goals-delivery-2026-10-27.md) |
 | Task communication | [Initiative 9](initiative-9-local-verification-2026-10-27.md), [review follow-up](initiative-9-review-fixes-2026-10-28.md) |
 | Managed General Assistant / Formal Workflows | [General Assistant](general-assistant-delivery-2026-10-28.md), [Workflows](formal-workflows-delivery-2026-10-28.md) |
+| Product Experience Transformation | [Delivery and acceptance](product-experience-delivery-2026-10-30.md), [independent review](product-experience-independent-review-2026-10-31.md) |
 | Production Hardening | [Controlled single-host design, implementation and exact-source acceptance](production-hardening-delivery-2026-10-30.md) |
 | Project refactoring | [Delivery and final review](project-refactoring-delivery-2026-10-30.md), [design decisions](../proposals/project-refactoring-architecture-stabilization.md) |
 

@@ -42,7 +42,7 @@ function TenantAgentProfile({ context, id }: { context: TenantContext; id: strin
     void command.run(signal => identityRequest<{ instance: TenantAgentEditor['agent']['instance'] }>(tenantAgentApi(tenant, id, '/persona'), { method: 'PUT', signal, body: { persona: value, expectedRevision: view.securityRevision, expectedInstanceRevision: view.agent.instance.revision, expectedPersonaRevision: view.agent.instance.personaRevision } }), result => { setPersona(result.instance.persona); setSaved(result.instance.persona); setJson(personaFieldsToJson(result.instance.persona)); message.success('Persona saved. New Runs use the updated guidance.'); state.reload(); });
   };
   return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">{guard.holder}
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to instances</Typography.Link><Button disabled={command.busy} onClick={reload}>Reload profile</Button></Flex>
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link><Button disabled={command.busy} onClick={reload}>Reload profile</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={reload} /> : view && persona && <>
       <TenantAgentHeading view={view} />
@@ -74,11 +74,10 @@ function TenantAgentSettings({ context, id }: { context: TenantContext; id: stri
     models: signal => identityRequest<Awaited<ReturnType<typeof listModels>>>(tenantApi(tenant, '/chat/models'), { signal })
   }), [tenant, id]);
   return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">{guard.holder}
-    <Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to instances</Typography.Link>
+    <Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link>
     {view && <TenantAgentHeading view={view} />}
-    <Typography.Paragraph type="secondary">Settings define behavior and capability eligibility. The agent’s own roles and approval policy still control execution.</Typography.Paragraph>
-    <Typography.Link href={tenantAgentPath(tenant, id, 'state-isolation')} onClick={followAppLink}>State, Memory and Voice enablement share the coordinated State & Isolation editor</Typography.Link>
     <InstanceSettingsSection systemManaged={!!view?.agent.managedKind} confirmationContext={view ? `Agent: ${view.agent.instance.persona.name}. Organization: ${context.tenant.name}.` : undefined} refreshKey={settingsEpoch} saveBlocked={cooperationDirty} externalBusy={cooperationBusy || presentationBusy} instanceId={id} archived={!view?.canUpdate || view.agent.instance.lifecycle !== 'Active'} transport={transport} onUpdated={() => {}} onDirtyChange={setDirty} onBusyChange={setBusy} />
+    <Typography.Link href={tenantAgentPath(tenant, id, 'state-isolation')} onClick={followAppLink}>Configure continuity, memory and voice availability</Typography.Link>
     {view && <TenantAgentPresentation context={context} id={id} view={view} disabled={dirty || busy || cooperationDirty || cooperationBusy} onBusyChange={setPresentationBusy} onSaved={focus => { presentationFocus.current = focus; setSettingsEpoch(value => value + 1); }} />}
     {view && <InstanceCooperationSettings key={`${tenant}:${id}`} tenant={tenant} instance={id} view={view} disabled={dirty || busy || presentationBusy} onDirtyChange={setCooperationDirty} onBusyChange={setCooperationBusy} onSaved={() => setSettingsEpoch(value => value + 1)} />}
     <InstanceEvaluationBindings key={view?.agent.instance.revision ?? 'loading'} tenant={tenant} instance={id} />

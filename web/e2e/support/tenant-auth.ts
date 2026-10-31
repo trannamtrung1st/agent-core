@@ -13,7 +13,8 @@ export async function canonicalFetch(api: APIRequestContext, path: string, optio
   }
   // Current workers may commit between a projection's two authority checks.
   // Obtain a new snapshot only after the explicit read conflict. Never replay writes.
-  for (let retry = 0; (options?.method ?? 'GET') === 'GET' && response.status() === 409 && retry < 2; retry++) {
+  const coherentRead = (options?.method ?? 'GET') === 'GET' || options?.method === 'POST' && path.endsWith('/access/check');
+  for (let retry = 0; coherentRead && response.status() === 409 && retry < 2; retry++) {
     if ((await response.json()).reasonCode !== 'stale_revision') break;
     response = await api.fetch(path, options);
   }

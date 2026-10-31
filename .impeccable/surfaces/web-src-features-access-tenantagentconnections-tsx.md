@@ -1,33 +1,39 @@
-# Tenant Instance Connections
+---
+version: 1
+slug: "web-src-features-access-tenantagentconnections-tsx"
+primary_target: "web/src/features/access/TenantAgentConnections.tsx"
+related_targets: ["web/src/app/antdTheme.ts", "web/src/app/AppShell.tsx", "web/src/app.css"]
+---
 
-Mode: Operate. Code-led local extension of the established Ant Design v6 dark admin world. The canonical interaction contract is in `/docs/19-multi-tenant-iam-ux.md`; existing Instance Access, Credential management and protected draft drawers are the composition references. No replacement world, concept seed, comp or raster asset is needed.
+# TenantAgentConnections
 
-## Direction contract — 2026-10-17
+Mode: Operate. Code-led.
 
-**THESIS:** Bind an exact readable Credential to one agent under a stable alias while keeping provider connection, execution permission and configuration visibly distinct.
+## Direction contract
 
-**OWN-WORLD:** Preserve flat bounded reading surfaces, native typography/status colors and the existing admin shell, form/drawer, confirmation, draft guard and 8/12/16px spacing owners. Scoped Instance navigation precedes organization collections. Reuse Ant Design directly; no new token, theme, generic component or decorative asset.
+THESIS: Identify the selected agent, lifecycle and adopted Definition before editing. Use contextual Identity/Behavior/Execution/Activity/Access navigation and an explicit organization transition. Settings categories retain one sparse-draft controller and field-level source/reset. Keep current authority, guarded save/cancel, stale/unknown readback and non-destructive recovery.
 
-**STORY:** Inventory leads directly to Connections or Access. Connections first shows the actual agent and safe bindings; Add binding opens a focused draft with Credential choice, safe status and alias. Explicit scoped permissions govern affordances. Removal names the exact association and preserves the shared Credential. Partial, empty, archived, denied and stale states explain the available next step.
+OWN-WORLD: Native Ant Design v6 on evergreen layout/container/elevated surfaces, warm white working text, mint links and independent semantic status colors.
 
-**FIRST VIEWPORT:** Agent identity/lifecycle, Reload/Add actions, concise configuration-versus-authority explanation and the first binding rows are immediately readable. Long aliases/names wrap, tags keep natural width, and narrow screens stack action rows without document overflow. Drawer footer remains usable at 320px.
+STORY: Understand the authorized owner and current saved state, perform the named task, and inspect its attributable result or explicit recovery.
 
-**FORM:** A bounded reading column with native Flex rows and a protected draft Drawer. The signature interaction is an exact Credential selection revealing its own safe status and bind authority before saving under a deliberate alias. Reload preserves draft values and refreshes witnesses; saving never starts OAuth or grants execution rights. Native focus/Drawer/confirmation motion is sufficient. Cancel returns focus to its opener and keyboard order follows the task.
+FIRST VIEWPORT: This composition remains inside its authorized page/Chat/inspector owner. The shared task/scope heading precedes native controls, evidence and actions; narrow layouts wrap and use local overflow.
 
-## Browser state extension — 2026-10-20
+FORM: Inherit the selected field-guide working grammar, candidate 7, seed `cb1be48c`; contextual classification without literal book decoration.
 
-**THESIS:** Inspect and deliberately reset one Agent's persistent Browser state from Connections, under independent Browser access.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
-**OWN-WORLD:** Inherit the current Ant Design dark shell, bounded reading column, AgentConfigurationPanel, native confirmation, semantic status and 8/12/16px rhythm. No new visual world or raster asset.
+The [Product Experience Contract](../../docs/product-experience-contract.md) and [frontend specification](../../docs/13-frontend-implementation-spec.md) own behavior. [DESIGN](../../.agents/context/DESIGN.md) owns concise visual guidance. Ant Design v6 controls and shared layout owners provide the presentation; no second framework or page-local tokens.
 
-**STORY:** Read current Agent/profile facts; distinguish saved state and open persistent views from the last reset outcome; confirm the exact Agent and organization before resetting. Lost replies and unknown outcomes require deliberate saved-state reload, never automatic repeat.
+## Qualification
 
-**FIRST VIEWPORT:** Existing Connections identity and binding inventory remain first. The Browser state panel follows as an independently readable section with a wrapping Reload action, plain facts, explicit recovery and one destructive action. Long names wrap at 390px; confirmation and focus remain usable at 320px.
+The [delivery ledger](../../docs/reports/product-experience-delivery-2026-10-30.md) and [master manifest](../../docs/reports/assets/product-experience/coverage.json) record actual journeys, roles, inspected images and open limits. This refreshed brief is source metadata, not acceptance. Preserve existing meaningful states and operations; verify desktop/tablet/mobile and narrow content/keyboard/authority boundaries.
 
-**FORM:** Code-led local extension. The signature interaction is exact preflight → named confirmation → one reset → factual readback; parent section gaps and shared panel padding own spacing. Native focus/confirmation motion suffices.
+## Source fingerprints
 
-**FINISH:** unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
-
-## Finish qualification — 2026-10-20
-
-The Browser state extension received independent **ship** review over desktop/mobile/narrow overview, confirmation and refusal captures. The documenter confirmed the incumbent system is preserved; no DESIGN.md, sidecar, PRODUCT.md or asset change is required. [Focused runtime evidence](../../docs/reports/tenant-browser-profile-reset-ui-verification-2026-10-20.md) records native focus, exact one-request reset, deliberate recovery, computed shared spacing and the separate backend boundary.
+| Source | SHA256 |
+| --- | --- |
+| `web/src/features/access/TenantAgentConnections.tsx` | `41ef485f612741d3b45e0f5384667ab27c4231bc45959103e3c964bcdbe1a30e` |
+| `web/src/app/antdTheme.ts` | `8f13dc29dc96e4ef2dcc86be8150743d7656975cbe202b06f04f039a8a8109ae` |
+| `web/src/app/AppShell.tsx` | `35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1` |
+| `web/src/app.css` | `e827076d776b5687e59bd83d86cba88d889203430bc8ae23a14e85c6014e0cae` |

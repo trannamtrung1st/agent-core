@@ -32,7 +32,7 @@ test('owner setup retry refreshes the ordinary picker and starts a real conversa
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }
     await retry.click(); await expect(page.getByTitle(/^General Assistant · System-managed —/)).toBeVisible();
-    await expect(page.getByRole('combobox', { name: 'Identity' })).toBeFocused(); expect(writes).toBe(1);
+    await expect(page.getByRole('combobox', { name: 'Agent' })).toBeFocused(); expect(writes).toBe(1);
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Hello after setup retry');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('Hello from synthetic.', { exact: true })).toHaveCount(1); expect(errors).toEqual([]);

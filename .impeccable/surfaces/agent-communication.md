@@ -1,33 +1,39 @@
-# Agent communication
+---
+version: 1
+slug: "agent-communication"
+primary_target: "web/src/features/admin/InstanceCommunicationSection.tsx"
+related_targets: ["web/src/app/antdTheme.ts", "web/src/app/AppShell.tsx", "web/src/app.css"]
+---
 
-Primary target: `web/src/features/admin/InstanceCommunicationSection.tsx`.
-Related: InstanceActivitySection, Instance settings, task detail, tenant authorization scope.
+# InstanceCommunicationSection
 
-Job: inspect an Agent's assigned work and private two-Agent correspondence, with honest delivery/wake facts. Humans oversee direct threads without a composer; task guidance is visibly attributed Human guidance. Exactly two Agent participants; no group navigation or shared transcript.
+Mode: Operate. Code-led.
 
-Hierarchy: existing Agent Activity → Inbox/Communication → authorized tasks/questions/threads → ordered message history and delivery receipts. Cooperation settings stay in the existing configuration owner: Accept delegated tasks, Accept direct messages and Allow direct-message wake, all off by default. Explain independent permissions and bounded operating cost. Direct-thread identity never comes from a human-selected speaker. Read/unread is not model execution or acknowledgement.
+## Direction contract
 
-Mode: Operate. Visual authority: Ant Design v6, `.agents/context/DESIGN.md`, `antdTheme.ts` and existing Chat/Activity drawers. No global theme change. Canonical behavior: `docs/proposals/initiative-9-task-delegation-communication.md`, adopted 2026-10-27 before UI implementation.
+THESIS: Identify the selected agent, lifecycle and adopted Definition before editing. Use contextual Identity/Behavior/Execution/Activity/Access navigation and an explicit organization transition. Settings categories retain one sparse-draft controller and field-level source/reset. Keep current authority, guarded save/cancel, stale/unknown readback and non-destructive recovery.
 
-## Shared layout and access contract
+OWN-WORLD: Native Ant Design v6 on evergreen layout/container/elevated surfaces, warm white working text, mint links and independent semantic status colors.
 
-Reuse `SessionSandboxFrame` (640 px capped operational drawer, full width on narrow screens, focus restoration/Escape), `DrawerListFooter`, `AgentRunDetails`, current approval and Goal deep links. Drawer Flex owns 16 px sections; control rows use 8 px token gaps, wrap and native AntD inner padding. System type, semantic status text, escaped wrapping evidence, no avatars or decorative status colors. Do not expose worker transcript/files through a Task permission.
+STORY: Understand the authorized owner and current saved state, perform the named task, and inspect its attributable result or explicit recovery.
 
-Widths 320/390/768/1024/1440; 200% zoom, keyboard, reduced motion, long names/objectives and 2,000-character messages must remain usable with one scroll/focus owner. Loading uses skeletons; empty teaches the next eligible action; denied refresh clears private projection. On tenant/session/instance/logout/403/404/410 changes retire scope epoch before any delayed HTTP reply can apply. Lost command replies use request-key readback; never silently resubmit an effect. Server rights inform controls and are rechecked on submit.
+FIRST VIEWPORT: This composition remains inside its authorized page/Chat/inspector owner. The shared task/scope heading precedes native controls, evidence and actions; narrow layouts wrap and use local overflow.
 
-| State | Visible treatment / action |
+FORM: Inherit the selected field-guide working grammar, candidate 7, seed `cb1be48c`; contextual classification without literal book decoration.
+
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+
+The [Product Experience Contract](../../docs/product-experience-contract.md) and [frontend specification](../../docs/13-frontend-implementation-spec.md) own behavior. [DESIGN](../../.agents/context/DESIGN.md) owns concise visual guidance. Ant Design v6 controls and shared layout owners provide the presentation; no second framework or page-local tokens.
+
+## Qualification
+
+The [delivery ledger](../../docs/reports/product-experience-delivery-2026-10-30.md) and [master manifest](../../docs/reports/assets/product-experience/coverage.json) record actual journeys, roles, inspected images and open limits. This refreshed brief is source metadata, not acceptance. Preserve existing meaningful states and operations; verify desktop/tablet/mobile and narrow content/keyboard/authority boundaries.
+
+## Source fingerprints
+
+| Source | SHA256 |
 | --- | --- |
-| Loading / refreshing | Scoped skeleton; no old private text on denied reload. |
-| Empty | Explain default-off cooperation; offer authorized creation/settings link. |
-| PendingDependencies / Queued | Exact factual status; no invented worker Run before readiness. |
-| Running / Waiting | Actual Run-derived status; bounded messages; cancel is a request. |
-| Blocked / Failed / Cancelled | Saved reason; deliberate retry creates a new Task. |
-| NeedsAttention | Uncertain effect warning, inspect facts; no automatic retry. |
-| Succeeded | Original saved result; explicitly not Goal verification. |
-| Denied / unavailable / expired | Clear content, actionable safe feedback, no hidden names/counts. |
-| Conflict / transport loss | Retain draft and saved request key; read current facts. |
-| Capacity / policy refusal | Safe precise reason; no alternate Agent/Space substitution. |
-
-## Verification disposition
-
-Design contract recorded before UI code. Rendered review, detector, finish-review and behavior evidence are pending; no polished or accepted claim.
+| `web/src/features/admin/InstanceCommunicationSection.tsx` | `243051af6bd1172c358d4cba67a5925394a89a5a699d891e083a4862e3b54938` |
+| `web/src/app/antdTheme.ts` | `8f13dc29dc96e4ef2dcc86be8150743d7656975cbe202b06f04f039a8a8109ae` |
+| `web/src/app/AppShell.tsx` | `35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1` |
+| `web/src/app.css` | `e827076d776b5687e59bd83d86cba88d889203430bc8ae23a14e85c6014e0cae` |

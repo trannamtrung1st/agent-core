@@ -1,42 +1,39 @@
-# Tenant Retained Experience
+---
+version: 1
+slug: "web-src-features-access-tenantagentexperience-tsx"
+primary_target: "web/src/features/access/TenantAgentExperience.tsx"
+related_targets: ["web/src/app/antdTheme.ts", "web/src/app/AppShell.tsx", "web/src/app.css"]
+---
 
-Mode: Operate. Ordinary extension of the incumbent dark Ant Design v6 UI. Preserve `.agents/context/PRODUCT.md`, `.agents/context/DESIGN.md` and `.impeccable/design.json`; no new visual world, font, asset, token or component kit is approved.
+# TenantAgentExperience
 
-## Direction contract — 2026-10-22
+Mode: Operate. Code-led.
 
-**THESIS:** Inspect retained derived Experience with explicit ownership, source lineage and retention controls beside independently managed learned Memory.
+## Direction contract
 
-**OWN-WORLD:** Reuse the existing `AppShell` token bridge, access navigation, `AgentConfigurationPanel`, shared collection table, `useAdminDetailLayout`, native Ant Design controls and shared confirmation/feedback owners. The incumbent dark role surfaces, system UI type and 8/12/16px rhythm remain authoritative.
+THESIS: Identify the selected agent, lifecycle and adopted Definition before editing. Use contextual Identity/Behavior/Execution/Activity/Access navigation and an explicit organization transition. Settings categories retain one sparse-draft controller and field-level source/reset. Keep current authority, guarded save/cancel, stale/unknown readback and non-destructive recovery.
 
-**STORY:** Continuity introduces learned Memory and retained Experience as separate panels. Experience offers an explicit history filter, recall-settings link, Reload and readable-scope Reset. The compact collection shows goal, owner, visibility and exact actions. Expansion discloses structured observations, source identity/cursor, immediate lineage, revision and update time. Suppression retains human inspection; restore makes an eligible record available to recall subject to current settings/access; deletion clears content while retaining provenance. Stale or uncertain changes require a fresh read. Chat and Inbox retain the same exact saved-action approval inspector, and decision status remains distinct from execution result.
+OWN-WORLD: Native Ant Design v6 on evergreen layout/container/elevated surfaces, warm white working text, mint links and independent semantic status colors.
 
-**FIRST VIEWPORT:** Shared organization/Agent shell and Continuity title/purpose lead into learned Memory; Retained Experience follows in the same internal scroller. The narrow top capture intentionally ends within Memory; it is not a claim that both panels fit one viewport. No dashboard composition or separate management shell is introduced.
+STORY: Understand the authorized owner and current saved state, perform the named task, and inspect its attributable result or explicit recovery.
 
-**FORM:** Existing panel insets, wrapping Flex action rows, compact native table and responsive Descriptions own the layout. Summary columns may scroll locally. Expanded narrative and provenance fit the visible collection width, using the shared collection container and `admin-expanded-record` for both Memory and Experience. Labels align at the existing medium breakpoint and stack below it. Narrow actions retain the incumbent 40px minimum height. This is a shared overflow correction, not a new design token.
+FIRST VIEWPORT: This composition remains inside its authorized page/Chat/inspector owner. The shared task/scope heading precedes native controls, evidence and actions; narrow layouts wrap and use local overflow.
 
-Behavior authority: [canonical Experience tools and human retention](../../docs/14-api-and-realtime-protocol.md#canonical-experience-tools-and-human-retention) and [tenant interaction specification](../../docs/19-multi-tenant-iam-ux.md). This brief records presentation; `/docs` owns permissions, source proofs, exact consent and retention semantics.
+FORM: Inherit the selected field-guide working grammar, candidate 7, seed `cb1be48c`; contextual classification without literal book decoration.
 
-## Bounded preservation evidence — 2026-10-22
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
-The documenter reopened all eight PNGs in [tenant-experience captures](../review/tenant-experience), verified their dimensions and SHA256, and compared the finished source against the incumbent system. Four desktop regions are 1400×950 and four narrow regions are 390×844: Continuity top, retained Experience, expanded source/detail and tombstone after reload. The supplied fresh reviewer initially found only mobile expanded-narrative width; the shared collection-owner correction resolved that scored finding. The targeted re-review reports all eight captures valid, remaining checklist rows clear and **ship for the scored correction**; it does not claim a second full review. Other checklist rows retain their initial full-review result.
+The [Product Experience Contract](../../docs/product-experience-contract.md) and [frontend specification](../../docs/13-frontend-implementation-spec.md) own behavior. [DESIGN](../../.agents/context/DESIGN.md) owns concise visual guidance. Ant Design v6 controls and shared layout owners provide the presentation; no second framework or page-local tokens.
 
-The supplied native Synthetic journey covered exact source Review → record Review → reload → suppress → restore → delete → reload at 1400px and 390px; `/private/tmp/tenant-experience-native/browser-review-fix.log` records two passing tests. This documentation pass did not rerun those journeys. The one pre-correction detector result is `[]` at `/private/tmp/tenant-experience-native/detector.json`; no second detector scan is claimed.
+## Qualification
 
-The mobile expanded record now shows wrapped narrative and complete source/provenance fields within the visible collection while summary columns retain their own horizontal scrolling. Screenshots cover visible scrolled regions, not every state or an entire page. Approval UI is source-sampled and journey-qualified by the supplied implementation evidence; the eight static captures do not show the approval dialog, confirmation, keyboard/focus, hover, contrast measurement, denied/stale/empty branches or intermediate suppressed/restored states. No new runtime, broad UI acceptance, CI or milestone claim is made here.
+The [delivery ledger](../../docs/reports/product-experience-delivery-2026-10-30.md) and [master manifest](../../docs/reports/assets/product-experience/coverage.json) record actual journeys, roles, inspected images and open limits. This refreshed brief is source metadata, not acceptance. Preserve existing meaningful states and operations; verify desktop/tablet/mobile and narrow content/keyboard/authority boundaries.
 
-PRODUCT, DESIGN and sidecar remain byte-for-byte unchanged. Exact preservation/source/capture hashes and limitations are in `/private/tmp/tenant-experience-native/design-documentation.md`. Historical sidecar source fingerprints already drift for PRODUCT/DESIGN, app CSS and AccessApp, while `AppShell`, `antdTheme`, shared configuration layout and detail-layout fingerprints still match. Historical records also reference removed Admin source modules. These are pre-existing documentation provenance gaps, reported without repair or canonization. No new presentation-system defect was identified within this bounded comparison.
+## Source fingerprints
 
-
-## Explicit human review extension — 2026-10-22
-
-The Retained Experience panel adds Review completed work through its existing heading-action owner. `TenantExperienceReview` uses a native dark Ant Design Modal, vertical Form, the shared tenant conversation picker or exact completed Run ID, responsive `useAdminDetailLayout` Descriptions, shared confirmation, semantic Alert and existing Activity link. Keep the selected source, stable observed-through cutoff and revision legible before Queue review. The existing system face, role surfaces and 8/12/16px spacing retain their owners; this ordinary extension adds no visual world, CSS, tokens, fonts, assets or component kit.
-
-The confirmation states that admission supplies neither source inspection consent nor recording permission. The acknowledgement distinguishes Review queued from Existing review found, explains that the work may require separate approval or finish without an observation, and links to continuation-aware Activity for the factual outcome. Source selector changes retire the old preview; scope retirement destroys its confirmation through the existing identity owners. Command failures require deliberate fresh source inspection and do not replay. These are presentation observations of the [explicit review interaction contract](../../docs/19-multi-tenant-iam-ux.md#starting-an-explicit-experience-review); [the protocol](../../docs/14-api-and-realtime-protocol.md#explicit-tenant-experience-review-requests) owns the exact source, admission, consent, ownership and recovery behavior.
-
-### Manual review finish evidence
-
-The supplied fresh [finish review](/private/tmp/tenant-experience-review-native/finish-review.md) contains all five required sections and returns **ship**, with no material fixes, for this bounded incumbent-system extension. This documenter individually reopened all eight final PNGs under [manual review captures](../review/tenant-experience-review), checked their dimensions and SHA256, and compared the finished source with the incumbent design. Four desktop captures are 1400×950 and four mobile captures are 390×844: selected-source preview, source actions, admission acknowledgement and settled Activity result. The mobile source-actions capture deliberately shows the bottom of the scrolled native modal; its companion preview establishes the title and opening content. Queue review and Close remain reachable. The paired Activity captures show the plain selected-source task, Completed ApprovalContinuation and actual recorded-observation response, without internal task JSON or source witness.
-
-The supplied final capture-qualified native Synthetic log reports two passing journeys at 1400/390px (29.8 seconds), exercising exact source confirmation, separate source/record approvals and the factual continued result. This documentation pass did not rerun the app or those journeys. The supplied detector result is the single `[]` at `/private/tmp/tenant-experience-review-native/detector.json`; no second detector scan is claimed. Static captures do not independently establish exact confirmation, picker interaction, Completed Run input, existing-receipt, denied/stale/unknown-result branches, scope retirement, keyboard/focus/hover, assistive-technology behavior or measured contrast. Source review and supplied functional evidence keep their own bounds. No broad design-system, proposal, CI or milestone acceptance is claimed.
-
-PRODUCT, DESIGN and `.impeccable/design.json` remain byte-for-byte unchanged. The detailed comparison, source/capture fingerprints and preservation checks are in `/private/tmp/tenant-experience-review-native/design-documentation.md`. Historical sidecar hashes still drift for PRODUCT/DESIGN, app CSS and AccessApp; AppShell, antdTheme, shared configuration layout and detail-layout hashes still match. Some historical Admin source targets are absent. These pre-existing provenance gaps are preserved without repair or canonization. No new presentation-system defect was found in this bounded comparison.
+| Source | SHA256 |
+| --- | --- |
+| `web/src/features/access/TenantAgentExperience.tsx` | `4729b1317f37df6eaa9caf10ed53759c885f536984d49ebb4d7521c082e5852a` |
+| `web/src/app/antdTheme.ts` | `8f13dc29dc96e4ef2dcc86be8150743d7656975cbe202b06f04f039a8a8109ae` |
+| `web/src/app/AppShell.tsx` | `35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1` |
+| `web/src/app.css` | `e827076d776b5687e59bd83d86cba88d889203430bc8ae23a14e85c6014e0cae` |

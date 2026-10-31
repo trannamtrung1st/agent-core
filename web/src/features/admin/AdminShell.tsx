@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Breadcrumb, Button, Drawer, Flex, Layout, Divider, Tooltip, Typography, theme } from 'antd';
-import { MenuOutlined } from '@ant-design/icons';
+import { Breadcrumb, Button, Drawer, Dropdown, Flex, Layout, Divider, Tooltip, Typography, theme } from 'antd';
+import { ArrowLeftOutlined, DownOutlined, MenuOutlined } from '@ant-design/icons';
+import { navigateToAppPath } from '../../app/appRoute';
 import { AdminNavigationIcon } from './AdminNavigationIcon';
 import { followAppLink } from '../../app/appLink';
 import { AdminDraftStatus } from './AdminDraftStatus';
@@ -14,6 +15,9 @@ export type AdminShellContext = {
   navigation: (NavigationPage & { href: string })[];
   headerActions: ReactNode;
   scopeAction?: ReactNode;
+  scopeNavigation?: { id: string; label: string; href: string; group: string }[];
+  organizationNavigation?: { id: string; label: string; href: string; group: string }[];
+  parentLink?: { label: string; href: string };
 };
 
 export function AdminShell({ headingActions, headingMetadata, context, children }: { context: AdminShellContext; headingActions?: ReactNode; headingMetadata?: ReactNode; children: ReactNode }) {
@@ -60,21 +64,24 @@ export function AdminShell({ headingActions, headingMetadata, context, children 
     return () => cancelAnimationFrame(frame);
   }, [routeKey]);
   const nav = <nav aria-label="Admin navigation" className="admin-navigation">
-    {[...new Set(items.map(p => p.group))].map(group => <div className="admin-nav-group" key={group}>
-      {group && <Typography.Text type="secondary" className="admin-nav-group-title">{group}</Typography.Text>}
+    {context.parentLink && <a className="admin-nav-back" href={context.parentLink.href} onClick={followAppLink}><ArrowLeftOutlined aria-hidden />{context.parentLink.label}</a>}
+    {context.organizationNavigation && <Dropdown trigger={['click']} menu={{ items: context.organizationNavigation.map(p => ({ key: p.href, label: p.label })), onClick: ({ key }) => navigateToAppPath(key) }}><Button icon={<MenuOutlined aria-hidden />}>Organization navigation <DownOutlined aria-hidden /></Button></Dropdown>}
+    {[...new Set(items.map(p => p.group))].map(group => <details className="admin-nav-group" key={`${context.areaLabel}:${group}:${context.parentLink?.href ?? ''}`} open={group === active.group || group === 'Work' || group === 'Identity' || group === 'Account' || group === 'Platform' || group === ''}>
+      <summary className="admin-nav-group-title">{group || 'Overview'}</summary>
       {items.filter(p => p.group === group).map(p => <Tooltip key={p.id} title={dirtyPages.includes(p.id) ? 'Unsaved changes' : undefined} placement="right" trigger={['hover', 'focus']}><a href={p.href} aria-label={p.label} aria-description={dirtyPages.includes(p.id) ? "Unsaved changes" : undefined} aria-current={active?.id === p.id ? 'page' : undefined} className="admin-nav-link" onClick={event => { followAppLink(event); if (event.defaultPrevented) { menuNavigation.current = true; setMenuOpen(false); } }}><AdminNavigationIcon id={p.id} /><span className="admin-nav-label">{p.label}</span>{dirtyPages.includes(p.id) && <span className="admin-nav-unsaved" aria-hidden="true" />}</a></Tooltip>)}
-    </div>)}
+    </details>)}
   </nav>;
   return <AdminDraftStatus.Provider value={reportDirty}><Layout className="admin-layout access-layout">
     <Layout.Header className="admin-header">
       <Flex align="center" wrap gap="var(--ac-space-compact)" className="admin-header-inner">
         {!desktop && <Button icon={<MenuOutlined aria-hidden />} aria-label="Open Admin navigation" onClick={e => { cancelMenuFocus(); opener.current = e.currentTarget; menuNavigation.current = false; setMenuOpen(true); }} />}
-        <Flex align="center" gap="var(--ac-space-compact)" className="admin-brand"><Typography.Title level={3} className="admin-title">Agent Core</Typography.Title><Typography.Text type="secondary" className="admin-brand-area" style={{ fontSize: token.fontSizeSM }}>{context.areaLabel}</Typography.Text></Flex><Divider orientation="vertical" className="admin-brand-divider" />
+        <Flex align="center" gap="var(--ac-space-compact)" className="admin-brand"><Typography.Text strong className="admin-title">Agent Core</Typography.Text><Typography.Text type="secondary" className="admin-brand-area" style={{ fontSize: token.fontSizeSM }}>{context.areaLabel}</Typography.Text></Flex><Divider orientation="vertical" className="admin-brand-divider" />
         <Breadcrumb aria-label="Admin breadcrumb" className="admin-breadcrumbs" items={[
           { title: <span className="admin-breadcrumb-owner" title={context.name}>{context.scopeAction ?? context.name}</span> },
           { title: active?.label ?? 'Page not found' },
         ]} />
         <Flex wrap gap="var(--ac-space-compact)" className="admin-header-actions">
+          {!!context.scopeNavigation?.length && <Dropdown trigger={['click']} menu={{ items: context.scopeNavigation.map(p => ({ key: p.href, label: p.label })), onClick: ({ key }) => navigateToAppPath(key) }}><Button aria-label="Account and platform navigation" icon={<DownOutlined aria-hidden />}><span className="admin-scope-label">Account</span></Button></Dropdown>}
           {context.headerActions}
         </Flex>
       </Flex>
@@ -105,7 +112,7 @@ export function AdminShell({ headingActions, headingMetadata, context, children 
 export function AdminPageHeading({ page, metadata, extra }: { page?: NavigationPage; metadata?: ReactNode; extra?: ReactNode }) {
   return <div className="admin-page-heading">
     <Flex justify="space-between" align="center" wrap gap="var(--ac-space-default)">
-      <Flex align="baseline" wrap gap="var(--ac-space-compact)"><Typography.Title level={2} tabIndex={-1} data-admin-page-heading>{page?.label ?? 'Page not found'}</Typography.Title>{metadata && <Typography.Text type="secondary">{metadata}</Typography.Text>}</Flex>
+      <Flex align="baseline" wrap gap="var(--ac-space-compact)"><Typography.Title level={1} tabIndex={-1} data-admin-page-heading>{page?.label ?? 'Page not found'}</Typography.Title>{metadata && <Typography.Text type="secondary">{metadata}</Typography.Text>}</Flex>
       {extra}
     </Flex>
     {page && <Typography.Paragraph type="secondary">{page.description}</Typography.Paragraph>}

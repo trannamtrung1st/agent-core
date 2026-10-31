@@ -1,8 +1,10 @@
+import { captureExperience, openDestination } from './support/experience-navigation';
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import { signInTenant } from './support/tenant-auth';
 
 async function login(page: Page, login = process.env.TENANT_UI_LOGIN ?? 'access-owner@example.test', password = process.env.TENANT_UI_PASSWORD ?? 'synthetic-access-test-password') {
-  await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(login); await page.getByLabel('Password', { exact: true }).fill(password); await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('button', { name: /^Open / }).first()).toBeVisible();
+  await signInTenant(page, login, password);
 }
 async function request<T>(page: Page, path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
   return page.evaluate(async ({ path, body, method }) => {
@@ -102,7 +104,7 @@ test('owned Definition authoring, resource/evaluation publication and lifecycle 
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
   await page.getByRole('button', { name: /^Open / }).first().click();
-  await page.getByRole('link', { name: 'Definitions', exact: true }).click();
+  await openDestination(page, 'Definitions');
   await page.getByRole('button', { name: 'New definition', exact: true }).click();
   await page.getByLabel('Definition name', { exact: true }).fill(definitionName);
   await page.getByRole('button', { name: 'Create definition', exact: true }).click();
@@ -112,14 +114,15 @@ test('owned Definition authoring, resource/evaluation publication and lifecycle 
   await page.getByRole('link', { name: 'Instructions', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Discard unsaved changes?' })).toHaveCount(0);
   await page.getByLabel('Agent instructions', { exact: true }).fill('Respond clearly using only the current owned configuration.');
+  await captureExperience(page, 'definition-draft');
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save draft', exact: true })).toBeDisabled();
-  await page.getByRole('link', { name: 'Resources', exact: true }).click();
+  await openDestination(page, 'Resources');
   await page.getByRole('button', { name: 'Upload resources', exact: true }).click();
   await page.getByLabel('Choose resource files', { exact: true }).setInputFiles([{ name: 'reference.txt', mimeType: 'text/plain', buffer: Buffer.from('Owned resource evidence.') }]);
   await page.getByRole('button', { name: 'Save resources', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Download reference.txt', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Test & Publish', exact: true }).click();
+  await openDestination(page, 'Test & Publish');
   await page.getByRole('button', { name: 'Edit publication checks', exact: true }).click();
   const suite = page.getByRole('dialog', { name: 'Edit publication checks', exact: true });
   await suite.getByRole('button', { name: 'Add check', exact: true }).click();
@@ -182,7 +185,7 @@ test('resource-only Reader, stale save recovery and tenant switch discard old re
   const people = await request<{ items: { login: string; principalId: string }[] }>(page, `${api}/members`); const principalId = people.items.find(p => p.login === email.toUpperCase())!.principalId;
   const roles = await request<{ items: { key: string; roleId: string }[] }>(page, `${api}/roles`); const readerRole = roles.items.find(r => r.key === 'reader')!.roleId;
   const assignment = await request<{ assignmentId: string }>(page, `${api}/role-assignments`, { principalId, roleId: readerRole, resourceType: 'definition', resourceId: first.definitionId, expectedRevision: await revision() });
-  await login(reader, email, 'synthetic-reader-password'); await reader.getByRole('button', { name: /^Open / }).first().click(); await reader.getByRole('link', { name: 'Definitions', exact: true }).click();
+  await login(reader, email, 'synthetic-reader-password'); await reader.getByRole('button', { name: /^Open / }).first().click(); await openDestination(reader, 'Definitions');
   await expect(reader.getByRole('button', { name: 'New definition', exact: true })).toHaveCount(0);
   await expect(reader.getByRole('link', { name: `Private owner ${nonce}`, exact: true })).toHaveCount(0);
   await reader.getByRole('link', { name: `Scoped reader ${nonce}`, exact: true }).click();
@@ -211,6 +214,6 @@ test('resource-only Reader, stale save recovery and tenant switch discard old re
   await page.goto(`${prefix}/admin/definitions/${first.definitionId}/drafts/${first.draftId}/profile`); await waiting;
   await page.getByRole('button', { name: /^Switch organization/ }).click(); await page.getByRole('button', { name: `Open Other organization ${nonce}`, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/t/${beta.tenantId}/admin/access`)); release();
-  await page.getByRole('link', { name: 'Definitions', exact: true }).click(); await expect(page.getByText('No definitions you can read in this organization.', { exact: true })).toBeVisible();
+  await openDestination(page, 'Definitions'); await expect(page.getByText('No definitions you can read in this organization.', { exact: true })).toBeVisible();
   await expect(page.getByText(`Scoped reader ${nonce}`, { exact: true })).toHaveCount(0);
 });

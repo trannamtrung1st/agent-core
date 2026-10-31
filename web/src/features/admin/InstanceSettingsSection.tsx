@@ -20,6 +20,12 @@ const fieldOrder: Record<string, string[]> = {
 };
 const choiceLabels: Record<string, string> = { concise: 'Concise', balanced: 'Balanced', acknowledgeThenContinue: 'Acknowledge, then continue', answerNewTurn: 'Answer new turn' };
 const nullable = new Set(['initializationScript','maxConsecutiveProactiveTurns', 'maxSilentEvaluations', 'maxInactivityMs', 'preference', 'speechRecognizer', 'speechSynthesizer']);
+const settingCategories = {
+  Conversation: ['instructions', 'conversationPolicy', 'voice', 'modelDefaults'],
+  Behavior: ['behaviorPolicy', 'initiativePolicy', 'providerPreferences', 'memoryPolicy', 'stateIsolationPolicy'],
+  Authority: ['capabilities', 'triggerPolicy', 'evaluationPolicy', 'sandboxPolicy'],
+  'All settings': [],
+};
 const numerics = new Set(['cpu','memoryMiB','maxCommandSeconds','idleTtlSeconds','maxLifetimeSeconds','storageBytes','maxOutputTokens', 'silenceThresholdMs', 'cooldownMs', 'maxPerSilencePeriod', 'maxConsecutiveProactiveTurns', 'maxSilentEvaluations', 'maxInactivityMs', 'speakingRate', 'maxActiveRegistrations', 'oneShotHorizonDays', 'minRecurrenceDays', 'minFixedIntervalSeconds']);
 
 
@@ -27,6 +33,7 @@ export type InstanceSandboxContext = { profiles: readonly Pick<SandboxProfile, '
 export function InstanceSettingsSection({ instanceId, archived, active = true, page, onDirtyChange, onBusyChange, onUpdated, transport, confirmationContext, sandboxContext, saveBlocked = false, externalBusy = false, refreshKey, systemManaged = false }: { systemManaged?: boolean; instanceId: string; archived: boolean; active?: boolean; page?: InstancePage; onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void; onUpdated: () => void; transport: InstanceSettingsTransport; confirmationContext?: string; sandboxContext?: InstanceSandboxContext; saveBlocked?: boolean; externalBusy?: boolean; refreshKey?: number }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const [expanded, setExpanded] = useState<string[]>([]);
+  const [category, setCategory] = useState<keyof typeof settingCategories>('Conversation');
   const formId = useId();
   const settings = useInstanceSettingsController(instanceId, archived, active, onUpdated, refreshKey, false, transport);
   const sections = settings.sections;
@@ -47,17 +54,17 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
   useEffect(() => { if (requested) setExpanded(current => [...new Set([...current, ...requested])]); }, [page]);
   const configuration = useInstanceConfigurationEditor('Settings', { dirty: independentDirty, busy: busy || loading, revision: sections?.[0]?.instanceRevision, blocked: !sections || saveBlocked ? 'Read current settings before saving.' : undefined, save: saveAll, discard: () => setDrafts({}), refresh: settings.reload });
   return <Flex vertical gap={token.padding}>
-    <Typography.Paragraph type="secondary" className="admin-settings-intro" style={{ margin: 0 }}>{page==='sandbox'?'Unchanged values inherit the Definition policy and chosen Profile. Only edited fields become Instance overrides. The next Run adopts saved changes; a changed environment is replaced only after safe termination.':'Only fields you change become Instance overrides. Unchanged fields inherit the selected Definition. Changes apply to the next new Run in any existing conversation. Current Runs are unchanged.'}</Typography.Paragraph>
-    <Button style={{ alignSelf: "flex-start" }} disabled={busy || loading} onClick={() => void reload()}>Reload settings</Button>
+    <Typography.Paragraph type="secondary" className="admin-settings-intro" style={{ margin: 0 }}>{page==='sandbox'?'Unchanged values inherit the Definition policy and chosen Profile. Only edited fields become Instance overrides. The next Run adopts saved changes; a changed environment is replaced only after safe termination.':'Unchanged fields inherit the Definition. Your changes apply to future Runs; current work keeps its saved configuration.'}</Typography.Paragraph>
     {error && <Alert type="error" showIcon title={error} action={<Button disabled={busy || loading} onClick={() => void reload()}>Retry settings</Button>} />}
     {settings.modelError && <Alert type="warning" showIcon title="Model catalog unavailable" description="Saved model choices are preserved. Reload models before changing the default model." action={<Button disabled={busy} onClick={settings.reloadModels}>Reload models</Button>} />}
     {loading && <Spin aria-label="Loading Instance settings" />}
-    {sections && <Collapse styles={{ header: { alignItems: 'center' } }} activeKey={expanded} onChange={keys => setExpanded(Array.isArray(keys) ? keys : [keys])} items={sections.filter(section => !requested || requested.includes(section.section)).map(section => {
+    <Flex wrap align="end" gap={token.paddingXS}>{!page && <Flex vertical gap={token.paddingXS} style={{ flex: '1 1 200px' }}><Typography.Text>Settings category</Typography.Text><Select aria-label="Settings category" value={category} onChange={setCategory} options={(Object.keys(settingCategories) as (keyof typeof settingCategories)[]).map(key => ({ value: key, label: `${key}${dirtySections.some(section => key === 'All settings' || settingCategories[key].includes(section)) ? ' · Unsaved' : ''}` }))} /></Flex>}<Button disabled={busy || loading} onClick={() => void reload()}>Reload settings</Button></Flex>
+    {sections && <Collapse styles={{ header: { alignItems: 'center' } }} activeKey={expanded} onChange={keys => setExpanded(Array.isArray(keys) ? keys : [keys])} items={sections.filter(section => requested ? requested.includes(section.section) : category === 'All settings' || settingCategories[category].includes(section.section) || !Object.values(settingCategories).flat().includes(section.section)).map(section => {
       const draft = drafts[section.section] ?? emptyDraft();
       const changed = Object.keys(draft.set).length + draft.clear.length > 0;
       const title = systemManaged && section.section === 'instructions' ? 'Additional instructions' : titles[section.section];
       const hasOverrides = Object.keys(draft.set).some(field => field !== 'allowUnreadUnsupportedTypes') || Object.keys(section.overrides).some(field => field !== 'allowUnreadUnsupportedTypes' && !draft.clear.includes(field));
-      return { key: section.section, label: <Flex wrap align="center" gap={token.paddingXS}>
+      return { key: section.section, extra: <Typography.Text type="secondary" aria-hidden>{hasOverrides ? 'Customized' : 'Inherited'}</Typography.Text>, label: <Flex wrap align="center" gap={token.paddingXS}>
         <span id={section.section === "triggerPolicy" ? "restrictions" : section.section} tabIndex={-1} className="admin-settings-anchor">{title}</span>
         {changed && <Typography.Text type="secondary">Unsaved changes</Typography.Text>}
         {hasOverrides && <Tooltip trigger={['hover', 'focus', 'click']} title={changed ? 'Unsaved Instance overrides' : 'This section has Instance overrides.'}><InfoCircleOutlined tabIndex={0} aria-label={`${title}: Instance override`} /></Tooltip>}

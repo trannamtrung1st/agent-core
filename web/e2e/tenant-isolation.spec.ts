@@ -1,10 +1,11 @@
+import { canonicalFetch } from './support/tenant-auth';
 import { test, expect, request as requests, type APIRequestContext } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password';
 async function call<T>(api: APIRequestContext, route: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
-  const result = await api.fetch(route, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
+  const result = await canonicalFetch(api, route, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
   expect(result.ok(), `${method} ${route}: ${result.status()} ${await result.text()}`).toBeTruthy(); return result.status() === 204 ? undefined as T : result.json();
 }
 test('coordinated isolation saves atomically, retains stale drafts and recovers a lost reply across desktop and narrow sizes', async ({ page }) => {
@@ -50,7 +51,7 @@ test('coordinated isolation saves atomically, retains stale drafts and recovers 
     await page.getByRole('heading', { name: 'State & Isolation', exact: true }).first().scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(captures, 'mobile.png'), fullPage: true, animations: 'disabled' });
     await page.goto(`/t/${tenant}/admin/agents/${id}/settings`);
-    await expect(page.getByRole('link', { name: 'State, Memory and Voice enablement share the coordinated State & Isolation editor', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Configure continuity, memory and voice availability', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Memory policy', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'State & Isolation', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Voice', exact: true }).click();

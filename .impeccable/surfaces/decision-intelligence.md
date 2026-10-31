@@ -1,18 +1,39 @@
-# Decision Intelligence extension
+---
+version: 1
+slug: "decision-intelligence"
+primary_target: "web/src/features/access/DecisionServiceReadiness.tsx"
+related_targets: ["web/src/app/antdTheme.ts", "web/src/app/AppShell.tsx", "web/src/app.css"]
+---
 
-Mode: Operate. Approved direction: extend the incumbent Ant Design v6 world with Organization AI Models → Routing and canonical inherit/fixed/auto preferences across Chat, Definition, Instance and Automation, plus the compact operator-only System catalog status/help panel. No new layout or visual identity.
+# DecisionServiceReadiness
 
-Task: deliberately opt into bounded Auto routing, choose an explicit fallback policy, save under current IAM/CAS, and inspect the concrete last Run outcome. Distinguish configuration from readiness and measured quality. Cost, capacity and latency metadata remain unknown.
+Mode: Operate. Code-led.
 
-Use the existing AdminShell/Tabs, bounded vertical Forms, useTenantCommand, draft guard, AccessFeedback, native Select/Checkbox and shared ExecutionModelFields. The shell owns outer spacing; existing 8/12/16 token gaps own groups. Chat preserves its compact model Dropdown, separate inherit row, and new Auto row. Any unavailable/refused outcome keeps repair guidance and never silently substitutes a fixed selection. Save/refusal/readback/focus and responsive/keyboard journeys must be exercised.
+## Direction contract
 
-Verify 1440/768/390/320 CSS px, long model labels, keyboard controls, disabled/read-only and stale revision recovery, plus actual Auto Chat → immutable Run. Real GPU quality/latency and physical-device acceptance remain separate.
+THESIS: Task-first contextual administration. Use the shared heading, scope trail, native collection/filter/detail/edit compositions and dark evergreen tokens. Keep resource ownership, exact revisions, server authority, draft guards and honest loading/error/read-only/uncertain states.
 
+OWN-WORLD: Native Ant Design v6 on evergreen layout/container/elevated surfaces, warm white working text, mint links and independent semantic status colors.
 
-## Finished extension record — 2026-10-26
+STORY: Understand the authorized owner and current saved state, perform the named task, and inspect its attributable result or explicit recovery.
 
-The [fresh finish review](../../docs/reports/assets/decision-intelligence/finish-review.md) returned SHIP for the represented Routing, System catalog, Chat and picker scope in its superseding full review. The subsequent [documentation comparison](../../docs/reports/assets/decision-intelligence/documentation-review.md) independently reopened all sixteen refreshed final captures and checked every dimension/SHA256, then compared the final changed components, observed-Run mapping, shared theme and containment rules with the incumbent PRODUCT/DESIGN. This packet supersedes the earlier screenshot fingerprints.
+FIRST VIEWPORT: This composition remains inside its authorized page/Chat/inspector owner. The shared task/scope heading precedes native controls, evidence and actions; narrow layouts wrap and use local overflow.
 
-Routing retains the shared AdminShell/Tabs, 48rem bounded native Form, semantic Alerts and existing 8/12/16px spacing. DecisionServiceReadiness now owns the shared native readiness Alert in Routing and the permission-gated SystemModelPresets insertion. Its action reflows below the description at narrow widths through the same scoped native Alert rule. System operator help keeps host configuration, shadow-mode quality/hardware qualification and notConfigured/loading checks separate from shared catalog metadata, without exposing service-key values. Chat retains the compact composer Dropdown: inheritance, deliberate Auto and fixed selections remain separate; last Run names the actual prior offering and effective reasoning effort independently of saved model preference. Reasoning intent remains a separate choice: inherited reasoning, model default, Auto or fixed supported effort. A fixed effort can constrain Auto eligibility, and a fixed model can retain Auto reasoning. A fixed slider appears only for fixed intent on a concrete reasoning-capable model. The narrow trigger truncates within its bounds while the popup wraps the separate last-Run explanation. Shared ExecutionModelFields extends existing labeled Selects. Selection/readback and session.ready map observedFromRun; current response-start updates the observed offering/effort while preserving the saved preference. ModelPicker retains that observation for fixed/inherited choices too. Those branches, other reasoning menus and authoring layouts have source comparison only in this image packet. Both lower Routing captures show Save/Reload; the 390px view also shows final guidance.
+FORM: Inherit the selected field-guide working grammar, candidate 7, seed `cb1be48c`; contextual classification without literal book decoration.
 
-Incumbent reuse is sound. Preserve PRODUCT.md, DESIGN.md, the sidecar and all earlier briefs; no token, font, palette, depth, asset or identity change is recorded. Historical sidecar fingerprint drift and two existing missing-primary-target briefs are reported in the documentation comparison without repair. The captures do not visually accept every transient, permission, stale or keyboard state. Functional evidence remains separate; real GPU quality/latency, physical devices, CI, full-proposal and milestone acceptance are not design claims.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+
+The [Product Experience Contract](../../docs/product-experience-contract.md) and [frontend specification](../../docs/13-frontend-implementation-spec.md) own behavior. [DESIGN](../../.agents/context/DESIGN.md) owns concise visual guidance. Ant Design v6 controls and shared layout owners provide the presentation; no second framework or page-local tokens.
+
+## Qualification
+
+The [delivery ledger](../../docs/reports/product-experience-delivery-2026-10-30.md) and [master manifest](../../docs/reports/assets/product-experience/coverage.json) record actual journeys, roles, inspected images and open limits. This refreshed brief is source metadata, not acceptance. Preserve existing meaningful states and operations; verify desktop/tablet/mobile and narrow content/keyboard/authority boundaries.
+
+## Source fingerprints
+
+| Source | SHA256 |
+| --- | --- |
+| `web/src/features/access/DecisionServiceReadiness.tsx` | `7282f9af8e0cbd09ff54b78c2c5831ba33704278faa39244479458950e65e591` |
+| `web/src/app/antdTheme.ts` | `8f13dc29dc96e4ef2dcc86be8150743d7656975cbe202b06f04f039a8a8109ae` |
+| `web/src/app/AppShell.tsx` | `35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1` |
+| `web/src/app.css` | `e827076d776b5687e59bd83d86cba88d889203430bc8ae23a14e85c6014e0cae` |

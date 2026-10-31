@@ -1,8 +1,15 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render as renderView, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App, ConfigProvider } from 'antd';
 import { InstanceSettingsSection } from './InstanceSettingsSection';
 import type * as settingsTypes from '../../services/instanceConfiguration';
+// Existing save/recovery tests intentionally inspect multiple settings categories.
+function render(...args: Parameters<typeof renderView>) {
+  const result = renderView(...args);
+  const category = screen.queryByRole('combobox', { name: 'Settings category' });
+  if (category) { fireEvent.mouseDown(category); fireEvent.click(screen.getByTitle('All settings')); }
+  return result;
+}
 const api = { listInstanceSettings: vi.fn(), patchInstanceSettings: vi.fn() };
 const fixtureTransport = { list: (id: string) => api.listInstanceSettings(id), patch: (id: string, section: settingsTypes.SettingsSection, set: Record<string, settingsTypes.SettingValue>, clear: string[]) => api.patchInstanceSettings(id, section, set, clear), models: () => modelApi.listModels() };
 const fixtureSandbox = { profiles: [] as import('../../services/sandboxes').SandboxProfile[], summary: () => null };
@@ -100,7 +107,7 @@ it('uses host-default reasoning choices for an explicit inherited preference and
   await waitFor(() => expect(effort).toBeEnabled());
   fireEvent.mouseDown(effort);
   await screen.findByTitle('low');
-  const choices = Array.from(document.querySelectorAll('.ant-select-item-option-content')).map(element => element.textContent);
+  const choices = Array.from(document.querySelectorAll('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content')).map(element => element.textContent);
   expect(choices).toEqual(['Use inherited reasoning', 'Model default', 'Auto reasoning', 'low', 'medium', 'high']);
 });
 

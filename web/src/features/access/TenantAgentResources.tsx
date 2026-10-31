@@ -75,7 +75,7 @@ export function TenantAgentResources({ context, id }: { context: TenantContext; 
     });
   }
   return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">{guard.holder}
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to instances</Typography.Link><Button ref={reloadButton} disabled={busy || !!selection} onClick={reload}>Reload resources</Button></Flex>
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link><Button ref={reloadButton} disabled={busy || !!selection} onClick={reload}>Reload resources</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}{committed && <Alert type="info" showIcon title="Resource changes were saved" description="Reload reads current facts and never replays a command." />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={reload} /> : view && <>
       <TenantAgentHeading view={{ agent: view.agent, canUpdate: view.canCreate || view.items.some(item => item.canManage || item.canDelete) }} readOnlyDescription="Resource changes require typed item access. Creating or copying a local file requires organization-wide Resource read and manage access." />

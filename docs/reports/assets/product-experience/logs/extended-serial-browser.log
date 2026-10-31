@@ -1,0 +1,398 @@
+
+Running 37 tests using 1 worker
+
+(node:17042) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 e2e/system-administration.spec.ts:12:1 › System operators manage metadata and exact status through native guarded controls (19.7s)
+  ✓   2 e2e/system-browser-privacy.spec.ts:15:1 › platform policy keeps effective startup facts, recovers lost reply and retains stale Unmasked draft with a fresh acknowledgement (5.8s)
+  ✓   3 e2e/system-browser-privacy.spec.ts:45:1 › tenant Owner has no platform policy entry or data, and retired endpoints have no owner-header fallback (3.1s)
+  ✓   4 e2e/system-browser-privacy.spec.ts:62:34 › policy read recovery, keyboard and explicit draft discard at 1440px (1.1m)
+  ✓   5 e2e/system-browser-privacy.spec.ts:62:34 › policy read recovery, keyboard and explicit draft discard at 390px (5.3s)
+  ✓   6 e2e/system-operators.spec.ts:11:1 › guarded platform role assignment, revocation, recovery and final-operator protection (12.1s)
+  ✘   7 e2e/tenant-agent-access.spec.ts:34:1 › create, grant exact chat and independent execution, inspect permissions, recover stale revoke and lifecycle (18.4s)
+(node:18567) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   8 e2e/tenant-agent-access.spec.ts:76:1 › a resource-scoped reader can inspect only that agent and loses private content after revocation (8.1s)
+  ✓   9 e2e/tenant-automations.spec.ts:26:1 › Schedule management preserves stale drafts, admits saved work and cancels registration at desktop and narrow sizes (12.4s)
+  ✓  10 e2e/tenant-automations.spec.ts:61:1 › scoped Automation reader has no mutation controls and read revocation retires the open detail (12.3s)
+  ✓  11 e2e/tenant-automations.spec.ts:82:1 › exact Automation admission is reviewed before any work exists and settles truthfully at narrow width (12.1s)
+  ✓  12 e2e/tenant-automations.spec.ts:112:1 › configured completion uses the shared tenant picker, retains a stale destination and delivers the exact report once (16.4s)
+  ✓  13 e2e/tenant-automations.spec.ts:163:1 › selected-conversation execution preserves its destination through stale recovery and exact admission Review (23.8s)
+  ✓  14 e2e/tenant-automations.spec.ts:224:1 › tenant Activity inspects original background facts and continues the same Session through canonical Chat (18.3s)
+  ✓  15 e2e/tenant-browser-profile.spec.ts:20:1 › named confirmation, real reset, lost reply readback and no automatic physical replay at desktop and mobile (5.8s)
+  ✓  16 e2e/tenant-browser-profile.spec.ts:49:1 › stale preflight requires fresh observation and archived profile stays readable without reset at 320px (6.0s)
+  ✘  17 e2e/tenant-continuity.spec.ts:18:85 › historical source change refusal fresh exact consent and reload 1400 (29.6s)
+(node:20423) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  18 e2e/tenant-continuity.spec.ts:18:85 › historical source change refusal fresh exact consent and reload 390 (28.7s)
+(node:20454) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  19 e2e/tenant-credentials.spec.ts:24:1 › canonical Credential purposes, protected replacement and separate Google consent (15.9s)
+(node:20513) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  20 e2e/tenant-credentials.spec.ts:111:1 › exact Credential grants, read-only inspection, revoked-write and stale-draft recovery (15.9s)
+(node:20550) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  21 e2e/tenant-credentials.spec.ts:153:1 › protected failure clears only the secret and acknowledged creation never offers duplicate retry (15.9s)
+(node:20570) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  22 e2e/tenant-events.spec.ts:23:1 › webhook management preserves exact source drafts and distinguishes receipt acceptance from execution across native widths (9.8s)
+  ✓  23 e2e/tenant-events.spec.ts:64:1 › exact webhook read scope filters records and revocation retires protected receipt details (8.6s)
+  ✓  24 e2e/tenant-events.spec.ts:85:1 › typed subscriptions test filters, preserve child identities, and separate receipt approval from Run admission (19.7s)
+  ✓  25 e2e/tenant-instance-controls.spec.ts:32:1 › 320px budgets retain stale drafts; policy freeze preserves drafts; model reset uses current catalog (20.8s)
+  ✓  26 e2e/tenant-instance-controls.spec.ts:82:1 › exact scoped controls reader needs no IAM inspector and loses protected configuration after revocation (8.2s)
+  ✓  27 e2e/tenant-instance-controls.spec.ts:101:1 › self-management saved status, retained choices and keyboard confirmations fit all supported widths (8.9s)
+  ✓  28 e2e/tenant-instance-controls.spec.ts:141:1 › Definition procedure labels provide mobile touch targets and save only explicit defaults (5.1s)
+  ✓  29 e2e/tenant-instance-resources.spec.ts:36:1 › 320px owner imports, previews, downloads, edits, copies and deletes with exact stale recovery (16.2s)
+  ✓  30 e2e/tenant-instance-resources.spec.ts:59:1 › partial and acknowledged-malformed imports retire saved files and resume only remaining staged bytes (8.3s)
+  ✓  31 e2e/tenant-instance-resources.spec.ts:79:1 › exact resource reader can preview without IAM tools and revocation retires nested protected content (14.0s)
+  ✓  32 e2e/tenant-instance-skills.spec.ts:31:1 › 320px owner authors and reviews Skills with exact stale recovery and inherited choices (11.6s)
+  ✓  33 e2e/tenant-instance-skills.spec.ts:52:1 › exact item reader can inspect without IAM tools and revocation retires open protected content (12.6s)
+  ✘  34 e2e/tenant-instance-version.spec.ts:48:1 › 320px version paging, guarded review, focus, stale recovery and explicit adoption preserve configuration (49.2s)
+(node:22156) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  35 e2e/tenant-instance-version.spec.ts:67:1 › exact reader needs Definition source permission, can preview without update/IAM inspection and loses protected content on revocation (15.3s)
+  ✘  36 e2e/tenant-isolation.spec.ts:11:1 › coordinated isolation saves atomically, retains stale drafts and recovers a lost reply across desktop and narrow sizes (23.1s)
+(node:22295) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  37 e2e/tenant-runtime-state.spec.ts:11:1 › Runtime State refresh, expiry, exact reader scope and revocation work on native Synthetic at desktop and narrow widths (25.2s)
+
+
+  1) e2e/tenant-agent-access.spec.ts:34:1 › create, grant exact chat and independent execution, inspect permissions, recover stale revoke and lifecycle 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: 'My organizations', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('heading', { name: 'My organizations', exact: true }) with timeout 15000ms
+      - waiting for getByRole('heading', { name: 'My organizations', exact: true })
+
+
+      11 | async function signIn(page: Page, email = login, secret = password) {
+      12 |   await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(email); await page.getByLabel('Password', { exact: true }).fill(secret);
+    > 13 |   await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
+         |                                                                                                                                                                ^
+      14 | }
+      15 | async function select(page: Page, name: string, label: string) { await page.getByRole('combobox', { name, exact: true }).click(); await page.getByTitle(label, { exact: true }).click(); }
+      16 | async function fixture() {
+        at signIn (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-agent-access.spec.ts:13:160)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-agent-access.spec.ts:38:62
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-agent-access-create-22d18--stale-revoke-and-lifecycle/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-agent-access-create-22d18--stale-revoke-and-lifecycle/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-agent-access-create-22d18--stale-revoke-and-lifecycle/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-agent-access-create-22d18--stale-revoke-and-lifecycle/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) e2e/tenant-continuity.spec.ts:18:85 › historical source change refusal fresh exact consent and reload 1400 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('region', { name: 'Conversation approvals', exact: true }).getByText('Waiting for review', { exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('region', { name: 'Conversation approvals', exact: true }).getByText('Waiting for review', { exact: true }) with timeout 15000ms
+      - waiting for getByRole('region', { name: 'Conversation approvals', exact: true }).getByText('Waiting for review', { exact: true })
+
+
+      11 | async function detail(page: Page) {
+      12 |   const panel = page.getByRole('region', { name: 'Conversation approvals', exact: true });
+    > 13 |   await expect(panel.getByText('Waiting for review', { exact: true })).toBeVisible();
+         |                                                                        ^
+      14 |   await panel.getByRole('link', { name: 'Review details', exact: true }).first().click();
+      15 |   const result = page.getByRole('dialog', { name: 'Approval details', exact: true });
+      16 |   await expect(result.getByRole('region', { name: 'Exact saved read', exact: true })).toContainText('Search historical continuity'); return result;
+        at detail (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-continuity.spec.ts:13:72)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-continuity.spec.ts:33:114
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-continuity-historic-7357d-act-consent-and-reload-1400/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-continuity-historic-7357d-act-consent-and-reload-1400/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-continuity-historic-7357d-act-consent-and-reload-1400/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-continuity-historic-7357d-act-consent-and-reload-1400/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) e2e/tenant-continuity.spec.ts:18:85 › historical source change refusal fresh exact consent and reload 390 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('region', { name: 'Conversation approvals', exact: true }).getByText('Waiting for review', { exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('region', { name: 'Conversation approvals', exact: true }).getByText('Waiting for review', { exact: true }) with timeout 15000ms
+      - waiting for getByRole('region', { name: 'Conversation approvals', exact: true }).getByText('Waiting for review', { exact: true })
+
+
+      11 | async function detail(page: Page) {
+      12 |   const panel = page.getByRole('region', { name: 'Conversation approvals', exact: true });
+    > 13 |   await expect(panel.getByText('Waiting for review', { exact: true })).toBeVisible();
+         |                                                                        ^
+      14 |   await panel.getByRole('link', { name: 'Review details', exact: true }).first().click();
+      15 |   const result = page.getByRole('dialog', { name: 'Approval details', exact: true });
+      16 |   await expect(result.getByRole('region', { name: 'Exact saved read', exact: true })).toContainText('Search historical continuity'); return result;
+        at detail (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-continuity.spec.ts:13:72)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-continuity.spec.ts:33:114
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-continuity-historic-9b505-xact-consent-and-reload-390/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-continuity-historic-9b505-xact-consent-and-reload-390/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-continuity-historic-9b505-xact-consent-and-reload-390/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-continuity-historic-9b505-xact-consent-and-reload-390/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) e2e/tenant-credentials.spec.ts:24:1 › canonical Credential purposes, protected replacement and separate Google consent 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: 'My organizations', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('heading', { name: 'My organizations', exact: true }) with timeout 15000ms
+      - waiting for getByRole('heading', { name: 'My organizations', exact: true })
+
+
+      3 | async function login(page: Page, login = 'access-owner@example.test', password = 'synthetic-access-test-password') {
+      4 |   await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(login); await page.getByLabel('Password', { exact: true }).fill(password);
+    > 5 |   await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
+        |                                                                                                                                                                ^
+      6 | }
+      7 | async function request<T>(page: Page, path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
+      8 |   return page.evaluate(async ({ path, body, method }) => {
+        at login (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-credentials.spec.ts:5:160)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-credentials.spec.ts:31:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-credentials-canonic-257af-and-separate-Google-consent/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-credentials-canonic-257af-and-separate-Google-consent/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-credentials-canonic-257af-and-separate-Google-consent/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-credentials-canonic-257af-and-separate-Google-consent/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) e2e/tenant-credentials.spec.ts:111:1 › exact Credential grants, read-only inspection, revoked-write and stale-draft recovery 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: 'My organizations', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('heading', { name: 'My organizations', exact: true }) with timeout 15000ms
+      - waiting for getByRole('heading', { name: 'My organizations', exact: true })
+
+
+      3 | async function login(page: Page, login = 'access-owner@example.test', password = 'synthetic-access-test-password') {
+      4 |   await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(login); await page.getByLabel('Password', { exact: true }).fill(password);
+    > 5 |   await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
+        |                                                                                                                                                                ^
+      6 | }
+      7 | async function request<T>(page: Page, path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
+      8 |   return page.evaluate(async ({ path, body, method }) => {
+        at login (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-credentials.spec.ts:5:160)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-credentials.spec.ts:112:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-credentials-exact-C-80edc-te-and-stale-draft-recovery/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-credentials-exact-C-80edc-te-and-stale-draft-recovery/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-credentials-exact-C-80edc-te-and-stale-draft-recovery/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-credentials-exact-C-80edc-te-and-stale-draft-recovery/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) e2e/tenant-credentials.spec.ts:153:1 › protected failure clears only the secret and acknowledged creation never offers duplicate retry 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: 'My organizations', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('heading', { name: 'My organizations', exact: true }) with timeout 15000ms
+      - waiting for getByRole('heading', { name: 'My organizations', exact: true })
+
+
+      3 | async function login(page: Page, login = 'access-owner@example.test', password = 'synthetic-access-test-password') {
+      4 |   await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(login); await page.getByLabel('Password', { exact: true }).fill(password);
+    > 5 |   await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
+        |                                                                                                                                                                ^
+      6 | }
+      7 | async function request<T>(page: Page, path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
+      8 |   return page.evaluate(async ({ path, body, method }) => {
+        at login (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-credentials.spec.ts:5:160)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-credentials.spec.ts:154:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-credentials-protect-f18da-ever-offers-duplicate-retry/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-credentials-protect-f18da-ever-offers-duplicate-retry/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-credentials-protect-f18da-ever-offers-duplicate-retry/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-credentials-protect-f18da-ever-offers-duplicate-retry/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) e2e/tenant-instance-version.spec.ts:48:1 › 320px version paging, guarded review, focus, stale recovery and explicit adoption preserve configuration 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: 'Open Admin navigation', exact: true })
+        - locator resolved to <button type="button" aria-label="Open Admin navigation" class="ant-btn css-dev-only-do-not-override-19u5a7b css-var-_r_0_ ant-btn-default ant-btn-color-default ant-btn-variant-outlined ant-btn-icon-only">…</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="ant-drawer-mask ant-drawer-mask-motion-appear ant-drawer-mask-motion-appear-active ant-drawer-mask-motion"></div> from <div>…</div> subtree intercepts pointer events
+        - retrying click action
+        - waiting 20ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div id="_r_2_" class="ant-drawer-title">Admin navigation</div> from <div>…</div> subtree intercepts pointer events
+      2 × retrying click action
+          - waiting 100ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <button type="button" aria-label="Close" class="ant-drawer-close">…</button> from <div>…</div> subtree intercepts pointer events
+      28 × retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <button type="button" aria-label="Close" class="ant-drawer-close">…</button> from <div>…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+
+
+       at support/experience-navigation.ts:14
+
+      12 |   }
+      13 |   const narrow = page.getByRole('button', { name: 'Open Admin navigation', exact: true });
+    > 14 |   if ((page.viewportSize()?.width ?? 1440) < 1024) { await expect(narrow).toBeVisible(); await narrow.click(); }
+         |                                                                                                       ^
+      15 |   else await expect(narrow).toHaveCount(0);
+      16 |   const nav = page.getByRole('navigation', { name: 'Admin navigation', exact: true });
+      17 |   await expect(nav).toBeVisible();
+        at openDestination (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/support/experience-navigation.ts:14:103)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-instance-version.spec.ts:54:93
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-instance-version-32-e51b3-tion-preserve-configuration/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-instance-version-32-e51b3-tion-preserve-configuration/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-instance-version-32-e51b3-tion-preserve-configuration/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-instance-version-32-e51b3-tion-preserve-configuration/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) e2e/tenant-isolation.spec.ts:11:1 › coordinated isolation saves atomically, retains stale drafts and recovers a lost reply across desktop and narrow sizes 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('link', { name: 'State, Memory and Voice enablement share the coordinated State & Isolation editor', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('link', { name: 'State, Memory and Voice enablement share the coordinated State & Isolation editor', exact: true }) with timeout 15000ms
+      - waiting for getByRole('link', { name: 'State, Memory and Voice enablement share the coordinated State & Isolation editor', exact: true })
+
+
+      52 |     await page.screenshot({ path: path.join(captures, 'mobile.png'), fullPage: true, animations: 'disabled' });
+      53 |     await page.goto(`/t/${tenant}/admin/agents/${id}/settings`);
+    > 54 |     await expect(page.getByRole('link', { name: 'State, Memory and Voice enablement share the coordinated State & Isolation editor', exact: true })).toBeVisible();
+         |                                                                                                                                                      ^
+      55 |     await expect(page.getByRole('button', { name: 'Memory policy', exact: true })).toHaveCount(0);
+      56 |     await expect(page.getByRole('button', { name: 'State & Isolation', exact: true })).toHaveCount(0);
+      57 |     await page.getByRole('button', { name: 'Voice', exact: true }).click();
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-isolation.spec.ts:54:150
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-isolation-coordinat-e8845-ss-desktop-and-narrow-sizes/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-isolation-coordinat-e8845-ss-desktop-and-narrow-sizes/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-isolation-coordinat-e8845-ss-desktop-and-narrow-sizes/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-mX3pYl/tenant-isolation-coordinat-e8845-ss-desktop-and-narrow-sizes/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8 failed
+    e2e/tenant-agent-access.spec.ts:34:1 › create, grant exact chat and independent execution, inspect permissions, recover stale revoke and lifecycle 
+    e2e/tenant-continuity.spec.ts:18:85 › historical source change refusal fresh exact consent and reload 1400 
+    e2e/tenant-continuity.spec.ts:18:85 › historical source change refusal fresh exact consent and reload 390 
+    e2e/tenant-credentials.spec.ts:24:1 › canonical Credential purposes, protected replacement and separate Google consent 
+    e2e/tenant-credentials.spec.ts:111:1 › exact Credential grants, read-only inspection, revoked-write and stale-draft recovery 
+    e2e/tenant-credentials.spec.ts:153:1 › protected failure clears only the secret and acknowledged creation never offers duplicate retry 
+    e2e/tenant-instance-version.spec.ts:48:1 › 320px version paging, guarded review, focus, stale recovery and explicit adoption preserve configuration 
+    e2e/tenant-isolation.spec.ts:11:1 › coordinated isolation saves atomically, retains stale drafts and recovers a lost reply across desktop and narrow sizes 
+  29 passed (11.2m)

@@ -1,54 +1,38 @@
 ---
 name: Agent Core
-description: Ant Design v6 dark operate UI for Chat, Admin and account/organization access.
+description: Dark evergreen Ant Design v6 working environment for conversation, creation and administration.
 colors:
-  primary: "#1668dc"
-  primaryBg: "#15325b"
-  focus: "#3c89e8"
-  linkText: "#3c89e8"
-  linkTextHover: "#69b1ff"
-  error: "#dc4446"
-  success: "#49aa19"
-  successHover: "#6abe39"
-  successBg: "#162312"
-  text: "rgba(255, 255, 255, 0.85)"
-  textSecondary: "rgba(255, 255, 255, 0.65)"
-  textTertiary: "rgba(255, 255, 255, 0.45)"
-  layout: "#000000"
-  container: "#141414"
-  elevated: "#1f1f1f"
-  border: "#303030"
-  borderStrong: "#424242"
-  fill: "rgba(255, 255, 255, 0.08)"
-  bubble: "rgba(255, 255, 255, 0.12)"
+  primary: "#246750"
+  primaryBg: "#203e32"
+  linkText: "#86d5af"
+  focus: "#b3e8cd"
+  text: "#e7eee9"
+  textSecondary: "#aebdb3"
+  textTertiary: "#92a499"
+  layout: "#0e1613"
+  container: "#16201c"
+  elevated: "#202d26"
+  border: "#2b3e33"
+  borderStrong: "#40564a"
 typography:
   headline:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif"
     fontSize: "28px"
     fontWeight: 600
     lineHeight: 1.3
-  title:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'"
-    fontSize: "16px"
-    fontWeight: 600
-    lineHeight: 1.3
   body:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.5714285714
   label:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif"
     fontSize: "12px"
     fontWeight: 400
     lineHeight: 1.4
 rounded:
-  inline: "4px"
-  control: "6px"
-  surface: "8px"
-  chip: "12px"
-  bubble: "18px"
-  composer: "16px"
+  control: "8px"
+  surface: "10px"
 spacing:
   tight: "4px"
   compact: "8px"
@@ -56,854 +40,59 @@ spacing:
   section: "16px"
   controlInner: "8px"
 components:
-  antd-control:
-    backgroundColor: "{colors.container}"
-    textColor: "{colors.text}"
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "#ffffff"
     rounded: "{rounded.control}"
-    size: "32px"
-  user-bubble:
-    backgroundColor: "{colors.bubble}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.bubble}"
-    padding: "8px 12px"
+    height: "32px"
   composer-shell:
     backgroundColor: "{colors.elevated}"
     textColor: "{colors.text}"
-    rounded: "{rounded.composer}"
     padding: "{spacing.compact}"
-  composer-control:
-    backgroundColor: "transparent"
+  selected-navigation:
+    backgroundColor: "{colors.primaryBg}"
     textColor: "{colors.text}"
     rounded: "{rounded.control}"
-    padding: "{spacing.controlInner}"
-  composer-chip:
-    backgroundColor: "{colors.bubble}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.chip}"
-    padding: "2px 8px"
-  composer-picker:
-    backgroundColor: "{colors.elevated}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.chip}"
-    padding: "{spacing.compact}"
-  file-chip:
-    backgroundColor: "{colors.elevated}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.chip}"
-    padding: "8px 12px"
-  queued-messages:
-    backgroundColor: "{colors.elevated}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.chip}"
-    padding: "8px 12px"
-  spoken-text:
-    backgroundColor: "transparent"
-    textColor: "{colors.textSecondary}"
-    padding: "8px 0 0"
-  operational-drawer-wide:
-    backgroundColor: "{colors.container}"
-    textColor: "{colors.text}"
-    width: "400px"
-  operational-drawer-narrow:
-    backgroundColor: "{colors.container}"
-    textColor: "{colors.text}"
-    width: "100vw"
-  operational-status-chip:
-    textColor: "{colors.text}"
-    rounded: "{rounded.chip}"
-    padding: "0 8px"
-    height: "24px"
-  background-work-drawer:
-    backgroundColor: "{colors.container}"
-    textColor: "{colors.text}"
-    width: "640px"
-  background-session-title:
-    backgroundColor: "transparent"
-    textColor: "{colors.text}"
-    padding: "0"
-  agent-run-details:
-    backgroundColor: "transparent"
-    textColor: "{colors.text}"
-  operational-detail-inset:
-    backgroundColor: "{colors.elevated}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.surface}"
-    padding: "{spacing.default}"
-  admin-detail-label:
-    textColor: "{colors.textSecondary}"
-    width: "12rem"
-  admin-version-drawer:
-    backgroundColor: "{colors.elevated}"
-    textColor: "{colors.text}"
-    width: "52rem"
-  admin-configuration-panel:
-    backgroundColor: "{colors.container}"
-    textColor: "{colors.text}"
-    typography: "{typography.body}"
-    rounded: "{rounded.surface}"
-    padding: "{spacing.section}"
-  admin-owner-actions:
-    backgroundColor: "{colors.container}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.surface}"
-    padding: "{spacing.section}"
-  file-preview:
-    backgroundColor: "{colors.elevated}"
-    textColor: "{colors.text}"
-    typography: "{typography.body}"
-    rounded: "{rounded.surface}"
-    width: "90vw"
-  admin-configuration-form:
-    textColor: "{colors.text}"
-    typography: "{typography.body}"
-    width: "48rem"
-  session-sandbox:
-    backgroundColor: "{colors.elevated}"
-    textColor: "{colors.text}"
-    typography: "{typography.body}"
-    width: "640px"
-  sandbox-profile-catalog:
-    backgroundColor: "{colors.container}"
-    textColor: "{colors.text}"
-    typography: "{typography.body}"
-    padding: "{spacing.section}"
-  account-auth-form:
-    textColor: "{colors.text}"
-    typography: "{typography.body}"
-    width: "26rem"
-  access-editor-drawer:
-    backgroundColor: "{colors.elevated}"
-    textColor: "{colors.text}"
-    typography: "{typography.body}"
-    width: "736px"
-  organization-row:
-    textColor: "{colors.text}"
-    typography: "{typography.body}"
-    padding: "16px 0"
-  feedback-toast:
-    backgroundColor: "{colors.elevated}"
-    textColor: "{colors.text}"
-    typography: "{typography.body}"
-    rounded: "{rounded.surface}"
-    width: "40rem"
 ---
 
 # Design System: Agent Core
 
-This file records the current Ant Design v6 presentation system. Screens, copy and behavior stay in [Frontend Implementation](../../docs/13-frontend-implementation-spec.md); `/docs` wins on conflicts. Resolved values come from `antdTheme`, `AppShell`, `app.css` and the product components, rather than an independent runtime token system.
-
-The full presentation extraction was synchronized on 2026-10-16 against `cca9050d`, including the verified account/organization access foundation and its second polish pass. The companion [preview metadata](../../.impeccable/design.json) retains that earlier inspection's source fingerprints. The [October 16 documentation sync](../../docs/reports/design-system-access-sync-2026-10-16.md) records extraction and consistency checks; [access UI verification](../../docs/reports/access-ui-polish-2026-10-16.md) retains the actual browser/test evidence. The October 17 scoped Instance extension below merges current source patterns and links their [focused evidence](../../docs/reports/tenant-instance-editor-ui-verification-2026-10-17.md) without changing the design tokens. Historical reports retain their original source and scope; no milestone or hosted acceptance is renewed.
-
-The [recent Git and UI review](../../docs/reports/recent-git-ui-design-review-2026-10-14.md) records the earlier attachment/artifact cards, compact pending uploads, FortuneSheet previews, Drive approvals and credential creation review on `d279abfe`. The [integrated verification](../../docs/reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14) records the XLSX clipping-notice and Drive keyboard-rejection corrections. Historical reports retain their original source, hosted acceptance and manual verification gaps.
-
 ## Overview
 
-The October 17, 2026 scoped Instance documentation merge preserves the design system extracted on October 16 through `cca9050d`. Theme values come from `antdTheme.ts` and the resolved `AppShell` bridge; compositions come from current product components. The [October 16 documentation sync](../../docs/reports/design-system-access-sync-2026-10-16.md) records token/metadata checks. The [earlier rendered sync](../../docs/reports/design-system-sync-2026-10-16.md), [access UI verification](../../docs/reports/access-ui-polish-2026-10-16.md) and [current Instance editor evidence](../../docs/reports/tenant-instance-editor-ui-verification-2026-10-17.md) retain their own measured layouts and executed journeys. This merge does not repeat runtime acceptance or rebase historical fingerprints.
+One dark evergreen working environment across conversation, creation and administration. The field-guide direction contributes quiet green grounds, warm white text, readable mint links and precise contextual identity. Standard task layouts and native controls carry interaction. `/docs` owns behavior; this guide describes presentation. Acceptance belongs to the delivery ledger.
 
-**Creative North Star: "Ant Design operate UI"**
-
-Agent Core combines personal Chat, Admin configuration and account/organization access in one Ant Design v6 operate UI. Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT/Codex are UX and hierarchy references for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer with inference controls, in-flow activity)—not a component dependency or pixel clone. Admin uses the same dark roles, type, and 8/12/16 spacing for definitions and instances. It does not borrow a navy enterprise sider or copy Chat's composer onto configuration screens.
-
-The shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation container, elevated composer, and primary blue for Send and Voice-on. The theme seed remains `#1677ff`; Ant Design resolves the dark primary to `#1668dc`. `AppShell` maps resolved `theme.useToken()` roles to product CSS custom properties and publishes them on the document root so body portals (Dropdown, Drawer and Modal) share the same theme. Product CSS does not maintain independent color or spacing literals.
-
-Shared source-owned previews inherit the same dark surfaces, typography and spacing; the document remains the focus. Source collections own their action rows, the preview owns filename/metadata/toolbar and a locally scrolling canvas, and bounded dialogs keep Download, Close and local recovery reachable on short screens. Document paper stays white inside the isolated Word renderer. No parallel file-management shell, theme or UI kit is introduced.
-
-**Key Characteristics:**
-
-- Ant Design v6 imported directly in product components; `app.css` only sizes the shell, overflow, product layout, previews, and accessibility.
-- Compact / default / section spacing (8 / 12 / 16px) owns shells, docks, and sibling `gap`. Text-control inner padding is `{spacing.controlInner}` (8px, Ant Design `paddingXS`, same as a session-row body).
-- Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice and context-sensitive Stop/Queue/Send; header groups role, provider profile and live status beside identity, with Speech locale and compact icon actions in a stable trailing group.
-- Model catalog rows expose enabled vision, reasoning, tools, and structured-output capabilities as compact named icons. Queued drafts remain a compact local work list above the composer.
-- Assistant display Markdown stays primary for reading; persisted public speech text is a quieter **Spoken** inset first on the same turn when it differs (the TTS projection).
-- Background Work lists Sessions; shared Run details serve both Chat history and Admin inspection. Operational drawers use quiet headers, open rows, filled icon-and-text status chips, bounded reading regions and inline recovery. Automations retain their elevated schedule inset.
-- Admin collections use compact tables with local horizontal scrolling where needed; Experience and Automations expand one record at a time. Read-only details share aligned labels on wider screens and stacked labels on mobile.
-- Account and organization access inherit the shared AdminShell context, page headings, collection toolbar, navigation drawer, confirmation and feedback compositions. Audit reuses the collection table and responsive descriptions: one inline detail on wider screens, a bounded access drawer with outcome/reason summary on mobile, and named result tags for checks versus applied effects.
-- Admin uses contextual creation dialogs, one shared sticky configuration action frame, shared conversation source selection and explicit time-zone previews. Failed submissions give immediate warning/error feedback alongside persistent field or local error details; invalid fields are revealed, scrolled into view and focused.
-- `AdminShell` and the typed registry own focused icon-and-label pages. Shared panels retain one inset; exact-owner controllers retain drafts across pages. Immutable inspectors keep their local read-only controls.
-- Structured composer choices use category icons and quiet type labels in one flat list; draft, queue and history share immutable chip labels, with pending and historical tooltips distinguished.
-- Shared file previews keep code/grids locally scrollable, mobile controls at 40px, worksheet selection stable through resizing and full metadata accessible. Drive connections and browsing reuse existing Credentials and Instance owners; file mutations remain authorized agent capabilities.
+`web/src/app/antdTheme.ts` owns colors/controls. AntD resolves primary seed `#27765b` to `#246750`; links/surfaces and readable placeholder aliases are explicit. AppShell projects resolved tokens into `--ac-*` variables on the shell/document root, including portals. Never create another page token source.
 
 ## Colors
 
-Dark operate neutrals with one primary accent and one success accent for live microphone state.
-
-### Primary
-- **Ant Design primary** (`{colors.primary}`): primary actions and Voice-on (`aria-pressed`). Selection tint uses `{colors.primaryBg}`. Product text controls and picker choices use `{colors.focus}` (Ant Design `colorPrimaryTextHover`) for their shared inset keyboard-focus outline. Keep the transcript visually quiet.
-- **Ant Design error** (`{colors.error}`): failure and destructive-action feedback; retain the visible error label and recovery control.
-
-### Secondary
-- **Listening green** (`{colors.success}` / `{colors.successHover}`): microphone is actively capturing; `{colors.successBg}` supplies its active fill. Completed operational status uses Ant Design semantic success. Voice-on uses primary.
-
-### Neutral
-- **Layout** (`{colors.layout}`): rail and page chrome.
-- **Container** (`{colors.container}`): conversation pane and header.
-- **Elevated** (`{colors.elevated}`): composer shell, code, chips-on-dark.
-- **Border** (`{colors.border}`): 1px hairlines (rail edge, header, composer, Spoken separator).
-- **Strong border** (`{colors.borderStrong}`): native Ant Design `colorBorder`; the 1px feedback outline separates transient messages from dark content without a second shadow.
-- **Fill** (`{colors.fill}`): session-row hover across the whole row including overflow.
-- **Bubble** (`{colors.bubble}`): user message fill. Structured chips and active picker choices consume the same Ant Design `colorFillSecondary` role directly.
-- **Text / secondary / tertiary** (`{colors.text}`, `{colors.textSecondary}`, `{colors.textTertiary}`): body, meta/timestamps/Spoken body, Spoken caption and icons.
-
-**The Role Surfaces Rule.** `AppShell` owns the CSS bridge: primary → `colorPrimary`, success → `colorSuccess`, listening hover → `colorSuccessTextHover`, layout/container/elevated → `colorBgLayout`/`colorBgContainer`/`colorBgElevated`, border → `colorBorderSecondary`, strong border → `colorBorder`, fill → `colorFillTertiary`, bubble → `colorFillSecondary`. Error color uses `colorError`; selection uses `colorPrimaryBg`, and live microphone fill uses `colorSuccessBg`. The values above record the resolved dark theme, not a parallel palette. Map these dark roles in product CSS. Do not invert a light palette or add extra brand hues.
+Mint links and focus contrast with evergreen grounds. Layout/container/elevated surfaces establish hierarchy. Error/warning/success retain Ant Design status palettes and text/icon meanings. Native Office/document canvases retain white presentation within the dark frame.
 
 ## Typography
 
-**Display/Body Font:** system UI stack (San Francisco / Segoe UI / Roboto fallbacks). No self-hosted display face.
-
-**Character:** Ant Design defaults. Status is written in type, not color alone.
-
-### Hierarchy
-- **Headline** (600, 28px desktop / 22px below 768px): empty-chat “What do you want to work on?”. Admin task headings use a local 28px / 24px responsive variant, without changing the Chat role.
-- **Title** (600, 16px): Agent Core rail wordmark (line-height 1.4) and session header agent name (line-height 1.3). Admin branding uses 16px on wide screens and 14px below 768px, beside a secondary label-sized Admin, Account or Access marker supplied by the shell context.
-- **Body** (400, 14px, line-height 1.57): conversation, composer field, rail titles. Structured editor/history text uses the local 1.85 line-height variant to accommodate wrapped inline chips; queue previews remain single-line. Reading column max width 52rem.
-- **Label** (400, 12px): timestamps, header subtitle, connection/profile, Spoken caption. Spoken icon matches this size.
-
-**The One Face Rule.** Do not self-host a display face or costume monospace except for code in Markdown.
+Use the existing AntD system sans and scale, without a font dependency. Task H1 is 28px wide/24px narrow. Branding is text, not a heading. Secondary owner identity is 16px with lifecycle/version context. Body 14px, labels 12px, explanatory measure near 72ch. Code retains the existing monospace renderer; inspection identifiers wrap.
 
 ## Layout
 
-One session: black rail + conversation column + sticky composer. Column is `min(100%, 52rem)` centered with 16px inline padding. Conversation list gap is section (16px); inside a turn, compact (8px) owns sibling stacks (meta → body: speech projection when present, then display).
+AdminShell owns the 248px rail, task heading, scope trail, page insets and native navigation Drawer. Rail switches to Drawer below 1024px; page insets are 32px wide/16px narrow. Native details/summary groups disclose contextual destinations. Tables own intentional local overflow. Drawer bodies scroll without hiding actions.
 
-- Rail: 280px at 1200px+, 240px from 768–1199px, Drawer below 768px. Shared 16px left edge for New chat, Chats, session titles. Sections use title + gap, not dividing rules.
-- Header: 56px CSS minimum, container background, compact block padding and 16px inline padding (12px below 768px). Name and timestamp lead; role, provider profile and live status share one secondary row with compact gaps. At 1200px and above, a shrinking identity column sits beside an intrinsic-width actions column with a default 12px gap. Below 1200px, actions occupy a deliberate second row aligned to the end. Changing status text never determines control placement. The minimum height and compact block inset remain shared with Admin.
-- Composer dock: 12px above, 16px below the shell. Toolbar min-height 32px (44px below 768px); wrap with 8px gap. On mobile, Model occupies the first row of the start group; input actions sit below it, and the trailing Send/Queue/Stop group aligns to that bottom row. Keep 44px composer icon hits.
-- Queued drafts sit above the message well in a 12px-radius elevated container. Rows use an icon / truncated content / actions grid, 8px rhythm, and a 12.5rem maximum expanded list height.
-- After a user send, leave about half the pane for the incoming reply; shrink as the reply grows. Historical turns stay compact.
-- New chat empty: Identity + Speech locale in the intro stack (max 22rem). Model/Reasoning are not duplicated there.
-- Paused: Resume replaces the composer. Ended: quiet ended note only. Model selection lives only in the composer, so neither paused nor ended shows a header Model control.
-- Automations is 400px wide when the host reports the wide layout and full viewport width otherwise. Background work and Run details use up to 640px on wide layouts and full viewport width on narrow layouts. Their open rows stay visible rather than becoming nested cards; row and inset relationships use the same 8/12/16px rhythm. On narrow layouts, drawer action buttons have a 40px minimum height.
-- Admin: shared dark header and 8/12/16 rhythm. Global and contextual sidebar links replace collection-wide tabs; immutable inspectors retain their local read-only controls. Main content uses 16px desktop and 12px mobile outer insets. One inventory page heading contains its count and creation action; the collection owns search, compact rows and local scrolling. Numeric metadata stays in its column; ordinary cells wrap safely and bounded summaries retain full-text titles. Definition lifecycle uses Versions/Drafts destinations and a 20rem base-version selector beside Create draft. Immutable inspection remains in a 52rem/full-mobile Drawer.
-- Admin collection spacing has one owner: inventory toolbars use 12px block / 16px inline insets; toolbars inside a padded configuration panel add no second inset. Search fields cap at 28rem. Ant Design owns compact table cell padding; product CSS owns bounded cell wrapping, summary ellipsis, tabular numerals, inline action alignment and table-local overflow. Pagination uses 10/20/50 rows; expanded record content wraps and stays within the visible table width, including while the columns scroll horizontally.
-- Admin detail labels use `{components.admin-detail-label.width}` at 768px and above, with top alignment and wrapping content. Below 768px labels stack above their values. The same layout applies to Experience observations/provenance, Automation details, effective configuration, policy summaries, validation snapshots and version capabilities. Observation lists retain separate bullets and a 72ch maximum measure.
-
-- Account entry: the enclosing page owns one section inset and vertical overflow; the form owns a shrinking `{components.account-auth-form.width}` column and section gaps. Wide screens center it; below 768px it starts near the top. Account profile/current-access forms reuse the existing 48rem bound. Organization rows own section block padding and sibling gaps, tight summary spacing and a structural bottom hairline; names wrap rather than force page overflow. The switch dialog reuses that same list.
-- Access editors: member and role inspectors use the native large Drawer (`{components.access-editor-drawer.width}`), capped at `100vw`, with a locally scrolling body. The role footer owns 12px block / 16px inline padding and wrapping 8px action gaps. The body stack owns 16px sibling gaps; permission groups own 12px gaps. Below 768px, scoped buttons and outer text/password/search controls retain 40px height; do not add another height to an input inside an affix wrapper. Native dialogs keep their own Ant Design inset and responsive sizing.
-
-**The Docs Win Rule.** This file does not own Voice availability, Send/Queue/Stop behavior, or speech persistence. `/docs` does.
-
-**The Compact Rhythm Rule.** `AppShell` maps compact/default/section to Ant Design `paddingXS`/`paddingSM`/`padding` (8 / 12 / 16px). Shells, docks, and sibling `gap` consume these roles. Composer action groups also use compact, including Queue/Send/Stop and queued-message actions. The existing tight role maps to native `paddingXXS` (4px) for the narrow Admin brand gap, header/action gaps below 360px, and the shared preview metadata relationship between source/size and MIME. It does not replace normal shell, panel or control spacing. Do not invent further spacing steps or 2px CSS gaps.
-
-**The Additive Inset Rule.** A padded shell owns the outer inset. Nested text controls keep their own inner padding (`{spacing.controlInner}` = 8px, Ant Design `paddingXS` via `theme.useToken()`, same as `.session-row-body`). Align labels by giving equivalent children the same inner padding. Example: composer `{spacing.compact}` (8px) + field/button `{spacing.controlInner}` (8px) so Message and Model text share one edge, while hover fill still has 8px around the glyph. Apply the same stack to the Model Dropdown overlay (shell 8px + 8px on title, catalog rows, and reasoning footer). Icon-only 32×32 toolbar hits stay padding 0.
-
-Inline link-style actions (`Button type="link"`) align flush with surrounding text and table-cell content: no inline padding or inline border. Keep native button semantics for local actions, Ant Design hover/disabled states, the shared primary keyboard focus outline, and existing vertical hit areas (including 40px Admin controls on mobile). This treatment does not apply to padded text controls such as Model options, session rows or toolbar actions. Existing `Typography.Link` navigation anchors retain their `href` and default inline presentation.
-
-Audit: Message placeholder left edge equals the Model name left edge; Model hover fill matches session-row inset and does not overlap the next control. Never zero a text button's padding to force alignment, and never use negative margin to grow a hover fill.
-
-Ownership: `AppShell` owns resolved colors, spacing, type and Ant Design radius aliases. `app.css` owns the product-specific chip/composer/bubble radii (12/16/18px), reading measure and responsive geometry. `AgentConfigurationPanel` owns recurring Admin section shells, wrapping heading actions and optional token-based body stacks; inventory panels share its surface/header/title rule; Chat and Admin headers both use compact block padding. A contained Versions collection owns sibling gaps and gives its toolbar no extra inset. `AdminCollectionToolbar` and `useAdminCollectionSearch` share collection search/pagination; `useAdminDetailLayout` shares responsive label alignment. `AdminSessionPicker` shares conversation browsing and manual entry across Memory and Experience; its stack owns compact sibling gaps. Memory owns the compact wrapping scope/action toolbar for IdentityUser and User; Session keeps its scope/source row and separate actions below the picker. `.admin-owner-actions` owns the shared sticky Definition/Instance frame: container fill, 1px border, surface radius, section inset and compact sibling gap. Feature action groups wrap within it; fields use the existing focus/anchor clearance. BackgroundWorkDrawer owns its 16px body inset; catalog rows own 12px inline padding, 16px block padding and the 8px first-row top inset. SessionRunHistory owns its 16px sibling gap; subsequent history sections own a hairline and 16px top padding. AgentRunDetails owns a 16px content stack and 8px status/action groups, with no catalog-row padding or outer inset. Admin Run inspection reuses that same composition. SessionArtifacts reuses ArtifactView; DrawerListFooter supplies cursor loading/retry states. Product components compose Ant Design Table and Descriptions directly. These helpers are product layout policies, not a replacement component library.
-
-### Heading supporting text
-
-Supporting heading text follows its title in the same left-aligned, wrapping row with the compact 8px gap (Ant Design `paddingXS` / `--ac-space-compact`). Counts, revisions, copyable draft IDs and status/attention labels stay beside the title; long content wraps in document order. Heading action groups retain their existing separate placement. Numeric table cells retain their column alignment.
-
-Admin inventory/draft counts, Persona/Lifecycle metadata, draft title/ID, Settings markers and attention labels reuse this arrangement. Background Work and Automations place their Run/status label after the wrapping task title. The row owns the gap; titles do not grow to push metadata to the opposite edge. Existing panel heading/body insets remain unchanged.
-
-The [heading metadata verification](../../docs/reports/heading-metadata-layout-verification.md) records local Admin interactions at 1440/768/767/390px and focused component checks. Chat drawers have component-test evidence only for this change; historical hosted acceptance remains separate.
+Parent gaps use 8/12/16px compact/ordinary/section roles. The additive inset rule retains 8px native inner text-control padding inside compact composer and Model overlay shells. Do not zero text-button padding or double outer insets. Narrow header/tool hits are 40px. Chat retains a bounded reading/composer column and labeled tool/context disclosures. Workflow palette is a collapsed full-width disclosure above structure/properties; Outline supports every edit without dragging. Settings groups retain controller-owned drafts.
 
 ## Elevation & Depth
 
-Mostly flat tonal layering (layout → container → elevated → bubble/fill). One structural shadow is shared by the composer and its Model overlay. The structured choice picker consumes Ant Design `boxShadowSecondary` for overlay elevation.
-
-Automation schedule expressions retain an elevated inset with a border, 8px radius, 12px padding and 8px internal gap. Current Run outcomes, confirmed effects and approval previews use open labeled ReadingRegion sections inside AgentRunDetails. They add no card fill, border or outer padding; each text region is independently scrollable, keyboard-focusable and capped at `clamp(8rem, 24dvh, 16rem)`. Short content remains natural height. Run metadata uses direct compact Ant Design Descriptions for Model, Attempt and Updated. The drawer body owns the shared 16px outer inset.
-
-### Shadow Vocabulary
-- **Composer lift** (`box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45)`): sticky message well and its anchored Model overlay.
-
-**The Flat-By-Default Rule.** Surfaces are flat at rest. Do not add card shadows inside transcript turns.
+Native AntD portal elevation and tonal surfaces. The existing bounded composer shadow remains. No ornamental glow/glass/backgrounds or nested-card system. Visible focus remains independent of borders.
 
 ## Shapes
 
-- **Inline** (4px): inline Markdown code and compact focus outlines.
-- **Control** (6px): AntD buttons, Selects, 32px composer and header icon hits, status tags.
-- **Surface** (8px): session rows, code blocks, and image previews.
-- **Chip** (12px): structured `/Skill` and `@resource` chips, attachment/file chips, queued-send container, and 24px operational status/time-zone chips.
-- **Composer** (16px): message well and Model overlay.
-- **Bubble** (18px): user turns only. Assistant content is unbubbled Markdown.
-
-Inline/control/surface radii map to Ant Design `borderRadiusSM`/`borderRadius`/`borderRadiusLG` through `AppShell`; product chip/composer/bubble radii have one CSS owner. Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
+Control radius seed is 8px; resolved large surfaces use 10px. Existing message/composer/file silhouettes retain their product role. Use tables, sections and dividers directly instead of nesting cards.
 
 ## Components
 
-### Account and organization access
-
-Account and organization access inherit the shared AdminShell context, page headings, collection toolbar, navigation drawer, confirmation and feedback compositions. `AdminShellContext` supplies identity, area marker, current task, permitted navigation and header actions without duplicating the shell. The same sidebar uses a native navigation Drawer below 1024px; the account/organization header retains full accessible names when labels truncate.
-
-| Repeated relationship | Existing owner | Current presentation |
-| --- | --- | --- |
-| Authenticated page chrome | `AdminShell`, `AdminPageHeading` | One task heading, breadcrumb, responsive sidebar/drawer and shared content insets; Account/Access are shell contexts. |
-| Account entry forms | `AccountFormFrame` | One 26rem shrinking column, section gaps, labeled native inputs, inline recovery and a full-width submit action. |
-| Organization selection | `OrganizationsList`, reused by `TenantSwitcher` | Searchable paged list; wrapping name/identifier summary, content-width Open action and explicit current organization. |
-| Members, roles and invitation records | `AdminCollectionToolbar` and direct Ant Design Table | Wrapping summary plus compact action column; omit horizontal-scroll guidance where there is no table overflow. |
-| Member/role inspection | Native Drawer plus scoped access styles | Elevated surface, 736px large width capped at viewport, local scrolling, readable 72ch prose and reachable controls. Member-specific role input resets at inspector boundaries; failed reads keep Reload inside the drawer. |
-| Role permission choices | Direct Ant Design Collapse, Checkbox, Input and Empty | Grouped search, contextual accessible names, People only text and a selected count; no-result guidance includes Clear search without clearing selected permissions. |
-| Consequential actions and dirty drafts | `confirmAction`, `useAccessDraftGuard` | One pending confirmation owns nested Escape through close; Keep editing retains the draft. Role close restores its surviving trigger or the page heading; Clear search restores search focus. |
-| Invitation copy recovery | Native read-only TextArea, Button and Alert | Selectable one-time link, persistent inline manual-copy guidance on absent/denied Clipboard, success message and cleared error after retry. |
-
-Use the existing dark palette, native Ant Design control states and text alongside authority/status labels. Built-in roles remain visibly read-only. Current server permissions determine editable controls; permission-denied, last-Owner and stale-revision recovery remain distinct. Invitation copy explicitly does not imply email delivery. Generic service failures do not imply a write was rolled back; a failed refresh uses read recovery. The [consistency review](../../docs/reports/access-foundation-review-2026-10-16.md) records the member-switch/refresh corrections. [Access UI verification](../../docs/reports/access-ui-polish-2026-10-16.md) owns actual interactions and responsive evidence; [Frontend](../../docs/13-frontend-implementation-spec.md) and the [IAM UX contract](../../docs/19-multi-tenant-iam-ux.md) own behavior.
-
-Subsequent focused checkpoints verify [tenant text Chat](../../docs/reports/tenant-chat-ui-verification-2026-10-17.md), the [durable approval inbox and inspector](../../docs/reports/tenant-approval-ui-verification-2026-10-17.md), [shared Chat approval links and inbox attention](../../docs/reports/tenant-chat-approvals-verification-2026-10-17.md), [Instances and Agent Access](../../docs/reports/tenant-agent-access-ui-verification-2026-10-17.md) and [Instance Connections](../../docs/reports/tenant-agent-connections-ui-verification-2026-10-17.md). They reuse the existing shell, conversation and review compositions. Tenant voice/rich resources, other resource/effect families and the broader tenant cutover remain open; these reports do not claim complete proposal acceptance.
-
-### Tenant Browser Review parameters
-
-Browser requests reuse the same `TenantApprovalDetail` exact-command Descriptions list, viewport-capped native Drawer, 16px body section gap, shared confirmations and wrapping footer. Named origin/state/parameter/consequence fields use escaped readable values, including defaults; canonical JSON and native target identities stay out of the primary review. Stale targets disable approval while retaining current cancellation/reload recovery. Consent and execution availability remain separate. [Focused evidence](../../docs/reports/tenant-browser-review-verification-2026-10-18.md) distinguishes actual backend/native checks from controlled presentation at 1440/390/320px. This adds no visual tokens, CSS or component recipe. Browser effect results keep the same shared result section: Command completed means SDK confirmation with application verification still separate; unknown outcomes direct current-state inspection and explicitly rule out replay. [Dispatch-result evidence](../../docs/reports/tenant-browser-effect-verification-2026-10-18.md) covers the existing composition at 1440/390/320px. Reviewed converted Browser commands have model offering and bounded private checkpoint delivery. Converted direct reads now use current Allowed policy, with exact Review when required and scoped compacted data; rich resource delivery remains pending. [Read verification](../../docs/reports/tenant-browser-read-verification-2026-10-18.md) owns backend/model evidence without introducing a new visual recipe. The backend extension adds no presentation recipe or token; [model verification](../../docs/reports/tenant-browser-model-verification-2026-10-18.md) owns its separate scope.
-
-### Tenant Sandbox command approval parameters
-
-Reuse `TenantApprovalDetail` for inbox and Chat inspection. Exact command review uses one responsive native Descriptions list with named fields/units, wrapped escaped text and natural height. Preserve the separate decision/effect status and explicit refresh recovery. Existing 736px viewport-capped Drawer, 16px body section gap, footer, confirmations and focus restoration remain unchanged. [Focused evidence](../../docs/reports/tenant-sandbox-command-approval-verification-2026-10-18.md) includes actual shared preference-review interactions and controlled command projection checks at 1440/768/390/320px; it does not accept production Sandbox dispatch or its full UI.
-
-### Tenant Agent Lifecycle
-
-Canonical Tenant Instance Lifecycle owns archive, restore and permanent decommission; Access owns audience and role changes and links to Lifecycle. The existing dark AdminShell, AgentConfigurationPanel, responsive bordered Descriptions, native Alerts/Buttons and shared centered confirmAction retain their spacing and appearance. The page presents the coherent Agent name, organization and lifecycle before actions. Archived state separates reversible Restore from Permanent retirement; exact named confirmation explains irreversible identity retirement, cleanup and retained-reference blockers. Long names and narrow details wrap through 320px; the shared shell owns scrolling and insets.
-
-Known identity retirement and completed/pending cleanup acknowledgement remain separate. Stale or lost outcomes require explicit Reload lifecycle and a new confirmation before another command; readback alone cannot confirm physical cleanup. Denied reads remove protected content. Cancel returns focus to its action; completed/stale actions return to the read control when their original action is unavailable. This code-led Operate extension adds no CSS, theme, font, token, raster asset or UI kit. [Interaction contract](../../docs/19-multi-tenant-iam-ux.md#agent-lifecycle-interaction-contract) owns behavior; [focused evidence](../../docs/reports/tenant-agent-lifecycle-ui-verification-2026-10-20.md) records verification.
-
-### Tenant Instance Profile and Settings
-
-Canonical Profile and Settings reuse one bounded reading column in the existing dark AdminShell. Scoped navigation retains Profile, Settings, Access and Connections for the exact organization/Instance; the page keeps Back to instances, current identity/lifecycle and Definition version visible. `InstancePersonaFields` supplies the same native Form/JSON controls to tenant and legacy Profile consumers. `AgentConfigurationPanel` owns the persona panel inset; native tabs, labels and actionable parser feedback preserve the incumbent form hierarchy.
-
-`InstanceSettingsSection` and `useInstanceSettingsController` reuse the existing typed fields, native disclosures and independent sparse section drafts with a tenant-owned transport. Inherited-source/default hints, per-field reset, unsaved section labels and wrapping Save/Discard/Reset actions stay beside their controls. Reset confirms the exact section, agent and organization. A section save/reset refreshes dependencies and retains unrelated drafts. Read-only/archived views retain inspectable disabled controls; failed or stale writes keep drafts, explicit Reload obtains current data, and lost access removes protected controls. An acknowledged write with unreadable results requires read recovery without replay. Sandbox remains visibly unavailable until its tenant catalog/effects exist. The [IAM interaction contract](../../docs/19-multi-tenant-iam-ux.md#instance-profile-and-settings-interaction-contract) owns these behaviors.
-
-The existing 48rem bound, two-column field grids, stacked narrow controls and 8/12/16px rhythm contain long names, labels and JSON through 320px. [Focused editor evidence](../../docs/reports/tenant-instance-editor-ui-verification-2026-10-17.md) records six-width Profile/Settings captures plus JSON, reset and shared legacy-consumer views. No theme, token, CSS, asset or UI-kit change accompanied this extension. The execution-controls successor below supplies canonical budgets, management and unattended-model preferences; the Definition version successor supplies version review/adoption. The Skills successor below supplies the scoped collection and authoring. The Resources successor below supplies scoped file management; the remaining tenant cutover stays open.
-
-### Tenant Instance execution controls
-
-Execution budgets, Self-management and Unattended model extend the same scoped Instance configuration UI. `TenantAgentHeading`, also consumed by Profile/Settings, keeps wrapping agent name, lifecycle and Definition version together. `TenantAgentControls` reuses `AgentConfigurationPanel`, `BudgetFields` from `ExecutionBudgetsSection`, extracted `SelfManagementFields` and shared `ExecutionModelFields`; native Ant Design Form, Select, Collapse, Checkbox, Alert and confirmation owners retain their existing presentation. The parent owns the section gap (16px) and bounded column (48rem); headings/actions use the compact gap, and budget rows and management choices wrap through 320px. This ordinary code-led Operate extension introduces no visual-world, theme, token, font, asset or UI-kit change.
-
-The [execution-controls interaction contract](../../docs/19-multi-tenant-iam-ux.md#instance-execution-controls-interaction-contract) owns behavior. A coherent original-human read supplies identity, inherited/default/effective controls, host ceilings and matching witnesses. Per-class budgets and per-field management keep source hints beside native controls. Reset stages inheritance or the execution default until explicit Save. Saved mode/Frozen status and the saved lock remain independent of draft policy edits; the shared confirmation names the exact agent and organization, and freeze/unfreeze preserves unrelated edits. Unattended selection uses the current tenant catalog, keeps unavailable saved choices visible for deliberate repair, and offers read recovery while Save waits for a valid authoritative catalog. Execution-default reasoning choices follow the selected default model's advertised support.
-
-[Focused verification](../../docs/reports/tenant-instance-controls-ui-verification-2026-10-18.md) owns executed saves/resets, saved Assisted freeze/unfreeze while an Off draft survives, narrow mouse selection and functional recovery boundaries. The implementation and finish reviewers individually inspected all 18 current captures in `.playwright-mcp/tenant-controls-20261018`; that presentation evidence covers the three pages and captured responsive/interactive states. Loading, denied, archived, error and stale states lack visual acceptance from those captures; functional checks have their own scope in the report. This documentation pass performs no runtime acceptance. The Definition version successor below supplies version review/adoption. The Skills successor below supplies scoped Skill inspection/authoring. The Resources successor below supplies scoped file management. Tenant Sandbox cutover, other resource/effect families, voice/rich delivery, autonomous origins and final obsolete-authority/schema consolidation remain open.
-
-### Tenant Instance Definition version
-
-`TenantAgentVersion` extends the scoped configuration column with `TenantAgentHeading`, the existing 48rem bound and native Ant Design panels, Select, Pagination and disclosure. Current identity/version precedes the actual source publication choices; explicit Preview changes precedes the review and exact-target Adopt action. Parent sections use the existing 16px gap, heading/actions use 8px, and the shared panel retains its own inset. The native source disclosure keeps a long Definition ID secondary and fully readable.
-
-`InstanceVersionChanges` is shared by tenant review and the existing administrative confirmation. Strong group labels and ordinary wrapping values distinguish changed defaults, preserved Instance overrides and new/changed/removed inherited keys without nested cards. Existing anywhere wrapping retains full child keys through 320px. The partial-access note remains beside the review and reports neither hidden names nor counts. The native confirmation names agent, organization and current/target versions; Cancel/Escape restores Adopt focus, while a submitted confirmation returns focus to Reload. Preview changes keeps its accessible name while loading. The [interaction contract](../../docs/19-multi-tenant-iam-ux.md#instance-definition-version-interaction-contract) and [frontend specification](../../docs/13-frontend-implementation-spec.md#tenant-instance-definition-version) own behavior and recovery.
-
-The implementation and fresh finish reviewers inspected all 19 current captures in `.playwright-mcp/tenant-version-ui-20261018`: top/lower review at 1440/1024/768/390/320px, desktop/narrow confirmation and shared legacy preview, archived, read-only and revoked-source views. The five-width review has no horizontal page overflow. Loading, transient errors, malformed acknowledgements and stale presentation have no visual acceptance from those captures; functional evidence is separately scoped by the [focused verification report](../../docs/reports/tenant-instance-version-ui-verification-2026-10-18.md). This narrow documentation merge adds no theme, token, font, asset or component-preview change and runs no application verification. The Skills successor below supplies scoped Skill inspection/authoring. The Resources successor below supplies scoped file management. Sandbox/other resource/effect families, voice/rich delivery, autonomous origins and obsolete-authority/schema consolidation remain open; no full proposal or milestone acceptance is claimed.
-
-### Conversational harness learning
-
-- Teach durable knowledge and procedures in Chat. Automatic receipts say “saved to this Instance for its next Run” and disclose relevant verification limits; current Run pins remain unchanged.
-- Reuse the existing centered Chat approval Modal for Assisted changes, instructions and tool proposals. Use “Save this harness change?”, complete escaped semantic change, source, version/policy context and next-Run semantics (including the same Session). When supplied, show Applies to in an Ant Design info notice and active version/policy revision in labeled compact tags above the review. Change uses a quiet fill inset, 12px padding and Ant Design large radius; supplied colon-ended headings are emphasized and dash lines use hanging indentation without rewriting text. One focusable Approval details region scrolls within 40vh for all remaining fields; title/context/footer stay outside. Semantic proposals cap at 720px; ordinary sensitive actions at 520px. The container caps to the dynamic viewport with 16px clearance; review content shrinks on short screens, and body scrolling retains access if context itself is oversized. Each approval identity resets review scroll to the opening line. Semantic review lists own 16px section gaps, each stacked detail owns its 8px label/value gap, and the footer owns an 8px wrapping action gap. Ordinary sensitive actions reuse small one-column Ant Design Descriptions: secondary 6rem labels align complete wrapping plain-text values; empty supplied fields show a muted dash with the accessible name Not provided. This compact variant fits the 520px dialog without hiding recipients or changing the larger semantic review. Preserve keyboard Enter/Escape and exact Approve/Reject decisions; narrow footer buttons have 40px minimum targets.
-- Admin is governance and inspection: active version, Manual/Assisted/Managed, independent scopes, save policy and freeze. Keep recent changes/evidence collapsed. No primary purpose/source/eligible/preparation/publication form. An unfinished legacy candidate may be discarded through shared confirmation.
-- Distinguish Core checks, Agent assessments, tested revisions, stale evidence and external limitations in inspection. Preserve published evidence after freeze. Use existing safe errors/DiagnosticDetails and do not replay stale approvals.
-- Reuse established 8/12/16 spacing, 72ch evidence measure, wrapping action groups and incumbent dark Ant Design v6 tokens. Desktop, 768px and 390px cover approval, automatic receipt, failed/rejected change and frozen inspection.
-
-### Tenant Instance Skills
-
-Tenant Skills extends the same scoped Instance shell with the shared identity/lifecycle/Definition heading and `AgentConfigurationPanel`. The existing 48rem column, 16px parent section gap and compact wrapping metadata/action groups remain unchanged. Each readable Skill occupies one wrapping collection row with its complete name, description, origin, activation, source/copy provenance, capability requirements and effective enabled state. Explicit search and paging concern readable rows only; partial visibility discloses that scope without hidden names or counts. This single-column tenant collection complements the existing administrative Skills table described below.
-
-Native switches distinguish the stored enabled choice from effective suppression. Built-in and inherited Definition content use the shared read-only Skill inspection; local authoring uses the same `SkillDrawer` fields and persistent footer. The Drawer remains 640px on wider layouts and full viewport width below 768px, with one 16px body inset and native internal scrolling. Required capabilities remain requirements; enabling or inspecting a procedure grants no capabilities or IAM authority. Customize, Reset choice and Delete use the shared confirmation with exact Skill, agent and organization; copied provenance remains visible after customization.
-
-Independent exact-item reads provide fresh witnesses while Reload preserves an editing draft; Discard draft adopts the latest read. Stale saves require Reload and a new explicit Save. Acknowledged writes retire submitted drafts and recover by read without replay. Definitive item-read loss closes private content and refreshes the collection. Shared dirty-navigation/Cancel guards, Escape and surviving-opener focus recovery remain in the existing owners. Typed read-only and archived states explain restrictions. Optional Drawer change/disabled/save-disabled inputs leave existing Definition consumers' defaults intact. Behavior belongs to the [Skills/Resources interaction contract](../../docs/19-multi-tenant-iam-ux.md#instance-skills-and-resources-interaction-contract).
-
-Implementation and fresh finish reviewers individually opened all 18 current captures in `.playwright-mcp/tenant-skills-ui-20261018`: collection views at 1440/1024/768/390/320px, desktop/narrow editor and confirmation, Built-in inspection, copy provenance, shared Definition Drawer, archived, read-only and denied presentation. The five-width collection review has no horizontal page overflow. Native main/Drawer scroll containers mean the captures do not show every field or the complete procedure. Uncaptured loading, transient, stale and malformed-acknowledgement states and lower Drawer content have no visual acceptance. [Focused verification](../../docs/reports/tenant-instance-skills-ui-verification-2026-10-18.md) owns executed interactions, functional recovery and exact limits. This documentation merge performs no app checks and changes no token, CSS, font, asset or preview. The Resources successor below supplies scoped file management and rich/bulk adapters. Sandbox/other resource/effect families, voice/rich delivery, autonomous origins, obsolete-authority/schema consolidation and the earlier SQLite preference follow-up remain open; no full proposal or milestone acceptance is claimed.
-
-### Tenant Instance Resources
-
-`TenantAgentResources` extends the same scoped Instance heading, `AgentConfigurationPanel` and bounded column (48rem). Readable metadata search/paging precedes a single-column collection whose full logical paths, origin/kind/size, readable Skill dependencies, effective enabled state and stored inherited/local choice remain together. The panel owns section separation (16px); facts and wrapping action groups use the compact gap (8px). Full paths and provenance wrap through 320px, beside the existing administrative resource table's own density.
-
-`InstanceResourceFields` and `InstanceResourceInspector` now serve both tenant and existing administrative Instance consumers. Editing reuses native Form, Select, Switch and replacement-file upload; inspection uses the shared responsive detail labels, wrapping Run path, copyable content hash and explicit original Definition/version/resource provenance. Staged file/folder review reuses `ResourceFilePicker` and `ResourceImportPreview` from `ResourceImportFields`. Import retains the wider Drawer (880px); edit/copy/inspection use 640px, each full width below 768px, with one body inset (16px), internal scrolling and a persistent native footer. Copy names its distinct local destination and preserves the inherited source's enabled choice; the independent copy retains source provenance.
-
-The shared `FilePreview` renderer composition now accepts canonical tenant Resource transport for bounded read-only Word, spreadsheet, image and other supported previews/downloads. Definitive read loss, including nested worksheet/original-download reads, retires protected detail through its feature owner. Native Image zoom and Document zoom sliders name both control and actual handle. Shared feedback clearance includes explicitly marked body action groups inside the frontmost Modal/Drawer as well as its footer, keeping native hover-paused notices clear of Preview, Download, Reload and submission controls. Drafts, exact reads, sequential acknowledged-file retirement and commands remain feature-owned; the [Skills/Resources interaction contract](../../docs/19-multi-tenant-iam-ux.md#instance-skills-and-resources-interaction-contract) and [Frontend](../../docs/13-frontend-implementation-spec.md) own behavior.
-
-The fresh finish reviewer inspected all 25 named captures in `.playwright-mcp/tenant-resources-ui-20261018`, covering collection views at 1440/1024/768/390/320px, narrow row/paging, editor/import top and lower regions, exact copy confirmation/provenance, DOCX/XLSX/image previews, empty, read-only, archived and denied presentation. [Focused verification](../../docs/reports/tenant-instance-resources-ui-verification-2026-10-18.md) owns executed tenant/shared-consumer journeys and recovery limits. Loading, transient, stale and malformed-acknowledgement presentation have no visual acceptance from these captures; functional evidence stays separately report-scoped. This narrow merge changes no normative token, theme, font, asset or component preview and performs no app checks. It supersedes Resources UI/rich-file/bulk-adapter-pending context above for Instance configuration only. Sandbox, other resource Access/effect families, Governance/platform, voice/rich Chat delivery, autonomous origins, obsolete-authority/schema consolidation and the earlier SQLite preference follow-up remain open; no full proposal or milestone acceptance is claimed.
-
-### Organization Sandbox profile catalog
-
-`TenantSandboxes` extends the existing dark Integrations collection in `AdminShell`. The shell owns page context/inset; `AdminCollectionToolbar` and the collection own the 16px section stack. Wrapping names, revision, enabled intent and named availability form the readable row. Exact current/history inspection and guarded authoring use native access Drawers capped at `min(736px, 100vw)`, with one native 24px body inset, local scrolling and wrapping footers. Keep image/source facts in the inspector and preserve full readable values.
-
-`SandboxProfileFields` supplies the existing responsive field grid, ordinary Image/registry guidance, Enabled intent and Advanced limits/initialization to both tenant authoring and `SandboxProfilesSection`. Each feature owns its identity, transport, bounds and commands; the shared fields introduce no generic wrapper. `SandboxProfileDetails` supplies responsive Descriptions, wrapped immutable image and Profile initialization to both contexts. `SandboxEvidence`, native confirmations, draft guard, form feedback and explicit recovery retain their existing presentation owners. Cancel editing returns focus to Edit profile; detail close returns to the surviving collection opener/fallback. The [interaction contract](../../docs/19-multi-tenant-iam-ux.md#organization-sandbox-catalog-interaction-contract) and [Frontend](../../docs/13-frontend-implementation-spec.md#organization-sandbox-profile-catalog) own behavior.
-
-The [focused verification report](../../docs/reports/tenant-sandbox-catalog-ui-verification-2026-10-18.md) records actual Synthetic authoring/history/stale recovery, acknowledged malformed-response recovery without save replay and keyboard draft/focus interactions, separately from controlled verification/access and shared-platform adapters. The fresh finish reviewer inspected 29 captures under `/private/tmp/agent-core-catalog-ui-JnGswL` and returned SHIP for the inspected scope. Collection and Drawer measurements fit 1440/1024/768/390/320px without document overflow. Loading, empty/search-empty, transient, stale, malformed acknowledgement, history and confirmation have no dedicated visual acceptance; shared platform lower fields and mobile CPU/memory remain visually unverified. This documentation merge performs no app checks, changes no token/CSS/font/asset/preview and preserves `.impeccable/design.json` with its historical fingerprints; it does not regenerate the stale sidecar. This supersedes organization catalog-UI-pending context above only. Instance Sandbox configuration/verification, Session controls UI, other proposal work and live SDK qualification remain open; no full proposal or milestone acceptance is claimed.
-
-### Keyboard and control states
-
-Ant Design owns control hover, pressed, disabled, loading and semantic states. Product text controls (Model chip/options, session links/actions and header icons) retain a shared 2px primary `:focus-visible` outline inside their hit area, including when hover resets remove default outlines. The composer shell retains its neutral border and the editor has no nested focus outline. Picker choices use the visible active/focus fill; the focused editor or picker search identifies the active choice. Ant Design search retains its normal focus state. Disabled controls do not gain active or focus styling. State meanings stay visible in text or accessible labels; color does not carry them alone.
-
-### Chat header
-
-The existing `ChatHeader` owns identity and action composition; `ChatApp` supplies the projected profile/status and Admin action. Name and timestamp remain the primary row. Role, profile and the labeled status dot use 12px secondary type and compact 8px sibling gaps beneath it. The role takes its natural width up to 40% of that row; status consumes remaining space. Long role/status labels ellipsize with full-text tooltips instead of pushing actions away. Missing role still leaves profile/status visible. Speech locale uses the existing small Ant Design Select; Background work, Automations, End and Admin retain the shared 32px icon hits, hover fill and inset keyboard outline.
-
-The header shell owns outer insets; the identity/actions grid owns the 12px major gap; secondary and action rows own their 8px gaps. Product CSS owns the fixed 1200px transition, shrinking columns and text containment. Preserve this stable grouping for empty, live, reconnecting, paused and ended chats; action availability remains governed by the frontend specification. [Header verification](../../docs/reports/chat-header-status-review.md) records local Synthetic interactions and 320–1440px geometry checks.
-
-### Buttons
-- **Shape:** 6px radius; header icon actions are 32×32px. Composer Send/Attach/Voice are 32×32px and become 44px below 768px.
-- **Primary:** Send/Queue and Voice-on use `{colors.primary}`.
-- **Ghost/text:** Header actions, Attach, overflow, New chat, Model, catalog rows; hover uses `{colors.fill}` only. Suppress Ant Design text-button `::before`/`::after` rings so hover does not flash a border. Selected catalog row is a checkmark, not a persistent fill.
-- **Success:** live microphone control uses `{colors.success}`.
-
-### Chips
-Skill invocation and resource chips use the same readable text token and subtle neutral fill, without decorative borders. The shared `.composer-chip` owns this foreground across the Lexical draft, queue and user history; previews retain the same role. Normal-state measured text contrast is 8.75:1 in draft/queue and 7.06:1 in history after background compositing.
-
-- Interrupted/failed: solid Ant Design Tag, not a full-width banner. Default tag marks the catalog default model in the Model menu.
-- Operational state: filled Ant Design Tag with an icon and text, 24px minimum height, 8px inline padding, and 12px radius. Semantic color reinforces the label; it never replaces the icon and text.
-
-### Cards / Containers
-- Composer shell: elevated fill, 16px radius, compact 8px padding, 8px inner gap, 1px border, composer shadow.
-- Queued-send container: elevated fill, 12px radius, 1px border; compact rows divide with a softened border and keep Steer/Remove actions at the trailing edge.
-- File chip: elevated fill, 12px radius, 1px border, 8px × 12px padding. Image previews fit within 240×180px with an 8px radius.
-- Do not nest a card inside each assistant message.
-
-### Inputs / Fields
-- Message: borderless headless Lexical plain-text editor inside the composer, with a labeled multiline textbox and Ant Design placeholder tone. Follow **The Additive Inset Rule** (shell `{spacing.compact}` + `{spacing.controlInner}` on the field). The editor keeps a 40px minimum and 224px maximum height with local scrolling; it introduces no second UI kit or rich-text formatting toolbar.
-- Model in the composer: one Ant Design `Dropdown` (not Modal, not a pair of Selects). The chip is a single Model text button: model name, optional Default tag, optional reasoning level as secondary text inside the same control (`aria-label="Reasoning"`, Codex-style, not a sibling button), then the chevron. The overlay lists models with compact, named capability icons for vision, reasoning, tools, and structured output; the default model carries a Default tag and the active row carries a check. When supported, a footer shows Reasoning, the current level, and a dotted slider. Overlay chrome matches the composer shell; title, rows, and footer use `{spacing.controlInner}` (8px, same as session rows). Model appears only in the composer; paused and ended sessions show no Model control.
-- Identity and Speech locale: labeled AntD Selects.
-
-### Structured composer parts and choices
-
-The same message well mixes ordinary text with atomic `/Skill` invocation and `@resource` reference chips. Inline chips use the existing 12px chip radius, Ant Design neutral fill/text roles and wrapping text; `/` and `@` distinguish invocation and reference chips. Drafts, queued drafts and user history reuse one product chip presentation and immutable labels. Chips keep 8px inline padding, no border and 1.85 line height in the editor/history so wrapped labels do not crowd neighboring lines; queued previews remain single-line. Typed tooltips identify resources and distinguish pending activation from historical invocation. Pending attachments remain in the composer shell as compact icon/filename tiles with full filename tooltips, accessible icon-only Remove and Retry, and local progress/errors. The responsive grid scrolls vertically within 30vh/12rem; pending thumbnails are not generated. Existing Ant Design controls and 8px spacing roles own the tile/list insets. Sent files and artifacts reuse the shared `ChatFileCard` presentation below; authenticated source reads and original downloads retain their existing ownership.
-
-Slash/at-sign input and the Add content menu's Use Skill / Reference resource actions share one caret-anchored picker. Its elevated Ant Design surface has a 12px radius, 8px shell inset, viewport-bounded width up to 640px, capped to the composer and available viewport. It chooses above or below the caret according to available space; when neither side fits the controls plus a complete choice, it overlaps the caret within viewport bounds. The list owns local scrolling while heading, search and recovery controls remain visible; rows retain their 40px minimum height (44px below 768px). Selection, editor resize, viewport resize and scrolling reposition the overlay. Direct Ant Design Input, Button, Spin, Empty and Alert provide search, loading, empty and inline Retry states. Pagination is automatic as the choice list reaches the bottom; no Load more button is shown. Choice rows keep the name and muted metadata on one line, with the category label consistently aligned to the row’s trailing edge. Names use their natural content width capped at 50% of the row body and do not shrink under metadata pressure. Metadata follows the actual name width with an 8px gap and shrinks first within the remaining space before the category. A logical auto margin anchors the category even when metadata is absent. File paths use middle ellipsis preserving their last 12 characters, including the extension; other names and metadata use end ellipsis. Full details remain available through accessible option names and hover titles. The picker stack owns the 8px gap between heading, search, list and recovery states; each row owns its 8px inner inset. Resources share one flat list with category icons, quiet type labels aligned to the trailing edge and independently retained source cursors; slash Skills reuse the same rows; Close uses the Ant Design icon. The choice list exposes selected/unavailable states, arrow-key and Enter selection, outside-click, focus-leave, window-blur and Escape dismissal and polite result/loading announcements. The editor and composer border remain neutral while focused, without nested blue outlines. Picker buttons and choice rows have 44px minimum heights below 768px.
-
-The [single-row verification](../../docs/reports/composer-single-row-verification.md) records this successor layout and its local Synthetic checks. Earlier two-line captures remain historical evidence. This is a local extension of the Operate system. Existing palette, typography, spacing primitives and 52rem reading column remain unchanged. Picker geometry does not create a new global spacing or typography scale. Product meaning, immutable part identity and send/queue behavior remain owned by `/docs`.
-
-The [frontend design review](../../docs/reports/frontend-design-system-review.md) checks the current natural-width names, trailing category labels and borderless chips against the running Synthetic app. Keyboard focus on a choice is distinguished from the active selection by the same 2px inset outline used by product text controls. AppShell publishes Ant Design `colorPrimaryTextHover` as the shared focus role, keeping the outline legible on selected dark rows. The editor's neutral focus treatment applies only to the editing well. The preview mirrors the corrected choice outline.
-
-Composer picker accessibility follows [Frontend](../../docs/13-frontend-implementation-spec.md#unified-structured-composer): the focused editor or plus search owns the active-option association, and empty results do not name a missing option. Known metadata-only files use the existing muted choice-description style. A bounded search with remaining pages gives continuation guidance before showing an exhausted empty state; no additional visual tokens are introduced.
-
-Structured chips preserve immutable presentation labels across draft, queue and history. Skill-only sending, trigger deletion, title semantics and historical activation boundaries remain governed by [Frontend](../../docs/13-frontend-implementation-spec.md#unified-structured-composer) and [Backend](../../docs/12-backend-implementation-spec.md); presentation labels never replace canonical identities. [MessageParts](../../web/src/features/chat/MessageParts.tsx) owns the shared chip presentation, and [ComposerChipNode](../../web/src/features/chat/ComposerChipNode.ts) applies it to the atomic editor node.
-
-### Navigation
-- Compact Chat list and row action menus omit unnecessary separators. Destructive items retain Ant Design danger styling and their existing confirmation. The Model overlay keeps its meaningful reasoning-footer boundary.
-- Session row hover, keyboard focus-within, and active state fill the whole row including overflow (24px icon, inside row padding, common right edge).
-- Header: identity (agent name, 12px timestamp, and role), Speech locale, compact icon actions, and status metadata. The 32×32px actions use a 6px radius and `{colors.fill}` hover. Background Work uses an 18px inbox icon plus an attention badge; Automations, Admin, and the direct confirmed End action use 16px icons. End opens the shared centered confirmation. Profile and conversation status remain visible. Credential inventory and binding controls belong in Admin; Chat has no application connection row. At 1200px+, actions share the identity row; below 1200px, they use the stable trailing second row. No Model appears in the live header.
-
-### Definition permission hierarchy
-
-The existing Definition Form presents Schedule and Events with nested Built-in Events and Webhook Events using Ant Design v6 checkboxes, mixed parent state, paddingLG nesting and token-based spacing. Child permissions derive from the canonical candidate; a local parent off/on restores restricted choices. Read-only versions retain accurate disabled controls and overall-disabled guidance. Summaries and publish diffs name exact family grants. Backend identifiers and independent authority are unchanged. Product behavior belongs to [Frontend](../../docs/13-frontend-implementation-spec.md#unified-events-catalog-and-automation-editor); no additional visual system or permission state is introduced.
-
-### Shared Admin configuration compositions
-
-`AgentConfigurationPanel` in [AgentConfigurationLayout.tsx](../../web/src/features/admin/AgentConfigurationLayout.tsx) is the recurring section shell for Definition authoring and immutable inspection, Instance configuration and global Connections. Its container uses `{components.admin-configuration-panel.backgroundColor}`, a 1px structural border and `{components.admin-configuration-panel.rounded}` corners. The heading and body each own one `{components.admin-configuration-panel.padding}` inset. Headings have a 56px minimum height, a 16px title, 12px secondary description and compact gap; title/actions wrap within the same edge.
-
-**The Single Stack Owner Rule.** Use `bodyGap="compact"`, `"default"` or `"section"` for token-owned sibling gaps (8/12/16px). Direct Typography children have no block margin inside these stacks. Leave `bodyGap` unset for a single table or a form that owns its layout. Add heading actions through `extra`; feature owners retain accessible labels, busy/disabled states, errors and commands. A child toolbar inside the padded body adds no second outer inset.
-
-The typed Admin registry and `AdminShell` own workspace navigation. Desktop uses a 248px container-tone sidebar at 1024px+, independent sidebar/main scrolling, a shared header, readable breadcrumb and one main page title. Below 1024px a labeled menu control opens the 280px Ant Design Drawer; Escape and dismissal restore its opener. Context replaces global links with grouped exact-owner destinations and explicit collection/back links. Native anchors use current-page fill, visible focus and subtle text for unsaved state. Search Admin has a bounded local destination index, scoped/global ownership copy and an accessible empty state. No horizontal page-wide tabs duplicate the rail. `RetainedAdminPage` lazily mounts then retains private editor state for the same owner; immutable version inspectors retain their local read-only tab compositions.
-
-`AdminPageHeading` owns the single task title, adjacent inventory count and wrapping creation actions. `AdminOwnerHeading` keeps selected Instance/Definition identity secondary: the name uses Ant Design fontSizeLG (16px), metadata uses fontSizeSM (12px), and status/actions share the compact row. Full owner names remain in the main area; breadcrumbs ellipsize the owner with its full title available. On narrow screens, the header uses two deliberate rows: Agent Core/Admin beside 40px Menu/Search/Chat/Return icon controls above the single-line scope breadcrumb. Current task text remains in the main page title. All three trailing actions have zero inner padding at mobile widths and retain their full accessible names. The navigation Drawer body adds no second inset: navigation owns 12px outside, links own 8px inside, and group/link gaps use the existing 8/16px roles. Overview destinations are grouped by the same registry categories. Search results name the exact current owner once, then identify Global Admin separately; item descriptions show the destination rather than repeating the owner on every row.
-
-Full-width `AgentConfigurationPanel` surfaces keep one 16px heading/body inset. Ordinary forms are bounded to 48rem; operating instructions fills its panel. Field grids pair related controls at 768px+ and stack below. Execution budgets and Unattended model each have their own focused edit page; Models and Providers remain separate. Shared setting drafts survive page navigation and expose source/unsaved copy. Browser privacy uses a global Platform panel and the same bounded form, never a second editor inside Instance Effective configuration. Use 8/12/16px sibling gaps, 40px narrow controls (including header/navigation/close actions), local table scrolling, wrapped IDs/status text, the shared sticky configuration action frame and focus/anchor scroll clearance. Check 1440/1024/768/767/390/320px as one batched rendered pass; fix findings together and perform at most one visual confirmation round. Runtime behavior checks remain separate. See [shared composition guidance](../../web/src/features/admin/README.md) and [Frontend Implementation](../../docs/13-frontend-implementation-spec.md) for ownership.
-
-### Admin forms, creation dialogs and validation
-
-| Relationship | Shared owner | Presentation |
-| --- | --- | --- |
-| Form width and supporting copy | `admin-config-form` | 48rem maximum form; 72ch maximum supporting copy inside the enclosing panel/dialog inset. |
-| Related short fields | `admin-settings-field-grid` | Two equal, shrinking columns at 768px and above; one column below. The grid owns the 16px sibling gap. |
-| Sandbox field rhythm | `sandbox-profile-form` | A 16px vertical stack with child Form.Item margins cleared. Helper text keeps native 4px separation; controls fill their grid column. |
-| Action groups | Direct Ant Design `Flex` | Content-width buttons with wrapping 8px gaps. Separate Save/Discard from readiness checks and verification. |
-| Credential and Sandbox creation dialogs | `admin-credential-dialog`, `sandbox-profile-dialog` | One bounded flex container, locally scrolling body and nonshrinking header/footer; 16px dynamic-viewport clearance on each edge. Native AntD inner padding remains owned by the dialog. |
-| Narrow controls | Shared dialog/control rules | At least 40px for dialog buttons, inputs, selects and close controls below 768px. Textareas retain multiline sizing. |
-
-Add prebuilt image opens a centered 800px maximum Ant Design Modal, using the same fields and validation as the saved-profile editor. Cancel and Save profile stay outside the scrolling body. Dirty Cancel/Escape offers Keep editing or Discard changes; busy saves block dismissal, and the mask does not dismiss the dialog. A nested Add credential dialog owns Escape until it closes. Cancel restores the prior profile selection; closing restores the creation trigger. Saved-profile editing stays in its existing configuration panel. [Frontend Implementation](../../docs/13-frontend-implementation-spec.md#oci-catalog-interaction) owns the complete interaction contract.
-
-**The Submission Feedback Rule.** A failed submission must be immediately visible and lead to a correction. Client validation shows a deduplicated Ant Design warning with the first field error, keeps inline field errors, reveals any collapsed containing section, then scrolls to and focuses that field. Server failures show an action-specific error toast and preserve local details, safe diagnostics and editable drafts. A toast supplements persistent guidance; its disappearance must not erase the recovery path.
-
-**The Bounded Feedback Rule.** Chat and Admin share native Ant Design messages through [appMessageConfig](../../web/src/app/appFeedback.ts). Center the stack 16px above the bottom safe area, cap each toast at `{components.feedback-toast.width}` (640px), and retain 16px inline viewport clearance. Use an opaque `{colors.elevated}` surface and one 1px `{colors.borderStrong}` outline, without an additional shadow. Wrap full text and unbroken references with a top-aligned severity icon; do not truncate the recovery message. [AppShell's shared placement hook](../../web/src/app/appFeedbackPlacement.ts) raises the stack only when its default position would overlap a visible footer, composer, sticky configuration action frame or explicitly marked row actions (`data-feedback-actions`), keeping an 8px gap above that surface. The frontmost dialog owns clearance, including its explicitly marked body action groups and footer; covered page controls do not reserve space. Closing, scrolling, resizing and growing inputs recalculate placement. The stack uses normal flow and scrolls locally within half the dynamic viewport or the smaller available space above actions. Keep at most three messages, native hover pause, diagnostics and field focus; persistent local guidance remains after dismissal. Do not restore a fixed 96px gap across every page.
-
-Reuse [adminFormFeedback.ts](../../web/src/features/admin/adminFormFeedback.ts): `validateAdminForm` for explicit modal validation and `showAdminFormValidation` for native `onFinishFailed`. The containing feature opens collapsed sections before deferred scroll/focus. Validation warnings and Sandbox verification errors last 6 seconds; [showAdminFailure](../../web/src/features/admin/adminFailure.tsx) displays errors for 6 seconds, or 8 with diagnostic details. Keep diagnostic Copy available through the existing details popover. Neither helper introduces a custom control or notification system.
-
-The current shared pattern covers Sandbox profiles, credential/account/binding dialogs, Browser privacy, Skill forms and shared Instance configuration; Skill and Automation mutations reuse the error notification. Instance configuration owns one notification for a coordinated save, preserves remaining drafts after partial success, and distinguishes Save failed from Refresh failed. Background reads/polling keep their local recovery. A failed save does not replay the mutation or present a read-only Reload as a validation fix. See the [form-feedback verification record](../../docs/reports/admin-form-feedback-verification-2026-10-15.md) for the previously exercised desktop/mobile recovery paths and limits.
-
-Resource collections reuse `ResourceSelectionToolbar` for a wrapping compact selection/action row and `ResourceDeletionContent` for the bounded, scrollable path list in the shared confirmation dialog. `ResourceImportFields` owns the shared import table: one Path / Kind / Size / Status heading row, vertically centered desktop cells, and stacked rows below 768px. Instance Add allows an 880px drawer; edit/inspection retain 640px, each capped to the viewport with a persistent footer and 16px body inset. Keep untouched validation neutral and persistent recovery beside the affected controls according to the frontend specification. Format policy remains in Backend Implementation.
-
-### Admin collections and record details
-
-Definition Versions and Drafts use a 16px parent stack between creation guidance, controls and the active collection. Collection headings align with the controls; their own 12px stack separates heading, search and table. Draft editor sections use parent gaps without extra horizontal rules or section-top padding around already bordered panels. Capabilities owns its panel and does not render the unrelated candidate/settings accordion.
-- The enclosing collection owns search-to-content gaps and outer insets. `AdminCollectionToolbar` adds no padding inside section stacks or already padded panels; inventory cards alone give their direct search toolbar 12px block / 16px inline padding. Skills actions, search and grouped panels share the same content edge and 16px sibling gap. The mobile scroll hint keeps its own 8px gap below the search field.
-- Prefer one-line table action groups using direct Ant Design `Flex`, the shared `admin-table-actions` class and `paddingXS` gap. Buttons and tags do not shrink; each feature owns adequate action-column and scroll widths. This applies to Skills, Definition versions, Credentials and Workspace. Events uses the same compact gap for icon View and More actions, a 112px action column and a 950px table scroll width; its secondary operations stay in the direct Ant Design Dropdown. Form, expanded-record and drawer actions still wrap when needed.
-- In the legacy administrative Skills table, desktop names, IDs, descriptions, provenance and capability summaries ellipsize with native full-text titles. Inspection drawers retain complete content. Below 768px, metadata remains in the Skill cell, Skill ID stays separate, and the table scrolls locally; those readable detail rows may be taller. Missing-capability warnings remain visible.
-- Ordinary non-ellipsis cells use normal whitespace and anywhere wrapping; table links stay bounded to their cells. Automation Last run reserves 240px for the usual status/outcome label. No blanket nowrap rule may force text into adjacent columns.
-- Wrapped Automation timing field rows own their 16px sibling gap and external separation; their Form.Item children add no bottom margin. Effective model source describes saved configuration, while selection controls may contain an unsaved draft. Reasoning selectors always have a visible associated label.
-- Leading panel messages use the existing 16px body inset without extra top margin. In a panel with `bodyGap`, the parent owns the compact/default/section gap and direct Typography margins are cleared. In an unstacked panel, secondary text following a direct sibling keeps the default 12px separation. Short timing/unit controls, scope filters, base-version toolbar choices, pagination and table model editors intentionally stay compact; draft and instance grids keep their field columns. Event choices flex and wrap beside content-width actions.
-- Self-management owns Agent management authority and reviewed shared changes; Automations, Trigger restrictions and Unattended model have separate destinations using the existing Admin panel composition. Record-editing forms (authoring/model, Automation, Experience checkpoint, Event, Credential metadata and screenshot privacy) use the shared `{components.admin-configuration-form.width}` maximum width. The `admin-config-form` layout fills available width up to that bound, gives Form.Item fields 16px bottom spacing and supporting Typography a 72ch maximum measure. Selects fill their field columns; evidence and registration tables retain available width. Pending configuration uses the shared global actions; consequential Freeze/Unfreeze remains an explicit confirmed command. Model fields have visible labels, and advanced review belongs in its section header.
-- Admin form actions use content-width buttons in wrapping rows on desktop and mobile. Fields and upload targets may fill their container; action buttons do not stretch with them. The Admin content container owns a 40px minimum button height below 768px, including disabled and loading states.
-- Collection introductions and creation actions follow the selected collection: New definition for Definitions, New instance for Instances, and the New Event drawer within global Connections → Events. Keep the shared header and canonical sidebar structure.
-- Definition Save / Publish / Delete and Instance Save / Discard / Refresh use the same sticky panel above the editor pages. `.admin-owner-actions` owns a container-tone fill, 1px border, surface radius, one section inset on every side and compact gaps. Action groups wrap at natural button widths and retain 40px narrow targets; status/recovery stays readable below or beside them. Focused fields scroll clear of the panel.
-- Memory and Experience reuse `AdminSessionPicker`, a product composition of direct Ant Design Select, Input, Button, Flex and Alert. Browse by readable conversation title/date; keep manual Session ID entry, refresh and older-page actions near the selector. Source identifiers wrap below the field. For IdentityUser and User, Memory scope, Load items and Reset scope share a control baseline on wider screens; the action pair wraps beneath the scope selector on narrow screens. Session scope keeps top-aligned scope/source labels and a separate action row below the conversation picker.
-- Schedule run/end instants use Ant Design date/time pickers with the viewer time zone stated below the field and a readable preview below the timing group. Recurring end dates use date-only pickers; local time and named time zone remain separate fields. Interval fields reserve enough label width. Keep compact controls and section gaps; use native picker focus and keyboard affordances.
-- Unavailable reads use an inline Ant Design error Alert with Retry and safe diagnostic details rather than an empty-result presentation. Keep failed-copy guidance inside the one-time credential dialog, near the selectable value. Visible field labels must be included in accessible control names.
-- Visited Instance pages retain drafts while hidden polling pauses; returning refreshes the visible section. Stable exact-owner workspaces retain forms while the route controls visibility. Eligibility, UTC conversion, ownership checks and polling behavior remain specified in `/docs`.
-- Definitions, Instances, Events and versions use compact tables with searchable labels, column filters/sorting where offered, and shared pagination. Learned-memory and automation tables reuse the density and scrolling; their existing scope/load controls remain the entry point.
-- Experience and Automations use a searchable summary table with one expanded record at a time. Goal/name links expose the full title and expanded state; long summaries ellipsize. The narrow search toolbar includes a horizontal-scroll hint. Its clear affordance and existing no-match/empty states remain visible.
-- Expanded records use bordered single-column Descriptions and wrapping trailing action groups, separated by the enclosing token gap. Observation bullets remain distinct. Provenance is a separate grid with the same label edge. Do not join observations into a dense punctuation-separated paragraph.
-- Version inspection stays in the right-side drawer (`{components.admin-version-drawer.width}` maximum; viewport width on mobile), with 16px body padding, its own scroll container and persistent close control. Read-only values remain readable and copyable; select/switch/number controls retain their disabled presentation. Closing returns focus to the version link.
-- Effective configuration and validation use the same responsive label/value layout. Long identifiers and fingerprints wrap inside their cells. Keep status names and diagnostics readable; semantic tags reinforce text rather than replacing it.
-- Preserve the established forms, revisioned actions and confirmations described in [Frontend Implementation](../../docs/13-frontend-implementation-spec.md). This section documents presentation, not operation eligibility or API limits.
-
-### Operational drawers
-- The [October 9 bounded review](../../docs/reports/background-work-ui-review-verification.md) confirms the existing original-result composition at 1440/768/390px; retain it rather than adding another polish layer. Read preserved original titles/status/results/files separately from continued Chat and completion delivery. Settled drawer sizing is 640px on desktop/tablet and full viewport on mobile, with one 16px body inset.
-- Background Work has a single title, Background work; selecting a Session changes the title to its original task name. Introductory copy belongs in the body. The Automations drawer retains its own title/subtitle composition.
-- Catalog rows are semantic list items for Sessions. A wrapping level-five heading presents the complete Session name beside its initial Run’s filled status chip, aligned with row content without button padding or hover fill. Origin, Updated and bounded file/attempt count share a wrapping metadata row. The two-line result/failure preview uses normal text color; progress/unread attention and a wrapping 8px action row follow.
-- View original result is the single explicit action that enters Session detail; the name is not interactive. All background Sessions is a compact, start-aligned Back control with 8px inner padding. History navigation moves focus to Back, then restores View original result on return; polling does not move focus.
-- Source Automation navigation uses an inline Typography.Link in the action group. The selected Session shows origin, optional report-back copy, Continue in chat, View Automation when applicable, original file count, original Run details, expandable Conversation run history and Original task files. Continued in chat is secondary text; Open chat replaces Continue when ChatList is present. Continue in chat is the full-width primary action in this detail view; catalog actions wrap at their natural width. Unavailable Sessions or archived owners keep history available with continuation disabled and a readable explanation.
-- Continue failures stay in an inline Ant Design Alert with recovery guidance. Loading disables repeated continuation. A successful live, paused or read-only ended opening closes the drawer to reveal the conversation. Eligibility and same-Session behavior remain owned by `/docs`.
-- AgentRunDetails is shared by SessionRunHistory and Admin Run inspection. It shows status/turn kind/attention, optional progress, Model/Attempt/Updated, retry time, outcome, confirmed effects, exact approval preview and safe diagnostics. Labels name the displayed outcome: Response, Result, No action or Needs attention. A quiet No action retains readable copy without an attention badge.
-- Outcome, confirmed effects and approval preview retain complete escaped, wrapping text in separate labeled focusable regions. Each uses natural short-content height, a `clamp(8rem, 24dvh, 16rem)` scroll cap, 72ch text measure and the shared primary focus outline. Keep these sections open; schedule-expression insets remain specific to Automations.
-- Approve action and Reject action share a wrapping 8px control row; expiry has visible copy and disables both decisions. Cancel run stays content-width and start-aligned. Consequential actions use the shared centered confirmation, retain inline stale/error feedback and expose loading/disabled states.
-- Run history and Files retain their own heading, loading, empty, inline error/retry and bounded-page footer. Files reuse the same ArtifactView Download/Retry card as conversation history. Failed older-page loads keep the existing content visible.
-- Background Work and Run details cap at 640px on wide layouts and use full viewport width below 768px. Their body owns 16px padding; narrow drawer buttons retain at least 40px height. Automations remains 400px on wide layouts and full viewport width below 768px with its existing schedule rows and elevated expression inset.
-- Schedule metadata keeps its time-zone chip and formats the next occurrence for the viewer locale in the schedule's named zone, with a readable fallback.
-
-### Conversation turns
-- User: right-aligned bubble (`8px 12px`, 18px radius).
-- Live user transcript: the same bubble at 92% opacity with a restrained dashed border; pulse only when reduced motion is not requested.
-- Assistant: when public `speechText` meaningfully differs from display, show **Spoken** first (the TTS projection), then open sanitized Markdown, blocks, and files. Spoken is the same list item: speaker icon (decorative) + visible “Spoken” label (tertiary via CSS), body secondary with `pre-wrap`; 8px stack gap; 8px padding below a 1px border before on-screen detail. Not a second bubble, avatar, or timestamp.
-- Application message: in the same reading column, before the assistant entry that shares its response. Agent speaker, visible “Still working” in the tertiary label color, Markdown body in secondary text, `data-role="applicationMessage"`, `aria-live="polite"`. Not a card, not Spoken, and not the activity row.
-
-### Composer toolbar
-- Left: Model (reasoning level inside the Model button when supported), Attach, Voice, microphone.
-- Right: context-sensitive Stop / Queue / Send. With queued work above the shell, Steer and Remove stay row actions rather than joining the toolbar.
-- Accessible names stay Model, Reasoning, Attach, Voice, Send, Stop.
-
-### Instance automation and execution navigation
-
-Instance contextual navigation uses focused destinations with native Ant Design outline icons: Profile, Definition version, Instructions, Conversation, Behavior, Initiative, Voice, Models, Providers, Execution budgets, Skills, Resources, Workspace, Capabilities, Credential bindings, Self-management, Trigger restrictions, Memory policy, Automations, Unattended model, Memory, Experience, Sessions, Runs, Lifecycle and Effective configuration. Draft pages share the focused configuration destinations with one candidate, Identity & goals, Metadata, Test & Publish and Advanced JSON. Immutable version inspectors retain their own local read-only tabs. Visited pages retain exact-owner form drafts. Configuration is a searchable compact collection with concise Name, Destination, readable When, lifecycle, next activation, last Run, model and creation provenance. Schedule and Event variants share Name/Instructions and explicit Run in controls. Existing conversations use the shared owned eligible Session picker and pinned model; separate background Sessions use unattended model controls and a distinct None/Selected conversation report picker. Tools/Vision requirements stay explicit. Expanded record details retain the shared top-aligned desktop labels and stacked mobile layout.
-
-Activity defaults to Sessions with meaningful titles, secondary copyable IDs, origin, lifecycle and last activity. Sessions and Runs share the Admin collection toolbar/table, cursor footer and token-owned 8px row gaps; search names its loaded-page scope. Runs remains an independent collection with readable activation, secondary Run/Session IDs, Created, Status and Updated. Created means admission, not execution start. Continuity retains Memory and Experience. Run links open the exact AgentRun in the right-side Run details drawer, using the shared AgentRunDetails composition. The current collection does not show an Automation-name or admitted-Instructions column. Tables scroll locally while long drawer IDs/results wrap. Source controls expand/focus the exact configuration or Experience checkpoint without discarding drafts. Save returns focus to its source; deletion returns it to New automation. Close/Escape/mask restore the Run opener. Existing action groups wrap and retain at least 40px height below 768px. Exact Session reads gate inspection actions; cached list rows never hide missing or failed detail reads. Loading uses the incumbent Ant Design Spin. Detail failures show one inline Alert with an exact-session retry and no lingering spinner. Background detail reuses BackgroundWorkDrawer with the same 640px maximum/full-mobile width and 16px body inset. Safe errors and explicit retry stay inside the affected panel/drawer. No execution-authoring controls belong in Runs.
-
-### Message file and artifact cards
-
-Sent attachments and published artifacts share `ChatFileCard`. File collections own aligned stacked rows capped at 32rem; file-bearing user bubbles reserve available width and image thumbnails remain above their named card. Filenames expose their complete text in hover/keyboard tooltips. Published file cards reuse the file-chip elevated fill, 1px border, 12px radius and 8px × 12px padding. The enclosing block owns available width; the card caps at 32rem. One vertically centered horizontal row contains the leading file icon, a shrinking metadata column with filename ellipsis and secondary type/size, then tooltip-equipped Preview and Download icon-only Ant Design buttons. Complete filenames remain in accessible names/titles. Trailing actions use a non-shrinking group with the existing tight gap; mobile hit targets retain 40px. Loading and failed metadata/downloads keep safe local Retry. Generic Artifact and Workspace actions contain no provider-specific export button; integration mutation belongs to authorized conversational tools. No extra shadow or workspace browsing surface is added.
-
-### Admin Event and Automation compositions
-- Global Connections → Events shares the collection toolbar and pagination. The unified catalog combines Built-in and Webhook rows with All / Built-in / Webhook filtering. Its Subscriptions column reads active / total for Webhooks and Instance-scoped for Built-in definitions; Webhook details retain separate labeled counts. Event details separate Received signals from Automation deliveries, with distinct truthful empty states. Use the existing responsive Descriptions and local table scroll; payloads and protected credentials are absent from resting details.
-- Built-in definition inspection uses the same 640px/full-mobile drawer, responsive Descriptions and read-only schema/example fields. `BuiltinEventSubscribers` owns an 8px heading/selector/table stack. Its compact collection table scrolls locally at 500px, with a 280px ellipsis name column and 220px wrapping state column. Full names remain in titles and accessible button text; links reuse the shared focus and 40px mobile hit policy. Built-in delivery diagnostics reuse the collection table wrapping and tabular numerals with a 650px local scroll width. Definition details remain visible beside independent subscriber-read recovery.
-- Keep View as the primary row inspection action. More actions contains Rename, Rotate credential or Reactivate Event, and Revoke as applicable. Consequential operations use the shared centered confirmation. Reactivate Event copy explains the new credential and future signals; no previously skipped delivery is implied to replay.
-- `WebhookRequestExample` composes direct Ant Design Tabs, read-only Input.TextArea, Button and Alert. JSON body and cURL request share the same copyable region, with compact gaps and a wrapping copy action. Keep the selectable text available when clipboard access fails, show recovery inline, and use an illustrative body and `<secret>` placeholder. Optional UTC `occurredAt` guidance stays beside the example. No new code-editor styling or credential display is introduced.
-- New/Edit Automation keeps the existing 640px maximum drawer, full width below 768px, and 16px body inset. The persistent footer owns a 12px gap between Automation summary and the Save row; the summary owns an 8px gap between its labeled lines. Summarize the selected trigger and bounds, destination and requested report; show disabled or incomplete-selection guidance in place. These are secondary text lines rather than another card. Save remains content-width with the existing 40px mobile minimum.
-- Instance navigation uses Profile, Definition version, Lifecycle, Automations and Unattended model; the typed registry owns canonical URLs, active states and page headings. Capability overview uses the Authorized / Always selected count line without a duplicate capability disclosure. Knowledge source and saved scenario counts sit immediately beside their headings with the shared compact gap. The Always count describes explicit selections, not the complete initial model context; supporting copy acknowledges Core-managed browser bootstrap and active Skill requirements. Authorization and eligibility remain authoritative in [Frontend Implementation](../../docs/13-frontend-implementation-spec.md).
-
-### Automation destination and delivery presentation
-
-Use the shared AutomationDestination and CompletionDeliveryStatus composition. Destination and Reports to are separate compact secondary lines with exact Conversation links; Originally created from remains provenance. Chat Automations links to the exact Admin record. Background Work shows Not requested, Ready, In use, Handled in conversation, Pending · message queued, Reported, Could not report or Not reported and keeps unavailable/quiet results inspectable. Parent callback provenance is modest inline Background work completed metadata and an owned child link on the ordinary assistant turn. Preserve 8/12/16px rhythm, Ant Design theme, 16px drawer body, persistent Admin editor footer and 40px narrow actions. Long title/status/action groups wrap; collection tables scroll locally.
-
-A bounded Synthetic Playwright MCP review at 1440×900, 768×900 and 390×844 covers the conditional report picker, exact source link, Initiative-off report and truthful quiet child status. Resize capture waits for the existing drawer animation; full-mobile Background Work is confirmed at x=0,width=390. See [enhancement evidence](../../docs/reports/automation-targets-background-reportback-verification.md). Previous milestone evidence remains historical.
-
-
-### Result handoff and wait presentation
-
-Reuse CompletionDeliveryStatus and AgentRunDetails in Chat/Admin. Ready and In use are accounting states; Handled in conversation links the exact parent Run with View handling run and removes unread attention. Waiting uses a clock plus typed condition/deadline and Cancel, separate from retry/approval. Keep existing 640px drawers, full width below 768px, 16px inset and wrapping controls. Synthetic MCP review covers 1440×900, 768×900, 390×844; evidence is in docs/reports/assets/durable-completion-inbox.
-
-Shared Event authoring retains the established Admin drawer/footer and one-time credential dialog. Event details use the existing responsive descriptions layout and genuine subscriber/delivery tables; detail action groups wrap while the collection keeps View and More actions inline. Automation’s existing drawer separates General, Trigger, Execution and applicable Completion; Advanced collapses model/effort and tool/vision requirements. Nested Event management preserves the Automation draft and returns focus to its initiating control. Searchable catalog and timezone selectors use direct Ant Design grouping/filtering, with the same category order for Authorized and Always available capabilities.
-
-
-### Scoped Instance settings and resources
-
-Inherited sparse settings are immediately editable through direct Ant Design controls. The global configuration panel exposes Save changes, Discard and Refresh across retained visited editors. Changed fields disclose saved or unsaved override/source state through the existing named tooltip icons; per-field Reset remains beside its label. `.instance-settings-field-label` reserves a 32px minimum at wide widths and 40px below 768px, with compact wrapping gaps and non-shrinking icon controls. Long labels may grow; adding a source icon does not shift the input. The shared 48rem form bound owns the two-column field grid, stacked below 768px, bounded short controls, horizontal switch rows and full-width instructions/multi-value fields. Section Reset remains confirmed; field inheritance and sequential-save/partial-error semantics stay in `/docs`. Scoped resource collections retain quiet stable identity and written enablement beside compact switches. Inspection uses the shared 12rem desktop detail-label owner, stacked mobile labels, one 16px drawer inset and content-width actions.
-
-
-### Model reasoning presentation
-
-Reuse the existing Chat Model dropdown and Admin ExecutionModelFields composition. Preserve token-owned shell/control insets and mobile wrapping. All reasoning controls present supported intensity in `none → minimal → low → medium → high → xhigh → max` order through the shared utility; unknown/adaptive modes use discrete choices outside the slider. Slider value text names the visible effort. Model switching preserves supported effort and selects the new configured default only when needed. Catalog names/capabilities come from backend descriptors; unavailable saved model keys remain explicit. No automatic routing controls or extra model-tier badges.
-
-
-### Built-in Event presets and filters
-
-The existing Instance Automation drawer owns disabled Custom/preset drafts with Schedule or Events mode. Independent collapsible Event rows use stable identities, source type/key, current eligibility, filter/sample tests and dispatch; one grouped searchable picker discovers Built-in and Webhook definitions. Global Events shows safe code-owned Built-in definitions read-only alongside managed Webhooks; private activity stays Instance owned. Preserve separate unsaved mode branches and per-row samples, nested creation into the initiating row, shared Ant Design v6 controls, 640px/full-mobile drawer, reachable footer and focus return. Partial catalog failures retain successful definitions and draft state with retry. Product behavior is owned by docs/13 and docs/14; this is presentation context only.
-
-Browser operational budgets reuse the existing Admin Effective configuration Browser provider Descriptions, responsive detail labels and natural wrapping. Keep units and scope beside values, and the host-restart applicability in the same section. These are effective-value disclosures, with no separate settings layout or custom controls. Behavior and defaults remain owned by docs/13 and docs/15.
-
-### Browser provider and screenshot privacy
-
-System → Platform → Browser privacy (`/system/browser-privacy`, requiring current `system.governance.manage`) owns the single editable host policy. Instance Effective configuration keeps read-only Browser provider readiness, limits and resolved privacy diagnostics. Effective/saved policy Descriptions retain the full section width, shared 12rem desktop label edge and stacked labels below 768px. The global privacy editor uses a 12px content stack and the shared bounded configuration form; its enclosing panel owns the outer inset. Supporting copy stays within 72ch. Save and Reload are content-width actions with an 8px wrapping gap and 40px mobile minimum height. Loading uses Spin; read/write recovery and saved-revision feedback use inline Alert at the affected editor. Failed submissions also follow the shared warning/error and field-focus pattern above. Unmasked exposure review uses the existing centered danger confirmation. Mode/revision, deployment constraints and activation behavior stay in [Frontend Implementation](../../docs/13-frontend-implementation-spec.md#browser-privacy-editor).
-
-### Agent self-management presentation
-
-Reuse the single Self-management authority page and existing bounded configuration form. Off/Assisted/Managed, per-field inheritance/reset, allowed areas and explicitly delegated automatic categories must remain legible at 1440/768/390. Freeze is an Instance-local lock with explicit Admin unfreeze; retain choices/content and ordinary tasks. Definition Self-management provides defaults through the shared draft/read-only editor. Built-in · Read-only · On demand management procedures use existing Skill rows/drawers, without content authoring controls; distinguish stored enabled choice from master suppression. Exact Chat approvals show target, complete before/source/after, revisions and next new Run timing; freeze states immediate revocation. Preserve stale drafts, explicit refresh, Escape, focus return and shared diagnostics. Behavioral authority remains docs/13 and docs/14; the successor report records runtime evidence and remaining acceptance.
-
-### Email Account presentation
-
-Observed Gmail account forms reuse the Credentials panel/table, expanded safe details and bounded 640px Admin dialog. The shared Add credential dialog selects Google Drive, Gmail, Custom IMAP/SMTP or General purpose, then reuses the appropriate specialist fields. Gmail has display name and concise read/send consent guidance without password, editable sender or endpoints. Verified mailbox, independent credential/connection status and semantic icon/text tags remain in the same Ant Design v6 Operate world. Synthetic says no Google connection or delivery. Custom retains its TLS/password editor and incoming/outgoing tests. Reconnect/Test access/Disconnect use wrapping 8px action gaps and explicit all-agent confirmation; shared 8/12/16 spacing and 40px mobile controls remain. Callback reopens the authoritative account; retry guidance stays local. Decorative button icons are hidden from accessible names. The explicit Chat chooser and exact From/To/Cc/Bcc/content approval remain separate. Current responsive interaction evidence at 1440/768/390/320 lives in docs/reports/gmail-oauth-verification-2026-10-12.md; `/docs` owns behavior and acceptance.
-
-### Admin branding, navigation and configuration actions
-
-Brand the header Agent Core with a secondary Admin marker; a visible 24px vertical separator distinguishes desktop breadcrumbs. At 320px the secondary marker stays fully visible beside the wordmark; header/brand gaps alone may use native paddingXXS (4px). The regular 8/12/16 roles remain unchanged. Contextual navigation has direct collection/back links and no Global integrations & platform shortcut. Icons are native Ant Design outline icons, hidden from accessible names.
-
-Use one bordered, rounded sticky actions frame with a single 16px inset for Definition draft Save/Publish/Delete and Instance configuration Save/Discard/Refresh. The configuration bar coordinates existing CAS commands, reports partial writes and preserves remaining edits. Inherited settings are editable immediately; only edits create sparse overrides and per-field reset keeps its existing semantics. Minimum 32px desktop / 40px narrow label rows prevent override/restriction/reset buttons from moving controls. Tables use tooltipped icon buttons for familiar actions, or a More menu with native icon-before-label choices; returning from a dialog restores its surviving trigger or the creation control. Behavior and publication gates remain owned by docs/13 and docs/14.
-
-### Email Monitoring presentation
-
-Expanded Email Account details add Monitoring below connection/transport details using direct AntD Flex, Switch, Select, Tag, Button, Alert, Descriptions and diagnostic Collapse. Shared table inline-size containment keeps Credential detail controls within the visible viewport; inventory columns still scroll locally. Use token-owned 8px action gaps, 12px groups and 16px section separation; new prose is bounded to 75ch. Saved versus dirty choices are explicit, with Save/Cancel/Reload, queued checks and local safe recovery. No kit/token changes or modal redesign. The shared Credential detail stack owns 16px separation between metadata, connection/transport and Monitoring. A quiet divider separates Monitoring; its 16px title shares a wrapping row with live semantic status, header copy uses an 8px stack, and settings/actions use a 12px stack. Reload is a text action. Subscriber guidance stays beside configuration links. Mobile interval controls and labels use 40px minimum height. Saved feedback clears on new drafts or Cancel; next-check text distinguishes Off, Paused and operator unavailability. Diagnostics stay collapsed, status combines icon and text, and the three-option Select renders accessible real options. `/docs/13` and `/docs/14` own behavior; the monitoring verification report owns observed responsive/interaction evidence and remaining gates.
-
-Email/main integration keeps Monitoring inside the contextual Admin Credentials surfaces. Shared canonical route helpers own Automations and Credential bindings links; the focused Credential bindings page supersedes the earlier combined Capabilities & credentials destination. Instance monitoring drafts participate in retained workspace dirty status and departure protection. Account refreshes retain mounted details. Containment uses the available content width beside the 248px sidebar at 1024px and above, with shared navigation Drawer below. Integration captures and observed journeys are recorded in docs/reports/email-monitoring-main-integration-2026-10-13.md.
-
-### File preview presentation
-
-The read-only `FilePreview` composition inherits the shared Ant Design dark presentation roles. Source collections retain their own action spacing; the preview shell owns filename/actions, 12px sibling gaps and the bounded content canvas. Desktop uses 90vw capped at 1440px; below 768px, the shared Modal fills the viewport. Document-level horizontal overflow is forbidden; grids/code scroll locally. Mobile preview controls, worksheet inputs/tabs, checkboxes and dialog close have 40px minimum targets. The metadata group keeps source/size readable and truncates its MIME line with complete title/tooltip disclosure; worksheet tabs use the parent’s 12px gap without a second built-in bottom margin. Spreadsheet controls stay subordinate to the document; the range field grows into remaining mobile toolbar space. Word zoom shows a stable, tabular percentage beside its slider.
-
-CSV defaults to Grid, with a quiet Grid/Text control and optional header checkbox. Word pages sit on the neutral canvas inside a sanitized, scriptless iframe; the document's own paper/text formatting stays within that frame. XLSX and CSV Grid share the lazy read-only FortuneSheet canvas with compact source-coordinate/window navigation, local scrolling, range Copy and zoom; XLSX retains worksheet tabs and a separate formula/cached-value readout. Backend effective policy owns limits; oversized/structural/fetch/renderer failures retain original Download and local recovery. Original document ink/fills stay on the sheet canvas, with Ant Design tokens owning the surrounding controls. Clipped merges are explicitly disclosed. Shortened XLSX cell/window text has an explicit native information notice and smaller-range/original Download guidance. A cell-length ceiling can still shorten a one-cell range; only the original download preserves every value. The [integrated correction](../../docs/reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14) records browser recovery evidence. Loading, unsupported/corrupt/permission/stale/codec states use existing AntD controls. Source-owner changes abort and clear old content. Closing keeps native Modal focus restoration; Word frame Tab/Escape is handled by trusted parent listeners. No generic kit, palette or app-level Files sidebar is added.
-
-The [successor ledger](../../docs/reports/office-file-preview-drive-verification-2026-10-13.md) owns original implementation/hosted acceptance. The [original polish verification](../../docs/reports/file-preview-drive-ui-polish-2026-10-14.md) records source `8e053018`, five-width containment, 40px mobile input/close measurements, short-screen save, destination recovery and responsive worksheet stability. Its [confirmation captures](../../docs/reports/file-preview-drive-ui-polish-2026-10-14.md#confirmation-captures) record the preceding presentation. The [FortuneSheet ledger](../../docs/reports/fortune-sheet-preview-verification-2026-10-14.md) owns subsequent shared-canvas verification and captures. Real Google, actual native 200% zoom, physical touch/screen-reader and installed Office-client fidelity remain separate and unverified.
-
-Drive account connections remain in existing Credentials; Instance alias details open a bounded app-authorized file modal using the shared preview canvas. Drive search retains a wrapping control row and mobile hint for locally scrolling details/actions. Its named Clear control uses the emitted empty search value to restore the unfiltered list. Loading and retry stay local to the account/file collection. Generic Artifact, sent-file and Workspace actions expose Preview/Download; no destination form or Save to Drive control remains. Upload-session continuation and exact source/destination receipts belong to authorized agent capabilities, with mutation review through the existing ApprovalModal. Artifact and sent-file actions stay together in the non-shrinking card action group, keeping a readable filename at 320px. Synthetic identity remains visibly distinct from Google delivery. Word pages retain original document ink on a white page within the neutral product canvas; generated styles are sanitized inside a scriptless frame.
-
-Dynamic single-line Chat header, Session rail and file labels use CSS truncation with complete-text Ant Design tooltips/titles. The shared presentation owner avoids measured Typography resize feedback while retaining the established dimensions, color roles and action grouping.
-
-The [FilePreview surface brief](../../.impeccable/surfaces/web-src-features-filepreview-filepreview-tsx.md) records its Read mode and renderer composition; Chat/Admin briefs retain their Operate modes. Surface modes are not global design tokens.
-
-### Credential creation and Drive approval presentation
-
-One primary Add credential opens the existing bounded Admin Modal with a purpose Select and reused specialist fields. Purpose changes discard transient form/secret state; immutable-purpose edits open their specialist dialog directly. Saved Gmail/Drive connection Tags use the same semantic tokens/icons beside a separate Active/Disabled tag; Synthetic is explicit. Metadata keeps verified identity and provider/scope without duplicating Connected. The shared ApprovalModal uses action-specific Drive titles and destructive Trash CTAs, an 880px maximum viewport-bounded dialog and compact native Ant Design table for exact file/name/version targets. Reuse admin-collection-table cell wrapping, tabular numerals and native 8px padding with fixed layout. Name/File ID/Version columns use 36%/52%/12% on desktop so typical IDs fit on one line; longer values still wrap. Below 768px the exact 12px ID sits beneath the filename with a native 4px Flex gap, and Version remains separate. Metadata wraps completely without pagination, selection or ellipsis. Drive review content may use 60vh and shrinks inside the existing viewport-bounded container; other approvals retain 40vh. Titles reserve 32px for the native close control; footer, keyboard focus and Reject/Escape behavior remain. Composer Send/Stop tooltips are unmounted while an approval is pending so a popup behind the modal cannot consume its first Escape; normal hover help resumes after the decision. Product behavior is owned by docs/13-frontend-implementation-spec.md.
-
-### Session sandbox presentation (P10 local demo)
-
-Platform Sandboxes reuses retained Admin configuration panels, AntD vertical Form and existing control-width/navigation-guard rules. Global state and safe limitations precede editable profiles; Save/Discard/Verify share the compact action gap. Definition and Instance selections reuse the shared Sandbox configuration panels and profile facts; command grants remain in Capabilities. Published versions expose read-only Sandbox inspection.
-
-Chat adds a quiet Code icon beside existing header actions. Session sandbox uses the existing 640px desktop/full-width mobile Drawer pattern, bordered descriptions, wrapping status/exit/duration metadata, copyable code and AntD Collapse for output. Foreground stdout/stderr stay distinct; background output is labeled combined. Recovery errors retain prior evidence and consequential actions require the shared confirmation with stale-selection fencing. Files stay in shared Artifact/file-preview surfaces from current main; no second viewer or kit is added.
-
-#### Contextual diagnostics
-
-Keep diagnostic actions beside the evidence they explain. Session sandbox uses visible Command diagnostics beside exit/duration/file status, and Initialization diagnostics beside setup metadata, before the corresponding output panels. The heading group owns 8px sibling gaps; the command-result stack owns 12px section gaps, with paragraph bottom margins cleared so native typography does not add a second gap. Metadata and actions wrap naturally. A missing diagnostic ID renders no control or empty standalone row.
-
-Reuse [DiagnosticDetails](../../web/src/features/chat/DiagnosticDetails.tsx) with a contextual `label` for the visible native text button and popover title. The info icon stays beside its label with native compact padding. Existing error notices retain their Error details context. Diagnostic ID and Session ID remain copyable in the shared popover; command diagnostics preserves the environment-ID fallback. Narrow Session sandbox buttons and shared diagnostic Copy controls have 40px minimum height. Escape dismisses the popover and restores its trigger; the next Escape may dismiss the owning drawer/dialog. The [focused verification](../../docs/reports/sandbox-diagnostics-polish-verification-2026-10-15.md) records responsive grouping, actual Copy and keyboard behavior.
-
-One bounded local review inspected Admin and Chat at 1440/1024/768/390/320px after drawer transitions settled, with no horizontal overflow. Runtime Save/Discard/navigation guarding, real coding/Office downloads, cancel/reset and Core restart were exercised. The merged 1,021 frontend tests and build passed; final runner/hosted acceptance remains in the verification ledger. This records local evidence, not production or physical-device acceptance.
-
-#### Sandbox recovery clarity
-
-Retain native Ant Design Alert, wrapping metadata, the existing 640px/full-width Drawer and compact parent gaps. Setup failure names the correction and reset; expiry explains retained Workspace/Artifacts. Confirmed file commit with uncertain command completion and unknown file commit use distinct warning copy. Unknown never means not committed. Admin Verify profile tests the saved image and initialization; its timestamp/message is an observation of the unchanged configuration revision. Backend/product documents own these semantics.
-
-### Sandbox configuration and observable setup
-
-Operate mode preserves the dark Ant Design v6 Admin shell. Instance → Sandbox sits beside Execution budgets and owns inherited Profile selection, sparse reduced resource/lifecycle/storage overrides and the optional Instance supplement script. Reuse shared configuration Save/Discard/Refresh/CAS controls, inherited-value tooltips, field grid and Reset to inherited. Existing `execution#sandboxPolicy` links resolve to the new owner. Effective setup remains visibly saved configuration; an existing generation keeps its pinned revisions until expiry/reset.
-
-Definition drafts place Sandbox beside Execution budgets, matching Instance navigation. The shared configuration panel owns outer insets and section gaps; stacked fields own 8px label/control gaps. Default selection uses the existing 20rem settings control cap; multiple allowed profiles wrap across the available field width. Shared SandboxProfileDetails and responsive descriptions keep current Global image/resources/lifecycle/storage/setup facts aligned with Instance effective setup. Published-version Sandbox inspection has no editable controls. Inventory failures preserve saved IDs, fence both selectors and offer Retry profiles; unavailable IDs remain visible. Capabilities links to the policy owner, and legacy `capabilities#sandboxPolicy` draft links resolve to Sandbox.
-
-Global Sandboxes separates Check image readiness from Verify profile. Instance setup verification tests both ordered scripts and displays exact saved configuration pins. Bounded escaped stdout/stderr uses the shared collapsed SandboxEvidence component, with exit/duration/truncation/diagnostic evidence separate from Profile fields. The Session drawer exposes Initialization plus created/activity/idle-or-active-reservation/maximum-lifetime and cleanup reason/retry state. Failed or uncertain initialization requires explicit reset even after cleanup; unknown filesystem commits require inspection and never imply absent changes. Existing confirmations and surviving-trigger focus restoration apply. Verify affected configuration/drawer layouts at 1440/768/390/320; keep controls wrapping and long images/scripts/diagnostics within the shared content width.
-
-#### OCI catalog presentation (2026-10-15)
-
-Operate mode keeps the current dark Ant Design v6 shell and token bridge. Sandboxes now composes the existing AdminCollectionToolbar, locally scrolling admin-collection-table, shared guarded Form, shared SandboxProfileDetails and SandboxEvidence. The enclosing panel owns insets; token.padding (16px), paddingSM (12px) and paddingXS (8px) own section/control groups. Name actions align at the table content edge, secondary IDs use an 8px inset, source metadata wraps and short copyable digests stay readable. Local image identity is explained as installed on this daemon. Status uses words plus existing semantic Tag colors. Add prebuilt image is the catalog primary action and opens the bounded creation Modal described above; saved-profile editing remains inline. Dirty drafts fence selection and Save owns authoring. Image entry accepts tags, Docker Hub short names or digests; Save resolves tags to a fixed digest. Public images need no registry credential. Stored references and copied identity show the saved immutable image, not a promise that an entered tag stays unchanged.
-
-Advanced settings disclose resource ceilings and initialization; multiline image references wrap rather than stretching the page. Exact historical revisions are read-only, including their observations. Definitions and Instances reuse availability labels and keep unavailable stored IDs visible. Draft policy repair is explicit; verified configuration with an unavailable server stays inspectable but is not newly selectable/admissible. Credentials owns the existing purpose Modal, masked non-readback secret, scope fields, edit/rotation/status and focus restoration. Session drawer adds safe image/profile pins with unchanged 640px/full-width recovery ownership. No palette/token system, UI kit, builder or second file viewer is added.
-
-Historical catalog verification before the six-column hardening below: page widths equaled the viewport at 1440/1024/768/390/320. That earlier table used a local 640px minimum on compact viewports; the current six-column table uses 1080px, with profile actions in the first visible column. The 320×600 long-reference field stays within 262px; a CSS 200% zoom probe at 1024px does not enlarge the page. Registry Modal masks protected input, traps focus, clears canceled secrets and restores its opener after Escape/save. Actual code/Office, private selection and recovery journeys supplement visual inspection. Native browser zoom, manual screen-reader and exhaustive state/device coverage remain separate. [OCI verification](../../docs/reports/oci-sandbox-profile-catalog-verification-2026-10-15.md) owns actual checks/captures and source fingerprints; `/docs/13` owns behavior.
-
-#### Current Sandbox image guidance
-
-The Image helper explains ordinary Linux requirements (`/bin/sh` and `/proc`), platform-supplied writable `/working`, and that Python or a pre-created directory is unnecessary. Workload protections and initialization help consistently name the image default user. Keep these facts in the existing helper and responsive Descriptions, with native wrapping and the same 72ch supporting-copy bound; no additional form, badge or onboarding layout is needed. Save still pins the image independently of readiness checks and exact-revision verification. [Frontend Implementation](../../docs/13-frontend-implementation-spec.md#ordinary-image-verification-presentation) owns behavior; the [ordinary-image ledger](../../docs/reports/ordinary-sandbox-images-verification-2026-10-15.md) owns its reported evidence. The earlier copy mismatch is resolved in `0ca35e86` and recorded in the [sync record](../../docs/reports/design-system-sync-2026-10-15.md).
-
-#### OCI final hardening (2026-10-15)
-
-The Sandbox catalog uses six compact columns (Profile, Profile ID, Revision, Source, Image, Availability), a table-local 1080px minimum, shared collection-name ellipsis/full-value titles and full-reference copy. Existing configuration panels retain inset ownership; field grids own sibling gaps and the form owns section rhythm. Global and Instance Sandbox forms use the same 16px grid gap, full-column numeric controls and MiB presentation while persistence retains exact integer bytes (1 MiB = 1,048,576 bytes). Instance inherited-value hints use MiB too, retaining provenance and Reset to inherited. Initialization textareas use 4–14 rows; Global Advanced validation checks lifetime relationships and UTF-8 script bounds. Failed submission reveals invalid collapsed Advanced fields, announces the first error and moves focus without discarding drafts. Read-only history uses the existing 20rem selector cap. Readiness checks and verification remain a separate action group from Save/Discard.
-
-The existing Registry credential dialog adds optional expiry using the native Ant Design DatePicker, viewer-zone guidance and UTC storage. Details pair the stored offset-bearing date with Expired/Not expired, or No expiry. Creation, preservation, explicit renewal and clearing use the existing revision-protected owner workflow. Registry date/time popups extend the existing narrow-screen automation popup rules: stacked calendar/time panels, viewport-bounded scrolling and unchanged native focus/keyboard behavior. Catalog, Credentials, Definition and Instance were inspected at 1440/1024/768/390/320px; the 320×600 expiry popup fits within x=16…304 and y=16…584. [Focused evidence](../../docs/reports/oci-sandbox-final-hardening-2026-10-15.md) owns actual tests and external-provider limitations.
-
-### State observation and isolation previews
-
-Reuse `AgentConfigurationPanel` for both the read-only State observation and editable State & Isolation policy. The panel owns 16px heading/body insets; its body stack owns the 8/12/16px gaps. `StateIsolationPolicyFields` owns the responsive field grid shared by Definition drafts, published inspection and Instances. Preset, Memory and Voice controls retain their existing configuration owner and sticky action frame.
-
-`IsolationChangePreview` reuses `useAdminDetailLayout`: one 12rem, top-aligned label column at 768px and above, stacked labels below. Long policy names and complete before/after/source values wrap. The same preview appears on State & Isolation, Memory policy and Voice; none adds an independent label width or outer inset. Preset replacement retains the bounded native confirmation, reachable Keep editing/Replace draft actions and focus return. Custom is a local editing choice; Use Definition defaults remains a separate action.
-
-State uses compact native Descriptions for hosted/durable counts and resource observations, wrapping refresh/actions, readable observation time and explicit Partial/Stale/Unknown labels. Preserve the last observation during failed refresh and keep Retry beside the affected surface. Unknown counts never look like measured zeroes. This is presentation guidance; [Frontend](../../docs/13-frontend-implementation-spec.md#state-and-isolation-admin-surfaces) owns policy, atomic saves and observation behavior.
-
-### Sandbox Session selection and recovery
-
-Existing Ant Design v6 Sandbox owners distinguish Definition allowed IDs, sparse Instance allowed-subset inheritance and the default from per-Session selection. Reuse the shared field grid, 16px section gaps, field provenance/reset and sticky configuration action frame. The optional Instance script follows each chosen Profile script; saved-setup verification uses a separate exact-profile chooser.
-
-The Session drawer uses human-readable lifecycle/cancellation labels, exact image/profile revisions and retained execution diagnostics. It reports current canonical files independently from process status, with shared home RW/RO/disabled and private working scope. Cleanup uncertainty and EnforcementPending warn that writes can continue until termination is confirmed. Reset preserves canonical files. Preserve labeled diagnostics, output disclosure and Escape/focus restoration; use the same min(640px, 100vw) shell as Background Work, with a 100vw wrapper cap and 40px narrow controls.
-
-
-### Generic Linux sandbox lifecycle
-
-The canonical cutover supersedes the former file-commit presentation. The Session drawer shows command exit, possible filesystem writes and container lifecycle independently. Complete or partial writes are already visible in /home and /working; process cleanup has no file import or rollback stage. Successful recycling uses one concise informational notice; unknown process outcome retains safe Inspect status/Reset controls and diagnostics. Reset preserves files and clears profile selection.
-
-Preserve the incumbent Ant Design v6 640px drawer, full width below 768px, token-owned spacing, copyable wrapped command/output and 40px mobile controls. Native diagnostics restore focus on Escape; the next Escape restores the Session sandbox opener. Existing Admin Instance policy/setup stays in its saved configuration owner with no new mode or page. Real isolated Synthetic + OpenSandbox commands, polling failure/Retry, controlled pending/unknown projections and both surfaces were reviewed at 1440/1024/768/390/320px. The [generic runtime ledger](../../docs/reports/generic-linux-sandbox-runtime-verification-2026-10-15.md) owns source/runtime evidence and remaining platform gaps; earlier quiescence-rejection/managed-shutdown claims are historical. This does not renew hosted or milestone acceptance.
-
-#### Canonical workspace presentation
-
-Canonical workspace cutover (2026-10-16): Admin uses current path keys, folder breadcrumbs, immediate-child paging and search of loaded current-folder entries, sampled/unknown usage, and present-path deletion. Home previews show a live-file note and Reload preview, reading fresh bounded bytes. The final pass exercised folder navigation, external writer → preview reload, injected 503 → Retry, keyboard Escape and five widths (1440/1024/768/390/320). The sandbox wrapper cap fixes transient clipping during viewport changes. Detailed source/runtime evidence belongs to the [cutover ledger](../../docs/reports/canonical-workspace-cutover-verification-2026-10-16.md). Historical reports remain evidence for their original versions.
-
-#### Coordinated configuration draft
-
-State & Isolation, detailed Memory policy and Voice enablement share one Instance-owned draft/provider and reviewed atomic Save. Navigation retains it, Discard restores inherited values, and pending Save retains its reviewed preview. Custom selects local manual editing without changing fields or persisting a mode. Definition visibility defaults and maxima are distinct; Instance choices stay within the ceiling. Retain the canonical mount warning and existing private-working/shared-home presentation. Mobile Admin navigation defers focus restoration until after React commit. The current merge ledger owns runtime evidence; earlier visual records stay tied to their original source.
-
-
-### Tenant Instance Sandbox
-
-`TenantAgentSandbox` extends the same dark `AdminShell` Instance configuration. Keep the shared 48rem reading column, Back to instances, same-snapshot name/lifecycle/Definition heading and truthful read-only/archived/partial notices. The native `InstanceSettingsSection` Collapse owns inherited sparse fields and the existing form/grid rhythm; source/ceiling/reset hints stay beside fields. Tenant-supplied choices and summary preserve shared presentation while feature owners retain transport, authority and commands. Generic Settings links to this destination rather than duplicating protected Sandbox fields.
-
-Follow the task vertically: heading, saved sparse fields, Saved setup verification, then latest/exact retained attempt. Verification reuses `useAdminDetailLayout` Descriptions, a native profile Select, named status/Alert and wrapping actions. `SandboxVerificationDetails`, shared with the organization catalog, places revision/time/exit/duration above bounded escaped `SandboxEvidence` streams. Images wrap within the column; mobile labels stack. Native confirmation, field feedback, dirty guard and explicit Reload remain existing owners. Verification authorization stays visible independently from configuration management, including restricted settings with readable profiles.
-
-The [interaction contract](../../docs/19-multi-tenant-iam-ux.md#instance-sandbox-interaction-contract) and [Frontend](../../docs/13-frontend-implementation-spec.md#tenant-instance-sandbox-configuration-and-verification) own behavior and no-replay recovery. [Focused verification](../../docs/reports/tenant-instance-sandbox-ui-verification-2026-10-18.md) separates real Synthetic setup/disabled-host verification from controlled evidence/access presentation. The fresh finish reviewer returned SHIP for the inspected scope: settings and verification at 1440/1024/768/390/320px, shared Settings at 1440/320px and controlled read-only/partial/archived/denied views at 320px. Corrected read-only/partial captures include the heading; denied reads intentionally clear protected identity. Existing captures are under `/private/tmp/agent-core-instance-sandbox-ui-UnkPm6`; this documenter sampled desktop/narrow settings, narrow verification and corrected boundary views. Loading/hover, measured contrast, historical revision rendering and successful live initialization are not visually established. Confirmation, stale/acknowledgement and read-recovery interactions have functional evidence without dedicated visual acceptance. Controlled permission presentation is not backend authorization proof.
-
-This narrow merge adds a surface pattern without changing frontmatter tokens, theme, CSS, fonts, assets or component previews and runs no app checks. Historical `.impeccable/design.json` fingerprints remain unchanged; theme source still matches its recorded fingerprint while app CSS, shared Settings, scoped access/configuration and context have pre-existing drift. This is no broad re-extraction or drift repair. It supersedes Instance Sandbox configuration/verification-pending context above for this page only. Session controls UI, other proposal work and live SDK qualification remain open; no full proposal or milestone acceptance is claimed.
-
-### Tenant Chat Session Sandbox
-
-`TenantSessionSandboxDrawer` is an ordinary extension of the incumbent Operate inspector. `SessionSandboxFrame` shares its native 640px Drawer, full width below 768px, viewport-capped wrapper, one native 24px body inset and 16px section stack with `SessionSandboxDrawer`. Existing mobile control sizing, responsive `useAdminDetailLayout` Descriptions and wrapping 8px action groups retain their owners. No independent shell, palette, field grid or evidence style is introduced.
-
-Keep organization and stored-read limits first, then current generation/revisions, retained initialization and latest receipt, Session controls and optional exact historical receipt. Native Tags/Alerts name stored state, cleanup uncertainty and acceptance separately from completion. Long image references and escaped command/output wrap within the reading region; shared `SandboxEvidence` keeps bounded native disclosures and explicitly labels background streams as combined. Exact-context native confirmation, local Reload and shared opener-focus ownership preserve the existing interaction language. The [interaction contract](../../docs/19-multi-tenant-iam-ux.md#session-sandbox-controls-interaction-contract) and [Frontend](../../docs/13-frontend-implementation-spec.md#tenant-chat-session-sandbox-inspector) own behavior and authority.
-
-The fresh finish reviewer returned SHIP without findings after individually inspecting all 21 current captures under `/private/tmp/agent-core-session-sandbox-ui-iSeerp`: ready top and controls at 1440/1024/768/390/320px; pending, empty and shared legacy at 1440/320px; confirmation, exact receipt, read-only, denied and Chat header at 320px. These latest captures replace the earlier invalid transition captures. This documenter sampled desktop ready, narrow controls, denied and shared legacy views. [Focused verification](../../docs/reports/tenant-session-sandbox-ui-verification-2026-10-18.md) owns actual Synthetic Chat/empty-read journeys, controlled reset/Stop/profile/exact-history and recovery evidence, focus return and shared-consumer regression checks. Loading, hover, other control confirmations, stale and malformed-acknowledgement presentation have no dedicated visual acceptance. Controlled permission presentation is distinct from backend authorization proof; no live SDK/provider/Docker qualification is established.
-
-This bounded merge changes no frontmatter token, theme, CSS, font, asset or component preview and runs no app checks. Historical `.impeccable/design.json` timestamps/fingerprints remain unchanged: the theme source still matches its fingerprint, while app CSS and Chat/shared Drawer sources have prior drift. That drift is neither canonized nor repaired here. This supersedes Session Sandbox controls-UI-pending context above for the supported tenant adapter only; other proposal families, final authority/schema consolidation and the earlier SQLite preference reliability follow-up remain open. No full proposal or milestone acceptance is claimed.
+Consume native AntD primitives directly. Reuse AdminShell, AdminPageHeading/AdminOwnerHeading, AgentConfigurationPanel/Layout, AdminCollectionToolbar, useAdminDetailLayout, SessionSandboxFrame, ChatFileCard and FilePreview. Keep their inset, lifecycle, confirmation, save/cancel, per-field inheritance/reset, dirty-guard and uncertain-outcome owners. Tools has named actions and stable opener restoration. Scope menus distinguish organization/account/platform. Text selection and scrollbar roles come from shared tokens. Custom Chat/Workflow motion and scrolling respect reduced-motion CSS; short native AntD transitions remain library-owned. Primary hover is `#2f8064`; its white labels measured 4.7808:1 in the browser, with normal/hover/active contrast guarded by theme tests.
 
 ## Do's and Don'ts
 
-### Do:
-- **Do** import `antd` in feature files; ConfigProvider uses `darkAlgorithm`. Keep Sider `theme="light"` so chat surfaces stay black.
-- **Do** use compact/default/section (8/12/16px) for shells and sibling `gap`; use Ant Design `paddingXS` (8px, `{spacing.controlInner}`) via `theme.useToken()` for text-control inner padding so it matches session-row inset; align Spoken and composer toolbar to that rhythm.
-- **Do** disclose a failed turn, AgentRun, or admin error with one Ant Design popover, Error details, and a keyboard-reachable Copy control. Keep the Failed label. Show the popover only when a diagnostic id exists. Space the id and the copy control with `paddingXS`.
-- **Do** put Model in the composer when the composer is shown (Reasoning level inside the Model button when supported); keep Identity/Speech locale in the new-chat intro; keep Speech locale in the live header.
-- **Do** show enabled model capabilities as compact tooltip-backed icons in catalog rows; preserve the Default tag and selected-row check as separate signals.
-- **Do** keep queued drafts above the composer in a compact local work list, with truncation, bounded expansion, and trailing Steer/Remove actions. Tenant Steer uses the same row with current cancellation eligibility; keep a refused draft and its selected files in place. Below 768px the shared row-action owner provides 44px minimum height/width for Steer and Remove; retain the 8px sibling gap and compact desktop controls.
-- **Do** compose Model/catalog rows with Ant Design `Button type="text"` and `Flex`; keep `app.css` for shell chrome, overflow, and ring suppression only.
-- **Do** render Spoken only for assistant public `speechText` that differs after whitespace normalization; keep it first in the turn as the TTS projection, with Markdown as on-screen display below.
-- **Do** honor `prefers-reduced-motion`; keep labeled errors, visible focus, and testids `connection` and `profile`.
-- **Do** distinguish keyboard focus on picker choices from their selected/hover fill; the neutral editor focus treatment applies only to the editing well.
-- **Do** keep the labeled composer available while voice is live until `/docs` and tests change together.
-- **Do** treat Admin as the same dark product: shared spacing tokens, configuration panels, and operator copy. Behavior stays in `/docs`.
-- **Do** use tooltipped, accessibly named icon buttons for familiar table actions. Use More for larger or text-dependent action sets, with a native decorative icon before each menu label. Keep adequate column width, compact gaps and table-local scrolling; dialog close restores its surviving trigger or creation control. Forms and expanded details still wrap.
-- **Do** reuse `AgentConfigurationPanel` and the shared configuration panels and canonical sidebar for repeated Admin sections; let one body stack own spacing and keep feature state/commands in their existing owners.
-- **Do** reuse Admin collection search/pagination and responsive detail alignment; keep table summaries compact, expanded content contained, and mobile labels stacked.
-- **Do** apply the shared bounded form and collection table layouts to incoming screens, including nested privacy editors and Built-in subscriber/delivery tables. Keep one outer inset, complete accessible names and table-local scrolling.
-- **Do** reuse bounded creation dialogs and the shared responsive Sandbox field grid across Global and Instance configuration. Preserve explicit inherited values, units, reset controls and reachable Save/Cancel actions.
-- **Do** announce failed submissions immediately, retain field/local error details and drafts, and reveal, scroll to and focus the first client-invalid field through the shared form-feedback helper.
-- **Do** use the shared centered Ant Design confirmation dialog (`confirmAction` in `web/src/app/confirmAction.ts`) for destructive or consequential actions across Chat, Admin, Background Work, and Automations (session delete, Admin definition/instance delete, deprecation, run cancellation, approval decisions, memory reset, automation revoke, and similar). Prefer a stable `dialog` surface for tests and keyboard focus.
-- **Do** keep header identity, Speech locale, compact icon actions, profile, and connection status visible. Use 32×32px, 6px-radius fill-hover actions; keep Background Work at an 18px inbox icon with attention badge and Automations/Admin/End at 16px.
-- **Do** keep ended history on the same reading column with a quiet ended note, not a disabled input.
-- **Do** reuse AgentRunDetails across Chat history and Admin inspection, keeping one outer drawer inset, semantic filled status chips, open bounded reading regions and content-width consequential controls. Automations retains its elevated schedule inset.
-- **Do** reuse the global Admin collection and per-instance binding layouts for System Credentials. Mask transient protected input with no reveal control; safe metadata and grant aliases use existing forms and tables. Keep browser state reset in its own section and event reactions in the shared Automation collection. Attention results use the words Needs attention plus an icon. Quiet completions do not change the header count.
-- **Do** format schedule occurrences for the viewer locale in the schedule’s named time zone; keep the zone identifier visible beside the readable time.
-- **Do** show updated timestamps with the shared chat time formatter and a `time` element. Background Session origins use readable labels (Immediate task, Automation, Application event, Manual task); Run turn kinds use Chat turn, Scheduled task, Completion report and the other implemented labels. Keep transport values internal.
-- **Do** keep the unattended model and its effective-source sentence on Unattended model. Show a webhook credential once in a dialog, then clear it on Done or Escape. The resting Event collection keeps public keys and status only; System Credential projections keep only safe metadata and policy.
-
-- **Do** preserve keyboard focus across Background Session history navigation and keep continuation failures/recovery visible inside the drawer.
-- **Do** reuse AdminSessionPicker across Memory and Experience, align scope/source labels at the top, keep actions in a wrapping row, and preserve sticky draft actions with field scroll clearance. Date/time fields disclose the viewer zone; errors and copy recovery stay on their affected surface.
-
-### Don't:
-- **Don't** reproduce Pixel Dialogue Field, Obsidian Mint, Martian Mono, field textures, presence plates, or a custom Select.
-- **Don't** add generic wrappers, Ant Design Pro/ProComponents/X, or another CSS framework.
-- **Don't** use Layout.Sider `theme="dark"` (navy admin sider) or restyle Admin as a separate enterprise dashboard.
-- **Don't** let unbounded table text overlap adjacent cells or stack action buttons merely because an action column is too narrow.
-- **Don't** give equivalent Admin detail grids independent label widths, duplicate toolbar insets inside padded panels, or let wide tables expand the page.
-- **Don't** leave submission feedback only at the bottom of a long form, replace persistent field guidance with a disappearing toast, or offer read-only Reload as a fix for a failed save.
-- **Don't** treat this file as behavioral authority over `/docs`.
-- **Don't** use a blocking Modal or a second Select/button for model or effort; keep one Dropdown anchored to the Model chip, with effort in the overlay footer.
-- **Don't** render queued drafts as transcript turns or move pending attachments into a separate dock.
-- **Don't** zero a text control’s padding, use negative margin, or stack extra child padding to fake alignment with a sibling.
-- **Don't** show Spoken as another conversational turn or from internal generated tails.
-- **Don't** wrap every operational row in a card, apply catalog-row padding inside shared Run details, truncate Background Session names with Admin table styles, or generalize actions to rows without an operation.
-- **Don't** present schedule occurrence timestamps as raw transport strings when they parse as dates.
-- **Don't** use transient `Popconfirm` overlays for lifecycle, deletion, approval, cancellation, reset, or revoke actions when `confirmAction` is available; reserve Popconfirm for low-risk inline affordances only.
-- **Don't** add a browser panel, iframe, screenshot, or click log. Browser progress stays on the existing activity row as `Using browser…`.
-
-### Canonical tenant Schedule management — 2026-10-21
-
-Mode: Operate. Instance Activity navigation adds Automations. Reuse the configuration panel, loaded-page collection toolbar, native Table/Pagination, Automation timing fields/model controls, responsive Drawer and shared confirmations. Preserve literal saved objectives, current independent read/action hints, stale drafts and factual Activity links. Existing `automation-editor-form` owns zero Form.Item bottom margins; parent Flex owns the 16px section gaps. Existing `access-editor-drawer` owns 40px narrow buttons/input hits; the Drawer body keeps its 16px inset and bounded scrolling. No new tokens, CSS or primitive component is introduced. Desktop/narrow Synthetic MCP and E2E verify actual save/run/cancel/Activity and current read loss. Canceled/disabled registrations say Not scheduled; a retained historical next-date field cannot imply future dispatch. Broader historical sidecar freshness remains separate from this bounded merge. [Evidence](../../docs/reports/tenant-automation-ui-verification-2026-10-21.md).
-
-### Tenant Automation admission-consent tooling context
-
-Canonical Schedule/manual occurrences targeting a new Background Session with no completion destination can wait for durable exact consent before any Session or Run exists. The Automation acknowledgement links to the shared approval drawer; the drawer shows exact source time/revision, objective, schedule, destination, selected model, primary permission, compound scope and one-occurrence boundary. It invents no source conversation. Current source-busy hints, raw-read retirement, protected confirmation and unknown-outcome fences retain their owners. Approved, admitted, executing and completed remain separate facts. Missing/duplicate/unsupported preview evidence disables decision while independent cancellation remains available.
-
-This reuses current dark Ant Design v6 native Descriptions, Drawers, wrapping footer and focus/confirmation owners. No token, CSS, font, asset or component recipe changes. Canonical behavior is [Frontend](../../docs/13-frontend-implementation-spec.md#tenant-automation-admission-consent-presentation), with wire/schema ownership in docs/14 and docs/15. This bounded extension does not claim final proposal polish or a regenerated whole-repository design sidecar; the historical inspection fingerprints and pre-existing sidecar drift remain part of that open audit.
-
-### Tenant webhook connections — 2026-10-21
-
-Mode: Operate. `TenantEvents` extends the incumbent dark Ant Design v6 organization shell with the shared collection toolbar, fixed native source/receipt Tables, configuration sections and independent built-in metadata Collapse. Preserve loaded-page search, one inset owner, 8/12/16 spacing, responsive Descriptions, wrapping action rows, native Form/Alert and the existing 640px/full-mobile access Drawer with shared confirmations, dirty guard and focus recovery. The transient token uses the existing masked password control and Copy/Dismiss; protected receipt JSON remains bounded literal text. No palette, CSS, token, font, asset, wrapper or UI-kit change is introduced.
-
-The [focused surface brief](../../.impeccable/surfaces/web-src-features-access-tenantevents-tsx.md) records the direction and exact boundary; [Frontend](../../docs/13-frontend-implementation-spec.md#tenant-webhook-connections) owns behavior. The fresh finish reviewer returned SHIP without material fixes after reviewing 15 corrected captures under `.impeccable/review/tenant-webhooks/`: final header/details at 1440/1024/768/390/320px, collection at 1440/390px and activation/rotation/masked-token at 390px. This documenter sampled desktop header, 320px receipt detail, masked token and activation confirmation, and compared implementation/shared owners to the incumbent system. Dedicated hover/loading/empty/failure/stale/permission captures and measured contrast are outside this visual verdict. [Qualification](../../docs/reports/tenant-webhook-verification-2026-10-21.md) owns 77 focused passing cases, builds, detector `[]`, Synthetic interactions and remaining limits.
-
-This narrow documentation pass performs no app checks and leaves `.impeccable/design.json` timestamps/fingerprints intact. Sampled theme/collection-toolbar fingerprints match; app CSS, AccessApp, draft guard and context have pre-existing historical drift. That drift is neither repaired nor claimed fresh. This succeeds source/receipt-UI-pending context only; event subscriptions, fanout/admission, final authority/schema consolidation and full proposal/design acceptance remain open.
-
-### Tenant email monitoring tooling context — 2026-10-21
-
-Tenant Email Credential details reuses `EmailMonitoringSection` inside the existing 640px/full-mobile native access Drawer. The shared composition keeps one status, baseline-from-now explanation, wrapping controls, saved check timing and collapsed diagnostics. Native Ant Design controls, responsive Descriptions and the existing 8/12/16 spacing retain their owners. Tenant detail omits unfiltered subscriber counts and legacy navigation. Monitoring grants no Agent account access or send authority; a manager without account-use access can stop an enabled watch but cannot enable it or queue a check. The [interaction contract](../../docs/19-multi-tenant-iam-ux.md#tenant-email-monitoring-conversion-interaction-contract) and [wire contract](../../docs/14-api-and-realtime-protocol.md#canonical-tenant-email-monitoring-conversion-contract) own behavior.
-
-The fresh finish reviewer returned SHIP without material fixes for all five bounded monitoring-section captures at 1440/1024/768/390/320px in `.impeccable/review/tenant-email-watches/`. These establish enabled/queued presentation only. Loading, errors, stale recovery, read loss, focus and diagnostics remain source-reviewed or separately functionally checked, without dedicated visual acceptance. The reported frontend build, 121 focused component cases, five-width CLI journey and actual-control MCP save/queued-check evidence remain bounded to their exercised paths. Backend qualification was still running at this documentation checkpoint.
-
-This scoped merge samples current theme, CSS, monitoring and credential sources and checks the five capture fingerprints; it performs no application checks. It preserves normative tokens, fonts, assets, previews and historical `.impeccable/design.json` fingerprints. Existing sidecar drift remains unrepaired. This UI extension establishes no full module, proposal or milestone acceptance.
-
-### Tenant Automation completion report extension — 2026-10-21
-
-The existing tenant Automation Configuration Form adds Completion beneath its trigger fields. Reuse the native None/Selected conversation Select and shared `AdminSessionPicker`, with an explicit tenant list/read source. Keep independent Background work and its optional separate report legible. The native 640px/full-narrow Drawer, one 16px body inset, shared timing/model controls, draft recovery and 8/12/16 rhythm retain their owners. Selected long conversation labels truncate within the Select; exact Session IDs wrap below it. The native wrapping footer keeps Save Automation, Close and Reload current Automation reachable at narrow widths. This ordinary Operate extension introduces no CSS, tokens, fonts, assets, previews or second kit.
-
-The [Automation surface brief](../../.impeccable/surfaces/web-src-features-access-tenantagentautomations-tsx.md#completion-report-extension--2026-10-21) records the source comparison and evidence limits. The fresh finish reviewer returned SHIP without material fixes for five genuine scrolled Completion-section captures at 1440/1024/768/390/320px under `.impeccable/review/tenant-automation-completion/`; this documenter sampled 1440px and 320px. This verdict establishes configured-destination presentation at that section only. The implementation handoff separately records 120 passing focused UI cases, web build, detector `[]`, five-width CLI picker/save/stale-reload/Run/single-delivery checks and independent MCP owned-save/foreign-Instance-403/reload/corrected-save checks. Loading, hover, empty, failure, stale/access-loss visuals and measured contrast have no dedicated acceptance from these captures. This documentation pass runs no app checks.
-
-Normative frontmatter and historical `.impeccable/design.json` timestamps/fingerprints remain unchanged. Its theme fingerprint still matches; app CSS, AccessApp and PRODUCT/DESIGN context had pre-existing drift before this merge. That drift is preserved, without broad extraction or repair. At the completion-report module checkpoint, Existing-Session execution remained a later module; this bounded extension does not claim full proposal, design-system or milestone acceptance.
-
-
-### Tenant Automation existing-conversation execution extension — 2026-10-21
-
-The tenant Automation drawer adds native Execution → Run in choices for Separate Background work and Selected conversation. Selected conversation reuses `AdminSessionPicker` and its tenant source: truncate the native selected label, keep the exact Session ID wrapping below and retain active/same-Instance/current-read-and-Chat guidance beside the field. The conversation owns its model and reasoning effort; entering this mode clears separate report/model settings, hides Completion and replaces editable model controls with that guidance. Each occurrence retains its own Run and may need admission approval. Existing 640px/full-narrow dark Ant Design v6 Drawer, 16px inset, 8/12/16 rhythm, draft recovery, shared confirmations/focus and wrapping footer retain their owners. The shared approval drawer distinguishes an admitted conversation Run from Background Session creation without treating approval as completion. No token, CSS, font, asset, preview or UI-kit change is introduced.
-
-The [Automation surface brief](../../.impeccable/surfaces/web-src-features-access-tenantagentautomations-tsx.md#existing-conversation-execution-extension--2026-10-21) records source comparison and evidence limits. The fresh [finish review](../../.impeccable/review/tenant-automation-conversation/finish-review.md) returned SHIP without material fixes for configured, intentionally scrolled Execution-section captures at 1440/1024/768/390/320px. This documenter sampled 1440px and 320px and checked all five PNG dimensions/fingerprints plus detector `[]`. This establishes configured-section presentation only; whole-editor, approval-drawer, hover/loading/empty/error/stale/access-loss/focused-keyboard and expanded-options visual acceptance and measured contrast remain outside the verdict. The final implementation handoff records three passing CLI journeys (selected-conversation execution, configured report and exact admission; 28.1 seconds), requiring completed nonempty replies before and after exact eleven-field admission Review/approval, explicit-target/save gating, real 409 retained-draft/Reload/Save recovery and five-width overflow/console/legacy-call checks. The earlier assistant-row-count check missed a pre-fix failed response; the repaired runtime classifies authored Automation from admitted `TaskIntent.Source` rather than a legacy dedupe prefix, and the final checker verifies completed reply content. Independent MCP on the repaired Synthetic binary completed a deliberate native Run (201), verified one completed nonempty “Hello!” reply in the selected conversation’s history, inspected Activity Completed/Response, and found zero final console errors. The web build passed after correction of unsupported options in three test queries. Product UI remains unchanged from the reviewed captures. Final backend qualification was still ongoing at this checkpoint. This documentation pass runs no application checks.
-
-Normative frontmatter and historical `.impeccable/design.json` timestamps/fingerprints remain unchanged. The theme fingerprint matches; app CSS, AccessApp and PRODUCT/DESIGN context already had fingerprint drift before this merge. That drift is preserved without re-extraction or repair. This succeeds the earlier Existing-Session-later note only at the described UI/evidence scope. Full proposal, design-system and milestone acceptance remain open; [Frontend](../../docs/13-frontend-implementation-spec.md) retains behavioral authority.
-
-### Tenant and System Audit collection extension — 2026-10-21
-
-The shared `AuthorizationAuditCollection` extends the existing organization Audit and Platform audit compositions with a native vertical Form for exact activity code, result, actor principal and local date/time bounds. Preserve explicit Apply/Clear, the count/Refresh row, native server-backed Table pagination, one desktop expanded detail and the bounded narrow Audit details Drawer. The existing shell owns scope and outer inset; the bounded Form owns its wrapping fields and sibling gaps. Existing 8/12/16 spacing, native Ant Design controls, responsive Descriptions and mobile input/button sizing retain their owners. The two appended filter-layout rules add wrapping and gap ownership only; no palette, token, font, asset, preview, generic wrapper or second UI kit is introduced. [The canonical interaction contract](../../docs/19-multi-tenant-iam-ux.md#canonical-tenant-and-system-audit-query-interaction-contract) owns query, scope and access behavior.
-
-The [surface brief](../../.impeccable/surfaces/web-src-features-access-authorizationauditcollection-tsx.md) records the bounded direction and evidence. The fresh finish reviewer returned SHIP without material fixes for eight final captures under `.impeccable/review/authorization-audit/`: organization collection tops at 1440/1024/768/390/320px, a settled 390px details Drawer, and Platform collection tops at 1440/320px. This documenter sampled organization 1440/320px, the 390px Drawer and Platform 320px, and checked all eight PNG dimensions/fingerprints. The visual verdict excludes below-fold narrow pagination, execution-lineage details, transient states, keyboard behavior and measured contrast. The implementation handoff separately records 12 passing focused API cases across both stores, 50 focused UI cases, frontend/API builds and an 18.7-second Synthetic CLI journey covering exact filters, server paging, actual read revocation and tenant-only System denial. Independent MCP exercised actual filter, details and zero-result controls. These functional checks retain their own scope; this documentation pass runs no application checks.
-
-Normative frontmatter and historical `.impeccable/design.json` timestamps/fingerprints remain unchanged. Theme matching and the existing app CSS, AccessApp and PRODUCT/DESIGN fingerprint drift retain the earlier inspection boundary. This merge neither repairs that drift nor claims broad extraction, full proposal, design-system or milestone acceptance.
-
-
-### System administration identity metadata extension — 2026-10-21
-
-Platform Organizations and Accounts extend the incumbent Operate shell with administrative identity metadata only. `SystemAdministration` reuses the Audit filter Form, bounded form, native Table/server pagination, status Tags, native large viewport-capped access Drawer, responsive `useAdminDetailLayout` Descriptions, `CreateOrganization`, shared `confirmAction` and `useAccessDraftGuard`. Keep scope and metadata limits first, then explicit filters, count/Refresh, readable records, current/proposed status and exact confirmation. Shared shell inset, 8/12/16 sibling gaps, wrapping fields/IDs and native narrow control sizing retain their owners. No CSS, token, font, asset, preview or UI-kit change belongs to this module. The [System administration metadata interaction contract](../../docs/19-multi-tenant-iam-ux.md#system-administration-metadata-interaction-contract) owns behavior and authority.
-
-The [surface brief](../../.impeccable/surfaces/web-src-features-access-systemadministration-tsx.md) records the evidence boundary. The fresh finish reviewer reopened all eleven valid 1000px-high captures in `.impeccable/review/system-administration/` and returned SHIP without material fixes: Organizations collection tops at 1440/1024/768/390/320px, organization details at 390px and confirmation at 320px, Accounts collection tops at 1440/320px, Account details at 390px and confirmation at 320px. This documenter sampled Organizations 1440/320px, organization details and Account confirmation, and checked all eleven dimensions/fingerprints. The verdict covers these collection tops and internal shell scope, Drawers and native confirmations. Loading, empty, error, stale, permission, hover, keyboard and independently measured contrast have no dedicated visual acceptance. The final Platform Operator refusal copy is outside these captures and has source/functional qualification only. The single detector result was `[]` before that copy addition; no second detector run is claimed.
-
-[Focused qualification](../../docs/reports/system-administration-verification-2026-10-21.md) owns separately executed checks: final 25-case backend run, 44-case UI run, builds, final Synthetic CLI journey and independent native-control MCP status/readback journeys. Earlier overlapping runs remain separately scoped in that record. This documentation pass performs no app checks. Normative frontmatter and historical `.impeccable/design.json` timestamps/fingerprints remain unchanged; its SHA256 remains `8bdc3659a25b706454ac8cc0394323c5e0e60ea1ade616756b180efbaecef49b`. Theme matching and pre-existing app CSS, AccessApp and PRODUCT/DESIGN fingerprint drift retain the earlier inspection boundary. This bounded extension neither repairs that drift nor establishes whole-repository design-system, full proposal or milestone acceptance.
-
-
-### Platform operator assignment extension — 2026-10-21
-
-The existing SystemAdministration collection now presents built-in platform-role assignment in the same dark Ant Design v6 Operate world. Account sign-in status and platform role remain separately labeled. The inherited shell, explicit filters, count/Refresh, native Table/Pagination, responsive Descriptions, viewport-capped Drawer, Select and exact confirmation retain their spacing and overflow owners. Narrow filters stack; actions and exact IDs wrap. No CSS, tokens, fonts, assets, component previews or UI kit change is introduced. The [platform operator assignment interaction contract](../../docs/19-multi-tenant-iam-ux.md#platform-operator-assignment-interaction-contract) owns original-human System authority, exact target/role/powers/login-invalidation confirmation, retained stale/unknown-result drafts, deliberate readback and final-operator protection.
-
-The [surface brief](../../.impeccable/surfaces/web-src-features-access-systemadministration-tsx.md#operator-extension-finish-evidence--2026-10-21) records the evidence boundary. The fresh finish reviewer opened all seven valid 1000px-high captures under `.impeccable/review/system-operators/` and returned **ship**, with no material fixes: collection tops at 1440/1024/768/390/320px, details at 390px and confirmation at 320px. This documenter sampled the 1440/320px collection, 390px details and 320px confirmation, and checked all seven dimensions/SHA256 fingerprints. The verdict covers those visible tops, internal shell, details and confirmation only. Dedicated loading, empty, error, stale, permission, hover, keyboard and independently measured contrast remain outside visual acceptance. The single `/private/tmp/system-operators-detector.json` result is `[]`; no second scan is claimed.
-
-The [focused verification record](../../docs/reports/platform-operator-verification-2026-10-21.md) owns separate functional qualification: 52 focused UI cases passed in 93.68 seconds, and independent MCP exercised native exact assignment, external role drift, stale refusal and deliberate retained-draft readback without duplicate submission. MCP observed no document overflow or application exceptions; its sole console resource error was the expected 409. Lost reply and last-operator refusal belong to the separate CLI journey, not MCP. This documentation pass ran no application checks. Normative frontmatter and historical sidecar metadata remain unchanged; `.impeccable/design.json` retains SHA256 `8bdc3659a25b706454ac8cc0394323c5e0e60ea1ade616756b180efbaecef49b`. The theme fingerprint matches, while pre-existing app CSS, AccessApp and PRODUCT/DESIGN fingerprint drift is preserved without repair or canonization. This scoped merge does not establish broad design-system, full proposal or milestone acceptance; the full proposal remains active.
-
-### Dynamic model administration, selectors and impact review — 2026-10-25
-
-Mode: Operate. This is an ordinary extension of the incumbent Ant Design v6 dark system. Organization AI models keeps Connections / Models / Defaults in the shared AdminShell; Platform Model catalog manages shared metadata. Reuse AdminCollectionToolbar, native Table, responsive useAdminDetailLayout Descriptions, the bounded form and viewport-capped large access Drawer. Keep connection-qualified offering names and separate metadata evidence, capability provenance, enabled/retired state and current availability. Connection/default readback presents current saved nonsecret authentication references or the connection-qualified default alongside the retained draft. Existing protected Credential composition owns key input. No token, font, palette, asset or preview change is introduced.
-
-Chat retains one Model Dropdown anchored to its composer chip. Present Use Agent default / Use organization default separately from explicitly choosing the same offering. Keep connection-qualified rows, capability icons, default badge, selected check and supported reasoning control inside the existing compact overlay. Full row titles retain labels when they ellipsize. The trigger's inner Flex must shrink (`minWidth: 0`, `flex: 1 1 auto`) so label truncation leaves effort and chevron inside its hit/focus bounds. Native Dropdown horizontal adjustment and shift keep the open popup within the viewport after resize; preserve its existing placement and native transitions. Definition Model defaults, sparse Instance overrides, Unattended model and Automation Execution options reuse native Selects and existing form/action owners, with explicit inheritance and retained unavailable choices. Existing 8/12/16 spacing remains authoritative.
-
-References reuses the large access Drawer with a native category Select, readable-only count and paged Table; the 620px table scroll remains local on narrow screens. Existing-configuration changes reuse the native ModelImpactConfirmation Modal for exact before/after facts and readable counts, with Keep editing and Apply configuration change. The existing bounded Modal CSS now includes `model-impact-dialog`: its header/footer do not shrink, its body scrolls independently, long copy wraps and narrow controls retain 40px hits. These are additions to existing overflow/containment owners, not a new layout or confirmation system. [Frontend](../../docs/13-frontend-implementation-spec.md#dynamic-model-administration) owns behavior, current source/revision recovery and no automatic substitution.
-
-The [administration comparison](../../.impeccable/review/model-admin/design-comparison.md) records the earlier 12-image matrix and two resolved readback findings. The [final comparison](../../.impeccable/review/model-final/design-comparison.md), [capture manifest](../../.impeccable/review/model-final/captures.json) and [source manifest](../../.impeccable/review/model-final/source-sha256.json) record the later 14-image selector/reference/confirmation packet. This documenter opened all 14 final PNGs and verified their dimensions/SHA256 and all 13 listed source hashes. Two invalid impact images were replaced with settled captures; after the full review found one trigger-containment issue, only four picker images were recaptured. The [focused SHIP verdict](../../.impeccable/review/model-final/finish-verdict.md) closes that trigger fix only and preserves the full review's limits. Instance and Automation images intentionally show scrolled sections; Definition lower fields, unsupported-effort, loading/error and other unpictured states have no dedicated visual acceptance.
-
-The delivery ledger owns functional evidence separately from this documentation pass. The supplied record reports 10 administration component cases, two setup/privacy journeys and two earlier authoring/native unattended/gated-Automation journeys passed; the final expanded CLI regression passed one journey in 40.3 seconds, including protected-key setup, actual Chat/tool/reload, open-popup bounds and trigger label/chevron containment at 1440/768/390/320px, and reference/default-preview cancellation. The documenter checked the final log footer; parent-reported 26 picker/administration component cases predate the final one-line Flex constraint, and final build/typecheck results are not claimed here. This pass runs no browser, server, tests or detector and makes no physical-device, provider, security, CI, full-proposal or whole-design-system acceptance claim. The sidecar adds only `extensions.inspection.dynamicModelsDocumentationRefresh` with current scoped source/evidence hashes. All normative frontmatter, preview recipes, existing timestamps and historical fingerprints remain unchanged; pre-existing whole-repository metadata drift remains historical.
-
-
-### Model setup, catalog filters and credential replacement metadata — 2026-10-25
-
-Mode: Operate. The new-chat setup guide aligns with the existing identity composition and reuses native Alert/Flex/Button after identity/catalog loading settles. Give the current authorized next action: Connect a provider for an empty catalog, or Model defaults for an unavailable inherited choice when permitted; otherwise retain owner guidance or the available composer choice. State that starter presets contain no credentials. Keep missing inherited labels readable as Organization default / Agent default with Unavailable; explicit available selection removes the guide. At narrow widths the full adjacent guide preserves the explanation when the compact composer label truncates.
-
-ModelCatalogFilters reuses native labeled Selects and token-owned Row/Col gaps for provider, optional tenant connection, state and capability. Keep explicit All choices for keyboard reset. Filters combine with search, reset collection paging and stack within the existing responsive shell. Reuse the locally scrolling Table and responsive Descriptions: show readable capabilities and keep declaration source/time, metadata observation and current admission availability distinct. System Model catalog labels its aggregate Stored tenant registrations; the detail explains retained offerings, including disabled/retired records, without implying executions or exposing tenants. Tenant projections have no system aggregate.
-
-The existing bounded connection Drawer pairs the safe protected-key name with Last key replacement in Agent Core, wrapping its nonsecret reference independently. Distinguish no recorded replacement from unavailable/off-page metadata. This is the audited Agent Core replacement date; ordinary metadata edits preserve it. Keep the existing scrolling body, visible wrapping footer and native focus/keyboard ownership. Existing dark surfaces, typography, semantic tokens, 8/12/16 rhythm, preview recipes and layout owners remain unchanged.
-
-The [completion comparison](../../.impeccable/review/model-completion/design-comparison.md), [capture manifest](../../.impeccable/review/model-completion/captures.json) and [source manifest](../../.impeccable/review/model-completion/source-sha256.json) record this successor packet. Its [fresh full finish review](../../.impeccable/review/model-completion/finish-review.md) returns SHIP for the represented scope after individually inspecting all 16 captures: onboarding and both catalogs at 1440/768/390/320px, missing-default and credential editor at 1440/320px. This documenter checked all 16 dimensions/SHA256 and all eight packet source hashes; it relies on that visual review and did not independently reopen the images. The superseded default-missing-before image is excluded.
-
-Functional evidence remains separate: the documenter inspected log footers recording 62 focused frontend cases, the production build (10.15s), 49 focused API cases, two SQLite/InMemory replacement cases, two store/reference compatibility cases and two Synthetic browser journeys (53.0s). Parent-reported MCP interactions exercised native keyboard filters/reset, registration counts, fake-key replacement with millisecond-equal readback after rename and unavailable-default recovery. Captures use disposable Real SQLite with fake protected keys and metadata-only configuration; no provider inference, Session or Run was started for the packet. No browser, server, test or detector was run by this documentation pass. Unpictured states, measured contrast, physical devices, provider/security qualification, CI, full-proposal and milestone acceptance remain outside its boundary. Only a new scoped `dynamicModelsCompletionDocumentationRefresh` inspection record is appended; older model-final records, source/documentation fingerprints and timestamps remain historical, and pre-existing sidecar drift is not repaired.
-
-Shared Ant Design link text and selected Tab text use `{colors.linkText}` on dark surfaces; the filled primary button retains its primary color. This keeps ordinary small action text above 4.5:1 against the container. The shared owner is `web/src/app/antdTheme.ts`.
-
-
-### Self-management completion presentation — 2026-10-26
-
-The incumbent Instance/Definition fields retain Ant Design v6 and the existing panel/token owners. Saved mode and Frozen use independent tags in an accessible status row; stored automatic/procedure choices stay visible when suppressed, with per-field inheritance source. On narrow screens the shared SelfManagementFields owner gives checkbox rows, procedure activation labels, Selects and Buttons forty-pixel targets. Saved-policy lock confirmation and draft-preserving readback keep the existing shared confirmation/feedback patterns. [Frontend behavior](../../docs/13-frontend-implementation-spec.md) remains authoritative; [completion evidence](../../docs/reports/agent-self-management-delivery-2026-10-26.md) records measured viewports and interactions.
-
-Chat retention and overflow extend existing direct Ant Design controls: a Saved/Temporary Segmented choice by Identity, secondary deadline/disclosure text, scoped completion Switch, and the established read-only terminal note with New chat. Composer overflow uses an inline count, explicit Attach long text action and the same pending-file Retry/Restore controls; mixed typed references retain targeted guidance. Governance uses Checkbox Forever, bounded InputNumber and existing command feedback/Refresh. Keep current tokens, reading width and responsive wrapping; expiry unmounts private drawers. These are presentation patterns; docs/13 owns behavior.
-
-### Clean baseline file feedback — 2026-10-26
-
-Keep the existing shared ChatFileCard/FilePreview compositions and Ant Design spacing. Source-owned messages distinguish expired sign-in, permission loss, missing files and ordinary download failure; arbitrary exception text is never displayed. Retire Artifact metadata and revoke cached Attachment thumbnail URLs after read loss. Image zoom retains its visible percentage and accessible Slider values; suppress the duplicate Slider tooltip so its portal cannot overflow narrow viewports. No token, layout system, font, palette or asset change is introduced. Frontend behavior and the clean baseline delivery report own functional evidence.
-
-## Built-in General Assistant presentation
-
-Preserve the current Operate surfaces and Ant Design v6 primitives. Chat uses the incumbent picker with a quiet `System-managed` label; management uses the same table, headings, panels, switch, guarded commands and native confirmation. Use `Visible in Chat`, `Additional instructions` and `Reset to System Defaults`. Visibility/reset live in one Settings panel with the shared 8/12/16 spacing owners. Explain retained data, stale/unknown outcomes and protected lifecycle where relevant. Restore keyboard focus after saved readback/confirmation. Page-local filters say “on this page”; status never suggests privileged access. The [design brief](../../docs/reports/general-assistant-design-2026-10-28.md) owns the agreed flow; `/docs` remains authoritative for behavior.
-
-
-## Formal Workflow presentation
-
-Extend the incumbent dark Ant Design v6 Operate surfaces. The Workflow editor uses the existing Admin header/toolbar/feedback, a collapsible searchable palette, React Flow diagram, equivalent ordered Outline and native Properties/Process forms. Parent Flex/Grid owns the existing 8/12/16 spacing; branch outcome lines and secondary metadata use the existing compact/tight roles. Actions wrap in normal flow so labels stay visible while scrolling. At narrow/intermediate widths properties follow the structure in document order; native forms provide every edit without dragging. Diagram positions are local view arrangement, not saved behavior. No token, font, palette or second UI kit is added.
-
-Reuse SessionSandboxFrame for Chat discovery, typed inputs/start and progress. Status names, applicable required/proven ratio and evidence links carry meaning independently of color. Keep process sign-off, Manual Evaluation assessment, Goal acceptance and IAM operation approval distinct. Retain drafts for stale/unknown commands, compare all changed behavioral fields, read back original receipts before deliberate same-key catalog resumption, and use stable accessible loading-action labels. Nested Escape closes only the active inspector and restores its opener; the outer unsaved draft keeps its navigation guard. Current source denial clears private details and links. The [frontend specification](../../docs/13-frontend-implementation-spec.md#formal-workflow-surfaces) owns behavior; the [surface brief](../../.impeccable/surfaces/formal-workflows.md) and [delivery evidence](../../docs/reports/formal-workflows-delivery-2026-10-28.md) own scoped presentation and measured limits.
+- Do inspect actual desktop/tablet/mobile and long/empty/error variants, including shared consumers.
+- Do preserve native semantics, meaningful labels, authority distinctions and protected previews.
+- Do record visual review separately from interaction proof.
+- Don't add another UI kit, generic wrappers, per-page palette or decorative theme switch.
+- Don't infer permission, availability or completion from styling or screenshots.

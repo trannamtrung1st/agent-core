@@ -33,7 +33,7 @@ export function TenantAgentAccess({ context, id }: { context: TenantContext; id:
   };
   const disabled = command.busy || command.requiresReload;
   return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to instances</Typography.Link><Button onClick={state.reload} disabled={command.busy}>Reload access</Button></Flex>
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link><Button onClick={state.reload} disabled={command.busy}>Reload access</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={state.reload} />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={state.reload} /> : view && <>
       <Flex wrap align="center" gap="var(--ac-space-compact)" className="admin-draft-section-heading"><Typography.Title level={4}>{view.name}</Typography.Title><Tag>{view.lifecycle}</Tag><Typography.Link href={tenantAgentPath(tenant,id,'lifecycle')} onClick={followAppLink}>Lifecycle</Typography.Link></Flex>

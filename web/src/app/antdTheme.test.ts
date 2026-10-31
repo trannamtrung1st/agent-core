@@ -7,17 +7,29 @@ describe("antdTheme", () => {
     const baseline = theme.getDesignToken({ algorithm: theme.darkAlgorithm, token: antdTheme.token });
     const actual = theme.getDesignToken(antdTheme);
     expect(actual.colorPrimary).toBe(baseline.colorPrimary);
-    expect(actual.colorBgContainer).toBe(baseline.colorBgContainer);
-    expect(antdTheme.token?.colorPrimary).toBe("#1677ff");
+    expect(actual.colorBgContainer).toBe("#16201c");
+    expect(antdTheme.token?.colorPrimary).toBe("#27765b");
   });
 });
 
-it("keeps small links readable against the dark container", () => {
+it("keeps working text and primary action states above the small-text contrast floor", () => {
   const tokens = theme.getDesignToken(antdTheme);
   function luminance(hex: string) {
+    if (hex.length === 4) hex = '#' + [...hex.slice(1)].map(character => character.repeat(2)).join('');
     const rgb = [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16) / 255).map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
     return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
   }
-  const foreground = luminance(tokens.colorLink); const background = luminance(tokens.colorBgContainer);
-  expect((Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05)).toBeGreaterThanOrEqual(4.5);
+  for (const [name, foreground, background] of [
+    ['body', tokens.colorText, tokens.colorBgContainer],
+    ['secondary', tokens.colorTextSecondary, tokens.colorBgElevated],
+    ['tertiary', tokens.colorTextTertiary, tokens.colorBgElevated],
+    ['placeholder', tokens.colorTextPlaceholder, tokens.colorBgElevated],
+    ['link', tokens.colorLink, tokens.colorBgContainer],
+    ['primary', tokens.colorTextLightSolid, tokens.colorPrimary],
+    ['primary hover', tokens.colorTextLightSolid, tokens.colorPrimaryHover],
+    ['primary active', tokens.colorTextLightSolid, tokens.colorPrimaryActive],
+  ]) {
+    const front = luminance(foreground), back = luminance(background);
+    expect((Math.max(front, back) + 0.05) / (Math.min(front, back) + 0.05), name).toBeGreaterThanOrEqual(4.5);
+  }
 });

@@ -1,11 +1,12 @@
+import { captureExperience } from './support/experience-navigation';
 import { expect, test, request as requests, type APIRequestContext, type Page } from '@playwright/test';
-import { signInTenant } from './support/tenant-auth';
+import { signInTenant, canonicalFetch, prepareOrdinaryChat } from './support/tenant-auth';
 import type { ModelAdmin, ModelPreset } from '../src/services/models';
 import { MessagePackHubProtocol } from '@microsoft/signalr-protocol-msgpack';
 const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password';
 async function call<T>(api: APIRequestContext, path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
-  const response = await api.fetch(path, { method, data: body, headers: { 'X-AgentCore-CSRF': csrf.token } });
+  const response = await canonicalFetch(api, path, { method, data: body, headers: { 'X-AgentCore-CSRF': csrf.token } });
   expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy();
   return response.status() === 204 ? undefined as T : response.json();
 }
@@ -20,7 +21,16 @@ async function setup() {
 }
 async function select(page: Page, label: string, text: string) {
   await page.getByRole('combobox', { name: label, exact: true }).click();
-  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByTitle(text, { exact: true }).click();
+  const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option-content').filter({ hasText: new RegExp(`^${escaped}$`) }).click();
+}
+async function prepareAgent(api: APIRequestContext, tenant: string, id: string, name?: string) {
+  await prepareOrdinaryChat(api, tenant, id);
+  if (!name) return;
+  const root = `/api/v2/tenants/${tenant}/agents/${id}`;
+  const current = await call<{ securityRevision: number; agent: { instance: { revision: number; personaRevision: number; persona: Record<string, unknown> } } }>(api, root + '/editor');
+  await call(api, root + '/persona', { persona: { ...current.agent.instance.persona, name }, expectedRevision: current.securityRevision,
+    expectedInstanceRevision: current.agent.instance.revision, expectedPersonaRevision: current.agent.instance.personaRevision }, 'PUT');
 }
 
 test('protected-key onboarding, explicit default, stale connection recovery and responsive configuration', async ({ page }) => {
@@ -70,6 +80,7 @@ test('protected-key onboarding, explicit default, stale connection recovery and 
     let catalog = await call<ModelAdmin>(f.api, f.root + '/models');
     expect(catalog.settings.defaultOfferingId).toBe(catalog.offerings[0].offeringId); expect(catalog.settings.defaultReasoningEffort).toBe('high');
     expect(catalog.availability[0].available).toBe(true); expect(JSON.stringify(catalog)).not.toContain('synthetic-e2e-private-key');
+    await captureExperience(page, 'model-defaults');
     await page.reload(); await expect(page.getByRole('combobox', { name: 'Default model', exact: true })).toBeVisible();
     await page.getByRole('tab', { name: 'Connections', exact: true }).click();
     await page.getByRole('button', { name: `Edit connection ${name}` }).click();
@@ -108,6 +119,7 @@ test('protected-key onboarding, explicit default, stale connection recovery and 
     });
     const contextRole = await call<{ roleId: string }>(f.api, f.root + '/roles', { name: 'Model fixture Space execution', permissions: ['spaces.read'], expectedRevision: await f.revision() });
     await call(f.api, f.root + '/role-assignments', { principalId: agent.principalId, roleId: contextRole.roleId, expectedRevision: await f.revision() });
+    await prepareAgent(f.api, f.tenant, agent.instance.instanceId);
     await page.goto(`/t/${f.tenant}`);
     await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('GPT-6 Luna');
     const prompt = `synthetic authorization audit: agents.read ${agent.instance.instanceId}`;
@@ -174,7 +186,7 @@ test('protected-key onboarding, explicit default, stale connection recovery and 
     await select(page, 'Default model', 'No default — refuse inherited model execution');
     await page.getByRole('button', { name: 'Save organization default' }).click();
     const defaultPreview = page.getByRole('dialog', { name: 'Apply model configuration change?', exact: true });
-    await expect(defaultPreview.getByText('Instances: 1', { exact: true })).toBeVisible();
+    await expect(defaultPreview.getByText('Instances: 2', { exact: true })).toBeVisible();
     await expect(defaultPreview.getByText('Runs: 2', { exact: true })).toBeVisible();
     await defaultPreview.getByRole('button', { name: 'Keep editing', exact: true }).click();
     expect((await call<ModelAdmin>(f.api, f.root + '/models')).settings.defaultOfferingId).toBe(catalog.settings.defaultOfferingId);
@@ -184,25 +196,27 @@ test('protected-key onboarding, explicit default, stale connection recovery and 
 
 test('shared preset edits retain tenant declarations and read-only members cannot mutate model configuration', async ({ page, browser }) => {
   const f = await setup();
+  let originalPreset: ModelPreset | undefined;
   try {
     const credential = await call<{ credential: { credentialId: string } }>(f.api, f.root + '/credentials', { displayName: 'Fixture inference', kind: 'ApiKey', purpose: 'ModelInference', protectedValue: 'synthetic-read-only-key', expectedRevision: await f.revision() });
     const c = await call<{ connectionId: string }>(f.api, f.root + '/model-connections', { kind: 'OpenAI', label: 'Read-only connection', credentialId: credential.credential.credentialId, noCredential: false, enabled: true, expectedRevision: await f.revision(), expectedConnectionRevision: 0 });
     const initialPreset = (await call<ModelPreset[]>(f.api, '/api/v2/system/model-presets')).find(p => p.presetId === 'dca10000-0000-4000-8000-000000000001')!;
+    originalPreset = initialPreset;
     const { source: _source, verifiedAt: _verifiedAt, ...capabilities } = initialPreset.capabilities;
     const adopted = await call<{ offeringId: string }>(f.api, f.root + '/models', { connectionId: c.connectionId, presetId: initialPreset.presetId, externalModelId: initialPreset.externalModelId, label: initialPreset.label, transport: initialPreset.transport, capabilities, enabled: true, retired: false, expectedRevision: await f.revision(), expectedOfferingRevision: 0 });
     await signInTenant(page, login, password); await page.goto('/system/model-presets');
     await expect(page.getByRole('heading', { name: 'Model catalog', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Edit preset GPT-6 Luna', exact: true }).click();
+    await page.getByRole('button', { name: `Edit preset ${initialPreset.label}`, exact: true }).click();
     await page.getByLabel('Preset name', { exact: true }).fill('GPT-6 Luna — reviewed metadata');
     await page.getByRole('button', { name: 'Save preset', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Edit preset GPT-6 Luna — reviewed metadata', exact: true })).toBeVisible();
-    expect((await call<ModelPreset[]>(f.api, '/api/v2/system/model-presets')).find(p => p.presetId === initialPreset.presetId)?.revision).toBe(2);
+    expect((await call<ModelPreset[]>(f.api, '/api/v2/system/model-presets')).find(p => p.presetId === initialPreset.presetId)?.revision).toBe(initialPreset.revision + 1);
     const retained = (await call<ModelAdmin>(f.api, f.root + '/models')).offerings.find(o => o.offeringId === adopted.offeringId)!;
     expect(retained.label).toBe(initialPreset.label); expect(retained.capabilities).toEqual(initialPreset.capabilities); expect(retained.revision).toBe(1);
     await call(f.api, f.root + '/models/default', { offeringId: adopted.offeringId, reasoningEffort: null, expectedRevision: await f.revision(), expectedSettingsRevision: 0 }, 'PUT');
     await call(f.api, f.root + '/agents', { templateId: 'examiner', version: 1, expectedRevision: await f.revision() });
     const ownedReferences = await call<{ total: number }>(f.api, f.root + `/models/${adopted.offeringId}/references?kind=instances`);
-    expect(ownedReferences.total).toBe(1);
+    expect(ownedReferences.total).toBe(2); // Managed General Assistant also inherits the organization default.
     const role = await call<{ roleId: string }>(f.api, f.root + '/roles', { name: 'Read models only', permissions: ['models.read', 'model-connections.read'], expectedRevision: await f.revision() });
     const memberLogin = `model-reader-${Date.now()}@example.test`, memberPassword = 'synthetic-model-reader-password';
     const invitation = await call<{ invitationId: string; token: string }>(f.api, f.root + '/members/invite', { login: memberLogin, roleId: role.roleId, expectedRevision: await f.revision() });
@@ -228,7 +242,14 @@ test('shared preset edits retain tenant declarations and read-only members canno
       expect(catalog.presets.every(p => p.offeringReferences == null)).toBe(true);
       expect((await readerPage.request.get('/api/v2/system/model-presets')).status()).toBe(403);
     } finally { await member.dispose(); await context.close(); }
-  } finally { await f.api.dispose(); }
+  } finally {
+    if (originalPreset) {
+      const current = (await call<ModelPreset[]>(f.api, '/api/v2/system/model-presets')).find(p => p.presetId === originalPreset.presetId)!;
+      const { source: _source, verifiedAt: _at, ...capabilities } = originalPreset.capabilities;
+      await call(f.api, `/api/v2/system/model-presets/${current.presetId}`, { kind: originalPreset.kind, externalModelId: originalPreset.externalModelId, label: originalPreset.label, transport: originalPreset.transport, enabled: originalPreset.enabled, archived: originalPreset.archived, capabilities, expectedRevision: current.revision }, 'PATCH');
+    }
+    await f.api.dispose();
+  }
 });
 
 test('unavailable explicit model refuses without a Run, retains the draft, and recovers after deliberate retry', async ({ page }) => {
@@ -250,6 +271,7 @@ test('unavailable explicit model refuses without a Run, retains the draft, and r
     const agent = agentState.instance.instanceId;
     const contextRole = await call<{ roleId: string }>(f.api, f.root + '/roles', { name: 'Recovery fixture Space execution', permissions: ['spaces.read'], expectedRevision: await f.revision() });
     await call(f.api, f.root + '/role-assignments', { principalId: agentState.principalId, roleId: contextRole.roleId, expectedRevision: await f.revision() });
+    await prepareAgent(f.api, f.tenant, agent);
     await signInTenant(page, login, password); await page.goto(`/t/${f.tenant}`);
     await page.getByRole('button', { name: 'Model', exact: true }).click();
     await page.getByTitle('Native conversation · Recovery', { exact: true }).click();
@@ -278,7 +300,7 @@ test('unavailable explicit model refuses without a Run, retains the draft, and r
     await expect(page.getByText('Hello from synthetic.', { exact: true })).toHaveCount(2);
     expect((await call<{ total: number }>(f.api, runsPath)).total).toBe(2);
     const saved = await call<{ model: { offeringId: string; connectionId: string; selectionSource: string } }>(f.api, f.root + `/sessions/${session}/conversation`);
-    expect(saved.model.offeringId).toBe(offering.offeringId); expect(saved.model.connectionId).toBe(connection.connectionId); expect(saved.model.selectionSource).toBe('user');
+    expect(saved.model.offeringId).toBe(offering.offeringId); expect(saved.model.connectionId).toBe(connection.connectionId); expect(saved.model.selectionSource).toBe('host');
     await page.reload(); await expect(page.getByText('Hello from synthetic.', { exact: true })).toHaveCount(2);
     await expect(page.getByText(text, { exact: true })).toHaveCount(1);
     await expect(page.getByText('Native conversation · Recovery', { exact: true })).toBeVisible();
@@ -297,7 +319,7 @@ test('unavailable explicit model refuses without a Run, retains the draft, and r
     await expect(page.getByText('Hello from synthetic.', { exact: true })).toHaveCount(3);
     expect((await call<{ total: number }>(f.api, runsPath)).total).toBe(3);
     const recovered = await call<{ model: { offeringId: string; selectionSource: string } }>(f.api, f.root + `/sessions/${session}/conversation`);
-    expect(recovered.model).toMatchObject({ offeringId: 'dca30000-0000-4000-8000-000000000001', selectionSource: 'user' });
+    expect(recovered.model).toMatchObject({ offeringId: 'dca30000-0000-4000-8000-000000000001', selectionSource: 'host' });
     await page.reload(); await expect(page.getByText('Hello from synthetic.', { exact: true })).toHaveCount(3);
     await expect(page.getByText(recoveryDraft, { exact: true })).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('Scripted Alpha');
@@ -316,26 +338,36 @@ test('Agent defaults refresh with identity and an explicit same-offering pin sta
       await call(f.api, f.root + `/agents/${saved.instance.instanceId}/settings/modelDefaults`, {
         expectedRevision: await f.revision(), expectedInstanceRevision: saved.instance.revision, set: { preference: { mode: 'fixed', offeringId, reasoning: { mode: reasoningEffort ? 'fixed' : 'modelDefault', effort: reasoningEffort } } }, clear: []
       }, 'PATCH');
+      await prepareAgent(f.api, f.tenant, saved.instance.instanceId, offeringId === alpha ? 'Model Alpha' : 'Model Beta');
       return saved.instance.instanceId;
     }
     const first = await agent(alpha, 'high'), second = await agent(beta, null);
     await signInTenant(page, login, password); await page.goto(`/t/${f.tenant}`);
+    await page.getByRole('combobox', { name: 'Agent', exact: true }).click();
+    await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: /^Model Alpha —/ }).click();
     await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('Scripted Alpha');
-    await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('High');
+    await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('Default');
     await page.getByRole('button', { name: 'Model', exact: true }).click();
     await expect(page.getByTitle('Use Agent default', { exact: true })).toHaveAttribute('aria-selected', 'true');
     await page.getByTitle('Scripted Alpha · Offline Synthetic', { exact: true }).click();
     await expect(page.getByRole('button', { name: 'Model', exact: true })).not.toContainText('Default');
+    await page.getByRole('button', { name: 'Model', exact: true }).click();
+    await select(page, 'Reasoning preference', 'Fixed effort');
+    await page.getByRole('slider', { name: 'Reasoning effort', exact: true }).focus();
+    await page.getByRole('slider', { name: 'Reasoning effort', exact: true }).press('End');
+    await expect(page.getByRole('slider', { name: 'Reasoning effort', exact: true })).toHaveAttribute('aria-valuetext', 'High');
+    await page.keyboard.press('Escape');
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Explicitly pin the same Agent default');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('Hello from synthetic.', { exact: true })).toBeVisible();
     const pinned = page.url().split('/').pop()!;
     const saved = await call<{ model: { offeringId: string; reasoningEffort: string; selectionSource: string } }>(f.api, f.root + `/sessions/${pinned}/conversation`);
-    expect(saved.model).toMatchObject({ offeringId: alpha, reasoningEffort: 'high', selectionSource: 'user' });
+    expect(saved.model).toMatchObject({ offeringId: alpha, reasoningEffort: 'high', selectionSource: 'host' });
+    expect((await call<{ modelPreference: { mode: string; offeringId: string } }>(f.api, f.root + `/sessions/${pinned}/conversation`)).modelPreference).toMatchObject({ mode: 'fixed', offeringId: alpha });
     await page.reload(); await expect(page.getByText('Hello from synthetic.', { exact: true })).toBeVisible();
     await page.goto(`/t/${f.tenant}`);
-    await page.getByRole('combobox', { name: 'Identity', exact: true }).click();
-    await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option').filter({ hasText: second.replace(/-/g, '').slice(-8) }).click();
+    await page.getByRole('combobox', { name: 'Agent', exact: true }).click();
+    await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option').filter({ hasText: /^Model Beta —/ }).click();
     await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('Scripted Beta');
     await expect(page.getByRole('button', { name: 'Model', exact: true })).not.toContainText('High');
     await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -352,7 +384,8 @@ test('Agent defaults refresh with identity and an explicit same-offering pin sta
     await expect(page.getByText('Hello from synthetic.', { exact: true })).toBeVisible();
     const inherited = page.url().split('/').pop()!;
     const model = await call<{ model: { offeringId: string; reasoningEffort: string | null; selectionSource: string } }>(f.api, f.root + `/sessions/${inherited}/conversation`);
-    expect(model.model).toMatchObject({ offeringId: beta, reasoningEffort: null, selectionSource: 'agentDefault' });
+    expect(model.model).toMatchObject({ offeringId: beta, reasoningEffort: null, selectionSource: 'host' });
+    expect((await call<{ modelPreference: { mode: string } }>(f.api, f.root + `/sessions/${inherited}/conversation`)).modelPreference.mode).toBe('inherit');
     expect(first).not.toBe(second); expect(errors).toEqual([]);
   } finally { await f.api.dispose(); }
 });
@@ -383,6 +416,7 @@ test('configured native offering flows through unattended and Automation selecto
     const role = await call<{ roleId: string }>(f.api, f.root + '/roles', { name: 'Gated model executor',
       permissions: ['automations.run', 'sessions.create', 'agent-runs.create', 'sessions.read', 'agent-runs.read', 'agents.chat'], expectedRevision: await f.revision() });
     await call(f.api, f.root + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await f.revision() });
+    await prepareAgent(f.api, f.tenant, agent.instance.instanceId);
     await call(f.api, f.root + '/operation-policies/agent-runs.create', { mode: 'always', independentReview: false, expectedRevision: await f.revision(), expectedPolicyRevision: 0 }, 'PUT');
     const id = agent.instance.instanceId, label = 'Gated native model · Gated production fixture';
     await signInTenant(page, login, password); await page.goto(`/t/${f.tenant}/admin/agents/${id}/unattended-model`);
@@ -398,6 +432,7 @@ test('configured native offering flows through unattended and Automation selecto
     await editor.getByRole('checkbox', { name: 'Enable automatic occurrences', exact: true }).check();
     await editor.getByRole('spinbutton', { name: 'Schedule maximum occurrences', exact: true }).fill('2');
     await editor.getByRole('button', { name: 'Execution options', exact: true }).click();
+    await editor.getByRole('checkbox', { name: 'Task requires tools', exact: true }).check();
     await select(page, 'Automation execution model', label); await select(page, 'Automation reasoning effort', 'low');
     await editor.getByRole('button', { name: 'Save Automation', exact: true }).click(); await expect(editor).toHaveCount(0);
     const registration = (await call<{ items: { modelPreference: { mode: string; offeringId: string; reasoning: { mode: string; effort: string } } }[] }>(f.api, f.root + `/agents/${id}/automations`)).items[0];
@@ -433,11 +468,11 @@ test('Definition defaults publish into Chat and sparse Instance model changes cl
     });
     const route = `/t/${f.tenant}/admin/definitions/${draft.definitionId}/drafts/${draft.draftId}/models`;
     await signInTenant(page, login, password); await page.goto(route);
-    await select(page, 'Model', 'Scripted Alpha · Offline Synthetic'); await select(page, 'Reasoning', 'High');
+    await select(page, 'Definition model', 'Scripted Alpha · Offline Synthetic'); await select(page, 'Definition reasoning', 'high');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByText('Saved', { exact: true })).toBeVisible(); await page.reload();
     await expect(page.getByTitle('Scripted Alpha · Offline Synthetic', { exact: true })).toBeVisible();
-    await expect(page.getByTitle('High', { exact: true })).toBeVisible();
+    await expect(page.getByTitle('high', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Publish', exact: true }).click();
     await page.getByRole('dialog', { name: 'Publish this saved draft?', exact: true }).getByRole('button', { name: 'Publish definition', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/admin/definitions/${draft.definitionId}$`));
@@ -445,25 +480,26 @@ test('Definition defaults publish into Chat and sparse Instance model changes cl
       definitionId: draft.definitionId, version: 1, expectedRevision: await f.revision()
     });
     const id = agent.instance.instanceId;
+    await prepareAgent(f.api, f.tenant, id);
     await page.goto(`/t/${f.tenant}`);
     await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('Scripted Alpha');
-    await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('High');
+    await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('Default');
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Use the published Definition model');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('Hello from synthetic.', { exact: true })).toBeVisible();
     const first = page.url().split('/').pop()!;
     const inherited = await call<{ model: { offeringId: string; reasoningEffort: string | null; selectionSource: string } }>(f.api, f.root + `/sessions/${first}/conversation`);
-    expect(inherited.model).toMatchObject({ offeringId: 'dca30000-0000-4000-8000-000000000001', reasoningEffort: 'high', selectionSource: 'agentDefault' });
+    expect(inherited.model).toMatchObject({ offeringId: 'dca30000-0000-4000-8000-000000000001', reasoningEffort: 'high', selectionSource: 'host' });
     await page.goto(`/t/${f.tenant}/admin/agents/${id}/settings`);
     await page.getByRole('button').filter({ hasText: 'Model defaults' }).click();
-    await select(page, 'Default model', 'Scripted Beta · Offline Synthetic');
-    await expect(page.getByRole('combobox', { name: 'Reasoning effort', exact: true }).locator('..')).not.toContainText('high');
+    await select(page, 'Instance model', 'Scripted Beta · Offline Synthetic');
+    await expect(page.getByRole('combobox', { name: 'Instance reasoning', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Save Model defaults', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Save Model defaults', exact: true })).toBeDisabled();
     await expect(page.getByText('Unsaved changes', { exact: true })).toHaveCount(0);
     await page.reload(); await page.getByRole('button').filter({ hasText: 'Model defaults' }).click();
     await expect(page.getByTitle('Scripted Beta · Offline Synthetic', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Default model: Instance override', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Model preference: Instance override', exact: true })).toBeVisible();
     await page.goto(`/t/${f.tenant}`);
     await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('Scripted Beta');
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Use the sparse Instance model override');
@@ -471,7 +507,7 @@ test('Definition defaults publish into Chat and sparse Instance model changes cl
     await expect(page.getByText('Hello from synthetic.', { exact: true })).toBeVisible();
     const second = page.url().split('/').pop()!;
     const overridden = await call<{ model: { offeringId: string; reasoningEffort: string | null; selectionSource: string } }>(f.api, f.root + `/sessions/${second}/conversation`);
-    expect(overridden.model).toMatchObject({ offeringId: 'dca30000-0000-4000-8000-000000000002', reasoningEffort: null, selectionSource: 'agentDefault' });
+    expect(overridden.model).toMatchObject({ offeringId: 'dca30000-0000-4000-8000-000000000002', reasoningEffort: null, selectionSource: 'host' });
     expect(first).not.toBe(second); expect(errors).toEqual([]);
   } finally { await f.api.dispose(); }
 });

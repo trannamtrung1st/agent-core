@@ -12,7 +12,7 @@ describe("instance chat identity", () => {
     expect(key).toBe(managedChatIdentityKey(instance.instanceId));
     expect(parseChatIdentityKey(key)).toEqual({ kind: "managed", instanceId: instance.instanceId });
     expect(resolveNewChatIdentityPresentation(key, [instance])).toEqual({ displayName: "Pinned", voiceAvailable: false, language: "en" });
-    expect(managedInstancePickerLabel(instance)).toContain("00000099");
+    expect(managedInstancePickerLabel(instance)).toBe("Pinned — Coach");
   });
   it("keeps empty inventory empty and rejects definition keys", () => {
     expect(defaultChatIdentityKey([])).toBe("");

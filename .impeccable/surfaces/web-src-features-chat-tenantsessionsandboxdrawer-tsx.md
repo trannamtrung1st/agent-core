@@ -2,33 +2,41 @@
 version: 1
 slug: "web-src-features-chat-tenantsessionsandboxdrawer-tsx"
 primary_target: "web/src/features/chat/TenantSessionSandboxDrawer.tsx"
-related_targets: ["web/src/features/chat/SessionSandboxFrame.tsx", "web/src/features/chat/SessionSandboxDrawer.tsx", "web/src/features/chat/ChatApp.tsx", "web/src/features/sandbox/SandboxEvidence.tsx"]
+related_targets: ["web/src/features/chat/SessionSandboxFrame.tsx", "web/src/features/chat/ChatApp.tsx", "web/src/features/sandbox/SandboxEvidence.tsx", "web/src/app/antdTheme.ts", "web/src/app/AppShell.tsx", "web/src/app.css"]
 ---
 
-# Tenant Session Sandbox
+# TenantSessionSandboxDrawer
 
-Mode: Operate. Ordinary extension of the incumbent dark Ant Design v6 Chat inspector, grounded in the canonical Session interaction contract. No replacement world or new tokens/assets.
+Mode: Operate. Code-led.
 
-## Direction contract — 2026-10-18
+## Direction contract
 
-**THESIS:** Inspect exact stored Session evidence and deliberately request independently authorized controls without mistaking request acceptance for confirmed cleanup.
+THESIS: Conversation-first. Retain one Session for text/voice, protected file/work/evidence inspectors, service-owned transport/audio, readable content and the persistent composer. Labeled Tools and Workspace Menu disclose secondary actions; attention stays visible and inspectors restore the stable opener. Scope changes retire private state.
 
-**OWN-WORLD:** Preserve the existing 640px/full-mobile native Drawer, dark AntD controls, responsive Descriptions, 16px section/8px action gaps and escaped evidence disclosures. Share its shell and opener focus with the incumbent consumer.
+OWN-WORLD: Native Ant Design v6 on evergreen layout/container/elevated surfaces, warm white working text, mint links and independent semantic status colors.
 
-**STORY:** Organization and stored-read limits → current generation/initialization/latest receipt → readable profile and reset/Stop actions → optional exact historical receipt. Reload obtains current evidence; confirmations bind the actual displayed revisions.
+STORY: Understand the authorized owner and current saved state, perform the named task, and inspect its attributable result or explicit recovery.
 
-**FIRST VIEWPORT:** Chat remains behind the focused inspector. Existing Drawer title/close and explicit Reload precede source and stored state; long image/generation facts wrap within the native inset. Empty/denied states keep local recovery and Chat intact.
+FIRST VIEWPORT: This composition remains inside its authorized page/Chat/inspector owner. The shared task/scope heading precedes native controls, evidence and actions; narrow layouts wrap and use local overflow.
 
-**FORM:** Code-led ordinary extension; seed key: incumbent-session-sandbox. Existing Inspector shell and native disclosure/confirmation motion. The signature interaction is exact confirmed control followed by read recovery, with no automatic command replay. Current and historical receipts remain distinct.
+FORM: Inherit the selected field-guide working grammar, candidate 7, seed `cb1be48c`; contextual classification without literal book decoration.
 
-**FINISH:** SHIP for the inspected scope on 2026-10-18. Fresh finish review found no actionable issue in all 21 current captures; bounded PRODUCT.md/DESIGN.md successor notes record the shared pattern and evidence limits. No shipping raster assets were added.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
-## Finish evidence — 2026-10-18
+The [Product Experience Contract](../../docs/product-experience-contract.md) and [frontend specification](../../docs/13-frontend-implementation-spec.md) own behavior. [DESIGN](../../.agents/context/DESIGN.md) owns concise visual guidance. Ant Design v6 controls and shared layout owners provide the presentation; no second framework or page-local tokens.
 
-[Focused verification](../../docs/reports/tenant-session-sandbox-ui-verification-2026-10-18.md) owns executed interactions and limits. Actual Synthetic evidence covers sign-in, tenant Chat send/reply and the canonical scoped empty read. Controlled GET/POST adapters separately cover exact-witness reset/Stop/profile requests, stale recovery, malformed acknowledgement without replay, exact historical receipt and permission presentation. Native close/Cancel and focus return were revalidated after removing temporary capture-only animation CSS; that CSS is absent from product source. Parent verification records 64 focused frontend tests and a passing production build, including the shared legacy Drawer and catalog/Instance evidence consumers.
+## Qualification
 
-The fresh reviewer individually inspected all 21 latest valid captures in `/private/tmp/agent-core-session-sandbox-ui-iSeerp`: `ready-top-{1440,1024,768,390,320}`, `controls-{1440,1024,768,390,320}`, `pending-{1440,320}`, `confirmation-320`, `exact-receipt-320`, `read-only-320`, `denied-320`, `empty-{1440,320}`, `chat-header-320` and `shared-legacy-{1440,320}` (all PNG). These replace the earlier invalid transition captures. Verdict: SHIP, no findings or requested fixes. The documenter sampled desktop ready, narrow controls, denied and shared legacy views; it ran no application checks.
+The [delivery ledger](../../docs/reports/product-experience-delivery-2026-10-30.md) and [master manifest](../../docs/reports/assets/product-experience/coverage.json) record actual journeys, roles, inspected images and open limits. This refreshed brief is source metadata, not acceptance. Preserve existing meaningful states and operations; verify desktop/tablet/mobile and narrow content/keyboard/authority boundaries.
 
-The incumbent dark AntD Operate system remains authoritative: 640px/full-mobile Drawer, native 24px body inset, 16px section/8px action gaps, responsive Descriptions, escaped bounded evidence and combined background-output labels. No theme, CSS, token, font, asset, UI-kit or sidecar-preview change accompanies this extension. Historical fingerprints are preserved; existing source/context drift is not canonized or repaired.
+## Source fingerprints
 
-Loading, hover, other control confirmations, stale and malformed-acknowledgement states lack dedicated visual acceptance. Functional focus and recovery evidence remains report-scoped. Controlled permission views are not backend authorization proof; the prior controls-read backend report has its own scope. Live SDK/provider/Docker qualification, remaining proposal families, final authority/schema consolidation and the earlier SQLite preference reliability follow-up remain open. This verdict does not claim full proposal or milestone acceptance.
+| Source | SHA256 |
+| --- | --- |
+| `web/src/features/chat/TenantSessionSandboxDrawer.tsx` | `7ccf6695f1acba9e898d887e4668c54c7332f52cd717bf13359ea199e36ed6c0` |
+| `web/src/features/chat/SessionSandboxFrame.tsx` | `d2835511f18446559a37411e788b6eea61ea3c8383fbdeeffbca22b764bcfb9d` |
+| `web/src/features/chat/ChatApp.tsx` | `57acdf3fe6b58aaf217b78720c57ef1939a43357a7d248bf07ab0b333ea8e11f` |
+| `web/src/features/sandbox/SandboxEvidence.tsx` | `0675ca8ee947dc8f7fbe4ccf67df9d0d527621a5fcdc92a27e2bfa49cf7bc5d5` |
+| `web/src/app/antdTheme.ts` | `8f13dc29dc96e4ef2dcc86be8150743d7656975cbe202b06f04f039a8a8109ae` |
+| `web/src/app/AppShell.tsx` | `35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1` |
+| `web/src/app.css` | `e827076d776b5687e59bd83d86cba88d889203430bc8ae23a14e85c6014e0cae` |

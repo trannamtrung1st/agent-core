@@ -1,3 +1,4 @@
+import { captureExperience, openConversationTool } from './support/experience-navigation';
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { canonicalFetch, grantPrivateSpaceRead, signInTenant } from './support/tenant-auth';
 
@@ -8,7 +9,7 @@ async function call<T>(api: APIRequestContext, path: string, data?: unknown, met
 }
 test('real delegated worker asks, waits, receives human guidance, completes and preserves independent Goals', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-  await signInTenant(page, 'task-owner@example.test', 'synthetic-task-password');
+  await signInTenant(page, process.env.TENANT_UI_LOGIN ?? 'task-owner@example.test', process.env.TENANT_UI_PASSWORD ?? 'synthetic-task-password');
   const api = page.request; const nonce = crypto.randomUUID().slice(0, 8);
   expect((await call<{ profile: string }>(api, '/health')).profile).toBe('Synthetic');
   const tenant = await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Delegation ${nonce}`, slug: `delegation-${nonce}` });
@@ -32,7 +33,7 @@ test('real delegated worker asks, waits, receives human guidance, completes and 
   await expect(page.getByRole('button', { name: 'Save cooperation', exact: true })).toBeDisabled();
   const chat = await call<{ sessionId: string }>(api, `${root}/sessions`, { agentInstanceId: source.instance.instanceId, mode: 'text', retentionKind: 'saved', expectedRevision: await revision(), expectedInstanceRevision: source.instance.revision });
   await page.goto(`/t/${tenant.tenantId}/c/${chat.sessionId}`);
-  await page.getByRole('button', { name: 'Tasks', exact: true }).click();
+  await openConversationTool(page, 'Tasks');
   await expect(page.getByText('No tasks created in this conversation')).toBeVisible();
   await page.getByRole('button', { name: /Delegate task$/ }).click();
   await page.getByLabel('Assigned Agent', { exact: true }).click();
@@ -40,14 +41,22 @@ test('real delegated worker asks, waits, receives human guidance, completes and 
   await page.getByLabel('Title', { exact: true }).fill('Review migration ownership');
   await page.getByLabel('Objective', { exact: true }).fill('synthetic-task-worker synthetic-task-question: Review the approved migration source.');
   await page.getByRole('button', { name: 'Assign task', exact: true }).click();
+  // The list can refresh while the worker is asking. Inspect the saved Task
+  // through its visible control if the view returns to the collection.
+  await expect(async () => {
+    const inspect = page.getByRole('listitem').filter({ hasText: 'Review migration ownership' }).getByRole('button', { name: 'Inspect task', exact: true });
+    if (await inspect.isVisible()) await inspect.click();
+    await expect(page.getByText('Which approved source should I use?', { exact: true })).toBeVisible();
+  }).toPass({ timeout: 30_000 });
   await expect(page.getByText('Which approved source should I use?', { exact: true })).toBeVisible();
   await expect(page.getByText('Waiting', { exact: true })).toBeVisible();
   await page.getByLabel('Human guidance', { exact: true }).fill('Use the reviewed migration proposal only.');
   await page.getByRole('button', { name: 'Send guidance', exact: true }).click();
   await expect(page.getByText('Synthetic worker completed the assigned review. No external effects were performed.', { exact: true })).toBeVisible();
-  await expect(page.getByText('Task success is separate from Goal verification.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Task success is separate from Goal and Workflow verification.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Acknowledge result', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Acknowledge result', exact: true })).toHaveCount(0);
+  await captureExperience(page, 'task-result');
   const tasks = await call<{ items: { taskId: string; state: string; workerSessionId: string; selectedTargetInstanceId: string; sourceSessionId: string }[] }>(api, `${root}/sessions/${chat.sessionId}/tasks`);
   const task = tasks.items[0]; expect(task.state).toBe('Succeeded'); expect(task.selectedTargetInstanceId).toBe(worker.instance.instanceId); expect(task.workerSessionId).not.toBe(chat.sessionId);
   await test.info().attach('task-fixture', { body: JSON.stringify({ tenantId: tenant.tenantId, sourceSessionId: chat.sessionId, workerInstanceId: worker.instance.instanceId, taskId: task.taskId }), contentType: 'application/json' });
@@ -63,6 +72,6 @@ test('real delegated worker asks, waits, receives human guidance, completes and 
     await page.screenshot({ path: test.info().outputPath(`task-detail-${width}.png`), fullPage: true, animations: 'disabled' });
   }
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.keyboard.press('Escape'); await expect(page.getByRole('button', { name: 'Tasks', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape'); await expect(page.getByRole('button', { name: /^Conversation tools/ })).toBeFocused();
   expect(errors).toEqual([]);
 });

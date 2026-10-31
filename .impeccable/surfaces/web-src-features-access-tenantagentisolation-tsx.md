@@ -1,19 +1,39 @@
-# Tenant State & Isolation
+---
+version: 1
+slug: "web-src-features-access-tenantagentisolation-tsx"
+primary_target: "web/src/features/access/TenantAgentIsolation.tsx"
+related_targets: ["web/src/app/antdTheme.ts", "web/src/app/AppShell.tsx", "web/src/app.css"]
+---
 
-Mode: Operate. Ordinary extension of the incumbent dark Ant Design v6 configuration UI. Preserve the current visual identity, native fields, bounded form, shared panel insets and 8/12/16px spacing. No theme, token, font, asset or component-kit change is required.
+# TenantAgentIsolation
 
-The scoped Instance page owns one coordinated State, Memory and Voice-enablement draft with Experience and identity-maintenance eligibility. Reuse `AgentConfigurationPanel`, `StateIsolationPolicyFields` and `StateIsolationToggleField`; keep inherited/override sources and explicit Use Definition default actions beside their fields. Preset selection prepares a draft. The sibling `IsolationChangePreview` owns the product-language before/after/source rows, retention/next-Run notice and wrapping Preview/Save/Discard actions. It uses the shared responsive `useAdminDetailLayout`: aligned labels on wider screens and stacked labels on narrow screens. Keep Save deliberate and disabled until the current complete preview permits it.
+Mode: Operate. Code-led.
 
-Behavior authority: [Coordinated State & Isolation interaction contract](../../docs/19-multi-tenant-iam-ux.md#coordinated-state--isolation-interaction-contract). Reload retains draft choices and invalidates the preview; stale or uncertain outcomes require current readback, a fresh preview and deliberate Save. Read loss retires protected content. Saved eligibility does not establish Experience/maintenance execution or native isolation enforcement. Shared generic Settings links here rather than supplying another State/Memory/Voice-enablement editor.
+## Direction contract
 
-## Bounded evidence — 2026-10-21
+THESIS: Identify the selected agent, lifecycle and adopted Definition before editing. Use contextual Identity/Behavior/Execution/Activity/Access navigation and an explicit organization transition. Settings categories retain one sparse-draft controller and field-level source/reset. Keep current authority, guarded save/cancel, stale/unknown readback and non-destructive recovery.
 
-The fresh finish reviewer returned **SHIP** after the sole material finding, raw preview labels, was corrected through the shared product-label mapping and `IsolationChangePreview`. Its initial pass reviewed the original four visible regions; its issue-only recheck opened corrected desktop and narrow populated previews. The final 10.9-second CLI run subsequently refreshed all six captures using identical UI source after only E2E assertions were added. This documenter reopened those six current captures under `../review/tenant-isolation/` and checked their PNG dimensions and SHA256 fingerprints: desktop top/preview at 1440×1100, narrow top/preview/actions at 320×844 and stale recovery at 390×844. Current fingerprints are recorded in the temporary design comparison. These are partial regions of an internally scrolling page. The desktop preview heading starts above the viewport; its narrow counterpart shows the heading. Native dark panels, field grids, stacked narrow descriptions and wrapping actions preserve the incumbent composition in those regions. The reviewer did not re-review these final refreshed files.
+OWN-WORLD: Native Ant Design v6 on evergreen layout/container/elevated surfaces, warm white working text, mint links and independent semantic status colors.
 
-The implementation handoff reports 81 passing focused API cases in 1 minute 39 seconds, 17 passing Application cases, 26 passing focused frontend cases and a passing web build. The final native CLI journey passed once in 10.9 seconds, exercising deliberate coordinated save, real stale refusal with retained draft/current reload/fresh preview and lost-reply read recovery without mutation replay. It also checked the affected generic Settings consumer: the coordinated-editor link remains visible, independent Memory/State sections are absent, and Voice ID remains visible without an Enabled switch. That Settings assertion has functional evidence but no dedicated capture here. The initial detector result is `[]`; no rerun is claimed. This documentation pass performs no application checks. The independent Playwright MCP attempt failed with `Transport closed`, so there is no independent MCP action verification.
+STORY: Understand the authorized owner and current saved state, perform the named task, and inspect its attributable result or explicit recovery.
 
-Whole-page and five-width visual acceptance, keyboard/focus/hover, loading/empty/read-loss states, independently measured contrast and runtime/native enforcement remain outside this evidence. The bounded finish verdict does not qualify every shared preview consumer, the complete proposal or a milestone.
+FIRST VIEWPORT: This composition remains inside its authorized page/Chat/inspector owner. The shared task/scope heading precedes native controls, evidence and actions; narrow layouts wrap and use local overflow.
 
-Normative PRODUCT/DESIGN, configuration and `.impeccable/design.json` are preserved. The sidecar retains SHA256 `8bdc3659a25b706454ac8cc0394323c5e0e60ea1ade616756b180efbaecef49b`. The context pass reported pre-existing stale sidecar metadata and orphaned AdminApp/ApprovalModal briefs; this ordinary extension neither repairs nor canonizes them.
+FORM: Inherit the selected field-guide working grammar, candidate 7, seed `cb1be48c`; contextual classification without literal book decoration.
 
-A subsequent console/network confirmation passed the same journey in 9.5 seconds without overwriting these reviewed captures. Expected lifecycle-cancelled GET reads and the deliberate lost save reply are separated from unexpected failures. This additional functional evidence does not expand the static visual verdict.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+
+The [Product Experience Contract](../../docs/product-experience-contract.md) and [frontend specification](../../docs/13-frontend-implementation-spec.md) own behavior. [DESIGN](../../.agents/context/DESIGN.md) owns concise visual guidance. Ant Design v6 controls and shared layout owners provide the presentation; no second framework or page-local tokens.
+
+## Qualification
+
+The [delivery ledger](../../docs/reports/product-experience-delivery-2026-10-30.md) and [master manifest](../../docs/reports/assets/product-experience/coverage.json) record actual journeys, roles, inspected images and open limits. This refreshed brief is source metadata, not acceptance. Preserve existing meaningful states and operations; verify desktop/tablet/mobile and narrow content/keyboard/authority boundaries.
+
+## Source fingerprints
+
+| Source | SHA256 |
+| --- | --- |
+| `web/src/features/access/TenantAgentIsolation.tsx` | `1e3bfeb03cb3554fd7cb766ec7b979f0b519838249d0e0b5893af6430facd39f` |
+| `web/src/app/antdTheme.ts` | `8f13dc29dc96e4ef2dcc86be8150743d7656975cbe202b06f04f039a8a8109ae` |
+| `web/src/app/AppShell.tsx` | `35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1` |
+| `web/src/app.css` | `e827076d776b5687e59bd83d86cba88d889203430bc8ae23a14e85c6014e0cae` |

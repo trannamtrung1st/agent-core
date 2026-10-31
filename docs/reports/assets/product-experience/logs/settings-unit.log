@@ -1,0 +1,216 @@
+
+ RUN  v3.2.7 /Users/trungtran/MyPlace/Personal/Projects/agent-core/web
+
+stderr | src/features/admin/InstanceSettingsSection.test.tsx > retires an acknowledged section after an unreadable response and explicitly reloads without replaying it
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ForwardRef inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/admin/InstanceSettingsSection.test.tsx > refreshes dependent sections after saving while retaining unrelated drafts and expansion
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/admin/InstanceSettingsSection.test.tsx > reports a committed save when refresh fails and recovers without replaying it or losing other drafts
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/admin/InstanceSettingsSection.test.tsx > ignores a late settings refresh after switching owners
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/admin/InstanceSettingsSection.test.tsx > finishes the committed save after leaving and re-entering the settings tab during refresh
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InstanceSettingsSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/admin/InstanceSettingsSection.test.tsx > edits sandbox storage in MiB while saving exact sparse bytes and preserving discard behavior
+`NaN` is an invalid value for the `height` css style property.
+
+ ✓ src/features/admin/InstanceSettingsSection.test.tsx (13 tests) 49389ms
+   ✓ retires an acknowledged section after an unreadable response and explicitly reloads without replaying it  4755ms
+   ✓ makes a tenant model catalog failure visible and retries only its read  1807ms
+   ✓ refreshes dependent sections after saving while retaining unrelated drafts and expansion  6324ms
+   ✓ reports a committed save when refresh fails and recovers without replaying it or losing other drafts  5025ms
+   ✓ uses host-default reasoning choices for an explicit inherited preference and orders effort semantically  1443ms
+   ✓ ignores a late settings refresh after switching owners  4658ms
+   ✓ finishes the committed save after leaving and re-entering the settings tab during refresh  5257ms
+   ✓ edits inherited values without writing and discards a local draft back to Definition defaults  3091ms
+   ✓ shows override provenance only in focusable tooltips and removes it after reset  5791ms
+   ✓ explains published restrictions before saving while allowing independent toggles  2285ms
+   ✓ edits sandbox storage in MiB while saving exact sparse bytes and preserving discard behavior  5570ms
+   ✓ retains unavailable model and effort explicitly without silently choosing the tenant default  1372ms
+   ✓ clears an inherited unsupported effort when explicitly changing the model  2009ms
+
+ Test Files  1 passed (1)
+      Tests  13 passed (13)
+   Start at  23:29:34
+   Duration  51.37s (transform 111ms, setup 114ms, collect 1.38s, tests 49.39s, environment 284ms, prepare 48ms)
+

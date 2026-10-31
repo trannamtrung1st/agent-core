@@ -1,0 +1,65 @@
+- dialog "Tasks" [ref=f37e220]:
+  - generic [ref=f37e222]:
+    - button "Close" [ref=f37e223] [cursor=pointer]:
+      - img "close" [ref=f37e224]
+    - generic [ref=f37e227]: Tasks
+  - generic [ref=f37e229]:
+    - generic [ref=f37e230]:
+      - generic [ref=f37e231]: Assignments have separate worker Sessions and Run outcomes.
+      - button "Reload tasks" [ref=f37e232] [cursor=pointer]
+    - generic [ref=f37e238]:
+      - tablist [ref=f37e239]:
+        - generic [ref=f37e241]:
+          - tab "Created" [selected] [ref=f37e243] [cursor=pointer]
+          - tab "Assigned" [ref=f37e245] [cursor=pointer]
+      - generic:
+        - generic:
+          - tabpanel "Created"
+    - generic [ref=f37e246]:
+      - generic [ref=f37e248]:
+        - generic "Assigned Agent" [ref=f37e250]: "* Assigned Agent"
+        - generic [ref=f37e253]:
+          - generic: Migration reviewer
+          - generic [ref=f37e254] [cursor=pointer]
+      - generic [ref=f37e262]:
+        - generic "Worker Space" [ref=f37e264]: "* Worker Space"
+        - generic [ref=f37e265]:
+          - generic [ref=f37e268] [cursor=pointer]
+          - generic [ref=f37e275]: The worker uses its own membership. Your files and credentials are not shared.
+      - generic [ref=f37e278]:
+        - generic "Environment profile" [ref=f37e280]
+        - generic [ref=f37e281]:
+          - generic [ref=f37e284]
+          - generic [ref=f37e291]: Only profiles readable by you and the worker are listed. Values remain private.
+      - generic [ref=f37e293]:
+        - generic [ref=f37e294]: "Worker model: Scripted Alpha"
+        - generic [ref=f37e295]: "Worker ceiling: 24 steps and 180 seconds of active time. The remaining root budget may lower these limits."
+        - generic [ref=f37e296]: Current settings are rechecked when the assignment is saved.
+      - generic [ref=f37e298]:
+        - generic "Title" [ref=f37e300]
+        - textbox "Title" [ref=f37e304]
+      - generic [ref=f37e306]:
+        - generic "Objective" [ref=f37e308]: "* Objective"
+        - generic [ref=f37e312]:
+          - textbox "* Objective" [ref=f37e313]
+          - generic: 0 / 4000
+      - generic [ref=f37e315]:
+        - generic "Wait for earlier tasks" [ref=f37e317]
+        - generic [ref=f37e321]:
+          - combobox "Wait for earlier tasks" [ref=f37e324]
+          - img "down" [ref=f37e326]
+      - generic [ref=f37e330]:
+        - generic "Deadline in hours" [ref=f37e332]: "* Deadline in hours"
+        - generic [ref=f37e336]:
+          - spinbutton "* Deadline in hours" [ref=f37e337]: "24"
+          - generic
+      - generic [ref=f37e351] [cursor=pointer]:
+        - checkbox "Send one completion report to this conversation" [ref=f37e353]
+        - generic [ref=f37e354]: Send one completion report to this conversation
+      - generic [ref=f37e355]:
+        - button "Assign task" [ref=f37e356] [cursor=pointer]
+        - button "Discard assignment" [ref=f37e358] [cursor=pointer]
+    - generic [ref=f37e360]:
+      - img "No data" [ref=f37e362]
+      - generic [ref=f37e368]: No tasks created in this conversation
+    - list "Delegated tasks"

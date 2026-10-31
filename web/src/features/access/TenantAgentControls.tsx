@@ -61,7 +61,7 @@ export function TenantAgentControls({ context, id, page }: { context: TenantCont
   }
   const update = (part: Partial<Draft>) => setDraft(current => current ? { ...current, ...part } : current);
   return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">{guard.holder}
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to instances</Typography.Link><Button disabled={command.busy} onClick={reload}>Reload controls</Button></Flex>
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link><Button disabled={command.busy} onClick={reload}>Reload controls</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}
     {committed && <Alert type="info" showIcon title="Changes were saved" description="Read the current configuration before making another change. No command is replayed by Reload." />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={reload} /> : view && draft && <>

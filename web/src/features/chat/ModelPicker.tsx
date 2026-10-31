@@ -328,7 +328,7 @@ export function ModelPicker({
             ariaValueTextFormatterForHandle={(value) => formatEffortLabel(efforts[value ?? 0])}
             onChange={(value) => setEffortPreviewIndex(value)}
             onChangeComplete={(value) => onEffortChange(efforts[value] ?? null)}
-            aria-label="Reasoning effort"
+            ariaLabelForHandle="Reasoning effort"
           /> : null}
           {modes.length > 0 ? <Select
             classNames={{ popup: { root: "model-picker-effort-popup" } }}

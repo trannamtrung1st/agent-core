@@ -1,0 +1,740 @@
+[
+  {
+    "id": "tenant.agents",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents",
+    "heading": "Agents"
+  },
+  {
+    "id": "tenant.agents",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents",
+    "heading": "Agents"
+  },
+  {
+    "id": "tenant.agents",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents",
+    "heading": "Agents"
+  },
+  {
+    "id": "tenant.workflows",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/workflows",
+    "heading": "Workflows"
+  },
+  {
+    "id": "tenant.workflows",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/workflows",
+    "heading": "Workflows"
+  },
+  {
+    "id": "tenant.workflows",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/workflows",
+    "heading": "Workflows"
+  },
+  {
+    "id": "tenant.spaces",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/spaces",
+    "heading": "Spaces"
+  },
+  {
+    "id": "tenant.spaces",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/spaces",
+    "heading": "Spaces"
+  },
+  {
+    "id": "tenant.spaces",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/spaces",
+    "heading": "Spaces"
+  },
+  {
+    "id": "tenant.approvals",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/approvals",
+    "heading": "Approvals"
+  },
+  {
+    "id": "tenant.approvals",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/approvals",
+    "heading": "Approvals"
+  },
+  {
+    "id": "tenant.approvals",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/approvals",
+    "heading": "Approvals"
+  },
+  {
+    "id": "tenant.evaluations",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/evaluations",
+    "heading": "Evaluations"
+  },
+  {
+    "id": "tenant.evaluations",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/evaluations",
+    "heading": "Evaluations"
+  },
+  {
+    "id": "tenant.evaluations",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/evaluations",
+    "heading": "Evaluations"
+  },
+  {
+    "id": "tenant.definitions",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/definitions",
+    "heading": "Definitions"
+  },
+  {
+    "id": "tenant.definitions",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/definitions",
+    "heading": "Definitions"
+  },
+  {
+    "id": "tenant.definitions",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/definitions",
+    "heading": "Definitions"
+  },
+  {
+    "id": "tenant.ai-models",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/integrations/ai-models/connections",
+    "heading": "AI models"
+  },
+  {
+    "id": "tenant.ai-models",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/integrations/ai-models/connections",
+    "heading": "AI models"
+  },
+  {
+    "id": "tenant.ai-models",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/integrations/ai-models/connections",
+    "heading": "AI models"
+  },
+  {
+    "id": "tenant.secrets",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/integrations/secrets",
+    "heading": "Secrets"
+  },
+  {
+    "id": "tenant.secrets",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/integrations/secrets",
+    "heading": "Secrets"
+  },
+  {
+    "id": "tenant.secrets",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/integrations/secrets",
+    "heading": "Secrets"
+  },
+  {
+    "id": "tenant.credentials",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/integrations/credentials",
+    "heading": "Credentials"
+  },
+  {
+    "id": "tenant.credentials",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/integrations/credentials",
+    "heading": "Credentials"
+  },
+  {
+    "id": "tenant.credentials",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/integrations/credentials",
+    "heading": "Credentials"
+  },
+  {
+    "id": "tenant.events",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/integrations/events",
+    "heading": "Events"
+  },
+  {
+    "id": "tenant.events",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/integrations/events",
+    "heading": "Events"
+  },
+  {
+    "id": "tenant.events",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/integrations/events",
+    "heading": "Events"
+  },
+  {
+    "id": "tenant.sandboxes",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/integrations/sandboxes",
+    "heading": "Sandbox profiles"
+  },
+  {
+    "id": "tenant.sandboxes",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/integrations/sandboxes",
+    "heading": "Sandbox profiles"
+  },
+  {
+    "id": "tenant.sandboxes",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/integrations/sandboxes",
+    "heading": "Sandbox profiles"
+  },
+  {
+    "id": "tenant.my-profile",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/profile",
+    "heading": "Your organization profile"
+  },
+  {
+    "id": "tenant.my-profile",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/profile",
+    "heading": "Your organization profile"
+  },
+  {
+    "id": "tenant.my-profile",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/profile",
+    "heading": "Your organization profile"
+  },
+  {
+    "id": "tenant.access",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/access",
+    "heading": "Your access"
+  },
+  {
+    "id": "tenant.access",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/access",
+    "heading": "Your access"
+  },
+  {
+    "id": "tenant.access",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/access",
+    "heading": "Your access"
+  },
+  {
+    "id": "tenant.members",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/members",
+    "heading": "Members"
+  },
+  {
+    "id": "tenant.members",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/members",
+    "heading": "Members"
+  },
+  {
+    "id": "tenant.members",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/members",
+    "heading": "Members"
+  },
+  {
+    "id": "tenant.roles",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/roles",
+    "heading": "Roles & permissions"
+  },
+  {
+    "id": "tenant.roles",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/roles",
+    "heading": "Roles & permissions"
+  },
+  {
+    "id": "tenant.roles",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/roles",
+    "heading": "Roles & permissions"
+  },
+  {
+    "id": "tenant.governance",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/governance",
+    "heading": "Governance"
+  },
+  {
+    "id": "tenant.governance",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/governance",
+    "heading": "Governance"
+  },
+  {
+    "id": "tenant.governance",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/governance",
+    "heading": "Governance"
+  },
+  {
+    "id": "tenant.audit",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/audit",
+    "heading": "Audit"
+  },
+  {
+    "id": "tenant.audit",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/audit",
+    "heading": "Audit"
+  },
+  {
+    "id": "tenant.audit",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/audit",
+    "heading": "Audit"
+  },
+  {
+    "id": "agent.profile",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/profile",
+    "heading": "Profile"
+  },
+  {
+    "id": "agent.profile",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/profile",
+    "heading": "Profile"
+  },
+  {
+    "id": "agent.profile",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/profile",
+    "heading": "Profile"
+  },
+  {
+    "id": "agent.version",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/version",
+    "heading": "Definition version"
+  },
+  {
+    "id": "agent.version",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/version",
+    "heading": "Definition version"
+  },
+  {
+    "id": "agent.version",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/version",
+    "heading": "Definition version"
+  },
+  {
+    "id": "agent.skills",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/skills",
+    "heading": "Skills"
+  },
+  {
+    "id": "agent.skills",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/skills",
+    "heading": "Skills"
+  },
+  {
+    "id": "agent.skills",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/skills",
+    "heading": "Skills"
+  },
+  {
+    "id": "agent.resources",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/resources",
+    "heading": "Resources"
+  },
+  {
+    "id": "agent.resources",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/resources",
+    "heading": "Resources"
+  },
+  {
+    "id": "agent.resources",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/resources",
+    "heading": "Resources"
+  },
+  {
+    "id": "agent.settings",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/settings",
+    "heading": "Settings"
+  },
+  {
+    "id": "agent.settings",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/settings",
+    "heading": "Settings"
+  },
+  {
+    "id": "agent.settings",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/settings",
+    "heading": "Settings"
+  },
+  {
+    "id": "agent.sandbox",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/sandbox",
+    "heading": "Sandbox"
+  },
+  {
+    "id": "agent.sandbox",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/sandbox",
+    "heading": "Sandbox"
+  },
+  {
+    "id": "agent.sandbox",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/sandbox",
+    "heading": "Sandbox"
+  },
+  {
+    "id": "agent.state-isolation",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/state-isolation",
+    "heading": "State & Isolation"
+  },
+  {
+    "id": "agent.state-isolation",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/state-isolation",
+    "heading": "State & Isolation"
+  },
+  {
+    "id": "agent.state-isolation",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/state-isolation",
+    "heading": "State & Isolation"
+  },
+  {
+    "id": "agent.execution-budgets",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/execution-budgets",
+    "heading": "Execution budgets"
+  },
+  {
+    "id": "agent.execution-budgets",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/execution-budgets",
+    "heading": "Execution budgets"
+  },
+  {
+    "id": "agent.execution-budgets",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/execution-budgets",
+    "heading": "Execution budgets"
+  },
+  {
+    "id": "agent.self-management",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/self-management",
+    "heading": "Self-management"
+  },
+  {
+    "id": "agent.self-management",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/self-management",
+    "heading": "Self-management"
+  },
+  {
+    "id": "agent.self-management",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/self-management",
+    "heading": "Self-management"
+  },
+  {
+    "id": "agent.unattended-model",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/unattended-model",
+    "heading": "Unattended model"
+  },
+  {
+    "id": "agent.unattended-model",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/unattended-model",
+    "heading": "Unattended model"
+  },
+  {
+    "id": "agent.unattended-model",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/unattended-model",
+    "heading": "Unattended model"
+  },
+  {
+    "id": "agent.memory",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/memory",
+    "heading": "Continuity"
+  },
+  {
+    "id": "agent.memory",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/memory",
+    "heading": "Continuity"
+  },
+  {
+    "id": "agent.memory",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/memory",
+    "heading": "Continuity"
+  },
+  {
+    "id": "agent.automations",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/automations",
+    "heading": "Automations"
+  },
+  {
+    "id": "agent.automations",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/automations",
+    "heading": "Automations"
+  },
+  {
+    "id": "agent.automations",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/automations",
+    "heading": "Automations"
+  },
+  {
+    "id": "agent.activity-sessions",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/activity/sessions",
+    "heading": "Sessions"
+  },
+  {
+    "id": "agent.activity-sessions",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/activity/sessions",
+    "heading": "Sessions"
+  },
+  {
+    "id": "agent.activity-sessions",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/activity/sessions",
+    "heading": "Sessions"
+  },
+  {
+    "id": "agent.activity-runs",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/activity/runs",
+    "heading": "Runs"
+  },
+  {
+    "id": "agent.activity-runs",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/activity/runs",
+    "heading": "Runs"
+  },
+  {
+    "id": "agent.activity-runs",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/activity/runs",
+    "heading": "Runs"
+  },
+  {
+    "id": "agent.state",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/state",
+    "heading": "State"
+  },
+  {
+    "id": "agent.state",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/state",
+    "heading": "State"
+  },
+  {
+    "id": "agent.state",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/state",
+    "heading": "State"
+  },
+  {
+    "id": "agent.lifecycle",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/lifecycle",
+    "heading": "Lifecycle"
+  },
+  {
+    "id": "agent.lifecycle",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/lifecycle",
+    "heading": "Lifecycle"
+  },
+  {
+    "id": "agent.lifecycle",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/lifecycle",
+    "heading": "Lifecycle"
+  },
+  {
+    "id": "agent.access",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/access",
+    "heading": "Access"
+  },
+  {
+    "id": "agent.access",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/access",
+    "heading": "Access"
+  },
+  {
+    "id": "agent.access",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/access",
+    "heading": "Access"
+  },
+  {
+    "id": "agent.connections",
+    "width": 1440,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/connections",
+    "heading": "Connections"
+  },
+  {
+    "id": "agent.connections",
+    "width": 390,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/connections",
+    "heading": "Connections"
+  },
+  {
+    "id": "agent.connections",
+    "width": 320,
+    "path": "/t/01a18dea-6c25-76cf-b67e-d3763abec3e5/admin/agents/01a18dea-6c3a-7f78-887b-422814ac6209/connections",
+    "heading": "Connections"
+  },
+  {
+    "id": "system.model-presets",
+    "width": 1440,
+    "path": "/system/model-presets",
+    "heading": "Model catalog"
+  },
+  {
+    "id": "system.model-presets",
+    "width": 390,
+    "path": "/system/model-presets",
+    "heading": "Model catalog"
+  },
+  {
+    "id": "system.model-presets",
+    "width": 320,
+    "path": "/system/model-presets",
+    "heading": "Model catalog"
+  },
+  {
+    "id": "system.operators",
+    "width": 1440,
+    "path": "/system/operators",
+    "heading": "Platform operators"
+  },
+  {
+    "id": "system.operators",
+    "width": 390,
+    "path": "/system/operators",
+    "heading": "Platform operators"
+  },
+  {
+    "id": "system.operators",
+    "width": 320,
+    "path": "/system/operators",
+    "heading": "Platform operators"
+  },
+  {
+    "id": "system.organizations",
+    "width": 1440,
+    "path": "/system/organizations",
+    "heading": "Organizations"
+  },
+  {
+    "id": "system.organizations",
+    "width": 390,
+    "path": "/system/organizations",
+    "heading": "Organizations"
+  },
+  {
+    "id": "system.organizations",
+    "width": 320,
+    "path": "/system/organizations",
+    "heading": "Organizations"
+  },
+  {
+    "id": "system.accounts",
+    "width": 1440,
+    "path": "/system/accounts",
+    "heading": "Accounts"
+  },
+  {
+    "id": "system.accounts",
+    "width": 390,
+    "path": "/system/accounts",
+    "heading": "Accounts"
+  },
+  {
+    "id": "system.accounts",
+    "width": 320,
+    "path": "/system/accounts",
+    "heading": "Accounts"
+  },
+  {
+    "id": "system.browser-privacy",
+    "width": 1440,
+    "path": "/system/browser-privacy",
+    "heading": "Browser privacy"
+  },
+  {
+    "id": "system.browser-privacy",
+    "width": 390,
+    "path": "/system/browser-privacy",
+    "heading": "Browser privacy"
+  },
+  {
+    "id": "system.browser-privacy",
+    "width": 320,
+    "path": "/system/browser-privacy",
+    "heading": "Browser privacy"
+  },
+  {
+    "id": "system.audit",
+    "width": 1440,
+    "path": "/system/audit",
+    "heading": "Platform audit"
+  },
+  {
+    "id": "system.audit",
+    "width": 390,
+    "path": "/system/audit",
+    "heading": "Platform audit"
+  },
+  {
+    "id": "system.audit",
+    "width": 320,
+    "path": "/system/audit",
+    "heading": "Platform audit"
+  }
+]

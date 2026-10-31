@@ -1,16 +1,15 @@
+import { canonicalFetch, signInTenant } from './support/tenant-auth';
+import { openDestination } from './support/experience-navigation';
 import { expect, test, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 
 const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password';
 let identity: Awaited<ReturnType<APIRequestContext['storageState']>>;
 async function call<T>(api: APIRequestContext, path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
-  const response = await api.fetch(path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
+  const response = await canonicalFetch(api, path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
   expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy(); return response.status() === 204 ? undefined as T : response.json();
 }
-async function signIn(page: Page, email = login, secret = password) {
-  await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(email); await page.getByLabel('Password', { exact: true }).fill(secret);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
-}
+async function signIn(page: Page, email = login, secret = password) { await signInTenant(page, email, secret); }
 type Draft = { definitionId: string; draftId: string; revision: number; candidate: Record<string, unknown> };
 async function fixture(count = 2) {
   const api = await requests.newContext({ baseURL: process.env.TENANT_CHAT_TEST_BASE_URL, storageState: identity }); const nonce = crypto.randomUUID().slice(0, 8);
@@ -49,7 +48,7 @@ test('320px version paging, guarded review, focus, stale recovery and explicit a
   try {
     await page.setViewportSize({ width: 320, height: 740 }); await signIn(page); await page.goto(f.route);
     await page.getByTitle('Next Page').click(); await choose(page, 'v2 · Active');
-    await page.getByRole('button', { name: 'Open Admin navigation', exact: true }).click(); await page.getByRole('link', { name: 'Profile', exact: true }).click();
+    await openDestination(page, 'Profile');
     await page.getByRole('dialog', { name: 'Discard unsaved changes?' }).getByRole('button', { name: 'Keep editing', exact: true }).click();
     await page.getByRole('button', { name: 'Preview changes', exact: true }).click(); const adopt = page.getByRole('button', { name: 'Adopt Definition v2', exact: true }); await expect(adopt).toBeEnabled(); expect((await f.read()).agent.instance.activeVersion).toBe(1);
     await adopt.click(); await page.keyboard.press('Escape'); await expect(page.getByRole('dialog', { name: 'Adopt Definition v2?', exact: true })).toHaveCount(0); await expect(adopt).toBeFocused();

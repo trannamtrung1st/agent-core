@@ -1,6 +1,12 @@
+import { signInTenant } from './support/tenant-auth';
+import { openDestination } from './support/experience-navigation';
 import { expect, test, type Page } from '@playwright/test';
 
 test('owner and invited Reader use scoped access UI, with safe mobile drawers and denial recovery', async ({ page, browser }) => {
+  const ownerLogin = process.env.TENANT_UI_LOGIN ?? 'access-owner@example.test';
+  const ownerPassword = process.env.TENANT_UI_PASSWORD ?? 'synthetic-access-test-password';
+  const nonce = crypto.randomUUID().slice(0, 8), readerEmail = `reader-access-${nonce}@example.test`;
+  const organizationName = `Access experience ${nonce}`, organizationSlug = `access-experience-${nonce}`;
   const pageErrors: string[] = [];
   const failedRequests: string[] = [];
   const observe = (target: Page) => {
@@ -9,16 +15,23 @@ test('owner and invited Reader use scoped access UI, with safe mobile drawers an
   };
   observe(page);
   await page.goto('/sign-in');
-  await page.getByRole('textbox', { name: 'Email' }).fill('access-owner@example.test');
+  await page.getByRole('textbox', { name: 'Email' }).fill(ownerLogin);
   await page.getByRole('textbox', { name: 'Password' }).fill('incorrect-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('email or password is incorrect');
-  await page.getByRole('textbox', { name: 'Password' }).fill('synthetic-access-test-password');
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await page.getByRole('button', { name: 'Open Access test organization' }).click();
-  await page.getByRole('link', { name: 'Members', exact: true }).click();
+  await signInTenant(page, ownerLogin, ownerPassword);
+  const ownerName = ((await (await page.request.get('/api/v2/account/me')).json()) as { account: { displayName: string } }).account.displayName;
+  await page.getByRole('button', { name: 'Create organization', exact: true }).click();
+  const createOrganization = page.getByRole('dialog', { name: 'Create organization', exact: true });
+  await createOrganization.getByLabel('Organization name', { exact: true }).fill(organizationName);
+  await createOrganization.getByLabel('Organization identifier', { exact: true }).fill(organizationSlug);
+  await createOrganization.getByRole('button', { name: 'Create organization', exact: true }).click();
+  await expect(createOrganization).toBeHidden();
+  await page.getByRole('textbox', { name: 'Search organizations', exact: true }).fill(organizationSlug);
+  await page.getByRole('button', { name: `Open ${organizationName}`, exact: true }).click();
+  await openDestination(page, 'Members');
   const tenantPath = new URL(page.url()).pathname.replace(/\/members$/, '');
-  await page.getByRole('button', { name: 'Manage Access test owner' }).click();
+  await page.getByRole('button', { name: `Manage ${ownerName}` }).click();
   await page.getByRole('button', { name: 'Suspend member', exact: true }).click();
   await page.getByRole('dialog', { name: 'Suspend member' }).getByRole('button', { name: 'Suspend member', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Keep at least one active owner');
@@ -28,7 +41,7 @@ test('owner and invited Reader use scoped access UI, with safe mobile drawers an
     if (failRoleRead && route.request().method() === 'GET') { return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ reasonCode: 'service_unavailable' }) }); }
     return route.continue();
   });
-  await page.getByRole('link', { name: 'Roles & permissions' }).click();
+  await openDestination(page, 'Roles & permissions');
   await expect(page.getByRole('alert')).toContainText('temporarily unavailable');
   failRoleRead = false;
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
@@ -68,9 +81,9 @@ test('owner and invited Reader use scoped access UI, with safe mobile drawers an
   await page.getByRole('dialog', { name: 'Discard unsaved changes?' }).getByRole('button', { name: 'Discard changes', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Create role', exact: true })).toBeFocused();
 
-  await page.getByRole('link', { name: 'Members', exact: true }).click();
+  await openDestination(page, 'Members');
   await page.getByRole('button', { name: 'Invite member' }).click();
-  await page.getByRole('textbox', { name: 'Email' }).fill('reader-access@example.test');
+  await page.getByRole('textbox', { name: 'Email' }).fill(readerEmail);
   await page.getByRole('combobox', { name: 'Initial role' }).fill('Reader');
   await page.getByRole('combobox', { name: 'Initial role' }).press('Enter');
   await page.getByRole('button', { name: 'Create invitation' }).click();
@@ -92,7 +105,7 @@ test('owner and invited Reader use scoped access UI, with safe mobile drawers an
   await clipboard.dispose();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByRole('tab', { name: 'Invitations', exact: true }).click();
-  await expect(page.getByRole('row').filter({ hasText: 'reader-access@example.test' })).toContainText('Pending');
+  await expect(page.getByRole('row').filter({ hasText: readerEmail })).toContainText('Pending');
   await page.getByRole('tab', { name: 'Members', exact: true }).click();
   const reader = await browser.newContext();
   const member = await reader.newPage();
@@ -102,7 +115,8 @@ test('owner and invited Reader use scoped access UI, with safe mobile drawers an
   await member.getByRole('textbox', { name: 'Password' }).fill('synthetic-reader-test-password');
   await member.getByRole('button', { name: 'Create account & join' }).click();
   await expect(member.getByRole('heading', { name: 'Your access', exact: true })).toBeVisible();
-  await member.getByRole('link', { name: 'Roles & permissions' }).click();
+  await openDestination(member, 'Roles & permissions');
+  await member.getByRole('textbox', { name: 'Search roles', exact: true }).fill('Reader');
   await expect(member.getByRole('button', { name: 'Create role', exact: true })).toHaveCount(0);
   await member.getByRole('button', { name: 'Inspect Reader', exact: true }).click();
   await expect(member.getByRole('dialog', { name: 'Reader' })).toContainText('Built-in roles');
@@ -114,7 +128,7 @@ test('owner and invited Reader use scoped access UI, with safe mobile drawers an
   await memberAccess.getByRole('combobox', { name: 'Role to assign' }).press('Enter');
   await memberAccess.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('textbox', { name: 'Search members' }).fill('');
-  await page.getByRole('button', { name: 'Manage Access test owner', exact: true }).click();
+  await page.getByRole('button', { name: `Manage ${ownerName}`, exact: true }).click();
   await expect(memberAccess.getByText('Choose a role', { exact: true })).toBeVisible();
   await expect(memberAccess.getByRole('button', { name: 'Assign role', exact: true })).toBeDisabled();
   await memberAccess.getByRole('button', { name: 'Close', exact: true }).click();
@@ -143,16 +157,20 @@ test('owner and invited Reader use scoped access UI, with safe mobile drawers an
   await expect(member.getByRole('alert')).toContainText('no longer have access');
   await reader.close();
   await page.getByRole('dialog', { name: 'Member access' }).getByRole('button', { name: 'Close', exact: true }).click();
-  await page.getByRole('button', { name: 'Your account', exact: true }).click();
-  await page.getByLabel('Current password', { exact: true }).fill('synthetic-access-test-password');
+  await openDestination(page, 'Your account');
+  await page.getByLabel('Current password', { exact: true }).fill(ownerPassword);
   await page.getByLabel('New password', { exact: true }).fill('updated-synthetic-access-password');
   await page.getByLabel('Confirm new password', { exact: true }).fill('updated-synthetic-access-password');
   await page.getByRole('button', { name: 'Change password', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Password changed');
-  await page.getByRole('textbox', { name: 'Email' }).fill('access-owner@example.test');
-  await page.getByRole('textbox', { name: 'Password' }).fill('updated-synthetic-access-password');
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
+  await signInTenant(page, ownerLogin, 'updated-synthetic-access-password');
+  await openDestination(page, 'Your account');
+  await page.getByLabel('Current password', { exact: true }).fill('updated-synthetic-access-password');
+  await page.getByLabel('New password', { exact: true }).fill(ownerPassword);
+  await page.getByLabel('Confirm new password', { exact: true }).fill(ownerPassword);
+  await page.getByRole('button', { name: 'Change password', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Password changed');
+  await signInTenant(page, ownerLogin, ownerPassword);
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
   expect(pageErrors).toEqual([]);

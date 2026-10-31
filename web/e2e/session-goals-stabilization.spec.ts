@@ -1,3 +1,4 @@
+import { openConversationTool } from './support/experience-navigation';
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { canonicalFetch, grantPrivateSpaceRead, signInTenant } from './support/tenant-auth';
 async function request(api: APIRequestContext, path: string, data?: unknown) {
@@ -14,7 +15,7 @@ async function openCheckpoint(page: Page, title: string) {
 }
 test('Goal stabilization preserves progress and verified proof and protects optional prerequisites', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-  await signInTenant(page, 'goals-owner@example.test', 'synthetic-goals-password'); const api = page.request; const nonce = crypto.randomUUID().slice(0, 8);
+  await signInTenant(page, process.env.TENANT_UI_LOGIN ?? 'goals-owner@example.test', process.env.TENANT_UI_PASSWORD ?? 'synthetic-goals-password'); const api = page.request; const nonce = crypto.randomUUID().slice(0, 8);
   const tenant = await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Goal stabilization ${nonce}`, slug: `goal-stabilization-${nonce}` }); const root = `/api/v2/tenants/${tenant.tenantId}`;
   const revision = async () => (await call<{ revision: number }>(api, `${root}/access/me`)).revision;
   const agent = await call<{ principalId: string; instance: { instanceId: string; revision: number } }>(api, `${root}/agents`, { templateId: 'examiner', version: 1, expectedRevision: await revision() });
@@ -30,7 +31,7 @@ test('Goal stabilization preserves progress and verified proof and protects opti
   await call(api, endpoint, { goalId: id, command: { kind: 0, requestKey: `create-${nonce}`, expectedSecurityRevision: await revision(), expectedGoalRevision: 0, expectedPlanRevision: 0, plan: { title: 'Synthetic stabilization proof', objective: 'Deliver with protected prerequisites and immutable evidence', successCriteria: 'Each required outcome is verified', checkpoints: [first,middle,proof,final,independent], requireFinalAcceptance: true, autoContinuation: { enabled: false, maxRuns: 0, until: null } } } });
   type Goal = { revision: number; planRevision: number; checkpoints: { checkpointId: string; status: number; sourceRunId: string | null; evidence: unknown[] | null; note: string | null }[] };
   const goal = () => call<Goal>(api, `${endpoint}/${id}`);
-  await page.goto(`/t/${tenant.tenantId}/c/${chat.sessionId}`); await page.getByRole('button', { name: 'Session goals', exact: true }).click();
+  await page.goto(`/t/${tenant.tenantId}/c/${chat.sessionId}`); await openConversationTool(page, 'Session goals');
   await page.getByRole('button', { name: 'Start goal', exact: true }).click(); await page.getByRole('button', { name: 'Accept plan', exact: true }).click();
   let panel = await openCheckpoint(page, 'Collect inputs'); await panel.getByRole('button', { name: 'Report or verify checkpoint', exact: true }).click();
   await panel.getByRole('textbox', { name: 'Progress or acceptance reason', exact: true }).fill('Waiting for the missing source input.'); await panel.getByRole('button', { name: 'Report blocker', exact: true }).click();

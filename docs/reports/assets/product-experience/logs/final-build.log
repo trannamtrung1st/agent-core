@@ -1,0 +1,45 @@
+
+> agent-core-web@ build /Users/trungtran/MyPlace/Personal/Projects/agent-core/web
+> tsc --noEmit && vite build
+
+vite v7.3.6 building client environment for production...
+transforming...
+node_modules/.pnpm/@microsoft+signalr@10.0.11/node_modules/@microsoft/signalr/dist/esm/Utils.js (190:0): A comment
+
+"/*#__PURE__*/"
+
+in "node_modules/.pnpm/@microsoft+signalr@10.0.11/node_modules/@microsoft/signalr/dist/esm/Utils.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+node_modules/.pnpm/@microsoft+signalr@10.0.11/node_modules/@microsoft/signalr/dist/esm/Utils.js (208:0): A comment
+
+"/*#__PURE__*/"
+
+in "node_modules/.pnpm/@microsoft+signalr@10.0.11/node_modules/@microsoft/signalr/dist/esm/Utils.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+✓ 4013 modules transformed.
+rendering chunks...
+[plugin vite:reporter] 
+(!) /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/src/services/tenantChat.ts is dynamically imported by /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/src/services/realtime.ts but also statically imported by /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/src/features/access/AccessApp.tsx, /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/src/features/chat/AgentPicker.tsx, /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/src/features/chat/ChatApp.tsx, /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/src/features/chat/SessionRail.tsx, /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/src/features/chat/TenantChatEntry.tsx, /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/src/features/chat/composerChoices.ts, /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/src/services/api.ts, /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/src/services/attachments.ts, /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/src/services/realtime.ts, dynamic import will not move module into another chunk.
+
+computing gzip size...
+dist/assets/preview.worker-CII08STH.js              0.43 kB
+dist/index.html                                     0.46 kB │ gzip:   0.30 kB
+dist/assets/parseDelimited-DebppUNk.js             19.37 kB
+dist/assets/highlight-Bye1E-18.js               1,176.46 kB
+dist/assets/WorkflowLauncher-BnuhLJ6X.css          15.87 kB │ gzip:   2.67 kB
+dist/assets/ReadonlySpreadsheet-B2uK5ewy.css       63.01 kB │ gzip:   8.86 kB
+dist/assets/index-BToBJChV.css                     70.72 kB │ gzip:  11.71 kB
+dist/assets/SessionWorkflowsDrawer-CPBTEjMs.js      2.14 kB │ gzip:   1.09 kB
+dist/assets/spreadsheetAdapter-ECZ8rn-2.js          2.26 kB │ gzip:   1.28 kB
+dist/assets/CsvPreview-k14qEt9f.js                  3.44 kB │ gzip:   1.70 kB
+dist/assets/SpreadsheetPreview-wRxuddBh.js          3.55 kB │ gzip:   1.66 kB
+dist/assets/WordPreview-CTdLKHCL.js                33.46 kB │ gzip:  12.99 kB
+dist/assets/TenantWorkflows-CUQpDdw9.js            33.51 kB │ gzip:  10.35 kB
+dist/assets/docx-preview-CVWFX-yH.js              173.37 kB │ gzip:  50.69 kB
+dist/assets/WorkflowLauncher-BxXYpssG.js          235.83 kB │ gzip:  75.68 kB
+dist/assets/ReadonlySpreadsheet-mPGiw780.js     2,758.87 kB │ gzip: 593.97 kB
+dist/assets/index-C1Rl7LCi.js                   2,950.28 kB │ gzip: 887.53 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 5.89s

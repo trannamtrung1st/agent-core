@@ -1,0 +1,11 @@
+
+ RUN  v3.2.7 /Users/trungtran/MyPlace/Personal/Projects/agent-core/web
+
+ ✓ src/features/chat/SessionSandboxFrame.opening.test.tsx (3 tests) 79ms
+ ✓ src/features/chat/SessionSandboxFrame.test.tsx (1 test) 194ms
+
+ Test Files  2 passed (2)
+      Tests  4 passed (4)
+   Start at  00:43:20
+   Duration  1.75s (transform 48ms, setup 272ms, collect 1.83s, tests 274ms, environment 621ms, prepare 97ms)
+

@@ -51,7 +51,7 @@ export function TenantAgentSkills({ context, id }: { context: TenantContext; id:
     });
   }
   return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">{guard.holder}
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to instances</Typography.Link><Button ref={reloadButton} disabled={busy || !!selection} onClick={reload}>Reload Skills</Button></Flex>
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link><Button ref={reloadButton} disabled={busy || !!selection} onClick={reload}>Reload Skills</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}
     {committed && <Alert type="info" showIcon title="Skill change was saved" description="Reload reads current facts and never replays a command." />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={reload} /> : view && <>

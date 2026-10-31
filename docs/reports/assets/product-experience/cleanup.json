@@ -1,0 +1,29 @@
+{
+  "task_ports": {
+    "5088": {
+      "exit_code": 1,
+      "listeners": ""
+    },
+    "5179": {
+      "exit_code": 1,
+      "listeners": ""
+    }
+  },
+  "remaining_task_processes": [],
+  "mcp_browser": "closed; tool reports no open tabs",
+  "unrelated_processes": "Left unchanged: pre-existing PID35919 launched2026-10-29, cwd /Users/trungtran/.codex/worktrees/project-refactoring/agent-core/web; not this task or screenshot host.",
+  "removed_disposable_data": [
+    "/tmp/agent-core-order6/qualified-profile",
+    "/tmp/agent-core-order6/launcher-smoke",
+    "/tmp/agent-core-order6/workspaces",
+    "/tmp/agent-core-order6/attachments",
+    "/tmp/agent-core-order6/artifacts",
+    "/tmp/agent-core-order6/resources",
+    "/tmp/agent-core-order6/keys",
+    "/tmp/agent-core-order6/store.db",
+    "/tmp/agent-core-order6/screenshot-closure",
+    "/tmp/agent-core-order6/screenshot-closure-approved"
+  ],
+  "retained": "Curated evidence in repository; raw screenshots/logs/traces in task scratch directory.",
+  "final_capture_closure": "Fresh evidence host stopped by SIGINT; orderly graceful drain completed. Vite stopped. Both extra disposable screenshot roots removed. MCP browser reports no open tabs."
+}

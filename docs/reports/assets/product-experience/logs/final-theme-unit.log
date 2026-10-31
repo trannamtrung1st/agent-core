@@ -1,0 +1,10 @@
+
+ RUN  v3.2.7 /Users/trungtran/MyPlace/Personal/Projects/agent-core/web
+
+ ✓ src/app/antdTheme.test.ts (2 tests) 9ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  00:13:29
+   Duration  1.29s (transform 25ms, setup 106ms, collect 719ms, tests 9ms, environment 258ms, prepare 41ms)
+

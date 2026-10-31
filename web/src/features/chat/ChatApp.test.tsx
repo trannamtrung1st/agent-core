@@ -95,7 +95,7 @@ describe("ChatApp accessibility", () => {
       });
     });
     const view = await act(async () => renderChat());
-    expect(screen.getByLabelText("Identity")).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Chats" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Start conversation" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
@@ -121,9 +121,19 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByRole("button", { name: "Add content" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Conversation tools/ }));
     fireEvent.click(screen.getByRole("button", { name: /^End$/ }));
     const endDialog = await screen.findByRole("dialog");
     expect(within(endDialog).getAllByText("End this conversation?")).not.toHaveLength(0);
+  });
+
+  it("gives a failed new Chat one connection failure and one retry owner", async () => {
+    await act(async () => {
+      useSessionStore.setState({ ...emptySession(), connection: 'failed', error: 'Access changed. Retry this connection.' });
+    });
+    await act(async () => renderChat());
+    expect(screen.getAllByTestId('session-failure')).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Retry' })).toHaveLength(1);
   });
 
   it("shows recoverable structured failure details from the chat owner", async () => {
@@ -695,6 +705,7 @@ describe("ChatApp accessibility", () => {
     await act(async () => renderChat());
     expect(screen.getByLabelText("Message")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Conversation tools/ }));
     fireEvent.click(screen.getByRole("button", { name: /^End$/ }));
     const endDialog = await screen.findByRole("dialog");
     expect(within(endDialog).getAllByText("End this conversation?")).not.toHaveLength(0);
@@ -974,7 +985,7 @@ describe("ChatApp narrow session drawer", () => {
     await act(async () => renderChat());
     expect(screen.getByRole("button", { name: "Open chats" })).toBeInTheDocument();
     expect(screen.queryByTestId("session-rail")).not.toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Identity" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Agent" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Open chats" }));
     await waitFor(() => {
@@ -1066,6 +1077,7 @@ describe("ChatApp tablet session rail", () => {
         });
       });
       const view = await act(async () => renderChat());
+      fireEvent.click(screen.getByRole("button", { name: /^Conversation tools/ }));
       const backgroundWork = await screen.findByRole("button", { name: /^Background work/ });
       await act(async () => fireEvent.click(backgroundWork));
       fireEvent.click(await screen.findByRole("button", { name: "View original result" }));

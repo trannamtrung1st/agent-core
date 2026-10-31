@@ -2,43 +2,45 @@
 version: 1
 slug: "web-src-features-access-tenantevents-tsx"
 primary_target: "web/src/features/access/TenantEvents.tsx"
-related_targets: ["web/src/features/access/AccessApp.tsx", "web/src/services/tenantWebhooks.ts", "web/src/features/admin/AdminCollectionToolbar.tsx", "web/src/features/admin/AgentConfigurationLayout.tsx", "web/src/features/admin/useAdminDetailLayout.ts", "web/src/features/access/useAccessDraftGuard.tsx", "web/src/app/confirmAction.ts"]
+related_targets: ["web/src/features/access/AccessApp.tsx", "web/src/services/tenantWebhooks.ts", "web/src/features/admin/AdminCollectionToolbar.tsx", "web/src/features/admin/AgentConfigurationLayout.tsx", "web/src/features/admin/useAdminDetailLayout.ts", "web/src/features/access/useAccessDraftGuard.tsx", "web/src/app/confirmAction.ts", "web/src/app/antdTheme.ts", "web/src/app/AppShell.tsx", "web/src/app.css"]
 ---
 
-# Tenant webhook connections
+# TenantEvents
 
-Mode: Operate. Ordinary code-led extension of the incumbent organization Integrations → Events surface.
+Mode: Operate. Code-led.
 
 ## Direction contract
 
-THESIS: Make an exact organization's readable webhook sources and accepted data understandable through the existing collection and inspector. Receipt acceptance remains distinct from matched subscriptions, admitted work and completed execution.
+THESIS: Task-first contextual administration. Use the shared heading, scope trail, native collection/filter/detail/edit compositions and dark evergreen tokens. Keep resource ownership, exact revisions, server authority, draft guards and honest loading/error/read-only/uncertain states.
 
-OWN-WORLD: Preserve dark Ant Design v6, native Form/Table/Descriptions/Collapse/Alert, the shared configuration panel and 8/12/16 spacing. Existing access Drawer, confirmation, dirty guard and focus owners retain their roles. No new token, CSS, asset, wrapper or UI kit.
+OWN-WORLD: Native Ant Design v6 on evergreen layout/container/elevated surfaces, warm white working text, mint links and independent semantic status colors.
 
-STORY: Find a source, inspect immutable identity and bounded receipts, rename deliberately, or confirm exact token rotation/revocation/reactivation. Save a newly issued token once; current independent authority and explicit recovery remain visible.
+STORY: Understand the authorized owner and current saved state, perform the named task, and inspect its attributable result or explicit recovery.
 
-FIRST VIEWPORT: Shared organization heading and Reload Events precede the webhook configuration section. Loaded-page search and New webhook sit above a native paged source table; the independently read built-in metadata catalog follows. Details use the existing 640px Drawer, capped to the viewport and full width on narrow phones, with reachable wrapping footer actions.
+FIRST VIEWPORT: This composition remains inside its authorized page/Chat/inspector owner. The shared task/scope heading precedes native controls, evidence and actions; narrow layouts wrap and use local overflow.
 
-FORM: Incumbent composition extension; no concept seed or replacement visual world. Feature state and canonical transport stay in their existing owners.
+FORM: Inherit the selected field-guide working grammar, candidate 7, seed `cb1be48c`; contextual classification without literal book decoration.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
-## Interaction and recovery boundaries
+The [Product Experience Contract](../../docs/product-experience-contract.md) and [frontend specification](../../docs/13-frontend-implementation-spec.md) own behavior. [DESIGN](../../.agents/context/DESIGN.md) owns concise visual guidance. Ant Design v6 controls and shared layout owners provide the presentation; no second framework or page-local tokens.
 
-Current `webhooks.read` filters rows/counts/pagination; management alone reveals no protected source. Create and exact-source management hints remain independent. The saved event key is immutable. Stale rename keeps the local draft while explicit Reload refreshes revision witnesses; unknown or malformed acknowledgements fence replay and cannot recover a lost token.
+## Qualification
 
-Successful create/rotation displays a masked transient token with Copy/Dismiss and sender guidance. Clipboard failure preserves manual selection recovery; Reload Events retires the token. Shared confirmation names the exact source and organization. Rotation invalidates the previous token; issuing a token for a revoked source explicitly confirms reactivation. Revoke preserves readable historical receipts. Source/receipt read loss retires protected detail, token/evidence and restores a usable collection focus target.
+The [delivery ledger](../../docs/reports/product-experience-delivery-2026-10-30.md) and [master manifest](../../docs/reports/assets/product-experience/coverage.json) record actual journeys, roles, inspected images and open limits. This refreshed brief is source metadata, not acceptance. Preserve existing meaningful states and operations; verify desktop/tablet/mobile and narrow content/keyboard/authority boundaries.
 
-Accepted receipts expose source event ID, source revision, occurrence/admission dates and bounded literal JSON through native read-only text controls. Sender examples and external data grant no execution authority. The built-in catalog uses its independent `core-events.read` metadata read and grants no occurrence/subscription access.
+## Source fingerprints
 
-Behavior belongs to [Frontend](../../docs/13-frontend-implementation-spec.md#tenant-webhook-connections), the [interaction contract](../../docs/19-multi-tenant-iam-ux.md#tenant-webhook-connections-interaction-contract) and [canonical routes](../../docs/14-api-and-realtime-protocol.md#canonical-tenant-webhook-connections-and-bearer-ingress).
-
-## Bounded finish evidence — 2026-10-21
-
-The fresh finish reviewer returned **SHIP**, with no material fixes, after a full review of 15 corrected captures under `.impeccable/review/tenant-webhooks/`: `header-final-{1440,1024,768,390,320}.png`, `details-final-{1440,1024,768,390,320}.png`, `collection-final-{1440,390}.png`, `activation-confirmation-final-390.png`, `rotation-confirmation-390.png` and `rotated-token-masked-390.png`. Transition-obscured earlier captures are superseded. Dedicated hover/loading/empty/failure/stale/permission captures and independently measured contrast are outside that visual verdict.
-
-This documentation pass sampled the final desktop header, 320px receipt details, masked token and activation confirmation. It checked `TenantEvents`, `AccessApp`, the typed webhook service, theme, shared collection/configuration/detail alignment and narrow access-control CSS owners. Existing native spacing, wrapping action rows, responsive labels and Drawer containment match the incumbent system; no new presentation recipe is required.
-
-The [qualification report](../../docs/reports/tenant-webhook-verification-2026-10-21.md) owns 77 focused passing cases, builds, detector `[]`, actual Synthetic ingress/source journeys, controlled recovery/access cases, five-width measurements and remaining limits. This documentation pass runs no browser or application checks. Receipt/source qualification does not close event/core/watch subscriptions, Automation fanout/admission, the full proposal, live sender/provider qualification or milestone acceptance.
-
-Historical `.impeccable/design.json` timestamps and fingerprints remain unchanged. The sampled theme and collection-toolbar fingerprints still match; app CSS, AccessApp, draft guard and PRODUCT/DESIGN have pre-existing drift. This bounded documentation merge neither repairs that drift nor claims whole-repository freshness. No shipping raster asset is introduced.
+| Source | SHA256 |
+| --- | --- |
+| `web/src/features/access/TenantEvents.tsx` | `b87ad7ab5a9cfddb932a509b70a91e614640da9af2f0a4e680e5e4e2636a8f5b` |
+| `web/src/features/access/AccessApp.tsx` | `893cb74a8e64f0a2db0ac35b93f43b48e0cd3f4948d3df67a3f7ac209c9f0e51` |
+| `web/src/services/tenantWebhooks.ts` | `a5ef8d619ee1142e9bf16b0c3da626607ab163aad4ba3ecb7c44475cbe991f6c` |
+| `web/src/features/admin/AdminCollectionToolbar.tsx` | `0fe5aba5f8dd821c2726d700fd7c1a80e8d4a6ff9dce5031c12ba536e01047e5` |
+| `web/src/features/admin/AgentConfigurationLayout.tsx` | `b36bde3bb2f8a11cc14abb20f29df25656b9ee2ee5490b1663d724513589e73b` |
+| `web/src/features/admin/useAdminDetailLayout.ts` | `b0f7d9585d713164dd1cf79a44b3c427a9dade81fa6d8df58c2bee2e86593c71` |
+| `web/src/features/access/useAccessDraftGuard.tsx` | `e2aa247ba8226f903cd0476300eaf5a88287978cf31db4210e6a950907f99e7b` |
+| `web/src/app/confirmAction.ts` | `95d41e265c8a23c0d2ec107fe5deeee3a75ac9d3a66e730e58acbc2eaa829a85` |
+| `web/src/app/antdTheme.ts` | `8f13dc29dc96e4ef2dcc86be8150743d7656975cbe202b06f04f039a8a8109ae` |
+| `web/src/app/AppShell.tsx` | `35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1` |
+| `web/src/app.css` | `e827076d776b5687e59bd83d86cba88d889203430bc8ae23a14e85c6014e0cae` |

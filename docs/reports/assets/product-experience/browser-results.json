@@ -1,0 +1,1193 @@
+{
+  "method": "Latest explicit result per stable file/title, with all earlier failures retained. This is a multi-run local qualification, not one pristine full run or CI acceptance. Source/fixture epochs and fixes are described in the ledger.",
+  "expected_cases": 76,
+  "observed_cases": 76,
+  "passed": 76,
+  "remaining_failures": [],
+  "runs": [
+    {
+      "log": "docs/reports/assets/product-experience/logs/canonical-browser.log",
+      "sha256": "fa9fe785383fad8b368352463cde5bb6b446cb472cd63bb5b2d6edcfcda9331f",
+      "reported_cases": 38,
+      "passed": 24,
+      "failed": 14,
+      "completion": "finished"
+    },
+    {
+      "log": "docs/reports/assets/product-experience/logs/repaired-browser.log",
+      "sha256": "2d0c07b6aa4ead2d800d0f6132a4488d50ed6a1e6a467f82c72f3e979005570a",
+      "reported_cases": 15,
+      "passed": 6,
+      "failed": 9,
+      "completion": "finished"
+    },
+    {
+      "log": "docs/reports/assets/product-experience/logs/fixture-repairs-browser.log",
+      "sha256": "b029bb7b4da419678abf7d0c25928d4c4c115886ccb9695f7f5fd6d8dfbefb28",
+      "reported_cases": 9,
+      "passed": 2,
+      "failed": 7,
+      "completion": "finished"
+    },
+    {
+      "log": "docs/reports/assets/product-experience/logs/extended-serial-browser.log",
+      "sha256": "8d26c1a2d26b4826d6393b08ce85b065c102d82ea19dd8d54b8025ef7b15e9e4",
+      "reported_cases": 37,
+      "passed": 29,
+      "failed": 8,
+      "completion": "finished"
+    },
+    {
+      "log": "docs/reports/assets/product-experience/logs/final-acceptance-browser.log",
+      "sha256": "009f5d7d5b51c22db28f29c5b4798b7720bcf06e8845ba9ce0a37483cc5ff074",
+      "reported_cases": 25,
+      "passed": 17,
+      "failed": 8,
+      "completion": "finished"
+    },
+    {
+      "log": "docs/reports/assets/product-experience/logs/remaining-browser.log",
+      "sha256": "e71de0dce9fef65bdb32313c8458da2dd3e9eec26305055411952cb291317417",
+      "reported_cases": 5,
+      "passed": 2,
+      "failed": 3,
+      "completion": "running or interrupted; use explicit recorded cases only"
+    },
+    {
+      "log": "docs/reports/assets/product-experience/logs/closure-browser.log",
+      "sha256": "814c474e0f1b4ceb736779d97887baa58488622f385c443689dc89707b1bf2eb",
+      "reported_cases": 13,
+      "passed": 10,
+      "failed": 3,
+      "completion": "finished"
+    },
+    {
+      "log": "docs/reports/assets/product-experience/logs/last-browser.log",
+      "sha256": "0c0fa782ffbdda2d83f3c7c30c493731b3c8eb0cbef2016718398bb7c4c5ad96",
+      "reported_cases": 3,
+      "passed": 3,
+      "failed": 0,
+      "completion": "finished"
+    },
+    {
+      "log": "docs/reports/assets/product-experience/logs/category-browser.log",
+      "sha256": "fd14ab7ef3cf39dc80658f2da51a2c51fe2551dc29f4d60d0877e402f27a887b",
+      "reported_cases": 1,
+      "passed": 0,
+      "failed": 1,
+      "completion": "running or interrupted; use explicit recorded cases only"
+    },
+    {
+      "log": "docs/reports/assets/product-experience/logs/category-confirmation-browser.log",
+      "sha256": "e8391c2ceee0e770b64b6a860d76f91178da1cb01602feb1fd6eae82576beda7",
+      "reported_cases": 1,
+      "passed": 0,
+      "failed": 1,
+      "completion": "running or interrupted; use explicit recorded cases only"
+    },
+    {
+      "log": "docs/reports/assets/product-experience/logs/category-final-browser.log",
+      "sha256": "73c4552ab60528c15fc7535668d11ed47f00b88922807ff15a5f874c89837b21",
+      "reported_cases": 1,
+      "passed": 1,
+      "failed": 0,
+      "completion": "finished"
+    }
+  ],
+  "cases": [
+    {
+      "test_file": "web/e2e/managed-general-assistant.spec.ts",
+      "title": "owner setup retry refreshes the ordinary picker and starts a real conversation",
+      "status": "passed",
+      "duration": "7.7s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/managed-general-assistant.spec.ts",
+      "title": "managed default ordinary Chat, hide, retained conversation, non-destructive reset and responsive management",
+      "status": "passed",
+      "duration": "16.5s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/product-experience.spec.ts",
+      "title": "J01\u2013J05: first use, actual answer, retained draft, labeled tools and protected file preview",
+      "status": "passed",
+      "duration": "1.5m",
+      "run": "closure-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/product-experience.spec.ts",
+          "title": "J01\u2013J05: first use, actual answer, retained draft, labeled tools and protected file preview",
+          "status": "passed",
+          "duration": "15.5s",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/product-experience.spec.ts",
+          "title": "J01\u2013J05: first use, actual answer, retained draft, labeled tools and protected file preview",
+          "status": "passed",
+          "duration": "25.6s",
+          "run": "final-acceptance-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/product-experience.spec.ts",
+      "title": "J06/J13/J14/J15: contextual navigation, settings categories, dirty guard and authoritative read-only scope",
+      "status": "passed",
+      "duration": "8.8s",
+      "run": "category-final-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/product-experience.spec.ts",
+          "title": "J06/J13/J14/J15: contextual navigation, settings categories, dirty guard and authoritative read-only scope",
+          "status": "passed",
+          "duration": "7.2s",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/product-experience.spec.ts",
+          "title": "J06/J13/J14/J15: contextual navigation, settings categories, dirty guard and authoritative read-only scope",
+          "status": "passed",
+          "duration": "9.0s",
+          "run": "final-acceptance-browser.log"
+        },
+        {
+          "test_file": "web/e2e/product-experience.spec.ts",
+          "title": "J06/J13/J14/J15: contextual navigation, settings categories, dirty guard and authoritative read-only scope",
+          "status": "passed",
+          "duration": "9.4s",
+          "run": "closure-browser.log"
+        },
+        {
+          "test_file": "web/e2e/product-experience.spec.ts",
+          "title": "J06/J13/J14/J15: contextual navigation, settings categories, dirty guard and authoritative read-only scope",
+          "status": "failed",
+          "duration": "17.2s",
+          "run": "category-browser.log"
+        },
+        {
+          "test_file": "web/e2e/product-experience.spec.ts",
+          "title": "J06/J13/J14/J15: contextual navigation, settings categories, dirty guard and authoritative read-only scope",
+          "status": "failed",
+          "duration": "17.4s",
+          "run": "category-confirmation-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/product-experience.spec.ts",
+      "title": "J10: author, validate, publish, start and independently sign off an actual Workflow",
+      "status": "passed",
+      "duration": "15.5s",
+      "run": "closure-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/product-experience.spec.ts",
+          "title": "J10: author, validate, publish, start and independently sign off an actual Workflow",
+          "status": "passed",
+          "duration": "14.1s",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/product-experience.spec.ts",
+          "title": "J10: author, validate, publish, start and independently sign off an actual Workflow",
+          "status": "passed",
+          "duration": "14.6s",
+          "run": "final-acceptance-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/product-experience.spec.ts",
+      "title": "complete route families retain contextual access across organization, agent and system scopes",
+      "status": "passed",
+      "duration": "38.3s",
+      "run": "closure-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/product-experience.spec.ts",
+          "title": "complete route families retain contextual access across organization, agent and system scopes",
+          "status": "passed",
+          "duration": "23.8s",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/product-experience.spec.ts",
+          "title": "complete route families retain contextual access across organization, agent and system scopes",
+          "status": "passed",
+          "duration": "35.4s",
+          "run": "final-acceptance-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/product-experience.spec.ts",
+      "title": "J07/J15: Space and Environment authoring retain exact identity and recover stale edits",
+      "status": "passed",
+      "duration": "12.5s",
+      "run": "closure-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/product-experience.spec.ts",
+          "title": "J07/J15: Space and Environment authoring retain exact identity and recover stale edits",
+          "status": "passed",
+          "duration": "8.1s",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/product-experience.spec.ts",
+          "title": "J07/J15: Space and Environment authoring retain exact identity and recover stale edits",
+          "status": "failed",
+          "duration": "18.1s",
+          "run": "repaired-browser.log"
+        },
+        {
+          "test_file": "web/e2e/product-experience.spec.ts",
+          "title": "J07/J15: Space and Environment authoring retain exact identity and recover stale edits",
+          "status": "passed",
+          "duration": "6.7s",
+          "run": "fixture-repairs-browser.log"
+        },
+        {
+          "test_file": "web/e2e/product-experience.spec.ts",
+          "title": "J07/J15: Space and Environment authoring retain exact identity and recover stale edits",
+          "status": "passed",
+          "duration": "11.5s",
+          "run": "final-acceptance-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/session-goals-stabilization.spec.ts",
+      "title": "Goal stabilization preserves progress and verified proof and protects optional prerequisites",
+      "status": "passed",
+      "duration": "15.8s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/session-goals.spec.ts",
+      "title": "real Goal plan, bound Synthetic work, exact Evaluation, acceptance and responsive recovery",
+      "status": "passed",
+      "duration": "34.0s",
+      "run": "closure-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/session-goals.spec.ts",
+          "title": "real Goal plan, bound Synthetic work, exact Evaluation, acceptance and responsive recovery",
+          "status": "passed",
+          "duration": "21.9s",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/session-goals.spec.ts",
+          "title": "real Goal plan, bound Synthetic work, exact Evaluation, acceptance and responsive recovery",
+          "status": "failed",
+          "duration": "42.8s",
+          "run": "final-acceptance-browser.log"
+        },
+        {
+          "test_file": "web/e2e/session-goals.spec.ts",
+          "title": "real Goal plan, bound Synthetic work, exact Evaluation, acceptance and responsive recovery",
+          "status": "passed",
+          "duration": "33.8s",
+          "run": "remaining-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/task-delegation.spec.ts",
+      "title": "real delegated worker asks, waits, receives human guidance, completes and preserves independent Goals",
+      "status": "passed",
+      "duration": "41.2s",
+      "run": "closure-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/task-delegation.spec.ts",
+          "title": "real delegated worker asks, waits, receives human guidance, completes and preserves independent Goals",
+          "status": "failed",
+          "duration": "33.9s",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/task-delegation.spec.ts",
+          "title": "real delegated worker asks, waits, receives human guidance, completes and preserves independent Goals",
+          "status": "passed",
+          "duration": "15.5s",
+          "run": "repaired-browser.log"
+        },
+        {
+          "test_file": "web/e2e/task-delegation.spec.ts",
+          "title": "real delegated worker asks, waits, receives human guidance, completes and preserves independent Goals",
+          "status": "failed",
+          "duration": "33.5s",
+          "run": "final-acceptance-browser.log"
+        },
+        {
+          "test_file": "web/e2e/task-delegation.spec.ts",
+          "title": "real delegated worker asks, waits, receives human guidance, completes and preserves independent Goals",
+          "status": "failed",
+          "duration": "36.6s",
+          "run": "remaining-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-approval-independence.spec.ts",
+      "title": "a different person decides Review after requester logout: approve",
+      "status": "passed",
+      "duration": "19.5s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-approval-independence.spec.ts",
+      "title": "a different person decides Review after requester logout: reject",
+      "status": "passed",
+      "duration": "19.8s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-approval-independence.spec.ts",
+      "title": "a different person decides Authorize once after requester logout: approve",
+      "status": "passed",
+      "duration": "1.3m",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-approval-independence.spec.ts",
+      "title": "a different person decides Authorize once after requester logout: reject",
+      "status": "passed",
+      "duration": "17.9s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-chat.spec.ts",
+      "title": "tenant text, rendered receipt, reload, rename, archive and read-only completion",
+      "status": "passed",
+      "duration": "15.3s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-chat.spec.ts",
+      "title": "organization switch and logout retire prior history, draft and transport",
+      "status": "passed",
+      "duration": "15.1s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-chat.spec.ts",
+      "title": "tenant attachment-only input retains the original file after reload",
+      "status": "passed",
+      "duration": "9.9s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-chat.spec.ts",
+      "title": "real websocket reconnect preserves unsent draft and does not duplicate admitted text",
+      "status": "passed",
+      "duration": "7.0s",
+      "run": "repaired-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-chat.spec.ts",
+          "title": "real websocket reconnect preserves unsent draft and does not duplicate admitted text",
+          "status": "failed",
+          "duration": "21.9s",
+          "run": "canonical-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-chat.spec.ts",
+      "title": "local queue drains once and Stop cancels the delivered canonical Run",
+      "status": "passed",
+      "duration": "23.7s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-chat.spec.ts",
+      "title": "Chat-only member has no management controls and revoked Chat clears protected content",
+      "status": "passed",
+      "duration": "15.9s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-chat.spec.ts",
+      "title": "original Chat recovers a durable approve decision and remains usable while waiting",
+      "status": "passed",
+      "duration": "24.8s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-chat.spec.ts",
+      "title": "original Chat recovers a durable reject decision and remains usable while waiting",
+      "status": "passed",
+      "duration": "15.8s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-chat.spec.ts",
+      "title": "tenant Steer atomically interrupts the current Run with row and keyboard controls",
+      "status": "passed",
+      "duration": "28.9s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-chat.spec.ts",
+      "title": "Chat permission permits Queue while Steer requires independent Run cancellation authority",
+      "status": "passed",
+      "duration": "10.0s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-chat.spec.ts",
+      "title": "authenticated entry and retired browser routes at 1440px",
+      "status": "passed",
+      "duration": "16.9s",
+      "run": "final-acceptance-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-chat.spec.ts",
+          "title": "authenticated entry and retired browser routes at 1440px",
+          "status": "failed",
+          "duration": "22.4s",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-chat.spec.ts",
+          "title": "authenticated entry and retired browser routes at 1440px",
+          "status": "failed",
+          "duration": "20.0s",
+          "run": "repaired-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-chat.spec.ts",
+          "title": "authenticated entry and retired browser routes at 1440px",
+          "status": "failed",
+          "duration": "20.8s",
+          "run": "fixture-repairs-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-chat.spec.ts",
+      "title": "authenticated entry and retired browser routes at 390px",
+      "status": "passed",
+      "duration": "22.9s",
+      "run": "last-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-chat.spec.ts",
+          "title": "authenticated entry and retired browser routes at 390px",
+          "status": "failed",
+          "duration": "22.8s",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-chat.spec.ts",
+          "title": "authenticated entry and retired browser routes at 390px",
+          "status": "failed",
+          "duration": "20.3s",
+          "run": "repaired-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-chat.spec.ts",
+          "title": "authenticated entry and retired browser routes at 390px",
+          "status": "passed",
+          "duration": "10.8s",
+          "run": "fixture-repairs-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-chat.spec.ts",
+          "title": "authenticated entry and retired browser routes at 390px",
+          "status": "failed",
+          "duration": "23.0s",
+          "run": "final-acceptance-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-chat.spec.ts",
+          "title": "authenticated entry and retired browser routes at 390px",
+          "status": "failed",
+          "duration": "26.3s",
+          "run": "remaining-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-chat.spec.ts",
+          "title": "authenticated entry and retired browser routes at 390px",
+          "status": "failed",
+          "duration": "26.8s",
+          "run": "closure-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-definitions.spec.ts",
+      "title": "exact Definition file access supports read-only settings, scoped edits and revoked-write recovery",
+      "status": "passed",
+      "duration": "19.3s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-definitions.spec.ts",
+      "title": "owned Definition authoring, resource/evaluation publication and lifecycle recovery",
+      "status": "passed",
+      "duration": "17.3s",
+      "run": "canonical-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-definitions.spec.ts",
+      "title": "resource-only Reader, stale save recovery and tenant switch discard old reads",
+      "status": "passed",
+      "duration": "10.9s",
+      "run": "repaired-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-definitions.spec.ts",
+          "title": "resource-only Reader, stale save recovery and tenant switch discard old reads",
+          "status": "failed",
+          "duration": "24.5s",
+          "run": "canonical-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-model-management.spec.ts",
+      "title": "protected-key onboarding, explicit default, stale connection recovery and responsive configuration",
+      "status": "passed",
+      "duration": "58.9s",
+      "run": "final-acceptance-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "protected-key onboarding, explicit default, stale connection recovery and responsive configuration",
+          "status": "failed",
+          "duration": "110ms",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "protected-key onboarding, explicit default, stale connection recovery and responsive configuration",
+          "status": "failed",
+          "duration": "38.7s",
+          "run": "repaired-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "protected-key onboarding, explicit default, stale connection recovery and responsive configuration",
+          "status": "failed",
+          "duration": "21.5s",
+          "run": "fixture-repairs-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-model-management.spec.ts",
+      "title": "shared preset edits retain tenant declarations and read-only members cannot mutate model configuration",
+      "status": "passed",
+      "duration": "14.8s",
+      "run": "final-acceptance-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "shared preset edits retain tenant declarations and read-only members cannot mutate model configuration",
+          "status": "failed",
+          "duration": "109ms",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "shared preset edits retain tenant declarations and read-only members cannot mutate model configuration",
+          "status": "failed",
+          "duration": "4.0s",
+          "run": "repaired-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "shared preset edits retain tenant declarations and read-only members cannot mutate model configuration",
+          "status": "failed",
+          "duration": "17.9s",
+          "run": "fixture-repairs-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-model-management.spec.ts",
+      "title": "unavailable explicit model refuses without a Run, retains the draft, and recovers after deliberate retry",
+      "status": "passed",
+      "duration": "46.8s",
+      "run": "final-acceptance-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "unavailable explicit model refuses without a Run, retains the draft, and recovers after deliberate retry",
+          "status": "failed",
+          "duration": "117ms",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "unavailable explicit model refuses without a Run, retains the draft, and recovers after deliberate retry",
+          "status": "failed",
+          "duration": "6.8s",
+          "run": "repaired-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "unavailable explicit model refuses without a Run, retains the draft, and recovers after deliberate retry",
+          "status": "failed",
+          "duration": "13.6s",
+          "run": "fixture-repairs-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-model-management.spec.ts",
+      "title": "Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance",
+      "status": "passed",
+      "duration": "35.9s",
+      "run": "last-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance",
+          "status": "failed",
+          "duration": "107ms",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance",
+          "status": "failed",
+          "duration": "18.3s",
+          "run": "repaired-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance",
+          "status": "failed",
+          "duration": "20.3s",
+          "run": "fixture-repairs-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance",
+          "status": "failed",
+          "duration": "27.1s",
+          "run": "final-acceptance-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance",
+          "status": "failed",
+          "duration": "29.5s",
+          "run": "closure-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-model-management.spec.ts",
+      "title": "configured native offering flows through unattended and Automation selectors, exact approval and completed work",
+      "status": "passed",
+      "duration": "30.8s",
+      "run": "closure-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "configured native offering flows through unattended and Automation selectors, exact approval and completed work",
+          "status": "failed",
+          "duration": "112ms",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "configured native offering flows through unattended and Automation selectors, exact approval and completed work",
+          "status": "failed",
+          "duration": "25.0s",
+          "run": "repaired-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "configured native offering flows through unattended and Automation selectors, exact approval and completed work",
+          "status": "failed",
+          "duration": "26.1s",
+          "run": "fixture-repairs-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "configured native offering flows through unattended and Automation selectors, exact approval and completed work",
+          "status": "failed",
+          "duration": "35.5s",
+          "run": "final-acceptance-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-model-management.spec.ts",
+      "title": "Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort",
+      "status": "passed",
+      "duration": "38.7s",
+      "run": "last-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort",
+          "status": "failed",
+          "duration": "115ms",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort",
+          "status": "failed",
+          "duration": "17.1s",
+          "run": "repaired-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort",
+          "status": "failed",
+          "duration": "17.5s",
+          "run": "fixture-repairs-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort",
+          "status": "failed",
+          "duration": "20.0s",
+          "run": "final-acceptance-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort",
+          "status": "failed",
+          "duration": "29.8s",
+          "run": "closure-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-model-management.spec.ts",
+      "title": "omitted manual default requires explicit recovery and fresh confirmation after conflict",
+      "status": "passed",
+      "duration": "12.4s",
+      "run": "final-acceptance-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "omitted manual default requires explicit recovery and fresh confirmation after conflict",
+          "status": "failed",
+          "duration": "120ms",
+          "run": "canonical-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-model-management.spec.ts",
+          "title": "omitted manual default requires explicit recovery and fresh confirmation after conflict",
+          "status": "passed",
+          "duration": "6.3s",
+          "run": "repaired-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-voice.spec.ts",
+      "title": "tenant voice keeps capture active, credits heard separately, and requires a fresh click after reconnect at 1440px",
+      "status": "passed",
+      "duration": "9.0s",
+      "run": "repaired-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-voice.spec.ts",
+          "title": "tenant voice keeps capture active, credits heard separately, and requires a fresh click after reconnect at 1440px",
+          "status": "failed",
+          "duration": "1.5m",
+          "run": "canonical-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-voice.spec.ts",
+      "title": "tenant voice keeps capture active, credits heard separately, and requires a fresh click after reconnect at 390px",
+      "status": "passed",
+      "duration": "8.3s",
+      "run": "repaired-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-voice.spec.ts",
+          "title": "tenant voice keeps capture active, credits heard separately, and requires a fresh click after reconnect at 390px",
+          "status": "failed",
+          "duration": "28.5s",
+          "run": "canonical-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/system-administration.spec.ts",
+      "title": "System operators manage metadata and exact status through native guarded controls",
+      "status": "passed",
+      "duration": "19.7s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/system-browser-privacy.spec.ts",
+      "title": "platform policy keeps effective startup facts, recovers lost reply and retains stale Unmasked draft with a fresh acknowledgement",
+      "status": "passed",
+      "duration": "5.8s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/system-browser-privacy.spec.ts",
+      "title": "tenant Owner has no platform policy entry or data, and retired endpoints have no owner-header fallback",
+      "status": "passed",
+      "duration": "3.1s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/system-browser-privacy.spec.ts",
+      "title": "policy read recovery, keyboard and explicit draft discard at 1440px",
+      "status": "passed",
+      "duration": "1.1m",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/system-browser-privacy.spec.ts",
+      "title": "policy read recovery, keyboard and explicit draft discard at 390px",
+      "status": "passed",
+      "duration": "5.3s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/system-operators.spec.ts",
+      "title": "guarded platform role assignment, revocation, recovery and final-operator protection",
+      "status": "passed",
+      "duration": "12.1s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-agent-access.spec.ts",
+      "title": "create, grant exact chat and independent execution, inspect permissions, recover stale revoke and lifecycle",
+      "status": "passed",
+      "duration": "22.9s",
+      "run": "closure-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-agent-access.spec.ts",
+          "title": "create, grant exact chat and independent execution, inspect permissions, recover stale revoke and lifecycle",
+          "status": "failed",
+          "duration": "18.4s",
+          "run": "extended-serial-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-agent-access.spec.ts",
+          "title": "create, grant exact chat and independent execution, inspect permissions, recover stale revoke and lifecycle",
+          "status": "failed",
+          "duration": "10.8s",
+          "run": "final-acceptance-browser.log"
+        },
+        {
+          "test_file": "web/e2e/tenant-agent-access.spec.ts",
+          "title": "create, grant exact chat and independent execution, inspect permissions, recover stale revoke and lifecycle",
+          "status": "passed",
+          "duration": "21.4s",
+          "run": "remaining-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-agent-access.spec.ts",
+      "title": "a resource-scoped reader can inspect only that agent and loses private content after revocation",
+      "status": "passed",
+      "duration": "8.1s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-automations.spec.ts",
+      "title": "Schedule management preserves stale drafts, admits saved work and cancels registration at desktop and narrow sizes",
+      "status": "passed",
+      "duration": "12.4s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-automations.spec.ts",
+      "title": "scoped Automation reader has no mutation controls and read revocation retires the open detail",
+      "status": "passed",
+      "duration": "12.3s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-automations.spec.ts",
+      "title": "exact Automation admission is reviewed before any work exists and settles truthfully at narrow width",
+      "status": "passed",
+      "duration": "12.1s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-automations.spec.ts",
+      "title": "configured completion uses the shared tenant picker, retains a stale destination and delivers the exact report once",
+      "status": "passed",
+      "duration": "16.4s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-automations.spec.ts",
+      "title": "selected-conversation execution preserves its destination through stale recovery and exact admission Review",
+      "status": "passed",
+      "duration": "23.8s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-automations.spec.ts",
+      "title": "tenant Activity inspects original background facts and continues the same Session through canonical Chat",
+      "status": "passed",
+      "duration": "18.3s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-browser-profile.spec.ts",
+      "title": "named confirmation, real reset, lost reply readback and no automatic physical replay at desktop and mobile",
+      "status": "passed",
+      "duration": "5.8s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-browser-profile.spec.ts",
+      "title": "stale preflight requires fresh observation and archived profile stays readable without reset at 320px",
+      "status": "passed",
+      "duration": "6.0s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-continuity.spec.ts",
+      "title": "historical source change refusal fresh exact consent and reload 1400",
+      "status": "passed",
+      "duration": "57.6s",
+      "run": "final-acceptance-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-continuity.spec.ts",
+          "title": "historical source change refusal fresh exact consent and reload 1400",
+          "status": "failed",
+          "duration": "29.6s",
+          "run": "extended-serial-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-continuity.spec.ts",
+      "title": "historical source change refusal fresh exact consent and reload 390",
+      "status": "passed",
+      "duration": "58.5s",
+      "run": "final-acceptance-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-continuity.spec.ts",
+          "title": "historical source change refusal fresh exact consent and reload 390",
+          "status": "failed",
+          "duration": "28.7s",
+          "run": "extended-serial-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-credentials.spec.ts",
+      "title": "canonical Credential purposes, protected replacement and separate Google consent",
+      "status": "passed",
+      "duration": "36.8s",
+      "run": "final-acceptance-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-credentials.spec.ts",
+          "title": "canonical Credential purposes, protected replacement and separate Google consent",
+          "status": "failed",
+          "duration": "15.9s",
+          "run": "extended-serial-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-credentials.spec.ts",
+      "title": "exact Credential grants, read-only inspection, revoked-write and stale-draft recovery",
+      "status": "passed",
+      "duration": "19.1s",
+      "run": "final-acceptance-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-credentials.spec.ts",
+          "title": "exact Credential grants, read-only inspection, revoked-write and stale-draft recovery",
+          "status": "failed",
+          "duration": "15.9s",
+          "run": "extended-serial-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-credentials.spec.ts",
+      "title": "protected failure clears only the secret and acknowledged creation never offers duplicate retry",
+      "status": "passed",
+      "duration": "8.3s",
+      "run": "final-acceptance-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-credentials.spec.ts",
+          "title": "protected failure clears only the secret and acknowledged creation never offers duplicate retry",
+          "status": "failed",
+          "duration": "15.9s",
+          "run": "extended-serial-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-events.spec.ts",
+      "title": "webhook management preserves exact source drafts and distinguishes receipt acceptance from execution across native widths",
+      "status": "passed",
+      "duration": "9.8s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-events.spec.ts",
+      "title": "exact webhook read scope filters records and revocation retires protected receipt details",
+      "status": "passed",
+      "duration": "8.6s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-events.spec.ts",
+      "title": "typed subscriptions test filters, preserve child identities, and separate receipt approval from Run admission",
+      "status": "passed",
+      "duration": "19.7s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-instance-controls.spec.ts",
+      "title": "320px budgets retain stale drafts; policy freeze preserves drafts; model reset uses current catalog",
+      "status": "passed",
+      "duration": "20.8s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-instance-controls.spec.ts",
+      "title": "exact scoped controls reader needs no IAM inspector and loses protected configuration after revocation",
+      "status": "passed",
+      "duration": "8.2s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-instance-controls.spec.ts",
+      "title": "self-management saved status, retained choices and keyboard confirmations fit all supported widths",
+      "status": "passed",
+      "duration": "8.9s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-instance-controls.spec.ts",
+      "title": "Definition procedure labels provide mobile touch targets and save only explicit defaults",
+      "status": "passed",
+      "duration": "5.1s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-instance-resources.spec.ts",
+      "title": "320px owner imports, previews, downloads, edits, copies and deletes with exact stale recovery",
+      "status": "passed",
+      "duration": "16.2s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-instance-resources.spec.ts",
+      "title": "partial and acknowledged-malformed imports retire saved files and resume only remaining staged bytes",
+      "status": "passed",
+      "duration": "8.3s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-instance-resources.spec.ts",
+      "title": "exact resource reader can preview without IAM tools and revocation retires nested protected content",
+      "status": "passed",
+      "duration": "14.0s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-instance-skills.spec.ts",
+      "title": "320px owner authors and reviews Skills with exact stale recovery and inherited choices",
+      "status": "passed",
+      "duration": "11.6s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-instance-skills.spec.ts",
+      "title": "exact item reader can inspect without IAM tools and revocation retires open protected content",
+      "status": "passed",
+      "duration": "12.6s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-instance-version.spec.ts",
+      "title": "320px version paging, guarded review, focus, stale recovery and explicit adoption preserve configuration",
+      "status": "passed",
+      "duration": "38.4s",
+      "run": "final-acceptance-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-instance-version.spec.ts",
+          "title": "320px version paging, guarded review, focus, stale recovery and explicit adoption preserve configuration",
+          "status": "failed",
+          "duration": "49.2s",
+          "run": "extended-serial-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-instance-version.spec.ts",
+      "title": "exact reader needs Definition source permission, can preview without update/IAM inspection and loses protected content on revocation",
+      "status": "passed",
+      "duration": "15.3s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/tenant-isolation.spec.ts",
+      "title": "coordinated isolation saves atomically, retains stale drafts and recovers a lost reply across desktop and narrow sizes",
+      "status": "passed",
+      "duration": "9.8s",
+      "run": "final-acceptance-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/tenant-isolation.spec.ts",
+          "title": "coordinated isolation saves atomically, retains stale drafts and recovers a lost reply across desktop and narrow sizes",
+          "status": "failed",
+          "duration": "23.1s",
+          "run": "extended-serial-browser.log"
+        }
+      ]
+    },
+    {
+      "test_file": "web/e2e/tenant-runtime-state.spec.ts",
+      "title": "Runtime State refresh, expiry, exact reader scope and revocation work on native Synthetic at desktop and narrow widths",
+      "status": "passed",
+      "duration": "25.2s",
+      "run": "extended-serial-browser.log"
+    },
+    {
+      "test_file": "web/e2e/access-foundation.spec.ts",
+      "title": "owner and invited Reader use scoped access UI, with safe mobile drawers and denial recovery",
+      "status": "passed",
+      "duration": "31.1s",
+      "run": "closure-browser.log",
+      "previous_attempts": [
+        {
+          "test_file": "web/e2e/access-foundation.spec.ts",
+          "title": "owner and invited Reader use scoped access UI, with safe mobile drawers and denial recovery",
+          "status": "failed",
+          "duration": "20.6s",
+          "run": "final-acceptance-browser.log"
+        },
+        {
+          "test_file": "web/e2e/access-foundation.spec.ts",
+          "title": "owner and invited Reader use scoped access UI, with safe mobile drawers and denial recovery",
+          "status": "failed",
+          "duration": "33.8s",
+          "run": "remaining-browser.log"
+        }
+      ]
+    }
+  ]
+}

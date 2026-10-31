@@ -1,0 +1,22 @@
+
+ RUN  v3.2.7 /Users/trungtran/MyPlace/Personal/Projects/agent-core/web
+
+ ✓ src/features/chat/chatIdentity.test.ts (3 tests) 4ms
+ ✓ src/app/appRoute.test.ts (17 tests) 80ms
+ ✓ src/app/AppRouter.test.tsx (7 tests) 164ms
+ ✓ src/features/workflows/WorkflowRecovery.test.tsx (4 tests) 71ms
+ ✓ src/app/AppShell.test.tsx (2 tests) 182ms
+stderr | src/features/chat/AgentPicker.test.tsx > AgentPicker > surfaces managed inventory failures with retry
+Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+
+ ✓ src/features/chat/AgentPicker.test.tsx (11 tests) 537ms
+ ✓ src/features/access/TenantAgentConfiguration.test.tsx (3 tests) 4481ms
+   ✓ synchronizes Form/JSON and saves only an explicit canonical persona with exact witnesses  1809ms
+   ✓ retains a stale draft through read recovery and hides the editor when read access is lost  1707ms
+   ✓ renders exact read-only Settings without requiring an IAM inspector or legacy catalog  964ms
+
+ Test Files  7 passed (7)
+      Tests  47 passed (47)
+   Start at  23:35:08
+   Duration  8.45s (transform 988ms, setup 1.49s, collect 8.64s, tests 5.52s, environment 5.52s, prepare 594ms)
+

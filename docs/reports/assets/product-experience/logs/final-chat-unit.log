@@ -1,0 +1,145 @@
+
+ RUN  v3.2.7 /Users/trungtran/MyPlace/Personal/Projects/agent-core/web
+
+(node:10280) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+stderr | src/features/chat/ChatApp.test.tsx > ChatApp accessibility > shows pending voice, thinking, interrupted entries, and Enter send
+An update to Placeholder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Placeholder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Controller inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/chat/ChatApp.test.tsx > ChatApp accessibility > shows ended history without composer or End
+An update to Controller inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/chat/ChatApp.test.tsx > ChatApp accessibility > names completed sessions without Resume or composer
+An update to Controller inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/chat/ChatApp.test.tsx > ChatApp accessibility > shows reason-specific pause copy and a keyboard-operable Resume
+An update to Controller inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/chat/ChatApp.test.tsx > ChatApp accessibility > shows the history-load error for a failed ended view
+An update to Controller inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/chat/ChatApp.test.tsx > ChatApp model selection > hides model controls on a paused session
+An update to Controller inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/chat/ChatApp.test.tsx > ChatApp model selection > hides model controls on an ended session
+An update to Controller inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/chat/ChatApp.test.tsx (31 tests) 24673ms
+   ✓ ChatApp accessibility > labels identity and surfaces connection and microphone errors  1312ms
+   ✓ ChatApp accessibility > gives a failed new Chat one connection failure and one retry owner  461ms
+   ✓ ChatApp accessibility > shows recoverable structured failure details from the chat owner  727ms
+   ✓ ChatApp accessibility > shows fatal structured failure details on the connection owner  721ms
+   ✓ ChatApp accessibility > hides Voice in session when ready reports voice unavailable  497ms
+   ✓ ChatApp accessibility > keeps the text composer when Voice is unavailable for the speech locale  538ms
+   ✓ ChatApp accessibility > shows Voice after reconnect when durable mode is voice until capture is live  832ms
+   ✓ ChatApp accessibility > shows voice unavailable instead of listening when browser STT is blocked  1127ms
+   ✓ ChatApp accessibility > shows Unmute while voice mode stays active after Browser STT mute  506ms
+   ✓ ChatApp accessibility > shows Voice (not Mute) when voice mode is active but capture is not live  509ms
+   ✓ ChatApp accessibility > shows Mute while browser capture is live in voice mode  522ms
+   ✓ ChatApp accessibility > shows pending voice, thinking, interrupted entries, and Enter send  996ms
+   ✓ ChatApp accessibility > blocks send while uploads are pending and allows attachment-only send  954ms
+   ✓ ChatApp accessibility > shows ended history without composer or End  488ms
+   ✓ ChatApp accessibility > names completed sessions without Resume or composer  447ms
+   ✓ ChatApp accessibility > shows reason-specific pause copy and a keyboard-operable Resume  458ms
+   ✓ ChatApp accessibility > keeps the composer while the session is still ending  1073ms
+   ✓ ChatApp accessibility > shows the history-load error for a failed ended view  494ms
+   ✓ ChatApp accessibility > reconnects with inline status over visible history, not an overlay  326ms
+   ✓ ChatApp model selection > explains empty model setup and offers the current organization connection route to a manager  516ms
+   ✓ ChatApp model selection > keeps setup guidance read-only and clears it while a newly selected catalog is loading  386ms
+   ✓ ChatApp model selection > distinguishes a missing inherited default from an explicit available choice  588ms
+   ✓ ChatApp model selection > starts a new chat on Default and restores a persisted session model  830ms
+   ✓ ChatApp model selection > disables model editing while a response is running  509ms
+   ✓ ChatApp model selection > hides model controls on a paused session  465ms
+   ✓ ChatApp model selection > hides model controls on an ended session  440ms
+   ✓ ChatApp narrow session drawer > exposes the same session catalog from a drawer  1351ms
+   ✓ ChatApp tablet session rail > uses a narrower persistent sider between 768px and 1199px  487ms
+   ✓ ChatApp tablet session rail > keeps background work available for live, paused, and ended sessions without a transcript result  5670ms
+
+ Test Files  1 passed (1)
+      Tests  31 passed (31)
+   Start at  00:01:43
+   Duration  27.53s (transform 531ms, setup 133ms, collect 2.15s, tests 24.67s, environment 297ms, prepare 45ms)
+

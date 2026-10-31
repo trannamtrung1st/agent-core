@@ -14,6 +14,9 @@ export function canonicalAppUrl(path: string): string {
   return url.origin === window.location.origin && url.pathname === '/' ? '/account/organizations' : path;
 }
 const LAST_CHAT_URL_KEY = 'agent-core:last-chat-url';
+// Chat transport is scoped at module initialization. Only a tenant whose Chat
+// has mounted in this document can retain that transport across management views.
+let documentChatTenant: string | null = parseTenantChatRoute(window.location.pathname)?.tenantId ?? null;
 export function rememberChatUrl(path: string): void {
   const url = new URL(path, window.location.origin);
   const tenant = parseTenantChatRoute(url.pathname);
@@ -24,7 +27,15 @@ export function rememberChatUrl(path: string): void {
 export function lastChatUrl(): string {
   const tenant = tenantIdFromPath(window.location.pathname);
   if (!tenant) return '/account/organizations';
-  return sessionStorage.getItem(`${LAST_CHAT_URL_KEY}:${tenant}`) ?? newChatPath();
+  const saved = sessionStorage.getItem(`${LAST_CHAT_URL_KEY}:${tenant}`);
+  if (saved) {
+    try {
+      const url = new URL(saved, window.location.origin);
+      if (url.origin === window.location.origin && parseTenantChatRoute(url.pathname)?.tenantId === tenant)
+        return url.pathname + url.search + url.hash;
+    } catch { /* A damaged local destination falls back to this exact organization. */ }
+  }
+  return newChatPath();
 }
 export type NavigationGuard = (path: string) => boolean | Promise<boolean>;
 const guards = new Map<symbol, NavigationGuard>();
@@ -43,12 +54,18 @@ function navigationApproval(path: string): boolean | Promise<boolean> {
 }
 export function approveAppNavigation(path: string): Promise<boolean> { return Promise.resolve(navigationApproval(path)); }
 export function initializeAppHistory() {
+  documentChatTenant ??= parseTenantChatRoute(window.location.pathname)?.tenantId ?? null;
   if (typeof window.history.state?.acIndex !== 'number') window.history.replaceState({ ...window.history.state, acIndex: 0 }, '', window.location.href);
 }
 export function navigateToAppPath(path: string, replace = false): void {
   const commit = () => {
     const currentChat = parseTenantChatRoute(window.location.pathname); const nextChat = parseTenantChatRoute(new URL(path, window.location.origin).pathname);
-    if ((currentChat || nextChat) && (!currentChat || !nextChat || currentChat.tenantId !== nextChat.tenantId)) {
+    if (currentChat) rememberChatUrl(window.location.pathname + window.location.search + window.location.hash);
+    const currentTenant = tenantIdFromPath(window.location.pathname);
+    const nextTenant = tenantIdFromPath(new URL(path, window.location.origin).pathname);
+    documentChatTenant ??= currentChat?.tenantId ?? null;
+    const retainedTenant = currentTenant !== null && currentTenant === nextTenant && documentChatTenant === currentTenant;
+    if ((currentChat || nextChat) && !retainedTenant) {
       window.location[replace ? 'replace' : 'assign'](path); return;
     }
     initializeAppHistory();

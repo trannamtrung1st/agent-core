@@ -1,3 +1,4 @@
+import { openDestination } from './support/experience-navigation';
 import { canonicalFetch, signInTenant } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 
@@ -75,7 +76,7 @@ test('exact scoped reader needs no IAM inspection and loses protected Profile af
     const assignment = await call<{ assignmentId: string }>(f.api, f.root + '/role-assignments', { principalId: member.principalId, roleId: reader.roleId, resourceType: 'agent', resourceId: f.id, expectedRevision: await f.revision() });
     await signIn(page, email, secret); await page.goto(f.route + '/settings'); await expect(page.getByText('Read-only configuration', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Conversation', exact: true }).click(); await expect(page.getByRole('textbox', { name: 'Language', exact: true })).toBeDisabled();
-    await page.getByRole('link', { name: 'Profile', exact: true }).click(); await expect(page.getByRole('textbox', { name: 'Persona name', exact: true })).toBeDisabled(); await expect(page.getByRole('button', { name: 'Save persona', exact: true })).toHaveCount(0);
+    await openDestination(page, 'Profile'); await expect(page.getByRole('textbox', { name: 'Persona name', exact: true })).toBeDisabled(); await expect(page.getByRole('button', { name: 'Save persona', exact: true })).toHaveCount(0);
     await call(f.api, `${f.root}/role-assignments/${assignment.assignmentId}?expectedRevision=${await f.revision()}`, undefined, 'DELETE');
     await page.getByRole('button', { name: 'Reload profile', exact: true }).click(); await expect(page.getByRole('textbox', { name: 'Persona name', exact: true })).toHaveCount(0); await expect(page.getByRole('alert')).toBeVisible();
   } finally { await f.api.dispose(); }

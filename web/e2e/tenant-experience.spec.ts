@@ -1,3 +1,4 @@
+import { openConversationTool } from './support/experience-navigation';
 import { expect, test, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 const login = process.env.TENANT_MEMORY_LOGIN ?? 'tenant-chat-owner@example.test';
 const password = process.env.TENANT_MEMORY_PASSWORD ?? 'synthetic-tenant-chat-password';
@@ -35,7 +36,7 @@ for (const viewport of [{ width: 1400, height: 950 }, { width: 390, height: 844 
     await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(login); await page.getByLabel('Password', { exact: true }).fill(password); await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible(); await page.goto(`/t/${tenant}`);
     await send(page, 'synthetic-inferred-frontend: one'); await expect(page.getByText('Observed a durable frontend preference.', { exact: true })).toBeVisible(); await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0, { timeout: 30000 });
     const sourceId = page.url().split('/').pop()!;
-    await page.getByRole('button', { name: 'End', exact: true }).click(); await page.getByRole('dialog', { name: 'End this conversation?', exact: true }).getByRole('button', { name: 'End', exact: true }).click(); await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveCount(0);
+    await openConversationTool(page, 'End'); await page.getByRole('dialog', { name: 'End this conversation?', exact: true }).getByRole('button', { name: 'End', exact: true }).click(); await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveCount(0);
     for (const permission of ['sessions.read', 'memory.manage']) await call(api, prefix + '/operation-policies/' + permission, { mode: 'always', independentReview: false, expectedRevision: await revision(), expectedPolicyRevision: 0 }, 'PUT');
     await page.goto(`/t/${tenant}`); await send(page, 'synthetic-tenant-experience: record ' + sourceId);
     let review = await reviewExperience(page, 'Inspect exact Experience source');

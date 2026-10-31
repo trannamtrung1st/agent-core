@@ -53,7 +53,7 @@ export function TenantAgentLifecycle({ context, id }: { context: TenantContext; 
   }
   const retired = view?.decommissioned || result?.action === 'decommission'; const disabled = loading || busy || blocked;
   return <Flex vertical gap="var(--ac-space-section)">
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant,'agents')} onClick={followAppLink}>Back to instances</Typography.Link><Button ref={reloadButton} disabled={busy || loading} onClick={() => void load()}>Reload lifecycle</Button></Flex>
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant,'agents')} onClick={followAppLink}>Back to Agents</Typography.Link><Button ref={reloadButton} disabled={busy || loading} onClick={() => void load()}>Reload lifecycle</Button></Flex>
     {error !== undefined && <Alert type="error" showIcon role="alert" title={accessErrorMessage(error)} />}
     {blocked && !loading && <Alert type="warning" showIcon title="Read current lifecycle before another action" description="Reload reads saved facts and current access. It does not repeat the previous command." />}
     {result && result.action !== 'decommission' && <Alert type="success" showIcon role="status" title={result.action === 'archive' ? 'Archive saved' : 'Restore saved'} description="The status change was saved. Reload lifecycle to inspect current facts." />}

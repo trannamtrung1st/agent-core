@@ -1,0 +1,10 @@
+
+ RUN  v3.2.7 /Users/trungtran/MyPlace/Personal/Projects/agent-core/web
+
+ ✓ src/features/chat/ModelPicker.test.tsx (19 tests) 926ms
+
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
+   Start at  00:53:13
+   Duration  2.49s (transform 42ms, setup 91ms, collect 1.04s, tests 926ms, environment 251ms, prepare 43ms)
+

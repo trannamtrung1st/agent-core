@@ -5,6 +5,10 @@
 The 2026-10-16 owner requirement adds global Accounts, tenant membership, independent agent principals, scoped IAM, durable review/exceptional approval and tenant-aware administration. It supersedes the original MVP authentication/multi-tenant exclusions for this successor. The historical local-demo scope below does not establish multi-tenant safety. [Architecture](03-system-architecture.md#accepted-account-tenant-iam-and-durable-approval-replacement-2026-10-16), [UX](19-multi-tenant-iam-ux.md) and the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md) own design, implementation and evidence respectively.
 
 
+## Order 6 experience transformation
+
+The authorized redesign spans every currently supported frontend operation and role, with Ant Design v6, tenant/runtime authority and existing execution owners retained. [The experience contract](product-experience-contract.md) defines the target; [its ledger](reports/product-experience-delivery-2026-10-30.md) records the controlled local Synthetic acceptance and its external limits. This changes presentation and integration paths, without adding Group Chat, marketplaces, public agent access or unrelated backend architecture.
+
 ## MVP question
 
 The MVP should answer one question convincingly:

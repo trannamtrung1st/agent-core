@@ -184,7 +184,7 @@ describe("ModelPicker", () => {
     expect(screen.getByLabelText("Reasoning effort")).toHaveTextContent("Medium");
     expect(screen.getByRole("button", { name: "Model" })).toContainElement(screen.getByLabelText("Reasoning effort"));
     fireEvent.click(screen.getByRole("button", { name: "Model" }));
-    expect(await screen.findByRole("slider")).toBeInTheDocument();
+    expect(await screen.findByRole("slider", { name: "Reasoning effort" })).toHaveAttribute('aria-valuetext', 'Medium');
     const listbox = await screen.findByRole("listbox");
     expect(within(listbox).getByTitle("Scripted Alpha")).toBeInTheDocument();
   });

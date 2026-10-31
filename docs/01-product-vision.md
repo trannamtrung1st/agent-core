@@ -1,5 +1,11 @@
 # Product Vision
 
+## Current product experience
+
+Agent Core is an organization workspace for persistent agents, natural conversation and authorized work with inspectable results. Everyday members start with Chat and the managed General Assistant. Creators configure reusable Definitions and independent agent Instances; reviewers inspect evidence; organization administrators and platform operators retain separately labeled scopes. Spaces/Environments, Tasks, Goals, Formal Workflows, evaluation and automation are current supporting capabilities under their existing contracts. Group Chat remains deferred.
+
+The [Product Experience Contract](product-experience-contract.md) owns the Order 6 navigation, terminology and progressive disclosure target. [Delivery evidence](reports/product-experience-delivery-2026-10-30.md) records the controlled local Synthetic acceptance and its external limits. The conversational thesis below remains foundational; historical milestone summaries do not define the current navigation.
+
 ## What Agent Core is
 
 Agent Core is a reusable agent harness for running an AI identity as a persistent conversational participant.
@@ -130,7 +136,7 @@ Continuity retrieves bounded Memory, Experience and Session evidence without rep
 
 ## Instance administration vocabulary
 
-Automation is one owner-authored future behavior: a concise Name, bounded Instructions, and a Schedule or Event trigger. Thinking, reminders, event reactions, Experience review and identity maintenance are ordinary instructions. A Run is its bounded execution through Trigger → Occurrence → background Session → Activation → AgentRun. A successful NoAction stays quiet. Permitted effects and attention use the existing capability, approval and delivery contracts. Connections owns webhook ingress and credentials; Continuity owns retained context. Background work has a real owned Session with inspectable history and same-Session Continue in chat; no unrestricted reasoning loop is introduced. Instance Admin has six top-level tabs: Identity & version, Continuity, Automation, Runs, Connections and Effective configuration. Historical milestone reports remain acceptance records for their original commits.
+Automation is one owner-authored future behavior: a concise Name, bounded Instructions, and a Schedule or Event trigger. Thinking, reminders, event reactions, Experience review and identity maintenance are ordinary instructions. A Run is its bounded execution through Trigger → Occurrence → background Session → Activation → AgentRun. A successful NoAction stays quiet. Permitted effects and attention use the existing capability, approval and delivery contracts. Connections owns webhook ingress and credentials; Continuity owns retained context. Background work has a real owned Session with inspectable history and same-Session Continue in chat; no unrestricted reasoning loop is introduced. Historical pre-IAM Instance Admin used six top-level tabs (superseded by the current frontend contract): Identity & version, Continuity, Automation, Runs, Connections and Effective configuration. Historical milestone reports remain acceptance records for their original commits.
 
 ## Using a background result during a conversation
 

@@ -1,8 +1,10 @@
+import { canonicalFetch, prepareOrdinaryChat, signInTenant } from './support/tenant-auth';
+import { openConversationTool } from './support/experience-navigation';
 import { expect, test, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 const login = process.env.TENANT_MEMORY_LOGIN ?? 'tenant-chat-owner@example.test';
 const password = process.env.TENANT_MEMORY_PASSWORD ?? 'synthetic-tenant-chat-password';
 async function call<T>(api: APIRequestContext, path: string, data?: unknown, method = data === undefined ? 'GET' : 'POST'): Promise<T> {
-  const csrf = await (await api.get('/api/v2/auth/csrf')).json(); const r = await api.fetch(path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data });
+  const csrf = await (await api.get('/api/v2/auth/csrf')).json(); const r = await canonicalFetch(api, path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data });
   expect(r.ok(), `${method} ${path}: ${r.status()} ${await r.text()}`).toBeTruthy(); return r.status() === 204 ? undefined as T : r.json();
 }
 async function send(page: Page, value: string) { const box = page.getByRole('textbox', { name: 'Message', exact: true }); await expect(box).toBeEnabled(); await box.fill(value); await page.getByRole('button', { name: 'Send', exact: true }).click(); }
@@ -23,10 +25,11 @@ for (const viewport of [{ width: 1400, height: 950 }, { width: 390, height: 844 
     const agent = await call<{ instance: { instanceId: string }; principalId: string }>(api, prefix + '/agents', { templateId: 'general-assistant', version: 36, expectedRevision: await revision() });
     const role = await call<{ roleId: string }>(api, prefix + '/roles', { name: 'Continuity executor', permissions: ['agents.chat', 'agents.read', 'sessions.read', 'agent-runs.read', 'memory.read', 'memory.manage'], expectedRevision: await revision() });
     await call(api, prefix + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await revision() });
-    await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(login); await page.getByLabel('Password', { exact: true }).fill(password); await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible(); await page.goto(`/t/${tenant}`);
+    await prepareOrdinaryChat(api, tenant, agent.instance.instanceId);
+    await signInTenant(page, login, password); await page.goto(`/t/${tenant}`);
     await send(page, 'synthetic-inferred-frontend: one'); await expect(page.getByText('Observed a durable frontend preference.', { exact: true })).toBeVisible(); await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0, { timeout: 30000 });
     const sourceId = page.url().split('/').pop()!;
-    await page.getByRole('button', { name: 'End', exact: true }).click(); await page.getByRole('dialog', { name: 'End this conversation?', exact: true }).getByRole('button', { name: 'End', exact: true }).click(); await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveCount(0);
+    await openConversationTool(page, 'End'); await page.getByRole('dialog', { name: 'End this conversation?', exact: true }).getByRole('button', { name: 'End', exact: true }).click(); await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveCount(0);
     await call(api, prefix + '/operation-policies/sessions.read', { mode: 'always', independentReview: false, expectedRevision: await revision(), expectedPolicyRevision: 0 }, 'PUT');
     await page.goto(`/t/${tenant}`); await send(page, 'synthetic-tenant-continuity:inspect'); let review = await detail(page);
     await expect(review).toContainText('Current historical excerpts'); await expect(review.getByRole('button', { name: 'Approve', exact: true })).toBeEnabled();

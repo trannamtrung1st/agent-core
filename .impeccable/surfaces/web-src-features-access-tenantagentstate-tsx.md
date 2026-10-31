@@ -1,25 +1,39 @@
-# Tenant Runtime State
+---
+version: 1
+slug: "web-src-features-access-tenantagentstate-tsx"
+primary_target: "web/src/features/access/TenantAgentState.tsx"
+related_targets: ["web/src/app/antdTheme.ts", "web/src/app/AppShell.tsx", "web/src/app.css"]
+---
 
-Mode: Operate. Ordinary code-led extension of the incumbent dark Ant Design v6 Instance UI. No new concept, comp, visual world, asset, font, token or component-kit change is approved. Preserve PRODUCT.md, DESIGN.md and `.impeccable/design.json`.
+# TenantAgentState
 
-## Direction contract — 2026-10-21
+Mode: Operate. Code-led.
 
-**THESIS:** Observe one exact Instance's currently readable runtime counts with explicit freshness, source limits and manual recovery, without starting work.
+## Direction contract
 
-**OWN-WORLD:** Reuse `AgentConfigurationPanel`, `TenantAgentHeading`, `useAdminDetailLayout`, the bounded access column and native Ant Design Typography, Flex, Descriptions, Alert and Button. The existing access shell owns organization/Instance navigation and page title. Panels own their heading/body inset; parent and body stacks retain the incumbent 8/12/16px rhythm.
+THESIS: Identify the selected agent, lifecycle and adopted Definition before editing. Use contextual Identity/Behavior/Execution/Activity/Access navigation and an explicit organization transition. Settings categories retain one sparse-draft controller and field-level source/reset. Keep current authority, guarded save/cancel, stale/unknown readback and non-destructive recovery.
 
-**STORY:** Activity → State remains distinct from State & Isolation. Current identity, lifecycle and Definition precede scope guidance and observation/fresh-through times. Session, Run, Browser and Sandbox source groups keep independent readable scope. Explicit Refresh observes existing state. Session/Run links lead to independently authorized Activity destinations. Unknown sources explain the restriction in text. Expired observations hide counts; a denied refresh retires private contents.
+OWN-WORLD: Native Ant Design v6 on evergreen layout/container/elevated surfaces, warm white working text, mint links and independent semantic status colors.
 
-**FIRST VIEWPORT:** State title and observation purpose, Back to instances and Refresh state precede the shared Instance heading, authority limits, freshness and partial-state explanation. Preserve this factual sequence without a new metric-card dashboard. Narrow identity and timestamp text wrap naturally.
+STORY: Understand the authorized owner and current saved state, perform the named task, and inspect its attributable result or explicit recovery.
 
-**FORM:** A bounded column (48rem maximum) uses the shared dark panels and responsive Descriptions: aligned labels at the existing medium breakpoint, stacked labels and values below it, with wrapping content. Native narrow buttons retain the shared 40px minimum height. Refresh and navigation wrap in their native Flex owner; there is no mutation form, allocation control or automatic resource action.
+FIRST VIEWPORT: This composition remains inside its authorized page/Chat/inspector owner. The shared task/scope heading precedes native controls, evidence and actions; narrow layouts wrap and use local overflow.
 
-Behavior authority: [Runtime State interaction contract](../../docs/19-multi-tenant-iam-ux.md#runtime-state-interaction-contract). Counts cover the current authorized scope without hidden totals; null/missing means Unknown, never zero. Counts confer no execution authority and do not prove login, logout or remote cleanup. The canonical contract owns fifteen-second expiry, source-specific authorization and bounded passive collection. This brief records presentation, not a second behavioral specification.
+FORM: Inherit the selected field-guide working grammar, candidate 7, seed `cb1be48c`; contextual classification without literal book decoration.
 
-## Bounded evidence — 2026-10-21
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
-The fresh [finish review](../../docs/reports/assets/tenant-runtime-state-2026-10-21/finish-review.md) returned **ship** without material fixes for four visible regions: desktop top at 1440×1100, narrow top at 320×844, restricted Runs at 320×844 and denied refresh at 390×844. This documenter reopened all four files, checked dimensions/SHA256 and compared the source to shared layout/theme owners; exact evidence is in [design comparison](../../docs/reports/assets/tenant-runtime-state-2026-10-21/design-comparison.md). The supplied detector result at `/private/tmp/tenant-runtime-state-verification/detector.json` is `[]`; no rerun is claimed.
+The [Product Experience Contract](../../docs/product-experience-contract.md) and [frontend specification](../../docs/13-frontend-implementation-spec.md) own behavior. [DESIGN](../../.agents/context/DESIGN.md) owns concise visual guidance. Ant Design v6 controls and shared layout owners provide the presentation; no second framework or page-local tokens.
 
-These are visible regions of the app's internal scroller. Desktop shows Sessions and most of Runs; narrow top stops at the Sessions heading. The scrolled restricted capture shows all Run values as Unknown and an Activity link; the revoked capture replaces private content with access guidance while preserving Back/Refresh. Browser/Sandbox lower panels, whole-page/five-width coverage, expired/loading/hover/focus presentation, keyboard behavior, measured contrast and full interaction correctness remain outside this static visual verdict. Source inspection identifies expiry and denial branches but does not exercise them. Separate implementation verification retains its own scope; this documentation pass runs no app checks and claims no full proposal or milestone acceptance.
+## Qualification
 
-Normative PRODUCT/DESIGN and the sidecar remain byte-for-byte unchanged; the sidecar retains SHA256 `8bdc3659a25b706454ac8cc0394323c5e0e60ea1ade616756b180efbaecef49b`. Historical sidecar source fingerprints already drift for PRODUCT/DESIGN, app CSS and AccessApp, while the theme fingerprint matches. The old AdminApp and ApprovalModal briefs still point to absent source targets, and the sidecar still carries historical source mentions. These pre-existing stale/orphan records are reported only, without repair or canonization.
+The [delivery ledger](../../docs/reports/product-experience-delivery-2026-10-30.md) and [master manifest](../../docs/reports/assets/product-experience/coverage.json) record actual journeys, roles, inspected images and open limits. This refreshed brief is source metadata, not acceptance. Preserve existing meaningful states and operations; verify desktop/tablet/mobile and narrow content/keyboard/authority boundaries.
+
+## Source fingerprints
+
+| Source | SHA256 |
+| --- | --- |
+| `web/src/features/access/TenantAgentState.tsx` | `0584b238390283f85b43cc7de1cbdecfb99d1c9fcceda6608853eb3d79b3b412` |
+| `web/src/app/antdTheme.ts` | `8f13dc29dc96e4ef2dcc86be8150743d7656975cbe202b06f04f039a8a8109ae` |
+| `web/src/app/AppShell.tsx` | `35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1` |
+| `web/src/app.css` | `e827076d776b5687e59bd83d86cba88d889203430bc8ae23a14e85c6014e0cae` |

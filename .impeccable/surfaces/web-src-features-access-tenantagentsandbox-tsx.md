@@ -2,29 +2,44 @@
 version: 1
 slug: "web-src-features-access-tenantagentsandbox-tsx"
 primary_target: "web/src/features/access/TenantAgentSandbox.tsx"
-related_targets: ["web/src/features/admin/InstanceSettingsSection.tsx", "web/src/features/access/TenantAgentHeading.tsx", "web/src/features/sandbox/SandboxVerificationDetails.tsx", "web/src/features/sandbox/SandboxEvidence.tsx", "web/src/services/tenantAgentSandbox.ts", "web/src/features/access/TenantAgentConfiguration.tsx"]
+related_targets: ["web/src/features/admin/InstanceSettingsSection.tsx", "web/src/features/access/TenantAgentHeading.tsx", "web/src/features/sandbox/SandboxVerificationDetails.tsx", "web/src/features/sandbox/SandboxEvidence.tsx", "web/src/services/tenantAgentSandbox.ts", "web/src/features/access/TenantAgentConfiguration.tsx", "web/src/app/antdTheme.ts", "web/src/app/AppShell.tsx", "web/src/app.css"]
 ---
 
-# Tenant Instance Sandbox
+# TenantAgentSandbox
 
-Mode: Operate. Ordinary extension of the incumbent dark Ant Design v6 application. Preserve the shared tenant shell, bounded Instance form, native Settings Collapse, responsive field grid/Descriptions, feedback and confirmations. No new visual world, tokens, CSS, font, raster asset or UI kit.
+Mode: Operate. Code-led.
 
-## Direction contract — 2026-10-18
+## Direction contract
 
-**THESIS:** Deliberately configure one exact saved Instance Sandbox setup through sparse inheritance, then separately authorize disposable verification and inspect retained evidence.
+THESIS: Identify the selected agent, lifecycle and adopted Definition before editing. Use contextual Identity/Behavior/Execution/Activity/Access navigation and an explicit organization transition. Settings categories retain one sparse-draft controller and field-level source/reset. Keep current authority, guarded save/cancel, stale/unknown readback and non-destructive recovery.
 
-**OWN-WORLD:** Existing dark Ant Design v6 Operate. `InstanceSettingsSection` owns fields, native disclosure, source/ceiling hints, staged reset and wrapping section actions. Tenant transport owns canonical setup GET, settings PATCH and verification routes. `SandboxVerificationDetails` shares bounded result presentation with the organization catalog. Existing theme bridge and 8/12/16px rhythm remain the system.
+OWN-WORLD: Native Ant Design v6 on evergreen layout/container/elevated surfaces, warm white working text, mint links and independent semantic status colors.
 
-**STORY:** Scoped heading → sparse saved fields → Saved setup verification → latest/exact retained attempt. Source availability, current accepted observation, historical pins and pending cleanup remain distinct readable facts. Configuration, disposable verification and Session execution authority stay separate.
+STORY: Understand the authorized owner and current saved state, perform the named task, and inspect its attributable result or explicit recovery.
 
-**FIRST VIEWPORT:** Retain the tenant shell, Back to instances, matching saved Instance name/lifecycle/Definition version and read-only/archived/limited-access notices. The 48rem column and shared heading wrap long names through 320px. Partial readable profiles omit protected defaults and counts; restricted configuration still permits separately authorized verification. Denied reads clear protected identity.
+FIRST VIEWPORT: This composition remains inside its authorized page/Chat/inspector owner. The shared task/scope heading precedes native controls, evidence and actions; narrow layouts wrap and use local overflow.
 
-**FORM:** Reuse sparse field/reset/CAS controls and the native responsive grid. Only deliberate edits become overrides. Stale draft recovery requires explicit Reload; acknowledged malformed settings responses retire submitted edits before read recovery. Clean saved setup and coherent profile/Instance/security witnesses gate native exact-context verification confirmation. Reload, selection and failed responses never replay initialization. Latest/exact evidence remains inspectable through bounded escaped streams, native status/Alerts and wrapping actions. Keyboard order follows the task; acknowledged verification recovery restores focus to the labeled configuration container.
+FORM: Inherit the selected field-guide working grammar, candidate 7, seed `cb1be48c`; contextual classification without literal book decoration.
 
-## Evidence and limits
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
-The [interaction contract](../../docs/19-multi-tenant-iam-ux.md#instance-sandbox-interaction-contract) and [Frontend](../../docs/13-frontend-implementation-spec.md#tenant-instance-sandbox-configuration-and-verification) own behavior. [Focused verification](../../docs/reports/tenant-instance-sandbox-ui-verification-2026-10-18.md) owns real Synthetic saved setup/recovery and disabled-host verification, separately from controlled evidence/access projections and live SDK qualification. Controlled GET-only permission presentation is not backend authorization proof; independent verification authority has separate two-store test evidence.
+The [Product Experience Contract](../../docs/product-experience-contract.md) and [frontend specification](../../docs/13-frontend-implementation-spec.md) own behavior. [DESIGN](../../.agents/context/DESIGN.md) owns concise visual guidance. Ant Design v6 controls and shared layout owners provide the presentation; no second framework or page-local tokens.
 
-The fresh finish reviewer returned SHIP for the inspected scope. Existing captures in `/private/tmp/agent-core-instance-sandbox-ui-UnkPm6` cover settings and verification at 1440/1024/768/390/320px; shared Settings at 1440/320px; controlled read-only, partial, archived and denied states at 320px. Corrected read-only and partial captures include the shared heading. The documenter sampled `settings-final-1440.png`, `settings-final-320.png`, `verification-320.png`, `read-only-320.png` and `partial-320.png`; this pass takes no new captures or application checks. Superseded initial `settings-{width}` captures are excluded.
+## Qualification
 
-Loading/hover, measured contrast, historical revision rendering and successful live initialization are not visually established. Confirmation, stale/acknowledgement and read-recovery interactions have functional evidence without dedicated visual acceptance. Historical sidecar fingerprints remain unchanged, with pre-existing source/context drift recorded rather than repaired. Session Sandbox controls UI, remaining proposal work and live SDK qualification stay open; no full proposal or milestone acceptance is claimed.
+The [delivery ledger](../../docs/reports/product-experience-delivery-2026-10-30.md) and [master manifest](../../docs/reports/assets/product-experience/coverage.json) record actual journeys, roles, inspected images and open limits. This refreshed brief is source metadata, not acceptance. Preserve existing meaningful states and operations; verify desktop/tablet/mobile and narrow content/keyboard/authority boundaries.
+
+## Source fingerprints
+
+| Source | SHA256 |
+| --- | --- |
+| `web/src/features/access/TenantAgentSandbox.tsx` | `aa464bc3c057652a2a6ae1a6d4273cca16403be3076c0bc515c3ee38f13e74b8` |
+| `web/src/features/admin/InstanceSettingsSection.tsx` | `14ed7d2fba2486cf98121b2bc4373fb0425e49512cb030eff241d84bcc73aecd` |
+| `web/src/features/access/TenantAgentHeading.tsx` | `caed388f6ee0fdeaab8848cf417bb76a2014d77a9f0bec348d64e0ebca192d0f` |
+| `web/src/features/sandbox/SandboxVerificationDetails.tsx` | `91e07d75321bd1d425103f9c3c6e701aab65936ce0c28512348cfd6f14c16128` |
+| `web/src/features/sandbox/SandboxEvidence.tsx` | `0675ca8ee947dc8f7fbe4ccf67df9d0d527621a5fcdc92a27e2bfa49cf7bc5d5` |
+| `web/src/services/tenantAgentSandbox.ts` | `1e0c40404021f09d934c1854c75431e373553862254b2096cd0d3c6aa594cc93` |
+| `web/src/features/access/TenantAgentConfiguration.tsx` | `7d2124819a86d3e12f104831148e6b335819439b7f6ccaa2879d91755a24a9eb` |
+| `web/src/app/antdTheme.ts` | `8f13dc29dc96e4ef2dcc86be8150743d7656975cbe202b06f04f039a8a8109ae` |
+| `web/src/app/AppShell.tsx` | `35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1` |
+| `web/src/app.css` | `e827076d776b5687e59bd83d86cba88d889203430bc8ae23a14e85c6014e0cae` |

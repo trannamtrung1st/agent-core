@@ -1,3 +1,4 @@
+import { captureExperience, openConversationTool } from './support/experience-navigation';
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { canonicalFetch, grantPrivateSpaceRead, signInTenant } from './support/tenant-auth';
 async function call<T>(api: APIRequestContext, path: string, data?: unknown, method = data === undefined ? 'GET' : 'POST'): Promise<T> {
@@ -7,7 +8,7 @@ async function call<T>(api: APIRequestContext, path: string, data?: unknown, met
 }
 test('real Goal plan, bound Synthetic work, exact Evaluation, acceptance and responsive recovery', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
-  await signInTenant(page, 'goals-owner@example.test', 'synthetic-goals-password');
+  await signInTenant(page, process.env.TENANT_UI_LOGIN ?? 'goals-owner@example.test', process.env.TENANT_UI_PASSWORD ?? 'synthetic-goals-password');
   const api = page.request; const nonce = crypto.randomUUID().slice(0, 8);
   const tenant = await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Goals ${nonce}`, slug: `goals-${nonce}` }); const root = `/api/v2/tenants/${tenant.tenantId}`;
   const revision = async () => (await call<{ revision: number }>(api, `${root}/access/me`)).revision;
@@ -18,7 +19,7 @@ test('real Goal plan, bound Synthetic work, exact Evaluation, acceptance and res
   const suite = await call<{ suiteId: string; version: number; contentHash: string }>(api, `${root}/evaluation-suites`, { name: 'Saved Goal Run proof', checks: [{ checkId: 'complete', title: 'Saved Run completed', kind: 0, required: true, predicate: 5 }], expectedVersion: 0, expectedRevision: await revision() });
   const chat = await call<{ sessionId: string }>(api, `${root}/sessions`, { agentInstanceId: agent.instance.instanceId, mode: 'text', retentionKind: 'saved', expectedRevision: await revision(), expectedInstanceRevision: agent.instance.revision });
   await page.goto(`/t/${tenant.tenantId}/c/${chat.sessionId}`);
-  await page.getByRole('button', { name: 'Session goals', exact: true }).click();
+  await openConversationTool(page, 'Session goals');
   await expect(page.getByText('No goals in this conversation')).toBeVisible(); await page.getByRole('button', { name: 'Create goal', exact: true }).click();
   await page.getByLabel('Goal title', { exact: true }).fill('Deliver an independently verified briefing');
   await page.getByLabel('Outcome to achieve', { exact: true }).fill('Produce the requested briefing and review it against explicit criteria.');
@@ -53,16 +54,17 @@ test('real Goal plan, bound Synthetic work, exact Evaluation, acceptance and res
   await page.getByRole('textbox', { name: 'Final acceptance reason', exact: true }).fill('All overall delivery criteria hold.');
   await page.getByRole('button', { name: 'Accept completed goal', exact: true }).click(); await page.getByRole('button', { name: 'Accept completed goal', exact: true }).last().click();
   await expect(page.getByText('Goal completed', { exact: true })).toBeVisible(); expect((await goal()).status).toBe(3);
+  await captureExperience(page, 'goal-completed');
   const session = await call<{ lifecycleStatus: string }>(api, `${root}/sessions/${chat.sessionId}`); expect(session.lifecycleStatus).toBe('active');
-  await page.getByRole('button', { name: 'Inspect Evaluation', exact: true }).click(); await expect(page.getByText('Evaluation evidence', { exact: true })).toBeVisible(); await expect(page.getByText('Passed', { exact: true }).first()).toBeVisible(); await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Inspect Evaluation', exact: true }).click(); await expect(page.getByText('Evaluation evidence', { exact: true })).toBeVisible(); await expect(page.getByText('Passed', { exact: true }).first()).toBeVisible(); await captureExperience(page, 'evaluation-evidence'); await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Inspect source Run', exact: true }).click();
   await page.getByRole('link', { name: 'Inspect Session goal', exact: true }).click(); await expect(page).toHaveURL(new RegExp(`goal=${working.goalId}`)); await expect(page.getByText('Goal completed', { exact: true })).toBeVisible();
   for (const width of [320,390,768,1024,1440]) {
     await page.setViewportSize({ width, height: 900 }); await expect(page.getByText('Goal completed', { exact: true })).toBeVisible();
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && [...document.querySelectorAll('.ant-drawer-body')].every(e => e.scrollWidth <= e.clientWidth + 1))).toBe(true);
   }
-  await page.keyboard.press('Escape'); await expect(page.getByRole('button', { name: 'Session goals', exact: true })).toBeFocused();
-  await page.getByRole('button', { name: 'Session goals', exact: true }).click(); await expect(page.getByText('Goal completed', { exact: true })).toBeVisible();
+  await page.keyboard.press('Escape'); await expect(page.getByRole('button', { name: /^Conversation tools/ })).toBeFocused();
+  await openConversationTool(page, 'Session goals'); await expect(page.getByText('Goal completed', { exact: true })).toBeVisible();
   const verifiedDisclosure = page.getByRole('button', { name: /1\. Verify the generated briefing/ });
   if (await verifiedDisclosure.getAttribute('aria-expanded') !== 'true') await verifiedDisclosure.click();
   let releaseRun!: () => void; let reachedRun!: () => void; let settledRun!: () => void;
@@ -95,6 +97,11 @@ test('real Goal plan, bound Synthetic work, exact Evaluation, acceptance and res
   await page.getByRole('button', { name: 'Propose revised plan', exact: true }).click(); await expect(page.getByLabel('Goal title', { exact: true })).toHaveValue('Retained local revision draft');
   await expect(page.getByText('Your draft is retained. Refresh authoritative state, compare the current plan and submit deliberately.')).toBeVisible();
   await page.unroute(`**${endpoint}/${denseId}/plan`); await page.getByRole('button', { name: 'Refresh goals', exact: true }).click();
+  await expect(async () => {
+    if (await page.getByRole('button', { name: 'Propose revised plan', exact: true }).isDisabled())
+      await page.getByRole('button', { name: 'Refresh goals', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Propose revised plan', exact: true })).toBeEnabled();
+  }).toPass({ timeout: 30_000 });
   const savedRevision = page.waitForResponse(r => r.url().endsWith(`/goals/${denseId}/plan`) && r.request().method() === 'PUT');
   await page.getByRole('button', { name: 'Propose revised plan', exact: true }).click(); const savedResponse = await savedRevision; expect(savedResponse.ok(), await savedResponse.text()).toBe(true); await expect(page.getByText('A revised plan needs human review')).toBeVisible();
   await page.getByRole('button', { name: 'Reject revision', exact: true }).click(); await page.getByRole('dialog', { name: 'Reject the proposed revision?', exact: true }).getByRole('button', { name: 'Reject revision', exact: true }).click();

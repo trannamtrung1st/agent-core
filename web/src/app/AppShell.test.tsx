@@ -12,7 +12,7 @@ describe("AppShell theme", () => {
         <AppShell>{createPortal(<div data-testid="portal" />, document.body)}</AppShell>
       </ConfigProvider>;
     }
-    const view = render(<Surface primary="#1677ff" />);
+    const view = render(<Surface primary={antdTheme.token!.colorPrimary!} />);
     expect(screen.getByTestId("portal").parentElement).toBe(document.body);
     const initial = document.documentElement.style.getPropertyValue("--ac-color-primary");
     expect(initial).toBe(theme.getDesignToken(antdTheme).colorPrimary);

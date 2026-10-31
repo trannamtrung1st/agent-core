@@ -1,15 +1,39 @@
-# Tenant Background Activity
+---
+version: 1
+slug: "tenant-background-activity"
+primary_target: "web/src/features/access/TenantAgentActivity.tsx"
+related_targets: ["web/src/app/antdTheme.ts", "web/src/app/AppShell.tsx", "web/src/app.css"]
+---
+
+# TenantAgentActivity
+
+Mode: Operate. Code-led.
 
 ## Direction contract
 
-THESIS: Extend the existing Ant Design Operate surface so an authorized person can inspect background work and continue the same Session deliberately.
+THESIS: Identify the selected agent, lifecycle and adopted Definition before editing. Use contextual Identity/Behavior/Execution/Activity/Access navigation and an explicit organization transition. Settings categories retain one sparse-draft controller and field-level source/reset. Keep current authority, guarded save/cancel, stale/unknown readback and non-destructive recovery.
 
-WORLD: Preserve the dark AdminShell, shared collection/table patterns, 640px Background Work drawer, native status chips and bounded Run reading regions. No new visual system, assets or type treatment.
+OWN-WORLD: Native Ant Design v6 on evergreen layout/container/elevated surfaces, warm white working text, mint links and independent semantic status colors.
 
-FIRST VIEWPORT: Agent identity and Activity navigation lead to recent Sessions or Runs. Exact details expose original task/result and current permitted actions. Chat retains its familiar Background work inbox action.
+STORY: Understand the authorized owner and current saved state, perform the named task, and inspect its attributable result or explicit recovery.
 
-SIGNATURE INTERACTION: Continue commits visibility, reads saved facts, then opens the same Session. A stale or lost response leaves an explicit readback action and cannot replay the command implicitly.
+FIRST VIEWPORT: This composition remains inside its authorized page/Chat/inspector owner. The shared task/scope heading precedes native controls, evidence and actions; narrow layouts wrap and use local overflow.
 
-STATES: Current access, loading, empty, running, quiet/attention result, archived/read-only, denied exact read and failed continuation all retain clear task-specific copy. Files and Run reads stay independent.
+FORM: Inherit the selected field-guide working grammar, candidate 7, seed `cb1be48c`; contextual classification without literal book decoration.
 
-REACH: Reuse Activity, BackgroundWorkDrawer, AgentRunDetails, SessionRunHistory, file inspector and navigation owners across Chat and Admin. Verify wide/narrow layouts and the legacy shared consumer.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+
+The [Product Experience Contract](../../docs/product-experience-contract.md) and [frontend specification](../../docs/13-frontend-implementation-spec.md) own behavior. [DESIGN](../../.agents/context/DESIGN.md) owns concise visual guidance. Ant Design v6 controls and shared layout owners provide the presentation; no second framework or page-local tokens.
+
+## Qualification
+
+The [delivery ledger](../../docs/reports/product-experience-delivery-2026-10-30.md) and [master manifest](../../docs/reports/assets/product-experience/coverage.json) record actual journeys, roles, inspected images and open limits. This refreshed brief is source metadata, not acceptance. Preserve existing meaningful states and operations; verify desktop/tablet/mobile and narrow content/keyboard/authority boundaries.
+
+## Source fingerprints
+
+| Source | SHA256 |
+| --- | --- |
+| `web/src/features/access/TenantAgentActivity.tsx` | `d2f1011b235c6b8c233ff1d72c56d1a8f465f939e708b1b965777c7ec1706ee3` |
+| `web/src/app/antdTheme.ts` | `8f13dc29dc96e4ef2dcc86be8150743d7656975cbe202b06f04f039a8a8109ae` |
+| `web/src/app/AppShell.tsx` | `35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1` |
+| `web/src/app.css` | `e827076d776b5687e59bd83d86cba88d889203430bc8ae23a14e85c6014e0cae` |

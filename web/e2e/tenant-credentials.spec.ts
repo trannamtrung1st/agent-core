@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import { signInTenant } from './support/tenant-auth';
 
-async function login(page: Page, login = 'access-owner@example.test', password = 'synthetic-access-test-password') {
-  await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(login); await page.getByLabel('Password', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
+async function login(page: Page, login = process.env.TENANT_UI_LOGIN ?? 'access-owner@example.test', password = process.env.TENANT_UI_PASSWORD ?? 'synthetic-access-test-password') {
+  await signInTenant(page, login, password);
 }
 async function request<T>(page: Page, path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
   return page.evaluate(async ({ path, body, method }) => {

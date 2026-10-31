@@ -31,6 +31,11 @@ describe('authenticated app entry routes', () => {
     window.history.replaceState(null, '', `/t/${session}`);
     expect(lastChatUrl()).toBe(`/t/${session}/c/${tenant}`);
   });
+  it.each(['https://example.test/elsewhere', `/t/${session}/c/${tenant}`, '/system/accounts', 'http://[invalid'])('rejects a damaged or cross-scope saved return %s', saved => {
+    window.history.replaceState(null, '', `/t/${tenant}/admin/agents`);
+    sessionStorage.setItem(`agent-core:last-chat-url:${tenant}`, saved);
+    expect(lastChatUrl()).toBe(`/t/${tenant}`);
+  });
 });
 
 describe('nested editing navigation guards', () => {

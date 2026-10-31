@@ -1,0 +1,42 @@
+
+Running 1 test using 1 worker
+
+(node:25365) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 e2e/product-experience.spec.ts:94:1 › J06/J13/J14/J15: contextual navigation, settings categories, dirty guard and authoritative read-only scope (17.4s)
+
+
+  1) e2e/product-experience.spec.ts:94:1 › J06/J13/J14/J15: contextual navigation, settings categories, dirty guard and authoritative read-only scope 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for locator('.ant-select-dropdown:visible .ant-select-item-option-content').filter({ hasText: /^Conversation$/ })
+
+
+      108 |   for (const category of ['Behavior', 'Conversation']) {
+      109 |     await page.getByRole('combobox', { name: 'Settings category', exact: true }).click();
+    > 110 |     await page.locator('.ant-select-dropdown:visible .ant-select-item-option-content').filter({ hasText: new RegExp(`^${category}$`) }).click();
+          |                                                                                                                                         ^
+      111 |     await expect(page.locator('.ant-select-dropdown:visible')).toHaveCount(0);
+      112 |   }
+      113 |   await expect(language).toHaveValue('vi');
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/product-experience.spec.ts:110:137
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/category-confirmation-results/product-experience-J06-J13-80b84-thoritative-read-only-scope/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../tmp/agent-core-order6/category-confirmation-results/product-experience-J06-J13-80b84-thoritative-read-only-scope/error-context.md
+
+    Error Context: ../../../../../../../tmp/agent-core-order6/category-confirmation-results/product-experience-J06-J13-80b84-thoritative-read-only-scope/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/category-confirmation-results/product-experience-J06-J13-80b84-thoritative-read-only-scope/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../tmp/agent-core-order6/category-confirmation-results/product-experience-J06-J13-80b84-thoritative-read-only-scope/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    e2e/product-experience.spec.ts:94:1 › J06/J13/J14/J15: contextual navigation, settings categories, dirty guard and authoritative read-only scope 

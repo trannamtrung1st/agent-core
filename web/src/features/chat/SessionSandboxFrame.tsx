@@ -4,6 +4,7 @@ import { Drawer, Flex, theme } from 'antd';
 /** The Session Sandbox inspector's existing shell, inset and opener-focus owner. */
 export function SessionSandboxFrame({ open, narrow, openerRef, onClose, blocked = false, title = 'Session sandbox', children }: { open: boolean; narrow: boolean; openerRef?: RefObject<HTMLButtonElement | null>; onClose: () => void; blocked?: boolean; title?: string; children: ReactNode }) {
   const { token } = theme.useToken(); const wasOpen = useRef(false);
+  const content = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const closing = wasOpen.current && !open; wasOpen.current = open;
     if (!closing || !openerRef) return;
@@ -24,8 +25,19 @@ export function SessionSandboxFrame({ open, narrow, openerRef, onClose, blocked 
     onKeyDown={event => {
       trapSessionInspectorFocus(event);
     }}
-    afterOpenChange={visible => { if (!visible && openerRef?.current?.isConnected) openerRef.current.focus({ preventScroll: true }); }}>
-    <Flex vertical gap={token.padding} onKeyDown={event => {
+    afterOpenChange={visible => {
+      if (visible) {
+        const panel = content.current;
+        // Opening motion can finish after a person has started editing or
+        // opened another inspector. Initial focus must not steal that work.
+        if (!panel || panel.contains(document.activeElement)) return;
+        const top = [...document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')].at(-1);
+        if (top && !top.contains(panel)) return;
+        panel.querySelector<HTMLElement>('[role="tab"][aria-selected="true"], button:not(:disabled), input:not(:disabled)')?.focus({ preventScroll: true });
+      }
+      else if (openerRef?.current?.isConnected) openerRef.current.focus({ preventScroll: true });
+    }}>
+    <Flex ref={content} vertical gap={token.padding} onKeyDown={event => {
       if (event.currentTarget.contains(event.target as Node) && event.key === 'Escape' && !event.defaultPrevented && !blocked) { event.preventDefault(); event.stopPropagation(); onClose(); }
     }}>{children}</Flex>
   </Drawer>;

@@ -80,7 +80,7 @@ export function TenantAgentAutomations({ context, id }: { context: TenantContext
   }
   const rows = view?.items.filter(item => `${item.automation.name} ${item.automation.instructions}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())) ?? [];
   return <Flex ref={collection} vertical gap="var(--ac-space-section)">
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to instances</Typography.Link><Button ref={reloadButton} disabled={busy || !!selection} onClick={reload}>Reload Automations</Button></Flex>
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link><Button ref={reloadButton} disabled={busy || !!selection} onClick={reload}>Reload Automations</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}
     {unknown && <Alert type="warning" showIcon title="Check the outcome before another action" description="The outcome of this action is unconfirmed. Inspect current Automations and Activity before leaving and starting another deliberate action. Reload never repeats it." />}
     {approval && <Alert type="info" showIcon title="Waiting for admission approval" description={<><Typography.Paragraph>No Run has been admitted for this occurrence. Approval and admission remain separate steps.</Typography.Paragraph><Typography.Link href={tenantApprovalPath(tenant, approval)} onClick={followAppLink}>Review the exact admission request</Typography.Link></>} />}

@@ -18,7 +18,7 @@ export function isNewChatIdentityReady(input: {
 }
 export function shortInstanceId(instanceId: string): string { return instanceId.replace(/-/g, "").toLowerCase().slice(-8); }
 export function managedInstancePickerLabel(item: ChatAgentInstance): string {
-  return `${item.name}${item.systemManaged ? " · System-managed" : ""} — ${item.role} · v${item.activeVersion} · ${shortInstanceId(item.instanceId)}`;
+  return `${item.name}${item.systemManaged ? " · System-managed" : ""} — ${item.role}`;
 }
 export type NewChatIdentityPresentation = { displayName: string; voiceAvailable: boolean; language: string };
 export function resolveNewChatIdentityPresentation(identityKey: string, instances: ChatAgentInstance[]): NewChatIdentityPresentation | null {

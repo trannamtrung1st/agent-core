@@ -1,0 +1,8 @@
+
+Running 1 test using 1 worker
+
+(node:25476) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 e2e/product-experience.spec.ts:94:1 › J06/J13/J14/J15: contextual navigation, settings categories, dirty guard and authoritative read-only scope (8.8s)
+
+  1 passed (9.8s)

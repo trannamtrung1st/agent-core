@@ -1,3 +1,4 @@
+import { captureExperience, signOutFromChat } from './support/experience-navigation';
 import { prepareOrdinaryChat } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 
@@ -90,7 +91,7 @@ for (const exceptional of [false, true]) for (const decision of ['approve', 'rej
       const pending = await call<{ items: { requestId: string; summary: string; kind: string }[] }>(api, prefix + '/approvals?status=pending');
       const request = pending.items[0]; expect(pending.items).toHaveLength(1);
       expect(request.kind).toBe(exceptional ? 'exceptionalGrant' : 'review');
-      await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+      await signOutFromChat(page);
       await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
 
       await signIn(reviewer, reviewerLogin, reviewerPassword);
@@ -106,6 +107,7 @@ for (const exceptional of [false, true]) for (const decision of ['approve', 'rej
         expect(await reviewer.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await reviewer.screenshot({ path: info.outputPath(`independent-${exceptional ? 'exception' : 'review'}-${decision}-${width}.png`), fullPage: true, animations: 'disabled' });
       }
+      await captureExperience(reviewer, `approval-${exceptional ? 'exception' : 'review'}-${decision}`);
       const decide = decision === 'approve' ? action : 'Reject';
       await detail.getByRole('button', { name: decide, exact: true }).click();
       const confirmation = reviewer.getByRole('dialog', { name: `${decide}?`, exact: true });

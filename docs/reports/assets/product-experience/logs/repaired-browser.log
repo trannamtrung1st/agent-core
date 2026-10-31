@@ -1,0 +1,344 @@
+
+Running 15 tests using 1 worker
+
+(node:10687) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   1 e2e/product-experience.spec.ts:196:1 › J07/J15: Space and Environment authoring retain exact identity and recover stale edits (18.1s)
+(node:10884) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   2 e2e/task-delegation.spec.ts:10:1 › real delegated worker asks, waits, receives human guidance, completes and preserves independent Goals (15.5s)
+  ✓   3 e2e/tenant-chat.spec.ts:158:1 › real websocket reconnect preserves unsent draft and does not duplicate admitted text (7.0s)
+  ✘   4 e2e/tenant-chat.spec.ts:389:34 › authenticated entry and retired browser routes at 1440px (20.0s)
+(node:11380) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   5 e2e/tenant-chat.spec.ts:389:34 › authenticated entry and retired browser routes at 390px (20.3s)
+(node:11602) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   6 e2e/tenant-definitions.spec.ts:174:1 › resource-only Reader, stale save recovery and tenant switch discard old reads (10.9s)
+  ✘   7 e2e/tenant-model-management.spec.ts:27:1 › protected-key onboarding, explicit default, stale connection recovery and responsive configuration (38.7s)
+(node:12147) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   8 e2e/tenant-model-management.spec.ts:187:1 › shared preset edits retain tenant declarations and read-only members cannot mutate model configuration (4.0s)
+(node:12200) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   9 e2e/tenant-model-management.spec.ts:236:1 › unavailable explicit model refuses without a Run, retains the draft, and recovers after deliberate retry (6.8s)
+(node:12270) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  10 e2e/tenant-model-management.spec.ts:310:1 › Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance (18.3s)
+(node:12487) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  11 e2e/tenant-model-management.spec.ts:362:1 › configured native offering flows through unattended and Automation selectors, exact approval and completed work (25.0s)
+(node:12750) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  12 e2e/tenant-model-management.spec.ts:430:1 › Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort (17.1s)
+(node:12964) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 e2e/tenant-model-management.spec.ts:481:1 › omitted manual default requires explicit recovery and fresh confirmation after conflict (6.3s)
+  ✓  14 e2e/tenant-voice.spec.ts:13:34 › tenant voice keeps capture active, credits heard separately, and requires a fresh click after reconnect at 1440px (9.0s)
+  ✓  15 e2e/tenant-voice.spec.ts:13:34 › tenant voice keeps capture active, credits heard separately, and requires a fresh click after reconnect at 390px (8.3s)
+
+
+  1) e2e/product-experience.spec.ts:196:1 › J07/J15: Space and Environment authoring retain exact identity and recover stale edits 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for getByRole('dialog', { name: 'Edit Space', exact: true }).getByRole('button', { name: 'Save Space', exact: true })
+
+
+      214 |   await capture(page, 'space-stale', [1440, 390]);
+      215 |   await edit.getByRole('button', { name: 'Reload current Space · keep draft', exact: true }).click();
+    > 216 |   await edit.getByRole('button', { name: 'Save Space', exact: true }).click(); await expect(edit).toHaveCount(0);
+          |                                                                       ^
+      217 |   await page.getByRole('tab', { name: 'Environments', exact: true }).click();
+      218 |   await page.getByRole('button', { name: 'Create Environment', exact: true }).click();
+      219 |   const environment = page.getByRole('dialog', { name: 'Create Environment', exact: true });
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/product-experience.spec.ts:216:71
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/product-experience-J07-J15-9b6e9-ity-and-recover-stale-edits/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/product-experience-J07-J15-9b6e9-ity-and-recover-stale-edits/error-context.md
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/product-experience-J07-J15-9b6e9-ity-and-recover-stale-edits/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/product-experience-J07-J15-9b6e9-ity-and-recover-stale-edits/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/product-experience-J07-J15-9b6e9-ity-and-recover-stale-edits/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) e2e/tenant-chat.spec.ts:389:34 › authenticated entry and retired browser routes at 1440px ─────
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for getByRole('menuitem', { name: 'Roles & permissions', exact: true })
+
+
+       at support/experience-navigation.ts:35
+
+      33 |       if (await page.getByRole('dialog', { name: 'Admin navigation', exact: true }).isVisible()) await page.keyboard.press('Escape');
+      34 |       await page.getByRole('button', { name: 'Account and platform navigation', exact: true }).click();
+    > 35 |       await page.getByRole('menuitem', { name: label, exact: true }).click(); return;
+         |                                                                      ^
+      36 |     }
+      37 |   }
+      38 |   await expect(link).toBeVisible(); await link.click();
+        at openDestination (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/support/experience-navigation.ts:35:70)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-chat.spec.ts:413:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-chat-authenticated--47d37-ed-browser-routes-at-1440px/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-chat-authenticated--47d37-ed-browser-routes-at-1440px/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-chat-authenticated--47d37-ed-browser-routes-at-1440px/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-chat-authenticated--47d37-ed-browser-routes-at-1440px/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) e2e/tenant-chat.spec.ts:389:34 › authenticated entry and retired browser routes at 390px ──────
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for getByRole('menuitem', { name: 'Roles & permissions', exact: true })
+
+
+       at support/experience-navigation.ts:35
+
+      33 |       if (await page.getByRole('dialog', { name: 'Admin navigation', exact: true }).isVisible()) await page.keyboard.press('Escape');
+      34 |       await page.getByRole('button', { name: 'Account and platform navigation', exact: true }).click();
+    > 35 |       await page.getByRole('menuitem', { name: label, exact: true }).click(); return;
+         |                                                                      ^
+      36 |     }
+      37 |   }
+      38 |   await expect(link).toBeVisible(); await link.click();
+        at openDestination (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/support/experience-navigation.ts:35:70)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-chat.spec.ts:413:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) e2e/tenant-model-management.spec.ts:27:1 › protected-key onboarding, explicit default, stale connection recovery and responsive configuration 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByTitle(/^Model integration space · /)
+
+
+      149 |     const context = page.getByRole('dialog', { name: 'Session context', exact: true });
+      150 |     await page.getByRole('combobox', { name: 'Space', exact: true }).click();
+    > 151 |     await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByTitle(/^Model integration space · /).click();
+          |                                                                                                                           ^
+      152 |     await context.getByRole('button', { name: 'Apply to next turn', exact: true }).click();
+      153 |     await expect(context).toHaveCount(0);
+      154 |     await expect(page.getByRole('button', { name: 'Session Space', exact: true })).toContainText('Model integration space');
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:151:123
+
+    Error: browserContext._wrapApiCall: file data stream has unexpected number of bytes
+
+    Error: End of central directory record signature not found. Either not a zip file, or file is truncated.
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-pr-b552d-nd-responsive-configuration/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-pr-b552d-nd-responsive-configuration/error-context.md
+
+  5) e2e/tenant-model-management.spec.ts:187:1 › shared preset edits retain tenant declarations and read-only members cannot mutate model configuration 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1
+    Received: 2
+
+      205 |     await call(f.api, f.root + '/agents', { templateId: 'examiner', version: 1, expectedRevision: await f.revision() });
+      206 |     const ownedReferences = await call<{ total: number }>(f.api, f.root + `/models/${adopted.offeringId}/references?kind=instances`);
+    > 207 |     expect(ownedReferences.total).toBe(1);
+          |                                   ^
+      208 |     const role = await call<{ roleId: string }>(f.api, f.root + '/roles', { name: 'Read models only', permissions: ['models.read', 'model-connections.read'], expectedRevision: await f.revision() });
+      209 |     const memberLogin = `model-reader-${Date.now()}@example.test`, memberPassword = 'synthetic-model-reader-password';
+      210 |     const invitation = await call<{ invitationId: string; token: string }>(f.api, f.root + '/members/invite', { login: memberLogin, roleId: role.roleId, expectedRevision: await f.revision() });
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:207:35
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-sh-2ec5a--mutate-model-configuration/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-sh-2ec5a--mutate-model-configuration/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-sh-2ec5a--mutate-model-configuration/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-sh-2ec5a--mutate-model-configuration/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) e2e/tenant-model-management.spec.ts:236:1 › unavailable explicit model refuses without a Run, retains the draft, and recovers after deliberate retry 
+
+    Error: GET /api/v2/tenants/01a18dc5-2ecd-790b-bb13-095aae595019/agents/01a18dc5-317e-7e93-a050-ad77663a83c4/activity/sessions/5dd8857a-09b8-4e68-917e-8896cbba7291/runs: 403
+
+    expect(received).toBeTruthy()
+
+    Received: false
+
+       8 |   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
+       9 |   const response = await canonicalFetch(api, path, { method, data: body, headers: { 'X-AgentCore-CSRF': csrf.token } });
+    > 10 |   expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy();
+         |                                                                    ^
+      11 |   return response.status() === 204 ? undefined as T : response.json();
+      12 | }
+      13 | async function setup() {
+        at call (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:10:68)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:262:13
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-un-9ba25-vers-after-deliberate-retry/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-un-9ba25-vers-after-deliberate-retry/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-un-9ba25-vers-after-deliberate-retry/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-un-9ba25-vers-after-deliberate-retry/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) e2e/tenant-model-management.spec.ts:310:1 › Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: getByRole('button', { name: 'Model', exact: true })
+    Expected substring: "High"
+    Received string:    "Scripted Alpha · Offline SyntheticDefault"
+    Timeout: 15000ms
+
+    Call log:
+      - Expect "toContainText" getByRole('button', { name: 'Model', exact: true }) with timeout 15000ms
+      - waiting for getByRole('button', { name: 'Model', exact: true })
+        34 × locator resolved to <button type="button" aria-label="Model" aria-expanded="false" aria-haspopup="listbox" class="ant-btn css-dev-only-do-not-override-19u5a7b css-var-_r_0_ ant-btn-text ant-btn-color-default ant-btn-variant-text ant-btn-sm model-picker-model">…</button>
+           - unexpected value "Scripted Alpha · Offline SyntheticDefault"
+
+
+      324 |     await signInTenant(page, login, password); await page.goto(`/t/${f.tenant}`);
+      325 |     await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('Scripted Alpha');
+    > 326 |     await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('High');
+          |                                                                            ^
+      327 |     await page.getByRole('button', { name: 'Model', exact: true }).click();
+      328 |     await expect(page.getByTitle('Use Agent default', { exact: true })).toHaveAttribute('aria-selected', 'true');
+      329 |     await page.getByTitle('Scripted Alpha · Offline Synthetic', { exact: true }).click();
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:326:76
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-Ag-91408-s-distinct-from-inheritance/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-Ag-91408-s-distinct-from-inheritance/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-Ag-91408-s-distinct-from-inheritance/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-Ag-91408-s-distinct-from-inheritance/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) e2e/tenant-model-management.spec.ts:362:1 › configured native offering flows through unattended and Automation selectors, exact approval and completed work 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('link', { name: 'Review the exact admission request', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('link', { name: 'Review the exact admission request', exact: true }) with timeout 15000ms
+      - waiting for getByRole('link', { name: 'Review the exact admission request', exact: true })
+
+
+      407 |     await page.getByRole('button', { name: 'Run now', exact: true }).click();
+      408 |     await page.getByRole('dialog', { name: 'Run saved Automation now?', exact: true }).getByRole('button', { name: 'Run now', exact: true }).click();
+    > 409 |     const link = page.getByRole('link', { name: 'Review the exact admission request', exact: true }); await expect(link).toBeVisible();
+          |                                                                                                                          ^
+      410 |     const requestId = (await link.getAttribute('href'))!.split('/').pop()!;
+      411 |     const pending = await call<{ runId: null; sessionId: null; review: { executionState: string } }>(f.api, f.root + `/approvals/${requestId}`);
+      412 |     expect(pending.runId).toBeNull(); expect(pending.sessionId).toBeNull(); expect(pending.review.executionState).toBe('waitingDecision');
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:409:122
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-co-01883-approval-and-completed-work/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-co-01883-approval-and-completed-work/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-co-01883-approval-and-completed-work/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-co-01883-approval-and-completed-work/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) e2e/tenant-model-management.spec.ts:430:1 › Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for getByRole('combobox', { name: 'Model', exact: true })
+
+
+      21 | }
+      22 | async function select(page: Page, label: string, text: string) {
+    > 23 |   await page.getByRole('combobox', { name: label, exact: true }).click();
+         |                                                                  ^
+      24 |   await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByTitle(text, { exact: true }).click();
+      25 | }
+      26 |
+        at select (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:23:66)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:438:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-De-cd3db-compatible-inherited-effort/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-De-cd3db-compatible-inherited-effort/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-De-cd3db-compatible-inherited-effort/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-9jc6sN/tenant-model-management-De-cd3db-compatible-inherited-effort/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9 failed
+    e2e/product-experience.spec.ts:196:1 › J07/J15: Space and Environment authoring retain exact identity and recover stale edits 
+    e2e/tenant-chat.spec.ts:389:34 › authenticated entry and retired browser routes at 1440px ──────
+    e2e/tenant-chat.spec.ts:389:34 › authenticated entry and retired browser routes at 390px ───────
+    e2e/tenant-model-management.spec.ts:27:1 › protected-key onboarding, explicit default, stale connection recovery and responsive configuration 
+    e2e/tenant-model-management.spec.ts:187:1 › shared preset edits retain tenant declarations and read-only members cannot mutate model configuration 
+    e2e/tenant-model-management.spec.ts:236:1 › unavailable explicit model refuses without a Run, retains the draft, and recovers after deliberate retry 
+    e2e/tenant-model-management.spec.ts:310:1 › Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance 
+    e2e/tenant-model-management.spec.ts:362:1 › configured native offering flows through unattended and Automation selectors, exact approval and completed work 
+    e2e/tenant-model-management.spec.ts:430:1 › Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort 
+  6 passed (3.9m)

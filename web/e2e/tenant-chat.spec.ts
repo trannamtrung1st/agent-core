@@ -1,3 +1,4 @@
+import { openConversationTool, openDestination, signOutFromChat } from './support/experience-navigation';
 import { canonicalFetch, grantPrivateSpaceRead, signInTenant } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext, type Page, type WebSocketRoute } from '@playwright/test';
 import { MessagePackHubProtocol } from '@microsoft/signalr-protocol-msgpack';
@@ -104,7 +105,7 @@ test('tenant text, rendered receipt, reload, rename, archive and read-only compl
     await page.getByRole('button', { name: 'Actions for Renamed private conversation', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Unarchive', exact: true }).click();
     await page.getByRole('link', { name: 'Renamed private conversation', exact: true }).click();
-    await page.getByRole('button', { name: 'End', exact: true }).click();
+    await openConversationTool(page, 'End');
     await page.getByRole('dialog', { name: 'End this conversation?', exact: true }).getByRole('button', { name: 'End', exact: true }).click();
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveCount(0);
     await expect.poll(async () => (await call<{ lifecycleStatus: string }>(f.api, `${f.prefix}/sessions/${id}`)).lifecycleStatus).toBe('completed');
@@ -125,7 +126,7 @@ test('organization switch and logout retire prior history, draft and transport',
     await expect(page.locator('body')).not.toContainText('Alpha private transcript');
     await send(page, 'Beta private transcript'); await reply(page);
     const beta = page.url();
-    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await signOutFromChat(page);
     await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
     await page.goto(beta); await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
     await expect(page.locator('body')).not.toContainText('Beta private transcript');
@@ -155,7 +156,7 @@ test('tenant attachment-only input retains the original file after reload', asyn
 });
 
 test('real websocket reconnect preserves unsent draft and does not duplicate admitted text', async ({ page }) => {
-  const f = await fixture(); let socket: WebSocketRoute | undefined, connections = 0, staleInjected = false;
+  const f = await fixture(); let socket: WebSocketRoute | undefined, connections = 0, staleInjected = false, reconnectArmed = false;
   const protocol = new MessagePackHubProtocol();
   await page.routeWebSocket('**/hubs/session*', route => {
     connections++; socket = route; const server = route.connectToServer();
@@ -163,7 +164,7 @@ test('real websocket reconnect preserves unsent draft and does not duplicate adm
       if (typeof data === 'string') { server.send(data); return; }
       for (const parsed of protocol.parseMessages(new Uint8Array(data).buffer, { log() {} })) {
         const message = parsed as { target?: string; invocationId?: string; arguments?: { eventId: string }[] };
-        if (connections === 2 && !staleInjected && message.target === 'AttachTenant' && message.invocationId) {
+        if (reconnectArmed && !staleInjected && message.target === 'AttachTenant' && message.invocationId) {
           // A failed read captured no authorized snapshot. The next attach must
           // reach the real host; never replay SendText or fabricate session.ready.
           staleInjected = true;
@@ -178,7 +179,8 @@ test('real websocket reconnect preserves unsent draft and does not duplicate adm
   try {
     await signIn(page); await page.goto(f.path); await send(page, 'Admitted before reconnect'); await reply(page);
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('My preserved draft');
-    const initial = connections; await socket!.close({ code: 1012, reason: 'Synthetic reconnect verification' });
+    const initial = connections; reconnectArmed = true;
+    await socket!.close({ code: 1012, reason: 'Synthetic reconnect verification' });
     await expect.poll(() => connections).toBeGreaterThan(initial);
     await expect.poll(() => staleInjected).toBe(true);
     await expect(page.getByTestId('connection')).toHaveText('Ready');
@@ -407,14 +409,12 @@ for (const width of [1440, 390]) test(`authenticated entry and retired browser r
       await expect(page.getByRole('button', { name: 'New chat', exact: true })).toHaveCount(0);
     }
     await page.goto(`${f.path}/admin/agents`);
-    await expect(page.getByRole('heading', { name: 'Instances', exact: true })).toBeVisible();
-    if (width < 1024) await page.getByRole('button', { name: 'Open Admin navigation', exact: true }).click();
-    await page.getByRole('navigation', { name: 'Admin navigation', exact: true }).getByRole('link', { name: 'Roles & permissions', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+    await openDestination(page, 'Roles & permissions');
     await expect(page.getByRole('heading', { name: 'Roles & permissions', exact: true })).toBeVisible();
-    if (width < 1024) await page.getByRole('button', { name: 'Open Admin navigation', exact: true }).click();
-    await page.getByRole('navigation', { name: 'Admin navigation', exact: true }).getByRole('link', { name: 'Instances', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Instances', exact: true })).toBeVisible();
-    await page.getByRole('link', { name: 'Chat', exact: true }).click();
+    await openDestination(page, 'Agents');
+    await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+    await page.getByRole('banner').getByRole('link', { name: 'Chat', exact: true }).click();
     await expect(page).toHaveURL(f.path);
     await send(page, 'Canonical entry remains usable'); await reply(page);
     expect(observed.errors).toEqual([]); expect(ownerRequests).toEqual([]);

@@ -2804,11 +2804,13 @@ body,
 .admin-layout { height: 100dvh; min-height: 0; }
 .admin-workspace { display: flex; flex: 1; min-height: 0; min-width: 0; }
 .admin-sidebar { flex: 0 0 248px; overflow-y: auto; border-inline-end: 1px solid var(--ac-color-border); background: var(--ac-color-container); }
-.admin-workspace > .admin-content { flex: 1; overflow-y: auto; min-height: 0; }
+.admin-workspace > .admin-content { flex: 1; overflow-y: auto; min-height: 0; padding: calc(2 * var(--ac-space-section)); }
 .admin-navigation { display: flex; flex-direction: column; gap: var(--ac-space-section); padding: var(--ac-space-default); }
-.admin-nav-group { display: flex; flex-direction: column; gap: var(--ac-space-compact); }
-.admin-nav-group-title { padding-inline: var(--ac-space-compact); font-size: var(--ac-font-size-label); }
-.admin-nav-link, .admin-nav-back { display: flex; align-items: center; gap: var(--ac-space-default); padding: var(--ac-space-compact); border-radius: var(--ac-radius-control); color: var(--ac-color-text-secondary); overflow-wrap: anywhere; }
+.admin-nav-group { min-width: 0; }
+.admin-nav-group > .admin-nav-link { margin-block-start: var(--ac-space-tight); }
+.admin-nav-group-title { padding: var(--ac-space-compact); font-size: var(--ac-font-size-label); color: var(--ac-color-text-secondary); cursor: pointer; }
+.admin-nav-group-title:focus-visible { outline: 2px solid var(--ac-color-focus); outline-offset: -2px; }
+.admin-nav-link, .admin-nav-back { min-height: 40px; box-sizing: border-box; display: flex; align-items: center; gap: var(--ac-space-default); padding: var(--ac-space-compact); border-radius: var(--ac-radius-control); color: var(--ac-color-text-secondary); overflow-wrap: anywhere; }
 .admin-nav-link:hover, .admin-nav-back:hover { background: var(--ac-color-fill); color: var(--ac-color-text); }
 .admin-nav-link[aria-current="page"] { background: var(--ac-color-primary-bg); color: var(--ac-color-text); }
 .admin-nav-owner { padding-inline: var(--ac-space-compact); overflow-wrap: anywhere; }
@@ -2832,7 +2834,7 @@ body,
 .admin-owner-metadata { min-width: 0; }
 .admin-owner-metadata .ant-typography { font-size: var(--ac-font-size-label); overflow-wrap: anywhere; }
 .admin-page-heading .ant-typography { margin: 0; }
-.admin-page-heading h2 { font-size: 28px; }
+.admin-page-heading h1 { font-size: 28px; }
 .admin-page-heading > .ant-typography-secondary { max-inline-size: 72ch; }
 .admin-page-heading { display: flex; flex-direction: column; gap: var(--ac-space-compact); }
 .admin-search-results { display: flex; flex-direction: column; gap: var(--ac-space-section); max-height: 55dvh; overflow-y: auto; }
@@ -2860,7 +2862,7 @@ body,
   .admin-header .admin-header-return { width: 40px; padding-inline: 0; }
   .admin-return-label-compact { display: none; }
 
-  .admin-page-heading h2 { font-size: 24px; }
+  .admin-page-heading h1 { font-size: 24px; }
   .admin-overview-destinations .ant-btn { min-height: 40px; }
 }
 @media (max-width: 767px) {
@@ -2989,8 +2991,9 @@ body,
 .access-collection-filters .ant-form-item { flex: 1 1 12rem; min-inline-size: 0; margin-block-end: 0; }
 
 /* Formal process composition; Ant Design tokens own controls and content insets. */
-.workflow-designer { min-width: 0; display: grid; grid-template-columns: 220px minmax(0, 1fr) 320px; gap: var(--ac-space-section); align-items: start; }
+.workflow-designer { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--ac-space-section); align-items: start; }
 .workflow-designer > * { min-width: 0; }
+.workflow-palette { grid-column: 1 / -1; }
 .workflow-palette, .workflow-properties { display: flex; flex-direction: column; gap: var(--ac-space-section); }
 .workflow-diagram { height: min(65vh, 640px); min-height: 360px; overflow: hidden; border: 1px solid var(--ac-color-border); border-radius: var(--ac-radius-surface); }
 .workflow-diagram-step { width: 224px; padding: var(--ac-space-default); border: 1px solid var(--ac-color-border-strong); border-radius: var(--ac-radius-control); background: var(--ac-color-container); color: var(--ac-color-text); }
@@ -3002,6 +3005,30 @@ body,
 .workflow-outline-label { display: flex; flex-direction: column; gap: var(--ac-space-tight); align-items: start; min-width: 0; overflow-wrap: anywhere; }
 .workflow-action-header { padding-block: var(--ac-space-default); background: var(--ac-color-layout); }
 .workflow-reading { max-width: 72ch; }
-@media (max-width: 1279px) { .workflow-designer { grid-template-columns: 200px minmax(0, 1fr); } .workflow-properties { grid-column: 1 / -1; } }
+@media (max-width: 1279px) { .workflow-designer { grid-template-columns: minmax(0, 1fr); } .workflow-properties { grid-column: 1 / -1; } }
 @media (max-width: 767px) { .workflow-designer { display: flex; flex-direction: column; } .workflow-designer > * { width: 100%; } .workflow-diagram { height: 360px; } .workflow-action-header { position: static; } }
 @media (prefers-reduced-motion: reduce) { .workflow-diagram *, .workflow-diagram *::before, .workflow-diagram *::after { animation: none !important; transition: none !important; } }
+
+/* The shared shell owns mobile page insets and native browser affordances. */
+::selection { background: var(--ac-color-primary-bg); color: var(--ac-color-text); }
+.app-shell { scrollbar-color: var(--ac-color-border-strong) var(--ac-color-layout); }
+@media (max-width: 767px) {
+  .admin-workspace > .admin-content { padding: var(--ac-space-section); }
+  .admin-header-actions > .ant-btn:has(.anticon-user) { display: none; }
+}
+
+/* Conversation tools share one stable opener; each action remains a named native button. */
+.chat-tools { min-inline-size: 14rem; max-inline-size: calc(100vw - 2 * var(--ac-space-section)); }
+.chat-tools .chat-tool-action { min-block-size: 40px; inline-size: 100%; justify-content: start; }
+@media (max-width: 767px) {
+  .chat-header-inner .ant-btn { min-block-size: 40px; }
+  .chat-header-inner .ant-btn-icon-only { min-inline-size: 40px; }
+}
+@media (max-width: 767px) {
+  .admin-scope-label { display: none; }
+  .admin-header-actions > .ant-btn { min-inline-size: 40px; }
+  .chat-header-session-actions { flex-wrap: nowrap; width: 100%; }
+  .chat-header-session-actions > .ant-flex { display: contents; }
+  .chat-header-inner .access-tenant-switcher { flex: 1 1 auto; max-inline-size: none; min-inline-size: 0; }
+  .chat-header-actions { width: 100%; }
+}

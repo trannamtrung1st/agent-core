@@ -1,15 +1,14 @@
+import { canonicalFetch, signInTenant } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { selectSpreadsheetCell } from './support/spreadsheet';
 const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password';
 let identity: Awaited<ReturnType<APIRequestContext['storageState']>>;
 async function call<T = any>(api: APIRequestContext, path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
-  const csrf = await (await api.get('/api/v2/auth/csrf')).json(); const response = await api.fetch(path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
+  const csrf = await (await api.get('/api/v2/auth/csrf')).json(); const response = await canonicalFetch(api, path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
   expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy(); return response.status() === 204 ? undefined as T : response.json();
 }
-async function signIn(page: Page, email = login, secret = password) {
-  await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(email); await page.getByLabel('Password', { exact: true }).fill(secret); await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
-}
+async function signIn(page: Page, email = login, secret = password) { await signInTenant(page, email, secret); }
 async function fixture() {
   const api = await requests.newContext({ baseURL: process.env.TENANT_CHAT_TEST_BASE_URL, storageState: identity }); const nonce = crypto.randomUUID().slice(0, 8);
   const tenant = (await call(api, '/api/v2/system/tenants', { name: `Regional Resources ${nonce}`, slug: `resources-${nonce}` })).tenantId;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Button, Flex, Tooltip } from 'antd';
-import { LogoutOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons';
+import { Button, Dropdown, Flex } from 'antd';
+import { MenuOutlined } from '@ant-design/icons';
 import { ChatApp } from './ChatApp';
 import { TenantApprovalNotification } from './TenantConversationApprovals';
 import { chatTenantId } from '../../services/tenantChat';
@@ -10,7 +10,7 @@ import { useIdentityQuery } from '../access/useIdentityQuery';
 import { AccessError, AccessLoading } from '../access/AccessFeedback';
 import { TenantSwitcher } from '../access/Organizations';
 import { tenantAccessPath } from '../access/accessRoute';
-import { approveAppNavigation } from '../../app/appRoute';
+import { approveAppNavigation, navigateToAppPath } from '../../app/appRoute';
 
 export function TenantChatEntry({ tenantId }: { tenantId: string }) {
   const tenant = useIdentityQuery<TenantContext>(chatTenantId === tenantId ? tenantApi(tenantId, '/access/me') : null);
@@ -34,8 +34,17 @@ export function TenantChatEntry({ tenantId }: { tenantId: string }) {
   return <ChatApp tenantContext={context} tenantError={error} tenantActions={<Flex align="center" wrap gap="var(--ac-space-compact)">
     <TenantSwitcher tenantId={tenantId} name={context.tenant.name} chat />
     <TenantApprovalNotification tenant={tenantId} />
-    <Tooltip title="Organization"><Button type="text" className="chat-header-icon-action" href={tenantAccessPath(tenantId)} aria-label="Organization administration" icon={<SettingOutlined />} /></Tooltip>
-    <Tooltip title="Your account"><Button type="text" className="chat-header-icon-action" href="/account/profile" aria-label="Your account" icon={<UserOutlined />} /></Tooltip>
-    <Tooltip title="Sign out"><Button type="text" className="chat-header-icon-action" aria-label="Sign out" loading={signingOut} onClick={() => void signOut()} icon={<LogoutOutlined />} /></Tooltip>
+    <Dropdown trigger={['click']} menu={{ items: [
+      { key: tenantAccessPath(tenantId, 'agents'), label: 'Agents' },
+      { key: tenantAccessPath(tenantId, 'spaces'), label: 'Spaces' },
+      { key: tenantAccessPath(tenantId, 'workflows'), label: 'Workflows' },
+      { key: tenantAccessPath(tenantId), label: 'Organization administration' },
+      { type: 'divider' },
+      { key: '/account/organizations', label: 'My organizations' },
+      { key: '/account/profile', label: 'Your account' },
+      { key: 'sign-out', label: 'Sign out', disabled: signingOut }
+    ], onClick: ({ key }) => key === 'sign-out' ? void signOut() : navigateToAppPath(key) }}>
+      <Button icon={<MenuOutlined aria-hidden />} aria-label="Workspace menu" loading={signingOut}>Menu</Button>
+    </Dropdown>
   </Flex>} />;
 }

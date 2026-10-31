@@ -1,13 +1,13 @@
 import { test, expect, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 import fs from 'node:fs';
-import { grantPrivateSpaceRead } from './support/tenant-auth';
+import { grantPrivateSpaceRead, canonicalFetch, signInTenant } from './support/tenant-auth';
 import path from 'node:path';
 const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password';
 async function call<T>(api: APIRequestContext, route: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
-  const csrf = await (await api.get('/api/v2/auth/csrf')).json(); const response = await api.fetch(route, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
+  const csrf = await (await api.get('/api/v2/auth/csrf')).json(); const response = await canonicalFetch(api, route, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
   expect(response.ok(), `${method} ${route}: ${response.status()} ${await response.text()}`).toBeTruthy(); return response.status() === 204 ? undefined as T : response.json();
 }
-async function signIn(page: Page, email = login, secret = password) { await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(email); await page.getByLabel('Password', { exact: true }).fill(secret); await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible(); }
+async function signIn(page: Page, email = login, secret = password) { await signInTenant(page, email, secret); }
 test('Runtime State refresh, expiry, exact reader scope and revocation work on native Synthetic at desktop and narrow widths', async ({ page }) => {
   const api = await requests.newContext({ baseURL: process.env.TENANT_CHAT_TEST_BASE_URL }); const errors: string[] = [], obsolete: string[] = [], failures: string[] = [], consoleErrors: string[] = [];
   page.on('pageerror', e => errors.push(e.message)); page.on('request', request => { if (/^\/api\/v[12]\/(owner-capability|agent-instances|admin)(\/|$)/.test(new URL(request.url()).pathname)) obsolete.push(request.url()); });

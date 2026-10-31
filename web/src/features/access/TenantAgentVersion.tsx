@@ -57,7 +57,7 @@ export function TenantAgentVersion({ context, id }: { context: TenantContext; id
   }
   const denied = readDenied ?? (lostRead(result.error) ? result.error : undefined);
   return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">{guard.holder}
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to instances</Typography.Link><Button ref={reloadButton} disabled={busy} onClick={reload}>Reload versions</Button></Flex>
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link><Button ref={reloadButton} disabled={busy} onClick={reload}>Reload versions</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}
     {committed && <Alert type="info" showIcon title="Version adoption was saved" description="Read the current configuration before another change. Reload never replays adoption." />}
     {denied ? <AccessError error={denied} retry={reload} /> : catalog.loading ? <AccessLoading /> : catalog.error ? <AccessError error={catalog.error} retry={reload} /> : view && <>

@@ -1,4 +1,5 @@
 import { canonicalFetch, signInTenant } from './support/tenant-auth';
+import { openDestination } from './support/experience-navigation';
 import { expect, test, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 
 const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password';
@@ -10,9 +11,7 @@ async function call<T>(api: APIRequestContext, path: string, body?: unknown, met
 }
 async function signIn(page: Page, email = login, secret = password) { await signInTenant(page, email, secret); }
 async function navigateTo(page: Page, name: 'Execution budgets' | 'Self-management' | 'Unattended model') {
-  const toggle = page.getByRole('button', { name: 'Open Admin navigation', exact: true });
-  if (await toggle.isVisible()) await toggle.click();
-  await page.getByRole('link', { name, exact: true }).click();
+  await openDestination(page, name);
 }
 type Editor = { securityRevision: number; agent: { instance: { revision: number; personaRevision: number; persona: { name: string; role: string; description: string; tone: string } } }; settings: { section: string; overrides: Record<string, unknown>; effective: Record<string, unknown>; sources: Record<string, string> }[] };
 async function fixture() {

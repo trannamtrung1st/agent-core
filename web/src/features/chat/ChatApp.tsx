@@ -333,9 +333,9 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
           <Sider className="app-sider" theme="light" width={siderWidth}>
             <div className="app-sider-inner">
               <div className="app-sider-brand">
-                <Typography.Title level={1} className="app-sider-title">
+                <Typography.Text strong className="app-sider-title">
                   Agent Core
-                </Typography.Title>
+                </Typography.Text>
               </div>
               {rail}
             </div>
@@ -366,7 +366,9 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
                   </Typography.Text></Tooltip>
                 </Flex>
               }
-              additionalActions={<>{state.sessionId && !expired && <Tooltip title="Workflows"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Workflows" ref={workflowsButtonRef} icon={<BranchesOutlined />} onClick={() => setWorkflowsOpen(true)} /></Tooltip>}{state.sessionId && !expired && <Tooltip title="Tasks"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Tasks" ref={tasksButtonRef} icon={<ApartmentOutlined />} onClick={() => setTasksOpen(true)} /></Tooltip>}{state.sessionId && !expired && <Tooltip title="Session goals"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Session goals" ref={goalsButtonRef} icon={<AimOutlined />} onClick={() => setGoalsOpen(true)} /></Tooltip>}{tenantActions}</>}
+              workActions={state.sessionId && !expired ? <>{state.sessionId && !expired && <Tooltip title="Workflows"><Button type="text" size="small" className="chat-tool-action" aria-label="Workflows" icon={<BranchesOutlined />} onClick={() => setWorkflowsOpen(true)}>Workflows</Button></Tooltip>}{state.sessionId && !expired && <Tooltip title="Tasks"><Button type="text" size="small" className="chat-tool-action" aria-label="Tasks" icon={<ApartmentOutlined />} onClick={() => setTasksOpen(true)}>Tasks</Button></Tooltip>}{state.sessionId && !expired && <Tooltip title="Session goals"><Button type="text" size="small" className="chat-tool-action" aria-label="Session goals" icon={<AimOutlined />} onClick={() => setGoalsOpen(true)}>Goals</Button></Tooltip>}</> : null}
+              additionalActions={tenantActions}
+              workButtonRefs={[workflowsButtonRef, tasksButtonRef, goalsButtonRef]}
 
               sessionsToggle={<Flex gap={8}>
                 {isNarrow ? (
@@ -419,7 +421,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
                 ) : null}
               </div>
             ) : null}
-            {inSession && !readonly && tenantMayManageSession(state.sessionId) ? <Flex align="center" wrap gap={token.paddingXS}>
+            {inSession && !readonly && tenantMayManageSession(state.sessionId) ? <Flex align="center" wrap gap={token.paddingXS} className="conversation-column conversation-preferences">
               <Switch size="small" aria-label="Allow agent to complete this chat" checked={state.agentCompletion === 'allowed'} disabled={composerStopEnabled() || state.mode === 'voice'} onChange={allowed => void setAgentCompletion(allowed)} />
               <Typography.Text type="secondary">Allow agent to complete this chat · {state.agentCompletion === 'allowed' ? 'On' : 'Off'}</Typography.Text>
             </Flex> : null}
@@ -453,7 +455,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
                             hasMore={state.chatAgentHasMore}
                             managedInstances={state.chatAgentInstances}
                             identityKey={state.newChatIdentityKey}
-                            error={state.modelCatalogError ?? state.sessionError ?? state.error}
+                            error={state.modelCatalogError ?? (state.connection === 'failed' ? null : state.sessionError ?? state.error)}
 
                             managedInstancesError={state.chatAgentInstancesError}
                             managedInstancesLoading={state.chatAgentInstancesLoading || !bootstrapped}

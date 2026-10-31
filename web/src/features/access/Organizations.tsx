@@ -11,12 +11,12 @@ import { AccessError, AccessLoading, accessErrorMessage } from './AccessFeedback
 import { tenantAccessPath } from './accessRoute';
 import { useIdentityQuery } from './useIdentityQuery';
 
-export function OrganizationsList({ selectedTenantId, switching = false, chat = false }: { selectedTenantId?: string; switching?: boolean; chat?: boolean }) {
+export function OrganizationsList({ selectedTenantId, switching = false, chat = true }: { selectedTenantId?: string; switching?: boolean; chat?: boolean }) {
   const [page, setPage] = useState(0); const [query, setQuery] = useState('');
   const state = useIdentityQuery<Page<Membership>>(membershipsApi(page, query));
   const open = async (tenantId: string) => {
     const target = chat ? `/t/${tenantId}` : tenantAccessPath(tenantId);
-    if (switching) {
+    if (switching || chat) {
       if (await approveAppNavigation(target)) window.location.assign(target);
     } else navigateToAppPath(target);
   };
@@ -25,7 +25,7 @@ export function OrganizationsList({ selectedTenantId, switching = false, chat = 
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={state.reload} /> : <>
       {!state.data?.items.length ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={query ? 'No organizations match your search.' : 'You have not joined an organization yet. Ask an owner for an invitation.'} /> : <div className="access-organization-list">{state.data.items.map(item => <div key={item.tenantId} className="access-organization-row">
         <Flex vertical gap="var(--ac-space-tight)" className="access-row-summary"><Typography.Text strong>{item.name}</Typography.Text><Typography.Text type="secondary">{item.slug}{selectedTenantId === item.tenantId ? ' · Current organization' : ''}</Typography.Text></Flex>
-        <Button icon={<RightOutlined aria-hidden />} iconPlacement="end" onClick={() => void open(item.tenantId)} aria-label={`Open ${item.name}`}>Open</Button>
+        <Flex wrap gap="var(--ac-space-compact)"><Button href={tenantAccessPath(item.tenantId, 'agents')} onClick={event => { event.preventDefault(); navigateToAppPath(tenantAccessPath(item.tenantId, 'agents')); }}>Manage</Button><Button type="primary" icon={<RightOutlined aria-hidden />} iconPlacement="end" onClick={() => void open(item.tenantId)} aria-label={`Open ${item.name}`}>{chat ? 'Open Chat' : 'Open'}</Button></Flex>
       </div>)}</div>}
       {!!state.data?.total && <Pagination current={page + 1} pageSize={10} total={state.data.total} onChange={value => setPage(value - 1)} showSizeChanger={false} responsive showTotal={total => `${total} ${total === 1 ? 'organization' : 'organizations'}`} />}
     </>}

@@ -2,60 +2,56 @@
 version: 1
 slug: "web-src-features-access-accessapp-tsx"
 primary_target: "web/src/features/access/AccessApp.tsx"
-related_targets: ["web/src/features/access/TenantDefinitions.tsx","web/src/features/access/TenantDefinitionDetail.tsx","web/src/features/access/TenantDefinitionEditor.tsx","web/src/features/access/TenantDefinitionResources.tsx","web/src/features/access/TenantDefinitionEvaluations.tsx","web/src/features/access/TenantDefinitionCapabilities.tsx","web/src/features/access/TenantCredentials.tsx","web/src/features/access/TenantCredentialEditor.tsx","web/src/features/admin/CredentialConnectionTag.tsx","web/src/features/admin/EmailAccountDialog.tsx","web/src/features/access/AccountForms.tsx","web/src/features/access/Organizations.tsx","web/src/features/access/Members.tsx","web/src/features/access/Roles.tsx","web/src/features/access/InvitationAcceptance.tsx","web/src/features/access/useAccessDraftGuard.tsx","web/src/services/identity.ts","web/src/features/admin/AdminShell.tsx","web/src/features/admin/AdminCollectionToolbar.tsx","web/src/app.css"]
+related_targets: ["web/src/features/access/TenantDefinitions.tsx", "web/src/features/access/TenantDefinitionDetail.tsx", "web/src/features/access/TenantDefinitionEditor.tsx", "web/src/features/access/TenantDefinitionResources.tsx", "web/src/features/access/TenantDefinitionEvaluations.tsx", "web/src/features/access/TenantDefinitionCapabilities.tsx", "web/src/features/access/TenantCredentials.tsx", "web/src/features/access/TenantCredentialEditor.tsx", "web/src/features/admin/CredentialConnectionTag.tsx", "web/src/features/access/AccountForms.tsx", "web/src/features/access/Organizations.tsx", "web/src/features/access/Members.tsx", "web/src/features/access/Roles.tsx", "web/src/features/access/InvitationAcceptance.tsx", "web/src/features/access/useAccessDraftGuard.tsx", "web/src/services/identity.ts", "web/src/features/admin/AdminShell.tsx", "web/src/features/admin/AdminCollectionToolbar.tsx", "web/src/app.css", "web/src/app/antdTheme.ts", "web/src/app/AppShell.tsx"]
 ---
 
-# Account and organization access
+# AccessApp
 
-Mode: Operate. Extend the incumbent dark Ant Design v6 system. The product contract is docs/19-multi-tenant-iam-ux.md; current implemented scope and remaining security cutover are in docs/reports/multitenant-iam-delivery-2026-10-16.md.
+Mode: Operate. Code-led.
 
-PURPOSE: Sign in once, choose an organization, understand current authority, invite people and manage roles without confusing human, agent, system and tenant privileges.
+## Direction contract
 
-COMPOSITION: Account forms are a bounded single column with persistent inline errors. Authenticated screens use AdminShell with an explicit context model, the same header/navigation drawer/page heading, 8/12/16 spacing and direct Ant Design controls. Organization selection is a searchable, paged list reused inside the switch dialog. Members and roles use the shared collection toolbar and wrapping two-column tables. Keep one inset owner and no nested card scaffolding.
+THESIS: Task-first contextual administration. Use the shared heading, scope trail, native collection/filter/detail/edit compositions and dark evergreen tokens. Keep resource ownership, exact revisions, server authority, draft guards and honest loading/error/read-only/uncertain states.
 
-AUTHORITY: Current server permissions control navigation and editable controls. A global Principal reference alone is never a platform-admin flag. Reader can inspect builtins but has no mutation CTA. Organization selection is not a platform-admin destination. Existing unscoped Chat/resources are not exposed through these access pages; their security cutover remains pending.
+OWN-WORLD: Native Ant Design v6 on evergreen layout/container/elevated surfaces, warm white working text, mint links and independent semantic status colors.
 
-FORMS: Role authoring uses grouped searchable permissions with contextual accessible names and People only labels. Builtins are read-only. A bounded native Drawer owns scrolling and reachable Save/Cancel; its wrapper is capped at the viewport. Match 40px mobile controls without adding height to inner affix inputs. Use the shared confirmation and form-feedback owners. One dirty guard owns nested Escape and deduplicates confirmation until the native close transition finishes.
+STORY: Understand the authorized owner and current saved state, perform the named task, and inspect its attributable result or explicit recovery.
 
-STATES: Real login failures, expired sessions, no organizations, search emptiness, read-only access, revoked membership, last-Owner and stale revision errors have named recovery. Do not suggest Reload for a last-Owner denial. Do not add horizontal-table guidance to a non-scrolling list. Success follows a committed response. Invitation links are shown once, remain purpose-bound and are transmitted in POST bodies after stripping the URL fragment; no email delivery is implied.
+FIRST VIEWPORT: This composition remains inside its authorized page/Chat/inspector owner. The shared task/scope heading precedes native controls, evidence and actions; narrow layouts wrap and use local overflow.
 
-RECOVERY: An unmatched permission search shows native Empty with Clear search; clearing returns focus to the search field and preserves selected permissions. Invitation Clipboard failure, including an absent browser API, keeps the one-time link selectable and shows persistent inline manual-copy guidance. Successful retry clears the error. Member-specific role choices reset when closing or changing inspectors. Failed member reads keep their error and Reload inside the open drawer; successful assignments are not replayed or described as unsaved when only the refresh fails. Preserve the shared 16px parent stack, native controls and narrow viewport containment for these states.
-
-SWITCHING: Unmount/abort previous scoped reads before rendering a new context. Full document switching closes previous browser connection/audio resources. Fetch current effective tenant permissions on each destination. Cookie/CSRF material stays in browser-managed cookies or transient service memory, never durable client storage.
-
-VERIFICATION: The dated access UI report owns the bounded audit/correction/confirmation, real Synthetic browser interactions, widths 320/390/768/1024/1440 and exact checks. No durable Approval, agent access, tenant-aware Chat, full resource isolation or production acceptance is established by this foundation slice.
-
-
-DEFINITION EXTENSION: The canonical owned Definition collection, owner/draft headings, shared configuration sections, resource/scenario drawers and sticky Save/Publish actions reuse incumbent compositions and spacing owners. Same-owner section navigation preserves the candidate; departing unsaved edits confirms discard. Read-only resource grants, stale saves, revoked access, retired requests and acknowledged-write recovery have explicit states. Sandbox catalog, rich previews, assignment panels and complete runtime integration remain pending. The dated tenant Definition UI report owns the two captured Test & Publish widths and actual browser evidence; no new palette, tokens or component recipes were introduced.
-
-## Credential extension direction contract
-
-THESIS: Make an organization's protected accounts understandable and manageable through the incumbent collection and exact-owner inspector. Connection, configuration, binding and use remain separate facts.
-
-OWN-WORLD: Preserve the current dark Ant Design v6 palette, typography, native controls, 8/12/16 spacing and existing AdminShell. Reuse credential fields, connection tags, collection toolbar and responsive detail alignment.
-
-STORY: Find readable credentials, inspect a saved account, edit safe configuration or replace a transient secret, then connect/disconnect Google explicitly. Show current scoped authority, retained drafts and recoverable failures without implying runtime use is delivered.
-
-FIRST VIEWPORT: One searchable paged collection, Reload and permitted Add credential action. A bounded native inspector holds full metadata and connection controls; focused creation/edit dialogs protect unsaved input.
-
-FORM: Existing organization access composition extension; code-led, no concept seed or new visual world. Canonical OAuth return opens the exact saved credential and displays a verified connection outcome.
+FORM: Inherit the selected field-guide working grammar, candidate 7, seed `cb1be48c`; contextual classification without literal book decoration.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
-## Organization Sandbox catalog successor
+The [Product Experience Contract](../../docs/product-experience-contract.md) and [frontend specification](../../docs/13-frontend-implementation-spec.md) own behavior. [DESIGN](../../.agents/context/DESIGN.md) owns concise visual guidance. Ant Design v6 controls and shared layout owners provide the presentation; no second framework or page-local tokens.
 
-The scoped Integrations Sandbox catalog is now represented by [its focused surface brief](web-src-features-access-tenantsandboxes-tsx.md). It reuses this shell and the existing native access Drawer/collection owners, with shared platform profile fields/details. [Focused evidence](../../docs/reports/tenant-sandbox-catalog-ui-verification-2026-10-18.md) supersedes catalog-UI-pending notes above only; Instance Sandbox configuration/verification, Session controls UI and the wider tenant cutover remain open. Preserve the incumbent system and historical sidecar fingerprints.
+## Qualification
 
-## Tenant webhook connections successor
+The [delivery ledger](../../docs/reports/product-experience-delivery-2026-10-30.md) and [master manifest](../../docs/reports/assets/product-experience/coverage.json) record actual journeys, roles, inspected images and open limits. This refreshed brief is source metadata, not acceptance. Preserve existing meaningful states and operations; verify desktop/tablet/mobile and narrow content/keyboard/authority boundaries.
 
-Organization Integrations → Events now uses [the focused webhook surface brief](web-src-features-access-tenantevents-tsx.md) for scoped source management, transient tokens and bounded literal receipts beside independently read built-in metadata. It reuses this shell, collection/configuration sections, native access Drawer, confirmations and draft guard. [Focused qualification](../../docs/reports/tenant-webhook-verification-2026-10-21.md) covers this source/receipt module only; event subscriptions/fanout, the wider tenant cutover and full design/security acceptance remain open. Preserve the incumbent tokens and historical sidecar fingerprints.
+## Source fingerprints
 
-## Tenant Email Credential monitoring successor
-
-The existing Credential details Drawer now includes the shared account-wide monitoring composition: one status, baseline-from-now explanation, wrapping native controls, saved timing and collapsed diagnostics. Preserve the dark Ant Design v6 system, 8/12/16 rhythm and responsive detail alignment. Tenant detail shows no unfiltered subscriber count or legacy links. Monitoring drafts use the existing departure guard; current busy commands coordinate with account/OAuth editing. Stale or uncertain outcomes require explicit reload, and lost source reads retire protected content. The [interaction contract](../../docs/19-multi-tenant-iam-ux.md#tenant-email-monitoring-conversion-interaction-contract) owns behavior. The fresh finish reviewer shipped five bounded section captures through 320px for enabled/queued presentation; other recovery, permission, focus and diagnostics states have source/functional evidence only. Backend qualification and full module/proposal acceptance remain open at this checkpoint. Preserve historical sidecar fingerprints.
-
-## Final IAM acceptance successor — 2026-10-24
-
-[Final bounded acceptance](../../docs/reports/tenant-final-ui-acceptance-2026-10-24.md) and its source/capture manifest supersede the historical pending presentation notes for the original IAM proposal. Actual Account/invitation/switch/Members/roles/Agent Access/Approvals/Chat/refusal/recovery journeys use the incumbent Ant Design v6 owners at five widths. Shared counts use singular result/request correctly; terminal management proposals describe historical values without an unavailable Cancel action. Preserve the existing tokens/layouts and historical evidence. Full WCAG, physical audio/touch and live-provider outcomes are not claimed. `.agents` remains untouched.
-
-SPACE SUCCESSOR (2026-10-25): Spaces and Secrets join the same organization shell. Space detail owns context, memberships, home files, Environments and separate scoped access. Retire Instance Workspace navigation. The exact state/permission/draft/contrast direction is in [Space management](space-environment-management.md); canonical behavior and measured evidence remain in docs/13 and the dated implementation ledger.
+| Source | SHA256 |
+| --- | --- |
+| `web/src/features/access/AccessApp.tsx` | `893cb74a8e64f0a2db0ac35b93f43b48e0cd3f4948d3df67a3f7ac209c9f0e51` |
+| `web/src/features/access/TenantDefinitions.tsx` | `7269caa32d7472ff81f702b7083fd77920919ef69da3763fc590c37606a2b6c3` |
+| `web/src/features/access/TenantDefinitionDetail.tsx` | `05fd02f131bea35fbbd129d9a8ac27d758176fa7f5e69f706c7a7d645930c4f7` |
+| `web/src/features/access/TenantDefinitionEditor.tsx` | `b2b8b7b3a9098e4e495315c85af55a4b430500ee63e0c2d9356527700c15e9e3` |
+| `web/src/features/access/TenantDefinitionResources.tsx` | `b7eb2712cea65c6f78f2891f3c201d2d3b275957823e4de98288542f0e810d45` |
+| `web/src/features/access/TenantDefinitionEvaluations.tsx` | `279c9967cee5391547fbc8655011a0334887355bfccfe3733f1f8b08ecffa74e` |
+| `web/src/features/access/TenantDefinitionCapabilities.tsx` | `658c36b0357f2517779efc54bbc362cb0eca9e399a310bc47201459fe3da5c40` |
+| `web/src/features/access/TenantCredentials.tsx` | `a7bc63b984149dde092f8b1fc6d09e29833548819062412b406c6c59639fc35d` |
+| `web/src/features/access/TenantCredentialEditor.tsx` | `c45ecb76c12f32da197795043f27762b60f30529470cedcb85d831db6ed2ef5e` |
+| `web/src/features/admin/CredentialConnectionTag.tsx` | `8a6ade94c5053e7aa9a44073d386303fac87dd8500435276b11372f272d81729` |
+| `web/src/features/access/AccountForms.tsx` | `62a822bd844235509266b14782391eebe07b180ed7e4f83fd79aaae74e0d2ad0` |
+| `web/src/features/access/Organizations.tsx` | `404976e1587e3da4c16ee13cc259f9b32176ecfe01fbf4e4a42f06690e131bed` |
+| `web/src/features/access/Members.tsx` | `e82f2effca36ec0d28bf97e5f520f0febc2cdddd2c433f9f026aaa1b286381c4` |
+| `web/src/features/access/Roles.tsx` | `a9124f4d673c7687e776ff969e4aaa0f899939f11404f632ab9a9b131859454e` |
+| `web/src/features/access/InvitationAcceptance.tsx` | `b7e2a934726263a7ff55109614730d5853644add89e950212ed9a8041f16100f` |
+| `web/src/features/access/useAccessDraftGuard.tsx` | `e2aa247ba8226f903cd0476300eaf5a88287978cf31db4210e6a950907f99e7b` |
+| `web/src/services/identity.ts` | `974dbb65971db690e544ad80737800453848e363381248e4f9267e9409504355` |
+| `web/src/features/admin/AdminShell.tsx` | `ad2457d2e505363bc514a449a831aaa4f7b372cf8ae0f9cfbd7c5cd31e384c92` |
+| `web/src/features/admin/AdminCollectionToolbar.tsx` | `0fe5aba5f8dd821c2726d700fd7c1a80e8d4a6ff9dce5031c12ba536e01047e5` |
+| `web/src/app.css` | `e827076d776b5687e59bd83d86cba88d889203430bc8ae23a14e85c6014e0cae` |
+| `web/src/app/antdTheme.ts` | `8f13dc29dc96e4ef2dcc86be8150743d7656975cbe202b06f04f039a8a8109ae` |
+| `web/src/app/AppShell.tsx` | `35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1` |

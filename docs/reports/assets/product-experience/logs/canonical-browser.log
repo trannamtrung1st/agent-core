@@ -1,0 +1,556 @@
+
+Running 38 tests using 1 worker
+
+(node:517) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 e2e/managed-general-assistant.spec.ts:10:1 › owner setup retry refreshes the ordinary picker and starts a real conversation (7.7s)
+  ✓   2 e2e/managed-general-assistant.spec.ts:41:1 › managed default ordinary Chat, hide, retained conversation, non-destructive reset and responsive management (16.5s)
+  ✓   3 e2e/product-experience.spec.ts:53:1 › J01–J05: first use, actual answer, retained draft, labeled tools and protected file preview (15.5s)
+  ✓   4 e2e/product-experience.spec.ts:94:1 › J06/J13/J14/J15: contextual navigation, settings categories, dirty guard and authoritative read-only scope (7.2s)
+  ✓   5 e2e/product-experience.spec.ts:129:1 › J10: author, validate, publish, start and independently sign off an actual Workflow (14.1s)
+  ✓   6 e2e/product-experience.spec.ts:155:1 › complete route families retain contextual access across organization, agent and system scopes (23.8s)
+  ✓   7 e2e/product-experience.spec.ts:196:1 › J07/J15: Space and Environment authoring retain exact identity and recover stale edits (8.1s)
+  ✓   8 e2e/session-goals-stabilization.spec.ts:16:1 › Goal stabilization preserves progress and verified proof and protects optional prerequisites (15.8s)
+  ✓   9 e2e/session-goals.spec.ts:9:1 › real Goal plan, bound Synthetic work, exact Evaluation, acceptance and responsive recovery (21.9s)
+  ✘  10 e2e/task-delegation.spec.ts:10:1 › real delegated worker asks, waits, receives human guidance, completes and preserves independent Goals (33.9s)
+(node:2395) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  11 e2e/tenant-approval-independence.spec.ts:36:3 › a different person decides Review after requester logout: approve (19.5s)
+  ✓  12 e2e/tenant-approval-independence.spec.ts:36:3 › a different person decides Review after requester logout: reject (19.8s)
+  ✓  13 e2e/tenant-approval-independence.spec.ts:36:3 › a different person decides Authorize once after requester logout: approve (1.3m)
+  ✓  14 e2e/tenant-approval-independence.spec.ts:36:3 › a different person decides Authorize once after requester logout: reject (17.9s)
+  ✓  15 e2e/tenant-chat.spec.ts:77:1 › tenant text, rendered receipt, reload, rename, archive and read-only completion (15.3s)
+  ✓  16 e2e/tenant-chat.spec.ts:116:1 › organization switch and logout retire prior history, draft and transport (15.1s)
+  ✓  17 e2e/tenant-chat.spec.ts:137:1 › tenant attachment-only input retains the original file after reload (9.9s)
+  ✘  18 e2e/tenant-chat.spec.ts:158:1 › real websocket reconnect preserves unsent draft and does not duplicate admitted text (21.9s)
+(node:4784) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  19 e2e/tenant-chat.spec.ts:193:1 › local queue drains once and Stop cancels the delivered canonical Run (23.7s)
+  ✓  20 e2e/tenant-chat.spec.ts:216:1 › Chat-only member has no management controls and revoked Chat clears protected content (15.9s)
+  ✓  21 e2e/tenant-chat.spec.ts:246:56 › original Chat recovers a durable approve decision and remains usable while waiting (24.8s)
+  ✓  22 e2e/tenant-chat.spec.ts:246:56 › original Chat recovers a durable reject decision and remains usable while waiting (15.8s)
+  ✓  23 e2e/tenant-chat.spec.ts:292:1 › tenant Steer atomically interrupts the current Run with row and keyboard controls (28.9s)
+  ✓  24 e2e/tenant-chat.spec.ts:352:1 › Chat permission permits Queue while Steer requires independent Run cancellation authority (10.0s)
+  ✘  25 e2e/tenant-chat.spec.ts:388:34 › authenticated entry and retired browser routes at 1440px (22.4s)
+(node:6569) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  26 e2e/tenant-chat.spec.ts:388:34 › authenticated entry and retired browser routes at 390px (22.8s)
+(node:6879) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  27 e2e/tenant-definitions.spec.ts:17:1 › exact Definition file access supports read-only settings, scoped edits and revoked-write recovery (19.3s)
+  ✓  28 e2e/tenant-definitions.spec.ts:93:1 › owned Definition authoring, resource/evaluation publication and lifecycle recovery (17.3s)
+  ✘  29 e2e/tenant-definitions.spec.ts:173:1 › resource-only Reader, stale save recovery and tenant switch discard old reads (24.5s)
+(node:7592) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  30 e2e/tenant-model-management.spec.ts:27:1 › protected-key onboarding, explicit default, stale connection recovery and responsive configuration (110ms)
+(node:7599) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  31 e2e/tenant-model-management.spec.ts:187:1 › shared preset edits retain tenant declarations and read-only members cannot mutate model configuration (109ms)
+(node:7604) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  32 e2e/tenant-model-management.spec.ts:236:1 › unavailable explicit model refuses without a Run, retains the draft, and recovers after deliberate retry (117ms)
+(node:7629) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  33 e2e/tenant-model-management.spec.ts:310:1 › Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance (107ms)
+(node:7634) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  34 e2e/tenant-model-management.spec.ts:362:1 › configured native offering flows through unattended and Automation selectors, exact approval and completed work (112ms)
+(node:7639) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  35 e2e/tenant-model-management.spec.ts:430:1 › Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort (115ms)
+(node:7644) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  36 e2e/tenant-model-management.spec.ts:481:1 › omitted manual default requires explicit recovery and fresh confirmation after conflict (120ms)
+(node:7649) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  37 e2e/tenant-voice.spec.ts:13:34 › tenant voice keeps capture active, credits heard separately, and requires a fresh click after reconnect at 1440px (1.5m)
+(node:8656) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  38 e2e/tenant-voice.spec.ts:13:34 › tenant voice keeps capture active, credits heard separately, and requires a fresh click after reconnect at 390px (28.5s)
+
+
+  1) e2e/task-delegation.spec.ts:10:1 › real delegated worker asks, waits, receives human guidance, completes and preserves independent Goals 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Task success is separate from Goal verification.', { exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByText('Task success is separate from Goal verification.', { exact: true }) with timeout 15000ms
+      - waiting for getByText('Task success is separate from Goal verification.', { exact: true })
+
+
+      47 |   await page.getByRole('button', { name: 'Send guidance', exact: true }).click();
+      48 |   await expect(page.getByText('Synthetic worker completed the assigned review. No external effects were performed.', { exact: true })).toBeVisible();
+    > 49 |   await expect(page.getByText('Task success is separate from Goal verification.', { exact: true })).toBeVisible();
+         |                                                                                                     ^
+      50 |   await page.getByRole('button', { name: 'Acknowledge result', exact: true }).click();
+      51 |   await expect(page.getByRole('button', { name: 'Acknowledge result', exact: true })).toHaveCount(0);
+      52 |   await captureExperience(page, 'task-result');
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/task-delegation.spec.ts:49:101
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/task-delegation-real-deleg-97319-preserves-independent-Goals/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/task-delegation-real-deleg-97319-preserves-independent-Goals/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/task-delegation-real-deleg-97319-preserves-independent-Goals/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/task-delegation-real-deleg-97319-preserves-independent-Goals/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) e2e/tenant-chat.spec.ts:158:1 › real websocket reconnect preserves unsent draft and does not duplicate admitted text 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      182 |     const initial = connections; await socket!.close({ code: 1012, reason: 'Synthetic reconnect verification' });
+      183 |     await expect.poll(() => connections).toBeGreaterThan(initial);
+    > 184 |     await expect.poll(() => staleInjected).toBe(true);
+          |                                            ^
+      185 |     await expect(page.getByTestId('connection')).toHaveText('Ready');
+      186 |     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeEnabled();
+      187 |     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveText('My preserved draft');
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-chat.spec.ts:184:44
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-chat-real-websocket-abd6c-not-duplicate-admitted-text/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-chat-real-websocket-abd6c-not-duplicate-admitted-text/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-chat-real-websocket-abd6c-not-duplicate-admitted-text/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-chat-real-websocket-abd6c-not-duplicate-admitted-text/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) e2e/tenant-chat.spec.ts:388:34 › authenticated entry and retired browser routes at 1440px ─────
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for getByRole('navigation', { name: 'Admin navigation', exact: true }).getByRole('link', { name: 'Roles & permissions', exact: true })
+
+
+      411 |     await page.goto(`${f.path}/admin/agents`);
+      412 |     await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+    > 413 |     if (width < 1024) await page.getByRole('button', { name: 'Open Admin navigation', exact: true }).click();
+          |                                                                                                              ^
+      414 |     await page.getByRole('navigation', { name: 'Admin navigation', exact: true }).getByRole('link', { name: 'Roles & permissions', exact: true }).click();
+      415 |     await expect(page.getByRole('heading', { name: 'Roles & permissions', exact: true })).toBeVisible();
+      416 |     if (width < 1024) await page.getByRole('button', { name: 'Open Admin navigation', exact: true }).click();
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-chat.spec.ts:413:147
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-chat-authenticated--47d37-ed-browser-routes-at-1440px/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-chat-authenticated--47d37-ed-browser-routes-at-1440px/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-chat-authenticated--47d37-ed-browser-routes-at-1440px/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-chat-authenticated--47d37-ed-browser-routes-at-1440px/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) e2e/tenant-chat.spec.ts:388:34 › authenticated entry and retired browser routes at 390px ──────
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for getByRole('navigation', { name: 'Admin navigation', exact: true }).getByRole('link', { name: 'Roles & permissions', exact: true })
+
+
+      411 |     await page.goto(`${f.path}/admin/agents`);
+      412 |     await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+    > 413 |     await openDestination(page, 'Roles & permissions');
+          |                                                        ^
+      414 |     await expect(page.getByRole('heading', { name: 'Roles & permissions', exact: true })).toBeVisible();
+      415 |     await openDestination(page, 'Agents');
+      416 |     await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-chat.spec.ts:413:147
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) e2e/tenant-definitions.spec.ts:173:1 › resource-only Reader, stale save recovery and tenant switch discard old reads 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('button', { name: /^Open / }).first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('button', { name: /^Open / }).first() with timeout 15000ms
+      - waiting for getByRole('button', { name: /^Open / }).first()
+
+
+      4 |
+      5 | async function login(page: Page, login = process.env.TENANT_UI_LOGIN ?? 'access-owner@example.test', password = process.env.TENANT_UI_PASSWORD ?? 'synthetic-access-test-password') {
+    > 6 |   await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(login); await page.getByLabel('Password', { exact: true }).fill(password); await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('button', { name: /^Open / }).first()).toBeVisible();
+        |                                                                                                                                                                                                                                                                                                             ^
+      7 | }
+      8 | async function request<T>(page: Page, path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
+      9 |   return page.evaluate(async ({ path, body, method }) => {
+        at login (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-definitions.spec.ts:6:301)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-definitions.spec.ts:187:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-definitions-resourc-b88a4-nt-switch-discard-old-reads/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-definitions-resourc-b88a4-nt-switch-discard-old-reads/test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-definitions-resourc-b88a4-nt-switch-discard-old-reads/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-definitions-resourc-b88a4-nt-switch-discard-old-reads/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-definitions-resourc-b88a4-nt-switch-discard-old-reads/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) e2e/tenant-model-management.spec.ts:27:1 › protected-key onboarding, explicit default, stale connection recovery and responsive configuration 
+
+    Error: POST /api/v2/auth/login: 429
+
+    expect(received).toBeTruthy()
+
+    Received: false
+
+       8 |   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
+       9 |   const response = await api.fetch(path, { method, data: body, headers: { 'X-AgentCore-CSRF': csrf.token } });
+    > 10 |   expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy();
+         |                                                                    ^
+      11 |   return response.status() === 204 ? undefined as T : response.json();
+      12 | }
+      13 | async function setup() {
+        at call (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:10:68)
+        at setup (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:16:3)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:28:13
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-pr-b552d-nd-responsive-configuration/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-pr-b552d-nd-responsive-configuration/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-pr-b552d-nd-responsive-configuration/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-pr-b552d-nd-responsive-configuration/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) e2e/tenant-model-management.spec.ts:187:1 › shared preset edits retain tenant declarations and read-only members cannot mutate model configuration 
+
+    Error: POST /api/v2/auth/login: 429
+
+    expect(received).toBeTruthy()
+
+    Received: false
+
+       8 |   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
+       9 |   const response = await api.fetch(path, { method, data: body, headers: { 'X-AgentCore-CSRF': csrf.token } });
+    > 10 |   expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy();
+         |                                                                    ^
+      11 |   return response.status() === 204 ? undefined as T : response.json();
+      12 | }
+      13 | async function setup() {
+        at call (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:10:68)
+        at setup (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:16:3)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:188:13
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-sh-2ec5a--mutate-model-configuration/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-sh-2ec5a--mutate-model-configuration/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-sh-2ec5a--mutate-model-configuration/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-sh-2ec5a--mutate-model-configuration/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) e2e/tenant-model-management.spec.ts:236:1 › unavailable explicit model refuses without a Run, retains the draft, and recovers after deliberate retry 
+
+    Error: POST /api/v2/auth/login: 429
+
+    expect(received).toBeTruthy()
+
+    Received: false
+
+       8 |   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
+       9 |   const response = await api.fetch(path, { method, data: body, headers: { 'X-AgentCore-CSRF': csrf.token } });
+    > 10 |   expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy();
+         |                                                                    ^
+      11 |   return response.status() === 204 ? undefined as T : response.json();
+      12 | }
+      13 | async function setup() {
+        at call (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:10:68)
+        at setup (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:16:3)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:237:13
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-un-9ba25-vers-after-deliberate-retry/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-un-9ba25-vers-after-deliberate-retry/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-un-9ba25-vers-after-deliberate-retry/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-un-9ba25-vers-after-deliberate-retry/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) e2e/tenant-model-management.spec.ts:310:1 › Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance 
+
+    Error: POST /api/v2/auth/login: 429
+
+    expect(received).toBeTruthy()
+
+    Received: false
+
+       8 |   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
+       9 |   const response = await api.fetch(path, { method, data: body, headers: { 'X-AgentCore-CSRF': csrf.token } });
+    > 10 |   expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy();
+         |                                                                    ^
+      11 |   return response.status() === 204 ? undefined as T : response.json();
+      12 | }
+      13 | async function setup() {
+        at call (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:10:68)
+        at setup (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:16:3)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:311:13
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-Ag-91408-s-distinct-from-inheritance/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-Ag-91408-s-distinct-from-inheritance/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-Ag-91408-s-distinct-from-inheritance/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-Ag-91408-s-distinct-from-inheritance/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) e2e/tenant-model-management.spec.ts:362:1 › configured native offering flows through unattended and Automation selectors, exact approval and completed work 
+
+    Error: POST /api/v2/auth/login: 429
+
+    expect(received).toBeTruthy()
+
+    Received: false
+
+       8 |   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
+       9 |   const response = await api.fetch(path, { method, data: body, headers: { 'X-AgentCore-CSRF': csrf.token } });
+    > 10 |   expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy();
+         |                                                                    ^
+      11 |   return response.status() === 204 ? undefined as T : response.json();
+      12 | }
+      13 | async function setup() {
+        at call (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:10:68)
+        at setup (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:16:3)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:363:13
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-co-01883-approval-and-completed-work/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-co-01883-approval-and-completed-work/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-co-01883-approval-and-completed-work/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-co-01883-approval-and-completed-work/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) e2e/tenant-model-management.spec.ts:430:1 › Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort 
+
+    Error: POST /api/v2/auth/login: 429
+
+    expect(received).toBeTruthy()
+
+    Received: false
+
+       8 |   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
+       9 |   const response = await api.fetch(path, { method, data: body, headers: { 'X-AgentCore-CSRF': csrf.token } });
+    > 10 |   expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy();
+         |                                                                    ^
+      11 |   return response.status() === 204 ? undefined as T : response.json();
+      12 | }
+      13 | async function setup() {
+        at call (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:10:68)
+        at setup (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:16:3)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:431:13
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-De-cd3db-compatible-inherited-effort/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-De-cd3db-compatible-inherited-effort/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-De-cd3db-compatible-inherited-effort/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-De-cd3db-compatible-inherited-effort/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) e2e/tenant-model-management.spec.ts:481:1 › omitted manual default requires explicit recovery and fresh confirmation after conflict 
+
+    Error: POST /api/v2/auth/login: 429
+
+    expect(received).toBeTruthy()
+
+    Received: false
+
+       8 |   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
+       9 |   const response = await api.fetch(path, { method, data: body, headers: { 'X-AgentCore-CSRF': csrf.token } });
+    > 10 |   expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy();
+         |                                                                    ^
+      11 |   return response.status() === 204 ? undefined as T : response.json();
+      12 | }
+      13 | async function setup() {
+        at call (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:10:68)
+        at setup (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:16:3)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:482:13
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-om-d8d2c-confirmation-after-conflict/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-om-d8d2c-confirmation-after-conflict/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-om-d8d2c-confirmation-after-conflict/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-model-management-om-d8d2c-confirmation-after-conflict/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  13) e2e/tenant-voice.spec.ts:13:34 › tenant voice keeps capture active, credits heard separately, and requires a fresh click after reconnect at 1440px 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      78 |     await expect.poll(() => page.evaluate(() => window.__agentCore?.playbackConsumed() ?? 0)).toBeGreaterThan(0);
+      79 |     await expect.poll(() => page.evaluate(() => window.__agentCore?.captureStreaming())).toBe(true);
+    > 80 |     await expect.poll(() => receiptHeld).toBe(true);
+         |                                          ^
+      81 |     const captured = await page.evaluate(() => window.__agentCore?.audioFramesSent() ?? 0);
+      82 |     await expect.poll(() => page.evaluate(() => window.__agentCore?.audioFramesSent() ?? 0)).toBeGreaterThan(captured + 20);
+      83 |     await page.getByRole('button', { name: 'Mute', exact: true }).click();
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-voice.spec.ts:80:42
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-voice-tenant-voice--45d80-k-after-reconnect-at-1440px/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-voice-tenant-voice--45d80-k-after-reconnect-at-1440px/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-voice-tenant-voice--45d80-k-after-reconnect-at-1440px/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-voice-tenant-voice--45d80-k-after-reconnect-at-1440px/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  14) e2e/tenant-voice.spec.ts:13:34 › tenant voice keeps capture active, credits heard separately, and requires a fresh click after reconnect at 390px 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      78 |     await expect.poll(() => page.evaluate(() => window.__agentCore?.playbackConsumed() ?? 0)).toBeGreaterThan(0);
+      79 |     await expect.poll(() => page.evaluate(() => window.__agentCore?.captureStreaming())).toBe(true);
+    > 80 |     await expect.poll(() => receiptHeld).toBe(true);
+         |                                          ^
+      81 |     const captured = await page.evaluate(() => window.__agentCore?.audioFramesSent() ?? 0);
+      82 |     await expect.poll(() => page.evaluate(() => window.__agentCore?.audioFramesSent() ?? 0)).toBeGreaterThan(captured + 20);
+      83 |     await page.getByRole('button', { name: 'Mute', exact: true }).click();
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-voice.spec.ts:80:42
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-voice-tenant-voice--cabf2-ck-after-reconnect-at-390px/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-voice-tenant-voice--cabf2-ck-after-reconnect-at-390px/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-voice-tenant-voice--cabf2-ck-after-reconnect-at-390px/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-experience-results-YTVXhz/tenant-voice-tenant-voice--cabf2-ck-after-reconnect-at-390px/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  14 failed
+    e2e/task-delegation.spec.ts:10:1 › real delegated worker asks, waits, receives human guidance, completes and preserves independent Goals 
+    e2e/tenant-chat.spec.ts:158:1 › real websocket reconnect preserves unsent draft and does not duplicate admitted text 
+    e2e/tenant-chat.spec.ts:388:34 › authenticated entry and retired browser routes at 1440px ──────
+    e2e/tenant-chat.spec.ts:388:34 › authenticated entry and retired browser routes at 390px ───────
+    e2e/tenant-definitions.spec.ts:173:1 › resource-only Reader, stale save recovery and tenant switch discard old reads 
+    e2e/tenant-model-management.spec.ts:27:1 › protected-key onboarding, explicit default, stale connection recovery and responsive configuration 
+    e2e/tenant-model-management.spec.ts:187:1 › shared preset edits retain tenant declarations and read-only members cannot mutate model configuration 
+    e2e/tenant-model-management.spec.ts:236:1 › unavailable explicit model refuses without a Run, retains the draft, and recovers after deliberate retry 
+    e2e/tenant-model-management.spec.ts:310:1 › Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance 
+    e2e/tenant-model-management.spec.ts:362:1 › configured native offering flows through unattended and Automation selectors, exact approval and completed work 
+    e2e/tenant-model-management.spec.ts:430:1 › Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort 
+    e2e/tenant-model-management.spec.ts:481:1 › omitted manual default requires explicit recovery and fresh confirmation after conflict 
+    e2e/tenant-voice.spec.ts:13:34 › tenant voice keeps capture active, credits heard separately, and requires a fresh click after reconnect at 1440px 
+    e2e/tenant-voice.spec.ts:13:34 › tenant voice keeps capture active, credits heard separately, and requires a fresh click after reconnect at 390px 
+  24 passed (12.0m)

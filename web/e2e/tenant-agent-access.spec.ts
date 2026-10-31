@@ -1,16 +1,14 @@
+import { canonicalFetch, signInTenant } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 
 const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password';
 let identity: Awaited<ReturnType<APIRequestContext['storageState']>>;
 async function call<T>(api: APIRequestContext, path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
-  const response = await api.fetch(path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
+  const response = await canonicalFetch(api, path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
   expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy(); return response.status() === 204 ? undefined as T : response.json();
 }
-async function signIn(page: Page, email = login, secret = password) {
-  await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(email); await page.getByLabel('Password', { exact: true }).fill(secret);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
-}
+async function signIn(page: Page, email = login, secret = password) { await signInTenant(page, email, secret); }
 async function select(page: Page, name: string, label: string) { await page.getByRole('combobox', { name, exact: true }).click(); await page.getByTitle(label, { exact: true }).click(); }
 async function fixture() {
   const api = await requests.newContext({ baseURL: process.env.TENANT_CHAT_TEST_BASE_URL, storageState: identity }); const nonce = crypto.randomUUID().slice(0, 8);
@@ -35,12 +33,12 @@ test('create, grant exact chat and independent execution, inspect permissions, r
   page.on('request', request => { if (/^\/api\/v[12]\/(owner-capability|agent-instances|admin)(\/|$)/.test(new URL(request.url()).pathname)) legacy.push(request.url()); });
   try {
     await page.setViewportSize({ width: 320, height: 740 }); await signIn(page); await page.goto(f.path);
-    await page.getByRole('button', { name: 'New instance', exact: true }).click(); await page.getByRole('dialog', { name: 'New agent instance' }).getByRole('button', { name: 'Cancel', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'New instance', exact: true })).toBeFocused(); await page.getByRole('button', { name: 'New instance', exact: true }).click();
-    const drawer = page.getByRole('dialog', { name: 'New agent instance' }); await drawer.getByLabel('Agent template', { exact: true }).fill('Alex');
+    await page.getByRole('button', { name: 'New agent', exact: true }).click(); await page.getByRole('dialog', { name: 'New agent' }).getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'New agent', exact: true })).toBeFocused(); await page.getByRole('button', { name: 'New agent', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: 'New agent' }); await drawer.getByLabel('Agent template', { exact: true }).fill('Alex');
     await page.getByTitle('Alex · Speaking examiner · v1', { exact: true }).click(); await drawer.getByRole('button', { name: 'Close', exact: true }).click();
     await page.getByRole('dialog', { name: 'Discard unsaved changes?' }).getByRole('button', { name: 'Keep editing', exact: true }).click();
-    await drawer.getByRole('button', { name: 'Create instance', exact: true }).click();
+    await drawer.getByRole('button', { name: 'Create agent', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`${f.path}/[0-9a-f-]+/access$`)); const id = page.url().split('/').at(-2)!;
     await select(page, 'Person or agent', 'Avery Nguyen — long member name for scoped access · Person'); await select(page, 'Chat role', 'Agent-specific Chat');
     await page.getByRole('button', { name: 'Grant chat access', exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Grant chat access', exact: true }).click();
@@ -80,7 +78,7 @@ test('a resource-scoped reader can inspect only that agent and loses private con
     const assignment = await call<{ assignmentId: string }>(f.api, f.prefix + '/role-assignments', { principalId: f.member.principalId, roleId: role.roleId, resourceType: 'agent', resourceId: id, expectedRevision: await f.revision() });
     await signIn(page, f.memberLogin, f.memberPassword); await page.goto(`${f.path}/${id}/access`);
     await expect(page.getByRole('heading', { name: 'Who can chat?', exact: true })).toBeVisible();
-    for (const name of ['Grant chat access', 'Grant execution role', 'Archive instance', 'New instance']) await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
+    for (const name of ['Grant chat access', 'Grant execution role', 'Archive instance', 'New agent']) await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
     await expect(page.getByRole('radio', { name: 'Organization', exact: true })).toHaveCount(0);
     await call(f.api, `${f.prefix}/role-assignments/${assignment.assignmentId}?expectedRevision=${await f.revision()}`, undefined, 'DELETE');
     await page.getByRole('button', { name: 'Reload access', exact: true }).click(); await expect(page.getByText(/You do not have permission/)).toBeVisible();

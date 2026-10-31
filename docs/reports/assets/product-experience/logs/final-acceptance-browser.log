@@ -1,0 +1,383 @@
+
+Running 25 tests using 1 worker
+
+(node:22431) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   1 e2e/access-foundation.spec.ts:5:1 › owner and invited Reader use scoped access UI, with safe mobile drawers and denial recovery (20.6s)
+(node:22457) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   2 e2e/product-experience.spec.ts:53:1 › J01–J05: first use, actual answer, retained draft, labeled tools and protected file preview (25.6s)
+  ✓   3 e2e/product-experience.spec.ts:94:1 › J06/J13/J14/J15: contextual navigation, settings categories, dirty guard and authoritative read-only scope (9.0s)
+  ✓   4 e2e/product-experience.spec.ts:129:1 › J10: author, validate, publish, start and independently sign off an actual Workflow (14.6s)
+  ✓   5 e2e/product-experience.spec.ts:155:1 › complete route families retain contextual access across organization, agent and system scopes (35.4s)
+  ✓   6 e2e/product-experience.spec.ts:196:1 › J07/J15: Space and Environment authoring retain exact identity and recover stale edits (11.5s)
+  ✘   7 e2e/session-goals.spec.ts:9:1 › real Goal plan, bound Synthetic work, exact Evaluation, acceptance and responsive recovery (42.8s)
+(node:22654) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   8 e2e/task-delegation.spec.ts:10:1 › real delegated worker asks, waits, receives human guidance, completes and preserves independent Goals (33.5s)
+(node:22686) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   9 e2e/tenant-agent-access.spec.ts:31:1 › create, grant exact chat and independent execution, inspect permissions, recover stale revoke and lifecycle (10.8s)
+(node:22701) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  10 e2e/tenant-chat.spec.ts:389:34 › authenticated entry and retired browser routes at 1440px (16.9s)
+  ✘  11 e2e/tenant-chat.spec.ts:389:34 › authenticated entry and retired browser routes at 390px (23.0s)
+(node:22742) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  12 e2e/tenant-continuity.spec.ts:18:85 › historical source change refusal fresh exact consent and reload 1400 (57.6s)
+  ✓  13 e2e/tenant-continuity.spec.ts:18:85 › historical source change refusal fresh exact consent and reload 390 (58.5s)
+  ✓  14 e2e/tenant-credentials.spec.ts:24:1 › canonical Credential purposes, protected replacement and separate Google consent (36.8s)
+  ✓  15 e2e/tenant-credentials.spec.ts:111:1 › exact Credential grants, read-only inspection, revoked-write and stale-draft recovery (19.1s)
+  ✓  16 e2e/tenant-credentials.spec.ts:153:1 › protected failure clears only the secret and acknowledged creation never offers duplicate retry (8.3s)
+  ✓  17 e2e/tenant-instance-version.spec.ts:45:1 › 320px version paging, guarded review, focus, stale recovery and explicit adoption preserve configuration (38.4s)
+  ✓  18 e2e/tenant-isolation.spec.ts:11:1 › coordinated isolation saves atomically, retains stale drafts and recovers a lost reply across desktop and narrow sizes (9.8s)
+  ✓  19 e2e/tenant-model-management.spec.ts:35:1 › protected-key onboarding, explicit default, stale connection recovery and responsive configuration (58.9s)
+  ✓  20 e2e/tenant-model-management.spec.ts:196:1 › shared preset edits retain tenant declarations and read-only members cannot mutate model configuration (14.8s)
+  ✓  21 e2e/tenant-model-management.spec.ts:254:1 › unavailable explicit model refuses without a Run, retains the draft, and recovers after deliberate retry (46.8s)
+  ✘  22 e2e/tenant-model-management.spec.ts:329:1 › Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance (27.1s)
+(node:23441) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  23 e2e/tenant-model-management.spec.ts:386:1 › configured native offering flows through unattended and Automation selectors, exact approval and completed work (35.5s)
+(node:23468) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  24 e2e/tenant-model-management.spec.ts:455:1 › Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort (20.0s)
+(node:23504) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  25 e2e/tenant-model-management.spec.ts:509:1 › omitted manual default requires explicit recovery and fresh confirmation after conflict (12.4s)
+
+
+  1) e2e/access-foundation.spec.ts:5:1 › owner and invited Reader use scoped access UI, with safe mobile drawers and denial recovery 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for getByRole('menuitem', { name: 'Members', exact: true })
+
+
+       at support/experience-navigation.ts:38
+
+      36 |       if (await page.getByRole('dialog', { name: 'Admin navigation', exact: true }).isVisible()) await page.keyboard.press('Escape');
+      37 |       await page.getByRole('button', { name: 'Account and platform navigation', exact: true }).click();
+    > 38 |       await page.getByRole('menuitem', { name: label, exact: true }).click(); return;
+         |                                                                      ^
+      39 |     }
+      40 |   }
+      41 |   await expect(link).toBeVisible(); await link.click();
+        at openDestination (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/support/experience-navigation.ts:38:70)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/access-foundation.spec.ts:32:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/access-foundation-owner-an-3e3f0-drawers-and-denial-recovery/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../tmp/agent-core-order6/final-acceptance-results/access-foundation-owner-an-3e3f0-drawers-and-denial-recovery/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/access-foundation-owner-an-3e3f0-drawers-and-denial-recovery/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../tmp/agent-core-order6/final-acceptance-results/access-foundation-owner-an-3e3f0-drawers-and-denial-recovery/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) e2e/session-goals.spec.ts:9:1 › real Goal plan, bound Synthetic work, exact Evaluation, acceptance and responsive recovery 
+
+    TimeoutError: page.waitForResponse: Timeout 15000ms exceeded while waiting for event "response"
+
+       98 |   await expect(page.getByText('Your draft is retained. Refresh authoritative state, compare the current plan and submit deliberately.')).toBeVisible();
+       99 |   await page.unroute(`**${endpoint}/${denseId}/plan`); await page.getByRole('button', { name: 'Refresh goals', exact: true }).click();
+    > 100 |   const savedRevision = page.waitForResponse(r => r.url().endsWith(`/goals/${denseId}/plan`) && r.request().method() === 'PUT');
+          |                              ^
+      101 |   await page.getByRole('button', { name: 'Propose revised plan', exact: true }).click(); const savedResponse = await savedRevision; expect(savedResponse.ok(), await savedResponse.text()).toBe(true); await expect(page.getByText('A revised plan needs human review')).toBeVisible();
+      102 |   await page.getByRole('button', { name: 'Reject revision', exact: true }).click(); await page.getByRole('dialog', { name: 'Reject the proposed revision?', exact: true }).getByRole('button', { name: 'Reject revision', exact: true }).click();
+      103 |   await expect(page.getByText('A revised plan needs human review')).toHaveCount(0);
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/session-goals.spec.ts:100:30
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: 'Propose revised plan', exact: true })
+        - locator resolved to <button disabled type="submit" class="ant-btn css-dev-only-do-not-override-19u5a7b css-var-_r_0_ ant-btn-primary ant-btn-color-primary ant-btn-variant-solid">…</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+          - waiting 100ms
+        28 × waiting for element to be visible, enabled and stable
+           - element is not enabled
+         - retrying click action
+           - waiting 500ms
+
+
+       99 |   await page.unroute(`**${endpoint}/${denseId}/plan`); await page.getByRole('button', { name: 'Refresh goals', exact: true }).click();
+      100 |   const savedRevision = page.waitForResponse(r => r.url().endsWith(`/goals/${denseId}/plan`) && r.request().method() === 'PUT');
+    > 101 |   await page.getByRole('button', { name: 'Propose revised plan', exact: true }).click(); const savedResponse = await savedRevision; expect(savedResponse.ok(), await savedResponse.text()).toBe(true); await expect(page.getByText('A revised plan needs human review')).toBeVisible();
+          |                                                                                 ^
+      102 |   await page.getByRole('button', { name: 'Reject revision', exact: true }).click(); await page.getByRole('dialog', { name: 'Reject the proposed revision?', exact: true }).getByRole('button', { name: 'Reject revision', exact: true }).click();
+      103 |   await expect(page.getByText('A revised plan needs human review')).toHaveCount(0);
+      104 |   await page.route(`**${endpoint}`, route => route.abort('failed')); await page.getByRole('button', { name: 'Refresh goals', exact: true }).click(); await expect(page.getByRole('alert')).toContainText(/fetch|network|failed/i);
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/session-goals.spec.ts:101:81
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/session-goals-real-Goal-pl-67e06-nce-and-responsive-recovery/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../tmp/agent-core-order6/final-acceptance-results/session-goals-real-Goal-pl-67e06-nce-and-responsive-recovery/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/session-goals-real-Goal-pl-67e06-nce-and-responsive-recovery/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../tmp/agent-core-order6/final-acceptance-results/session-goals-real-Goal-pl-67e06-nce-and-responsive-recovery/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) e2e/task-delegation.spec.ts:10:1 › real delegated worker asks, waits, receives human guidance, completes and preserves independent Goals 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Which approved source should I use?', { exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByText('Which approved source should I use?', { exact: true }) with timeout 15000ms
+      - waiting for getByText('Which approved source should I use?', { exact: true })
+
+
+      42 |   await page.getByLabel('Objective', { exact: true }).fill('synthetic-task-worker synthetic-task-question: Review the approved migration source.');
+      43 |   await page.getByRole('button', { name: 'Assign task', exact: true }).click();
+    > 44 |   await expect(page.getByText('Which approved source should I use?', { exact: true })).toBeVisible();
+         |                                                                                        ^
+      45 |   await expect(page.getByText('Waiting', { exact: true })).toBeVisible();
+      46 |   await page.getByLabel('Human guidance', { exact: true }).fill('Use the reviewed migration proposal only.');
+      47 |   await page.getByRole('button', { name: 'Send guidance', exact: true }).click();
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/task-delegation.spec.ts:44:88
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/task-delegation-real-deleg-97319-preserves-independent-Goals/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../tmp/agent-core-order6/final-acceptance-results/task-delegation-real-deleg-97319-preserves-independent-Goals/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/task-delegation-real-deleg-97319-preserves-independent-Goals/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../tmp/agent-core-order6/final-acceptance-results/task-delegation-real-deleg-97319-preserves-independent-Goals/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) e2e/tenant-agent-access.spec.ts:31:1 › create, grant exact chat and independent execution, inspect permissions, recover stale revoke and lifecycle 
+
+    Error: POST /api/v2/tenants/01a18dda-6d24-77d8-9e47-0e81f5f9e441/access/check: 409
+
+    expect(received).toBeTruthy()
+
+    Received: false
+
+       7 |   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
+       8 |   const response = await canonicalFetch(api, path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
+    >  9 |   expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy(); return response.status() === 204 ? undefined as T : response.json();
+         |                                                                    ^
+      10 | }
+      11 | async function signIn(page: Page, email = login, secret = password) { await signInTenant(page, email, secret); }
+      12 | async function select(page: Page, name: string, label: string) { await page.getByRole('combobox', { name, exact: true }).click(); await page.getByTitle(label, { exact: true }).click(); }
+        at call (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-agent-access.spec.ts:9:68)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-agent-access.spec.ts:47:13
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-agent-access-create-22d18--stale-revoke-and-lifecycle/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-agent-access-create-22d18--stale-revoke-and-lifecycle/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-agent-access-create-22d18--stale-revoke-and-lifecycle/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-agent-access-create-22d18--stale-revoke-and-lifecycle/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) e2e/tenant-chat.spec.ts:389:34 › authenticated entry and retired browser routes at 390px ──────
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for getByRole('menuitem', { name: 'Roles & permissions', exact: true })
+
+
+       at support/experience-navigation.ts:38
+
+      36 |         const destination = page.getByRole('menuitem', { name: label, exact: true });
+      37 |         if (await destination.count()) { await destination.click(); return; }
+    > 38 |         await page.keyboard.press('Escape');
+         |                                             ^
+      39 |       }
+      40 |       // Account/platform are deliberately separate scopes.
+      41 |       if (await page.getByRole('dialog', { name: 'Admin navigation', exact: true }).isVisible()) await page.keyboard.press('Escape');
+        at openDestination (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/support/experience-navigation.ts:38:70)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-chat.spec.ts:413:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) e2e/tenant-model-management.spec.ts:329:1 › Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: getByRole('button', { name: 'Model', exact: true })
+    Expected substring: "High"
+    Received string:    "Scripted Alpha · Offline SyntheticDefault"
+    Timeout: 15000ms
+
+    Call log:
+      - Expect "toContainText" getByRole('button', { name: 'Model', exact: true }) with timeout 15000ms
+      - waiting for getByRole('button', { name: 'Model', exact: true })
+        34 × locator resolved to <button type="button" aria-label="Model" aria-expanded="false" aria-haspopup="listbox" class="ant-btn css-dev-only-do-not-override-19u5a7b css-var-_r_0_ ant-btn-text ant-btn-color-default ant-btn-variant-text ant-btn-sm model-picker-model">…</button>
+           - unexpected value "Scripted Alpha · Offline SyntheticDefault"
+
+
+      346 |     await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: /^Model Alpha —/ }).click();
+      347 |     await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('Scripted Alpha');
+    > 348 |     await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('High');
+          |                                                                            ^
+      349 |     await page.getByRole('button', { name: 'Model', exact: true }).click();
+      350 |     await expect(page.getByTitle('Use Agent default', { exact: true })).toHaveAttribute('aria-selected', 'true');
+      351 |     await page.getByTitle('Scripted Alpha · Offline Synthetic', { exact: true }).click();
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:348:76
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-model-management-Ag-91408-s-distinct-from-inheritance/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-model-management-Ag-91408-s-distinct-from-inheritance/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-model-management-Ag-91408-s-distinct-from-inheritance/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-model-management-Ag-91408-s-distinct-from-inheritance/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) e2e/tenant-model-management.spec.ts:386:1 › configured native offering flows through unattended and Automation selectors, exact approval and completed work 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('link', { name: 'Review the exact admission request', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('link', { name: 'Review the exact admission request', exact: true }) with timeout 15000ms
+      - waiting for getByRole('link', { name: 'Review the exact admission request', exact: true })
+
+
+      432 |     await page.getByRole('button', { name: 'Run now', exact: true }).click();
+      433 |     await page.getByRole('dialog', { name: 'Run saved Automation now?', exact: true }).getByRole('button', { name: 'Run now', exact: true }).click();
+    > 434 |     const link = page.getByRole('link', { name: 'Review the exact admission request', exact: true }); await expect(link).toBeVisible();
+          |                                                                                                                          ^
+      435 |     const requestId = (await link.getAttribute('href'))!.split('/').pop()!;
+      436 |     const pending = await call<{ runId: null; sessionId: null; review: { executionState: string } }>(f.api, f.root + `/approvals/${requestId}`);
+      437 |     expect(pending.runId).toBeNull(); expect(pending.sessionId).toBeNull(); expect(pending.review.executionState).toBe('waitingDecision');
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:434:122
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-model-management-co-01883-approval-and-completed-work/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-model-management-co-01883-approval-and-completed-work/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-model-management-co-01883-approval-and-completed-work/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-model-management-co-01883-approval-and-completed-work/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) e2e/tenant-model-management.spec.ts:455:1 › Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByTitle('Scripted Alpha · Offline Synthetic', { exact: true })
+        - locator resolved to <div aria-disabled="false" title="Scripted Alpha · Offline Synthetic" class="ant-select-item ant-select-item-option">…</div>
+      - attempting click action
+        - waiting for element to be visible, enabled and stable
+        - element is not visible
+      - retrying click action
+        - waiting for element to be visible, enabled and stable
+        - element is not stable
+      - retrying click action
+        - waiting 20ms
+        - waiting for element to be visible, enabled and stable
+        - element is not stable
+      - retrying click action
+        - waiting 100ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <main class="ant-layout-content admin-content css-dev-only-do-not-override-19u5a7b css-var-_r_0_">…</main> from <div id="root">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 100ms
+        - waiting for element to be visible, enabled and stable
+        - element is not stable
+      28 × retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is not visible
+      - retrying click action
+        - waiting 500ms
+
+
+      22 | async function select(page: Page, label: string, text: string) {
+      23 |   await page.getByRole('combobox', { name: label, exact: true }).click();
+    > 24 |   await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByTitle(text, { exact: true }).click();
+         |                                                                                                                 ^
+      25 | }
+      26 | async function prepareAgent(api: APIRequestContext, tenant: string, id: string, name?: string) {
+      27 |   await prepareOrdinaryChat(api, tenant, id);
+        at select (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:24:113)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:464:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-model-management-De-cd3db-compatible-inherited-effort/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-model-management-De-cd3db-compatible-inherited-effort/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-model-management-De-cd3db-compatible-inherited-effort/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../tmp/agent-core-order6/final-acceptance-results/tenant-model-management-De-cd3db-compatible-inherited-effort/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8 failed
+    e2e/access-foundation.spec.ts:5:1 › owner and invited Reader use scoped access UI, with safe mobile drawers and denial recovery 
+    e2e/session-goals.spec.ts:9:1 › real Goal plan, bound Synthetic work, exact Evaluation, acceptance and responsive recovery 
+    e2e/task-delegation.spec.ts:10:1 › real delegated worker asks, waits, receives human guidance, completes and preserves independent Goals 
+    e2e/tenant-agent-access.spec.ts:31:1 › create, grant exact chat and independent execution, inspect permissions, recover stale revoke and lifecycle 
+    e2e/tenant-chat.spec.ts:389:34 › authenticated entry and retired browser routes at 390px ───────
+    e2e/tenant-model-management.spec.ts:329:1 › Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance 
+    e2e/tenant-model-management.spec.ts:386:1 › configured native offering flows through unattended and Automation selectors, exact approval and completed work 
+    e2e/tenant-model-management.spec.ts:455:1 › Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort 
+  17 passed (11.6m)

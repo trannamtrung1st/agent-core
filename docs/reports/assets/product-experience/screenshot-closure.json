@@ -1,0 +1,20 @@
+{
+  "source_digest": "1cea2eaa157e826ee76fc4be78ca1501f41a8bc45f2fab937dbc671310a1007b",
+  "fixture": "fresh /tmp/agent-core-order6/screenshot-closure-approved",
+  "tenant": "01a18e0c-3a74-7679-a482-bbd1afd96da6",
+  "method": "Actual MCP browser sign-in, organization selection, explicit setup_pending read simulation using existing browser fixture contract, actual reconcile and Synthetic reply; expanded picker and native mobile Admin Drawer. Existing Definition draft390 capture separately curated and actually opened.",
+  "actual_result": "Recovered assistant selected; sent Hello after the verified assistant setup retry; actual Hello from synthetic. reply; mobile navigation visibly open.",
+  "capture_ids": [
+    "final.organization-selection-1440",
+    "final.assistant-setup-recovery-390",
+    "final.agent-selection-390",
+    "final.assistant-recovered-390",
+    "final.admin-navigation-390",
+    "final.definition-draft-390"
+  ],
+  "attempt_history": [
+    "First login occurred before the fresh host finished migrations; UI showed temporary service unavailability; reloaded after readiness and signed in successfully.",
+    "Native AntD virtual option has hidden ARIA node; waiting its visibility timed out although the actual popup was open. Snapshot confirmed expanded combobox; captured actual visible popup."
+  ],
+  "limits": "No source/visual changes; evidence closure only. No added or re-counted automated cases."
+}

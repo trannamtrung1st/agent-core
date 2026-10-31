@@ -38,7 +38,7 @@ const instances = [
 ];
 
 function openIdentityOptions() {
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Identity" }));
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Agent" }));
 }
 
 describe("AgentPicker", () => {
@@ -58,14 +58,14 @@ describe("AgentPicker", () => {
       />
     );
 
-    expect(screen.getByRole("combobox", { name: "Identity" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Agent" })).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Speech locale" })).not.toBeInTheDocument();
-    expect(screen.getByText("Identity")).toBeInTheDocument();
-    expect(screen.getByText("Sam — Support · v3 · 00000091")).toBeInTheDocument();
+    expect(screen.getByText("Agent")).toBeInTheDocument();
+    expect(screen.getByText("Sam — Support")).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Model" })).not.toBeInTheDocument();
 
     openIdentityOptions();
-    fireEvent.click(screen.getByTitle("Jordan — Compliance · v2 · 00000092"));
+    fireEvent.click(screen.getByTitle("Jordan — Compliance"));
     expect(onSelect).toHaveBeenCalledWith("managed:019944af-00d1-7000-8000-000000000092");
   });
 
@@ -105,7 +105,7 @@ describe("AgentPicker", () => {
     );
 
     openIdentityOptions();
-    fireEvent.click(screen.getByTitle("Jordan — Compliance · v2 · 00000092"));
+    fireEvent.click(screen.getByTitle("Jordan — Compliance"));
     expect(onIdentityChange).toHaveBeenCalledWith("managed:019944af-00d1-7000-8000-000000000092");
   });
 
@@ -125,7 +125,7 @@ describe("AgentPicker", () => {
     );
 
     expect(screen.getByLabelText("Loading managed instances")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Identity" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Agent" })).toBeDisabled();
   });
 
   it("surfaces managed inventory failures with retry", () => {
@@ -164,7 +164,7 @@ describe("AgentPicker", () => {
       />
     );
 
-    expect(screen.getByRole("combobox", { name: "Identity" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Agent" })).toBeDisabled();
     expect(screen.getByText("No matching agents. Try another search or reload the list.")).toBeInTheDocument();
   });
 });
@@ -187,7 +187,7 @@ it('lets an owner explicitly retry pending setup once, refresh candidates and fo
   resolve({ status: 'ready' }); await waitFor(() => expect(props.onRetryManagedInstances).toHaveBeenCalledOnce());
   vi.mocked(tenantChatEmptyReason).mockReturnValue(null);
   view.rerender(<AgentPicker {...props} managedInstances={instances} identityKey={`managed:${instances[0].instanceId}`} />);
-  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Identity' })).toHaveFocus());
+  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Agent' })).toHaveFocus());
 });
 
 it('keeps a failed setup retry actionable without exposing the underlying exception', async () => {
@@ -212,5 +212,5 @@ it('keeps pending default setup visible when another ordinary agent is available
   render(<AgentPicker managedInstances={instances} identityKey={`managed:${instances[0].instanceId}`} error={null} managedInstancesError={null} managedInstancesLoading={false} onIdentityChange={vi.fn()} onRetryManagedInstances={vi.fn()} />);
   expect(screen.getByText('Default assistant setup pending')).toBeVisible();
   expect(screen.getByRole('button', { name: 'Retry assistant setup' })).toBeVisible();
-  expect(screen.getByRole('combobox', { name: 'Identity' })).toBeEnabled();
+  expect(screen.getByRole('combobox', { name: 'Agent' })).toBeEnabled();
 });

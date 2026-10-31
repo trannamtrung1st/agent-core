@@ -1,0 +1,10 @@
+{
+  "source_files": 76,
+  "source_drift": false,
+  "images": 53,
+  "goldens": 3,
+  "coverage_rows": 362,
+  "browser_expected": 76,
+  "browser_passed": 76,
+  "errors": []
+}

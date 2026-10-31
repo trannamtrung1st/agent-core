@@ -1,0 +1,16 @@
+
+Running 8 tests using 1 worker
+
+(node:23683) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 e2e/access-foundation.spec.ts:5:1 › owner and invited Reader use scoped access UI, with safe mobile drawers and denial recovery (33.8s)
+(node:23721) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 e2e/session-goals.spec.ts:9:1 › real Goal plan, bound Synthetic work, exact Evaluation, acceptance and responsive recovery (33.8s)
+  ✘  3 e2e/task-delegation.spec.ts:10:1 › real delegated worker asks, waits, receives human guidance, completes and preserves independent Goals (36.6s)
+(node:23780) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 e2e/tenant-agent-access.spec.ts:31:1 › create, grant exact chat and independent execution, inspect permissions, recover stale revoke and lifecycle (21.4s)
+  ✘  5 e2e/tenant-chat.spec.ts:389:34 › authenticated entry and retired browser routes at 390px (26.3s)
+(node:23825) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)

@@ -2,7 +2,7 @@
 
 ## Production Hardening local delivery
 
-Order 5 is accepted on 2026-10-30 for the controlled Synthetic single-host profile at `bc8124f7b8a0486dd38fb8364789a0891992df1f`. Its [design and evidence ledger](reports/production-hardening-delivery-2026-10-30.md#exact-source-acceptance-and-order-5-closure) owns centralized preflight/ownership, coordinated recovery, runtime export/worker probes, measured limits, packaged/browser checks and committed source/image provenance. Owner-authorized [CI run 41040306361](https://github.com/trannamtrung1st/agent-core/actions/runs/41040306361) passed all 62 required jobs, with 8,745 partition cases accounted exactly once; one setup-only browser job was rerun unchanged. CI remains manual and opt-in. Sustained Real/native workloads and public/customer/physical-device certification remain separate. Order 6 — Platform-wide UI/UX Polish is next and unstarted.
+Order 5 is accepted on 2026-10-30 for the controlled Synthetic single-host profile at `bc8124f7b8a0486dd38fb8364789a0891992df1f`. Its [design and evidence ledger](reports/production-hardening-delivery-2026-10-30.md#exact-source-acceptance-and-order-5-closure) owns centralized preflight/ownership, coordinated recovery, runtime export/worker probes, measured limits, packaged/browser checks and committed source/image provenance. Owner-authorized [CI run 41040306361](https://github.com/trannamtrung1st/agent-core/actions/runs/41040306361) passed all 62 required jobs, with 8,745 partition cases accounted exactly once; one setup-only browser job was rerun unchanged. CI remains manual and opt-in. Sustained Real/native workloads and public/customer/physical-device certification remain separate. Order 6 — Product Experience Transformation is accepted on 2026-10-31 for the controlled local Synthetic working tree. The [experience contract](product-experience-contract.md), [delivery ledger](reports/product-experience-delivery-2026-10-30.md) and [independent review](reports/product-experience-independent-review-2026-10-31.md) bind its scope, exact working-source digest, all AC01–AC22 and external limits. Refinement stops; local self-host readiness and owner manual validation follow.
 
 ## Project refactoring and architecture stabilization
 
@@ -980,3 +980,36 @@ The [Initiative 9 targeted review corrections](reports/initiative-9-review-fixes
 The protected tenant default uses immutable global v36, trusted idempotent provisioning, ordinary isolated IAM/private Space, universal Chat visibility, non-destructive reset and automatic safe adoption through existing Instance/Run owners. The [design brief](reports/general-assistant-design-2026-10-28.md), [delivery ledger](reports/general-assistant-delivery-2026-10-28.md) and [cutover runbook](general-assistant-cutover.md) own its scoped local implementation and verification. Historical milestone acceptance is unchanged; Formal Workflows local delivery is tracked under its [scope and evidence](#formal-workflows). CI, deployment and external provider/device/load qualification remain separate.
 
 The [General Assistant review stabilization](reports/general-assistant-stabilization-2026-10-28.md) addresses discovery query count, failed setup recovery and historical-template creation. It preserves the local/external qualification boundary and does not start Workflow.
+
+## Order 6 — Product Experience Transformation
+
+Status: **accepted 2026-10-31 for the controlled local Synthetic working tree**. The [experience contract](product-experience-contract.md) owns the selected product/navigation direction; [delivery ledger](reports/product-experience-delivery-2026-10-30.md), [coverage manifest](reports/assets/product-experience/coverage.json) and [independent review](reports/product-experience-independent-review-2026-10-31.md) own executed evidence and external limits. All AC01–AC22 pass within that profile; verdict Ready with Minor Improvements. The ledger identifies exact uncommitted source, not a new CI-accepted commit. Stop Order 6 refinement; hand off to local self-host readiness and owner manual validation without starting their implementation. Sequence: discovery and live baseline → product direction → shared design proof → full vertical migration → rendered/interaction verification → bounded polish, documentation and independent review. Local self-host readiness, owner manual validation and Group Chat retain their following roadmap positions. Hosted CI requires explicit opt-in.
+
+
+
+Mark each item with source/evidence links and pass/blocked status. **All mandatory items must pass for Order 6 acceptance.**
+
+- [x] **AC01 Product direction:** One documented, internally reviewed product experience model for real current capabilities and user roles.
+- [x] **AC02 IA:** Coherent navigation/page taxonomy, scope model, terminology, progressive disclosure, and cross-module journeys.
+- [x] **AC03 Inventory:** 100% of discovered routes and meaningful non-route views inventoried; no untracked in-scope functionality.
+- [x] **AC04 No feature loss:** Every supported operation remains appropriately discoverable or its deliberate, justified retirement is recorded and migrated.
+- [x] **AC05 Unified system:** No parallel UI framework/token source; AntD v6, shared layouts and styling owners are coherent.
+- [x] **AC06 Complete redesign:** All accepted target surfaces implemented, including Chat, Agents, Spaces, Workflows, Tasks/Goals, Evaluations, models, IAM, settings and system operations.
+- [x] **AC07 First-use quality:** Sign-in → organization → permitted General Assistant/Chat is intuitive, truthful and functional, including setup/unavailable recovery.
+- [x] **AC08 Chat/voice correctness:** Session identity, reconnect, history, run/tool states, attachments, voice and approval semantics are preserved.
+- [x] **AC09 Workflow correctness:** Real user journeys J01–J15 and all discovered critical branches are exercised through visible controls.
+- [x] **AC10 Security/IAM:** Tenant/role/system authority, secrets, approvals, read-only/denied and stale revision cases are verified at authoritative boundaries.
+- [x] **AC11 Responsive:** Required desktop/tablet/mobile viewports inspected; narrow-width stress cases show no material clipping or unusable navigation.
+- [x] **AC12 Accessibility:** Keyboard/focus, accessible names, validation, semantic feedback, contrast, reduced motion and relevant WCAG 2.2 AA patterns reviewed and material issues resolved.
+- [x] **AC13 Real screenshots:** Baseline and final captures for representative screens/states have been **actually viewed and evaluated**, with source/role/viewport attribution.
+- [x] **AC14 Visual regression:** Representative stable screenshots have guarded diff baselines; image changes were reviewed, not automatically blessed.
+- [x] **AC15 Error/state design:** Loading, empty, active, success, failure, denial, read-only, retry, cancellation, destructive and stale states are coherent.
+- [x] **AC16 Functional verification:** Relevant builds, unit tests, integration/security checks (if needed) and canonical Synthetic Playwright journeys pass; residual limits enumerated.
+- [x] **AC17 Clean migration:** Old/unused UI patterns, stale routes, duplicated components, sidecars and documentation have been removed or deliberately retained with rationale.
+- [x] **AC18 Impeccable:** Initial critique/technical audit, bounded batched final polish, final rendered confirmation and metadata reconciliation completed with real evidence.
+- [x] **AC19 Documentation:** Product vision, frontend spec, testing plan, design tooling context and roadmap correctly represent the shipped UX.
+- [x] **AC20 Independent review:** Final review reports no unresolved Critical/High issue or material Medium correctness/UX blocker; verdict supports acceptance.
+- [x] **AC21 Evidence integrity:** Source SHA, commands, fixtures, screenshots, artifacts, pass/fail results and unverified provider/device/deployment limits recorded accurately.
+- [x] **AC22 Scope discipline:** No Group Chat or unrelated new product feature slipped into Order 6, no weakened backend boundaries, no gratuitous framework/services/dependencies.
+
+**Acceptance rule:** “Looks nice,” screenshots without inspection, passing build/tests without user journeys, or completed components without navigation/permission integration are **not sufficient**. Partial/blocked verification must be shown as such. A baseline is accepted only when its intended shipped profile is genuinely exercised.

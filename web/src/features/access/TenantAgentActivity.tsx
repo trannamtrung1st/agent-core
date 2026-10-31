@@ -24,7 +24,7 @@ export function TenantAgentActivity({ context, id, page }: { context: TenantCont
   useEffect(() => { const sync = () => setRunId(readRun()); window.addEventListener('popstate', sync); return () => window.removeEventListener('popstate', sync); }, []);
   const select = (run?: string) => { if (run) runOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; const params = new URLSearchParams(window.location.search); if (run) params.set('run', run); else params.delete('run'); navigateToAppPath(path + (params.size ? `?${params}` : '')); };
   return <Flex vertical gap="var(--ac-space-section)">
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to instances</Typography.Link>
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link>
       <Button onClick={() => { view.reload(); setReload(value => value + 1); }}>Reload Activity</Button></Flex>
     {view.loading ? <AccessLoading /> : view.error ? <AccessError error={view.error} retry={view.reload} /> : view.data && <>
       <TenantAgentHeading view={view.data} configuration={false} archivedDescription="Activity remains readable. Restore this instance before continuing its conversations." />

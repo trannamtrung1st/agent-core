@@ -53,6 +53,9 @@ data/
 logs/
 tmp/
 *.log
+# Curated local qualification output; raw runtime logs remain ignored.
+!docs/reports/assets/product-experience/logs/
+!docs/reports/assets/product-experience/logs/*.log
 *.db
 *.db-shm
 *.db-wal

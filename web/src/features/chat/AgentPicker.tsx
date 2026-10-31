@@ -79,7 +79,7 @@ export function AgentPicker({
       {tenantChatCanManageSetup() && chatTenantId && (!hasOptions || needsSetup || selected?.setupState) && <Flex wrap align="center" gap="var(--ac-space-default)">
         {needsSetup && <Button loading={retryingSetup} disabled={managedInstancesLoading} onClick={() => void retrySetup()}>Retry assistant setup</Button>}
         <Typography.Link href={tenantAccessPath(chatTenantId, 'agents')} onClick={followAppLink}>Agent Management</Typography.Link><Typography.Link href={tenantModelsPath(chatTenantId, 'models')} onClick={followAppLink}>Models</Typography.Link></Flex>}
-      <Typography.Text>Identity</Typography.Text>
+      <Typography.Text>Agent</Typography.Text>
       {managedInstancesLoading ? (
         <Flex align="center" gap={8} aria-label="Loading managed instances">
           <Spin size="small" />
@@ -88,9 +88,9 @@ export function AgentPicker({
       ) : null}
       <Select
         ref={picker}
-        aria-label="Identity"
+        aria-label="Agent"
         value={!managedInstancesLoading && hasOptions && identityKey ? identityKey : undefined}
-        placeholder={managedInstancesLoading ? "Loading agents…" : "Select identity"}
+        placeholder={managedInstancesLoading ? "Loading agents…" : "Choose an agent"}
         disabled={!onSearch && (managedInstancesLoading || !hasOptions)}
         loading={managedInstancesLoading}
         filterOption={onSearch ? false : undefined}

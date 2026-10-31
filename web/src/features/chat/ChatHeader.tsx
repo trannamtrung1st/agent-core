@@ -1,6 +1,6 @@
-import type { ReactNode, Ref } from "react";
-import { App as AntApp, Badge, Button, Flex, Tooltip, Typography } from "antd";
-import { CalendarOutlined, CodeOutlined, FolderOpenOutlined, InboxOutlined, PoweroffOutlined } from "@ant-design/icons";
+import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { App as AntApp, Badge, Button, Flex, Popover, Tooltip, Typography } from "antd";
+import { CalendarOutlined, CodeOutlined, FolderOpenOutlined, InboxOutlined, PoweroffOutlined, MoreOutlined } from "@ant-design/icons";
 import { confirmAction } from "../../app/confirmAction";
 import { formatChatTime } from "./chatTime";
 
@@ -9,7 +9,7 @@ export function ChatHeader({
   subtitle,
   timestamp,
   status,
-  additionalActions,
+  additionalActions, workActions, workButtonRefs = [],
   sessionsToggle,
   speechLocale,
   onSchedules,
@@ -25,6 +25,8 @@ export function ChatHeader({
   timestamp?: string | null;
   status?: ReactNode;
   additionalActions?: ReactNode;
+  workActions?: ReactNode;
+  workButtonRefs?: Ref<HTMLButtonElement>[];
   sessionsToggle?: ReactNode;
   speechLocale?: ReactNode;
   onSchedules?: () => void;
@@ -38,6 +40,14 @@ export function ChatHeader({
   endDisabled?: boolean;
 }) {
   const { modal } = AntApp.useApp();
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsButton = useRef<HTMLButtonElement | null>(null);
+  const toolsPanel = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const frame = requestAnimationFrame(() => toolsPanel.current?.querySelector<HTMLButtonElement>('button')?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [toolsOpen]);
   const timeLabel = timestamp ? formatChatTime(timestamp) : null;
 
   return (
@@ -71,19 +81,21 @@ export function ChatHeader({
         <Flex align="center" wrap gap={8} className="chat-header-actions">
           {speechLocale}
           <Flex align="center" gap={8} className="chat-header-session-actions">
-            {onFiles && <Tooltip title="Session files"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Session files" ref={filesButtonRef} icon={<FolderOpenOutlined aria-hidden />} onClick={onFiles} /></Tooltip>}
-            {onSandbox && <Tooltip title="Session sandbox"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Session sandbox" ref={sandboxButtonRef} icon={<CodeOutlined />} onClick={onSandbox} /></Tooltip>}
+            {(onFiles || onSandbox || onBackgroundWork || inSession || workActions) && <Popover trigger="click" placement="bottomRight" open={toolsOpen} onOpenChange={setToolsOpen} content={<Flex ref={toolsPanel} vertical gap="var(--ac-space-compact)" className="chat-tools" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setToolsOpen(false); toolsButton.current?.focus(); } }} onClick={event => { if ((event.target as HTMLElement).closest('button:not(:disabled)')) setToolsOpen(false); }}>
+              <Typography.Text strong>Conversation tools</Typography.Text>
+            {onFiles && <Tooltip title="Session files"><Button type="text" size="small" className="chat-tool-action" aria-label="Session files" icon={<FolderOpenOutlined aria-hidden />} onClick={onFiles}>Files</Button></Tooltip>}
+            {onSandbox && <Tooltip title="Session sandbox"><Button type="text" size="small" className="chat-tool-action" aria-label="Session sandbox"  icon={<CodeOutlined />} onClick={onSandbox}>Sandbox</Button></Tooltip>}
             {onBackgroundWork ? (
               <Badge count={attentionCount} size="small" offset={[-4, 4]}>
                 <Tooltip title="Background work">
                   <Button
                     type="text"
                     size="small"
-                    ref={backgroundButtonRef} className="chat-header-icon-action chat-header-background-work"
+                    className="chat-tool-action chat-header-background-work"
                     aria-label={attentionCount > 0 ? `Background work, ${attentionCount} need attention` : "Background work"}
                     icon={<InboxOutlined />}
                     onClick={onBackgroundWork}
-                  />
+                  >Background work</Button>
                 </Tooltip>
               </Badge>
             ) : null}
@@ -92,11 +104,11 @@ export function ChatHeader({
                 <Button
                   type="text"
                   size="small"
-                  className="chat-header-icon-action"
+                  className="chat-tool-action"
                   aria-label="Automations"
                   icon={<CalendarOutlined />}
                   onClick={onSchedules}
-                />
+                >Automations</Button>
               </Tooltip>
             ) : null}
             {inSession ? (
@@ -104,7 +116,7 @@ export function ChatHeader({
                 <Button
                   type="text"
                   size="small"
-                  className="chat-header-icon-action"
+                  className="chat-tool-action"
                   aria-label="End"
                   disabled={endDisabled}
                   icon={<PoweroffOutlined />}
@@ -117,9 +129,21 @@ export function ChatHeader({
                       onOk: onEnd
                     });
                   }}
-                />
+                >End conversation</Button>
               </Tooltip>
             ) : null}
+              {workActions}
+            </Flex>}>
+              <Badge dot={attentionCount > 0}><Button icon={<MoreOutlined aria-hidden />} aria-label={attentionCount > 0 ? `Conversation tools, ${attentionCount} need attention` : 'Conversation tools'} ref={node => {
+                const button = node instanceof HTMLButtonElement ? node : null;
+                toolsButton.current = button;
+                for (const ref of [filesButtonRef, sandboxButtonRef, backgroundButtonRef, ...workButtonRefs]) {
+                  if (typeof ref === 'function') ref(button);
+                  else if (ref) ref.current = button;
+                }
+              }}>Tools</Button></Badge>
+            </Popover>}
+
             {additionalActions}
           </Flex>
         </Flex>

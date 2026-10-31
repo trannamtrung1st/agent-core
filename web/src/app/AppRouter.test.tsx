@@ -29,4 +29,14 @@ describe('closed browser entry surface', () => {
     act(() => navigateToAppPath(`/t/${tenant}/c/${tenant}`));
     expect(navigateFromBrowserHistory).toHaveBeenCalledTimes(1);
   });
+  it('suspends and returns to the exact conversation through same-organization management', () => {
+    window.history.replaceState(null, '', `/t/${tenant}/c/${tenant}`); render(<AppRouter />);
+    act(() => navigateToAppPath(`/t/${tenant}/admin/agents`));
+    expect(screen.getByText('Access tenant')).toBeVisible();
+    expect(suspendLiveSessionForNavigation).toHaveBeenCalled();
+    act(() => navigateToAppPath(`/t/${tenant}/c/${tenant}`));
+    expect(screen.getByText(`Tenant Chat ${tenant}`)).toBeVisible();
+    // A remount owns bootstrap. Routing must not also attach the same Session.
+    expect(navigateFromBrowserHistory).not.toHaveBeenCalled();
+  });
 });

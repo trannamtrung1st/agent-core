@@ -1,0 +1,140 @@
+
+Running 13 tests using 1 worker
+
+(node:24140) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 e2e/access-foundation.spec.ts:5:1 › owner and invited Reader use scoped access UI, with safe mobile drawers and denial recovery (31.1s)
+  ✓   2 e2e/product-experience.spec.ts:53:1 › J01–J05: first use, actual answer, retained draft, labeled tools and protected file preview (1.5m)
+  ✓   3 e2e/product-experience.spec.ts:94:1 › J06/J13/J14/J15: contextual navigation, settings categories, dirty guard and authoritative read-only scope (9.4s)
+  ✓   4 e2e/product-experience.spec.ts:129:1 › J10: author, validate, publish, start and independently sign off an actual Workflow (15.5s)
+  ✓   5 e2e/product-experience.spec.ts:155:1 › complete route families retain contextual access across organization, agent and system scopes (38.3s)
+  ✓   6 e2e/product-experience.spec.ts:196:1 › J07/J15: Space and Environment authoring retain exact identity and recover stale edits (12.5s)
+  ✓   7 e2e/session-goals.spec.ts:9:1 › real Goal plan, bound Synthetic work, exact Evaluation, acceptance and responsive recovery (34.0s)
+  ✓   8 e2e/task-delegation.spec.ts:10:1 › real delegated worker asks, waits, receives human guidance, completes and preserves independent Goals (41.2s)
+  ✓   9 e2e/tenant-agent-access.spec.ts:31:1 › create, grant exact chat and independent execution, inspect permissions, recover stale revoke and lifecycle (22.9s)
+  ✘  10 e2e/tenant-chat.spec.ts:389:34 › authenticated entry and retired browser routes at 390px (26.8s)
+(node:24368) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  11 e2e/tenant-model-management.spec.ts:330:1 › Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance (29.5s)
+(node:24396) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  12 e2e/tenant-model-management.spec.ts:393:1 › configured native offering flows through unattended and Automation selectors, exact approval and completed work (30.8s)
+  ✘  13 e2e/tenant-model-management.spec.ts:463:1 › Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort (29.8s)
+
+
+  1) e2e/tenant-chat.spec.ts:389:34 › authenticated entry and retired browser routes at 390px ──────
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  getByRole('navigation', { name: 'Admin navigation', exact: true }).locator('a[aria-label="Agents"]')
+    Expected: 1
+    Received: 0
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveCount" getByRole('navigation', { name: 'Admin navigation', exact: true }).locator('a[aria-label="Agents"]') with timeout 15000ms
+      - waiting for getByRole('navigation', { name: 'Admin navigation', exact: true }).locator('a[aria-label="Agents"]')
+        34 × locator resolved to 0 elements
+           - unexpected value "0"
+
+
+       at support/experience-navigation.ts:31
+
+      29 |     ? instancePages.some(item => item.label === label)
+      30 |     : !draftContext && tenantPages.some(item => item.label === label));
+    > 31 |   if (expectedInRail) await expect(nav.locator(`a[aria-label=${JSON.stringify(label)}]`)).toHaveCount(1);
+         |                                                                                           ^
+      32 |   let link = nav.getByRole('link', { name: label, exact: true });
+      33 |   if (!await link.count()) {
+      34 |     // Closed native details intentionally remove descendant accessible names.
+        at openDestination (/Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/support/experience-navigation.ts:31:91)
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-chat.spec.ts:415:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/closure-results/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../tmp/agent-core-order6/closure-results/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/closure-results/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../tmp/agent-core-order6/closure-results/tenant-chat-authenticated--13f1b-red-browser-routes-at-390px/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) e2e/tenant-model-management.spec.ts:330:1 › Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance 
+
+    TimeoutError: locator.focus: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for getByRole('slider', { name: 'Reasoning effort', exact: true })
+
+
+      354 |     await page.getByRole('button', { name: 'Model', exact: true }).click();
+      355 |     await select(page, 'Reasoning preference', 'Fixed effort');
+    > 356 |     await page.getByRole('slider', { name: 'Reasoning effort', exact: true }).focus();
+          |                                                                               ^
+      357 |     await page.getByRole('slider', { name: 'Reasoning effort', exact: true }).press('End');
+      358 |     await expect(page.getByRole('slider', { name: 'Reasoning effort', exact: true })).toHaveAttribute('aria-valuetext', 'High');
+      359 |     await page.keyboard.press('Escape');
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:356:79
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/closure-results/tenant-model-management-Ag-91408-s-distinct-from-inheritance/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../tmp/agent-core-order6/closure-results/tenant-model-management-Ag-91408-s-distinct-from-inheritance/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/closure-results/tenant-model-management-Ag-91408-s-distinct-from-inheritance/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../tmp/agent-core-order6/closure-results/tenant-model-management-Ag-91408-s-distinct-from-inheritance/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) e2e/tenant-model-management.spec.ts:463:1 › Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: getByRole('button', { name: 'Model', exact: true })
+    Expected substring: "High"
+    Received string:    "Scripted Alpha · Offline SyntheticDefault"
+    Timeout: 15000ms
+
+    Call log:
+      - Expect "toContainText" getByRole('button', { name: 'Model', exact: true }) with timeout 15000ms
+      - waiting for getByRole('button', { name: 'Model', exact: true })
+        34 × locator resolved to <button type="button" aria-label="Model" aria-expanded="false" aria-haspopup="listbox" class="ant-btn css-dev-only-do-not-override-19u5a7b css-var-_r_0_ ant-btn-text ant-btn-color-default ant-btn-variant-text ant-btn-sm model-picker-model">…</button>
+           - unexpected value "Scripted Alpha · Offline SyntheticDefault"
+
+
+      484 |     await page.goto(`/t/${f.tenant}`);
+      485 |     await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('Scripted Alpha');
+    > 486 |     await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('High');
+          |                                                                            ^
+      487 |     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Use the published Definition model');
+      488 |     await page.getByRole('button', { name: 'Send', exact: true }).click();
+      489 |     await expect(page.getByText('Hello from synthetic.', { exact: true })).toBeVisible();
+        at /Users/trungtran/MyPlace/Personal/Projects/agent-core/web/e2e/tenant-model-management.spec.ts:486:76
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/closure-results/tenant-model-management-De-cd3db-compatible-inherited-effort/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../tmp/agent-core-order6/closure-results/tenant-model-management-De-cd3db-compatible-inherited-effort/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/agent-core-order6/closure-results/tenant-model-management-De-cd3db-compatible-inherited-effort/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../../../../../tmp/agent-core-order6/closure-results/tenant-model-management-De-cd3db-compatible-inherited-effort/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    e2e/tenant-chat.spec.ts:389:34 › authenticated entry and retired browser routes at 390px ───────
+    e2e/tenant-model-management.spec.ts:330:1 › Agent defaults refresh with identity and an explicit same-offering pin stays distinct from inheritance 
+    e2e/tenant-model-management.spec.ts:463:1 › Definition defaults publish into Chat and sparse Instance model changes clear incompatible inherited effort 
+  10 passed (6.9m)

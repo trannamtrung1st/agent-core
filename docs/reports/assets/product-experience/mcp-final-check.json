@@ -1,0 +1,28 @@
+{
+  "profile": "Synthetic; final running source via Playwright MCP",
+  "url": "http://127.0.0.1:5179/t/01a18ded-82d3-7d59-8099-2494c4d8a26b/c/a1312779-ea01-416e-b672-bd532bfc4916",
+  "actions": [
+    "Signed in with disposable fixture account",
+    "Searched Delegation and opened visible organization",
+    "Selected Alex, sent text, observed Hello from synthetic.",
+    "Tools \u2192 Tasks \u2192 Delegate task \u2192 selected Migration reviewer rapidly",
+    "Waited 450ms after selection",
+    "Escape \u2192 confirmed discard of unsaved fixture assignment",
+    "Opened Model \u2192 Fixed effort \u2192 used keyboard End on named handle \u2192 observed High"
+  ],
+  "expected_and_observed": {
+    "real_reply": true,
+    "selected_agent_retained": "Migration reviewer",
+    "post_opening_focus": {
+      "tag": "INPUT",
+      "role": "combobox",
+      "not_reload_tasks_button": true
+    },
+    "drawer_closed_with_no_task_creation": true,
+    "close_restored_focus": "Conversation tools button",
+    "slider_handle_name": "Reasoning effort",
+    "slider_spoken_value": "High",
+    "slider_focus_after_server_commit": false
+  },
+  "limits": "The slider command achieved High; no assertion of focus retention during its server-save disabling cycle. No new Task was submitted. Independent full Task/Goal execution is covered by CLI browser cases."
+}

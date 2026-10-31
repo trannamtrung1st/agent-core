@@ -1,12 +1,14 @@
+import { canonicalFetch, signInTenant } from './support/tenant-auth';
+import { openDestination } from './support/experience-navigation';
 import { expect, test, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password'; const policyApi = '/api/v2/system/browser/privacy';
 type Policy = { saved: { mode: string; revision: number }; effective: { mode: string; revision: number }; durable: boolean };
 let identity: Awaited<ReturnType<APIRequestContext['storageState']>>;
 async function call<T>(api: APIRequestContext, path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
-  const csrf = await (await api.get('/api/v2/auth/csrf')).json(); const r = await api.fetch(path, { method, data: body, headers: { 'X-AgentCore-CSRF': csrf.token } });
+  const csrf = await (await api.get('/api/v2/auth/csrf')).json(); const r = await canonicalFetch(api, path, { method, data: body, headers: { 'X-AgentCore-CSRF': csrf.token } });
   expect(r.ok(), `${method} ${path}: ${r.status()}`).toBeTruthy(); return r.status() === 204 ? undefined as T : r.json();
 }
-async function signIn(page: Page, account = login, secret = password) { await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(account); await page.getByLabel('Password', { exact: true }).fill(secret); await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible(); }
+async function signIn(page: Page, account = login, secret = password) { await signInTenant(page, account, secret); }
 async function choose(page: Page, field: string, option: string) { await page.getByRole('combobox', {name:new RegExp(field)}).click(); await page.locator('.ant-select-item-option').filter({hasText:option}).click(); }
 test.beforeAll(async () => { const api = await requests.newContext({baseURL:process.env.TENANT_CHAT_TEST_BASE_URL});try{expect((await(await api.get('/health')).json()).profile).toBe('Synthetic');await call(api,'/api/v2/auth/login',{login,password});identity=await api.storageState();}finally{await api.dispose();} });
 
@@ -14,7 +16,7 @@ test('platform policy keeps effective startup facts, recovers lost reply and ret
   const api = await requests.newContext({baseURL:process.env.TENANT_CHAT_TEST_BASE_URL,storageState:identity}); const mutations: unknown[] = [], legacy: string[] = [], errors: string[] = [];
   page.on('request',r=>{const path=new URL(r.url()).pathname;if(path===policyApi&&r.method()==='PUT')mutations.push(r.postDataJSON());if(path.includes('/admin/browser/privacy')||path.includes('/owner-capability'))legacy.push(path);});page.on('pageerror',e=>errors.push(e.message));
   try {
-    await page.setViewportSize({width:1440,height:1000}); await signIn(page); await page.getByRole('link',{name:'Browser privacy',exact:true}).click();
+    await page.setViewportSize({width:1440,height:1000}); await signIn(page); await openDestination(page, 'Browser privacy');
     await expect(page).toHaveURL(/\/system\/browser-privacy$/); await expect(page.getByRole('region',{name:'Platform Browser privacy'})).toBeVisible();
     const current=await call<Policy>(api,policyApi); expect(current.durable).toBe(true); const firstMode=current.saved.mode==='Disabled'?'Protected':'Disabled';
     await choose(page,'Saved screenshot privacy mode',firstMode==='Disabled'?'Disabled — no screenshots':'Protected — mask sensitive pixels');
@@ -70,7 +72,7 @@ for (const width of [1440, 390]) test(`policy read recovery, keyboard and explic
   await choose(page,'Saved screenshot privacy mode',initial.includes('Disabled')?'Protected — mask sensitive pixels':'Disabled — no screenshots');
   const unload=()=>page.evaluate(()=>{const e=new Event('beforeunload',{cancelable:true});window.dispatchEvent(e);return e.defaultPrevented;});
   await expect.poll(unload).toBe(true);
-  const navigate=async(name:string)=>{const opener=page.getByRole('button',{name:'Open Admin navigation',exact:true});if(await opener.isVisible())await opener.click();await page.getByRole('navigation',{name:'Admin navigation',exact:true}).getByRole('link',{name,exact:true}).click();};
+  const navigate = (name: string) => openDestination(page, name);
   await navigate('My organizations');const dialog=page.getByRole('dialog',{name:'Discard unsaved changes?',exact:true});await dialog.getByRole('button',{name:'Stay',exact:true}).click();await expect.poll(unload).toBe(true);
   await navigate('My organizations');await dialog.getByRole('button',{name:'Discard and leave',exact:true}).click();await expect(page).toHaveURL(/\/account\/organizations$/);await expect.poll(unload).toBe(false);
   await navigate('Browser privacy');await expect(mode.locator('..')).toContainText(initial);await expect.poll(unload).toBe(false);expect(writes).toBe(0);
