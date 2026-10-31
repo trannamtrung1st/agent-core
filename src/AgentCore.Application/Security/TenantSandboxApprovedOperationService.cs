@@ -34,6 +34,19 @@ public sealed partial class TenantSandboxApprovedOperationService(ITenantRunStor
             var saved = await runtime.ReadTenantSandboxExecutionFactsAsync(tenant, session, executionId, ct).ConfigureAwait(false);
             if (saved?.Execution is not { ApprovalRequestId: not null, OperationId: not null } execution)
                 throw new AccessDeniedException("resource_unavailable");
+            // A later Review can replace the Run's current approval pointer.
+            // Read back its already committed exact result without trying to
+            // authorize/settle that historical effect again. This grants no dispatch.
+            if (await decisions.FindOperationReceiptAsync(tenant, execution.OperationId.Value, ct).ConfigureAwait(false) is { } old)
+            {
+                if (old.TenantId != tenant || old.RequestId != execution.ApprovalRequestId || old.OperationId != execution.OperationId
+                    || old.RunId != execution.AgentRunId || old.SessionId != session || old.SessionId != execution.SessionId
+                    || old.InstanceId != execution.AgentInstanceId || old.InstanceId != saved.Owner.AgentInstanceId
+                    || old.ExecutorPrincipalId != execution.ExecutorPrincipalId || old.ExecutorPrincipalId != saved.Owner.ExecutorPrincipalId
+                    || old.ActionHash != execution.ActionHash)
+                    throw new SecurityConflictException("sandbox_approval_mismatch");
+                return old;
+            }
             if (TenantSandboxEffectRules.Outcome(execution) is null) return null;
             var audit = new AuthorizationAudit(ids.NewId(), tenant, saved.Owner.ExecutorPrincipalId, "sandbox.command.result",
                 execution.OperationId.Value.ToString("D"), "allowed", "sandbox_command_completed", time.GetUtcNow());

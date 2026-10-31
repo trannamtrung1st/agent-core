@@ -269,11 +269,32 @@ configure_api() {
 }
 
 start_api() {
+  local workspace_override="${Persistence__WorkspaceRoot:-}"
   configure_api
   if [[ "$sandbox_selected" == 1 ]]; then
     set -a
     source "$root/local/opensandbox-compose/$sandbox_project/native.env"
     set +a
+    if [[ -n "$workspace_override" ]]; then
+      # A selected installation may own a child namespace of the server's
+      # allowlisted root. Keep its host/container mapping identical; never
+      # silently attach it to another installation's canonical files.
+      local docker_workspace
+      docker_workspace="$(python3 - "$workspace_override" "$Persistence__WorkspaceRoot" "$OpenSandbox__WorkspaceDockerHostRoot" <<'PYTHON'
+from pathlib import Path
+import re, sys
+selected, native, docker = map(Path, sys.argv[1:])
+try:
+    relative = selected.resolve().relative_to(native.resolve())
+except ValueError:
+    raise SystemExit('Selected Persistence__WorkspaceRoot must be within the managed Sandbox canonical root. Choose a private child namespace or use --api-only; no files were changed.')
+if relative.parts and (len(relative.parts) != 1 or not re.fullmatch('[0-9a-f]{32}', relative.name)):
+    raise SystemExit('Managed Sandbox workspace namespaces must be one 32-character lowercase hexadecimal child of its canonical root. Keep the selected namespace stable; no files were changed.')
+print(docker / relative)
+PYTHON
+)" || return 1
+      export Persistence__WorkspaceRoot="$workspace_override" OpenSandbox__WorkspaceDockerHostRoot="$docker_workspace"
+    fi
   else
     # Apply after .env so API-only cannot attach to a previously configured server.
     export OpenSandbox__Enabled=false
@@ -477,7 +498,7 @@ main() {
       local full=0 sandbox=0 api_only=0 with_store=0 recreate=0 option
       local start_args=()
       for option in "$@"; do
-        case "$option" in --full) full=1;; --with-sandbox) sandbox=1;; --with-store) with_store=1;; --api-only) api_only=1;; --recreate-sandbox) recreate=1;continue;; -h|--help) usage;return 0;; *) echo "unknown option: $option" >&2;return 2;; esac
+        case "$option" in --full) full=1;; --with-sandbox) sandbox=1;; --with-store) with_store=1;; --with-decision) ;; --api-only) api_only=1;; --recreate-sandbox) recreate=1;continue;; -h|--help) usage;return 0;; *) echo "unknown option: $option" >&2;return 2;; esac
         start_args+=("$option")
       done
       [[ "$full" != 1 || "$api_only" != 1 ]] || { echo "Choose --full or --api-only, not both." >&2; return 2; }

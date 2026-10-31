@@ -7,6 +7,7 @@ Reports are dated, source-bound evidence. They preserve the checks performed, ou
 
 | Evidence family | Main ledger |
 | --- | --- |
+| Local development / self-host readiness | [Selected native, packaged HTTPS, current-IAM and recovery qualification](self-host-local-readiness-2026-10-31.md) |
 | Original MVP / historical phases | [Implementation plan](../18-implementation-plan.md), [MVP handoff](m12-mvp-handoff.md) |
 | Tenant IAM / hosting stabilization | [Final IAM delivery](tenant-final-delivery-2026-10-24.md), [stabilization](iam-stabilization-2026-10-24.md) |
 | Spaces / models | [Space delivery](space-environment-implementation-2026-10-25.md), [model delivery](dynamic-model-management-delivery-2026-10-25.md) |

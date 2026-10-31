@@ -44,7 +44,7 @@ try {
     await assert.rejects(connect({ ...headers, Origin: base }), /WebSocket|401|Unauthorized|Unexpected server response/i);
   }
   csrf = (await json('/api/v2/auth/csrf')).token;
-  await json('/api/v2/auth/login', { login: 'owner@example.test', password: 'explicit-synthetic-test-password' });
+  await json('/api/v2/auth/login', { login: process.env.TENANT_UI_LOGIN ?? 'owner@example.test', password: process.env.TENANT_UI_PASSWORD ?? 'explicit-synthetic-test-password' });
   csrf = (await json('/api/v2/auth/csrf')).token;
   const tenant = (await json('/api/v2/account/tenants')).items[0].tenantId, api = `/api/v2/tenants/${tenant}`;
   const revision = async () => (await json(api + '/access/me')).revision;

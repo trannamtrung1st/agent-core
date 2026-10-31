@@ -111,7 +111,7 @@ Current code uses .NET 10/C# 14, the composed provider-neutral speech pipeline, 
 - [P0 agent-lifecycle handoff](docs/reports/p0-agent-lifecycle-handoff.md)
 - [P1 replaceable speech handoff](docs/reports/p1-replaceable-speech-handoff.md)
 
-Run commands and recovery guidance are documented in [Operations](docs/17-observability-and-operations.md#running-after-implementation). Native `scripts/dev-real.sh` loads the private root `.env` automatically; [`.env.example`](.env.example) contains the startup preset; [the host reference](docs/host-configuration-reference.md) documents advanced options and boundary translations and fresh identity setup fields. No manual shell export or user-secrets setup is needed for that launcher.
+Start with the [Local Development & Self-Hosting Quickstart](docs/local-development-quickstart.md). Detailed run commands and recovery belong to [Operations](docs/17-observability-and-operations.md#running-after-implementation). Native `scripts/dev-real.sh` loads the private root `.env` automatically; [`.env.example`](.env.example) contains the startup preset; [the host reference](docs/host-configuration-reference.md) documents advanced options and boundary translations and fresh identity setup fields. No manual shell export or user-secrets setup is needed for that launcher.
 
 ## Working with Codex and Cursor
 

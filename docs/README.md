@@ -18,6 +18,7 @@ Last committed executable/test acceptance: `bc8124f7b8a0486dd38fb8364789a0891992
 | HTTP, SignalR and MessagePack | [Protocol](14-api-and-realtime-protocol.md) |
 | SQLite schema, migrations, options and protected roots | [Persistence/configuration](15-persistence-and-configuration.md), [host input reference](host-configuration-reference.md) |
 | Automated evidence and test selection | [Testing strategy](16-testing-strategy.md) |
+| First local setup / self-hosting | [Quickstart](local-development-quickstart.md), [current readiness evidence](reports/self-host-local-readiness-2026-10-31.md) |
 | Startup, shutdown, deployment and recovery | [Operations](17-observability-and-operations.md) |
 | Work order / completed gates | [Implementation plan](18-implementation-plan.md), [TODO](../TODO.md) |
 | Shipped immutable definitions / developer tooling | [agents](../agents/README.md), [AGENTS](../AGENTS.md), [scripts](../scripts/README.md) |

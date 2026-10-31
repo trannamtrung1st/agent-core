@@ -84,6 +84,18 @@ class DevRealTests(unittest.TestCase):
         self.assertIn("Ignoring stale PID", started.stderr)
         self.assertTrue(all(self.alive(pid) for pid in self.pids()))
 
+    def test_occupied_untracked_port_refuses_without_stopping_its_owner(self):
+        with socket.socket() as server:
+            server.bind(('127.0.0.1', int(self.env['AGENTCORE_DEV_API_PORT'])))
+            server.listen()
+            result = self.run_script('start', '--api-only')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('occupied by an untracked process; it was left running', result.stderr)
+            with socket.socket() as probe:
+                self.assertEqual(probe.connect_ex(server.getsockname()), 0)
+            self.assertFalse((self.root / 'local/dev/api.pid').exists())
+            self.assertFalse((self.root / 'local/dev/web.pid').exists())
+
     def test_failed_process_is_reported_without_waiting_for_readiness_timeout(self):
         self.command("dotnet", "exit 42")
         self.command("curl", "exit 1")
@@ -280,6 +292,34 @@ print('OpenSandbox: authenticated fixture readiness')
         self.assertEqual(self.run_script('stop','--with-sandbox').returncode,0)
         self.assertNotIn('store:',(self.root/'trace').read_text())
 
+    def test_managed_sandbox_preserves_explicit_child_workspace_and_refuses_outside_root(self):
+        self.sandbox_stubs()
+        handoff = self.root / 'scripts/opensandbox-compose.py'
+        handoff.write_text(handoff.read_text().replace("p.write_text('OpenSandbox__Enabled=true", "p.write_text('Persistence__WorkspaceRoot=" + str(self.root / 'canonical') + "\\nOpenSandbox__WorkspaceDockerHostRoot=" + str(self.root / 'daemon-canonical') + "\\nOpenSandbox__Enabled=true"))
+        namespace = 'a' * 32
+        self.env['Persistence__WorkspaceRoot'] = str(self.root / 'canonical' / namespace)
+        self.command('dotnet', 'printf "%s\\n%s\\n" "$Persistence__WorkspaceRoot" "$OpenSandbox__WorkspaceDockerHostRoot" > "' + str(self.root / 'workspace-handoff') + '"\nexec sleep 300')
+        result = self.run_script('start')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for _ in range(100):
+            if (self.root / 'workspace-handoff').exists(): break
+            time.sleep(.01)
+        self.assertEqual((self.root / 'workspace-handoff').read_text().splitlines(),
+                         [str(self.root / 'canonical' / namespace), str(self.root / 'daemon-canonical' / namespace)])
+        self.assertEqual(self.run_script('stop').returncode, 0)
+        (self.root / 'workspace-handoff').unlink()
+        self.env['Persistence__WorkspaceRoot'] = str(self.root / 'outside')
+        refused = self.run_script('start')
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn('must be within', refused.stderr)
+        self.assertFalse((self.root / 'workspace-handoff').exists())
+        self.assertFalse((self.root / 'local/dev/api.pid').exists())
+        self.env['Persistence__WorkspaceRoot'] = str(self.root / 'canonical' / 'arbitrary-child')
+        refused = self.run_script('start')
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn('32-character', refused.stderr)
+        self.assertFalse((self.root / 'workspace-handoff').exists())
+
     def test_pending_selected_cleanup_returns_failure_and_stops_native_processes_without_claiming_success(self):
         self.sandbox_stubs();self.assertEqual(self.run_script('start','--api-only','--with-sandbox').returncode,0)
         pids=self.pids();self.env['FIXTURE_CLEANUP_PENDING']='1'
@@ -358,6 +398,20 @@ print('OpenSandbox: authenticated fixture readiness')
         result=self.run_script('restart','--api-only','--with-sandbox')
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertNotIn('sandbox:stop',(self.root/'trace').read_text())
+
+    def test_explicit_decision_restart_rechecks_preflight_without_stopping_service(self):
+        (self.root / 'scripts/decision-compose.py').write_text("""import pathlib,sys
+with (pathlib.Path(__file__).resolve().parents[1] / 'decision-trace').open('a') as output: output.write(sys.argv[1]+'\\n')
+""")
+        self.assertEqual(self.run_script('start', '--api-only', '--with-decision').returncode, 0)
+        old = self.pids()
+        restarted = self.run_script('restart', '--api-only', '--with-decision')
+        self.assertEqual(restarted.returncode, 0, restarted.stderr)
+        self.assertTrue(all(not self.alive(pid) for pid in old))
+        self.assertEqual((self.root / 'decision-trace').read_text().splitlines(),
+                         ['preflight', 'start', 'preflight', 'start'])
+        self.assertEqual(self.run_script('stop', '--with-decision').returncode, 0)
+        self.assertEqual((self.root / 'decision-trace').read_text().splitlines()[-1], 'stop')
 
     def test_explicit_recreation_warns_before_cleanup_and_restarts_native_processes(self):
         self.sandbox_stubs()

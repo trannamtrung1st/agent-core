@@ -15,6 +15,7 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed partial class TenantDefinitionIntegrationTests
 {
     [Theory] [InlineData(false, "known")] [InlineData(true, "known")]
+    [InlineData(false, "laterReview")] [InlineData(true, "laterReview")]
     [InlineData(false, "unknown")] [InlineData(true, "unknown")]
     [InlineData(false, "foreignHandle")] [InlineData(true, "foreignHandle")]
     [InlineData(false, "pendingProof")] [InlineData(true, "pendingProof")]
@@ -60,7 +61,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                 await RuntimeWorkspaceAccess(f, s), create: true);
             await mount.Working.WriteAsync("/working/keep.txt", "retained working bytes"u8.ToArray(), 1024, long.MaxValue, default);
             if (mount.Home is not null) await mount.Home.WriteAsync("/home/keep.txt", "retained home bytes"u8.ToArray(), 1024, long.MaxValue, default);
-            var known = mode is "known" or "foreignHandle" or "hostChanged";
+            var known = mode is "known" or "foreignHandle" or "hostChanged" or "laterReview";
             if (known)
             {
                 s = s with { Lease = s.Lease with { MountAuthority = mount.Authority, ProviderHostScope = new SandboxVerificationHost(options).Scope } };
@@ -78,6 +79,22 @@ public sealed partial class TenantDefinitionIntegrationTests
             Assert.True(await storage.TrySaveTenantSandboxExecutionFactsAsync(s.Tenant, execution, 1));
             if (known) await services.Execution.SettleAsync(s.Tenant, frame.SessionId, execution.Id);
             var originalEffect = await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(s.Tenant, request.Operation.OperationId);
+            if (mode == "laterReview")
+            {
+                execution = execution with { Revision = execution.Revision + 1, State = SandboxExecutionState.Completed,
+                    Phase = "completed", ExitCode = 0, FinishedAt = DateTimeOffset.UtcNow, TerminationConfirmed = true };
+                Assert.True(await storage.TrySaveTenantSandboxExecutionFactsAsync(s.Tenant, execution, execution.Revision - 1));
+                var ready = (await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, frame.SessionId))!.Lease!;
+                Assert.True(await storage.TrySaveTenantSandboxLeaseFactsAsync(s.Tenant,
+                    ready with { Revision = ready.Revision + 1, State = SandboxLeaseState.Ready, ActiveExecutionId = null }, ready.Revision));
+                // A later review replaces the Run's mutable approval pointer.
+                // The acknowledged command receipt remains exact historical evidence.
+                var active = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
+                var later = await services.Approvals.PrepareSandboxAsync(new(s.Tenant, frame.RunId), s.Lease.Profile.Id,
+                    new("printf later-review-never-dispatch", TimeoutSeconds: 30), active.Revision, frame.Generation);
+                Assert.NotEqual(request.RequestId, later.Request!.RequestId);
+                Assert.NotEqual(request.RequestId, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!.ApprovalRequestId);
+            }
             var saved = (await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, frame.SessionId))!; remote = saved.Lease!;
             await Assert.ThrowsAsync<ArgumentException>(() => storage.TrySaveTenantSandboxLeaseFactsAsync(s.Tenant, remote with { Revision = remote.Revision + 1, CleanupReason = "reset" }, remote.Revision).AsTask());
             var reset = new TenantSandboxReset(frame.SessionId, saved.SessionRevision, remote.Generation, remote.Revision, execution.Id);
@@ -108,8 +125,8 @@ public sealed partial class TenantDefinitionIntegrationTests
             }
             var final = (await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, frame.SessionId))!;
             Assert.Equal(SandboxLeaseState.Terminated, final.Lease!.State); Assert.Equal("reset", final.Lease.CleanupReason); Assert.Null(final.Lease.ActiveExecutionId);
-            Assert.Equal(SandboxExecutionState.Canceled, final.Execution!.State); Assert.True(final.Execution.TerminationConfirmed); Assert.True(final.Execution.RemoteTerminationConfirmed);
-            Assert.Equal("humanReset", final.Execution.CancellationReason);
+            Assert.Equal(mode == "laterReview" ? SandboxExecutionState.Completed : SandboxExecutionState.Canceled, final.Execution!.State); Assert.True(final.Execution.TerminationConfirmed); Assert.True(final.Execution.RemoteTerminationConfirmed);
+            Assert.Equal(mode == "laterReview" ? null : "humanReset", final.Execution.CancellationReason);
             Assert.Equal(known ? 1 : 0, kills); Assert.Equal(known ? 0 : blocked ? 2 : 1, fences);
             Assert.Equal("retained working bytes", System.Text.Encoding.UTF8.GetString(await mount.Working.ReadAsync("/working/keep.txt", 1024, default)));
             if (mount.Home is not null) Assert.Equal("retained home bytes", System.Text.Encoding.UTF8.GetString(await mount.Home.ReadAsync("/home/keep.txt", 1024, default)));

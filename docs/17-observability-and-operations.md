@@ -1,5 +1,7 @@
 # Observability and Operations
 
+For first use, start with the [local development and self-hosting quickstart](local-development-quickstart.md). This document owns detailed commands and recovery; the [current readiness ledger](reports/self-host-local-readiness-2026-10-31.md) records selected-profile qualification and the remaining external limits.
+
 ## Cold backup, restore and rollback
 
 Use `python3 scripts/data-backup.py --help`; [the persistence contract](15-persistence-and-configuration.md#cold-coordinated-snapshot-contract) owns manifest fields and the supported layout. Run as the installation OS owner with matching built binaries and a private (0700), physical backup parent. Keep archives off public shares and out of logs; they include credentials, private files and sensitive filenames. Provision storage separately; no command resets a database or overwrites an existing directory.
@@ -24,6 +26,17 @@ python3 scripts/data-backup.py restore --archive /private/backups/pre-upgrade --
 The read-only `dotnet /private/release/AgentCore.Api.dll verify-protected-state /private/installation/app.db /private/installation/keys` checks the exact current Core/Elsa schemas and decrypts existing credential/Secret/OAuth records with automatic key generation disabled. It forces existing account-key usability but cannot infer historical DB lineage from an arbitrary valid unrelated account ring when no persisted ciphertext ties them together. Backup custody and exact manifest/file inventory establish that relationship. The full snapshot tool additionally checks every retained Attachment/Artifact and Definition/Instance/Space immutable resource reference against actual blob size/hash. Mutable Workspace bytes have no independent database digest: an internally consistent substituted mutable root cannot be cryptographically identified. Provision/inventory the actual root before backup and retain custody; no broad cross-installation-mixing guarantee is claimed.
 
 `python3 scripts/qualification/production-recovery.py` rehearses actual HTTPS Chat/attachment/credential/Workflow bookmark state, cold backup, independent restore, original-cookie/new-login verification, continued Workflow sign-off, negative key/schema restore and matching-snapshot rollback on disposable data only. It does not qualify live effects, customer data or down migration.
+
+### Native stopped-state preservation
+
+The native/hybrid lane has external roots and writers. Before maintenance:
+
+1. Inventory the exact source/image, private configuration, Core/Elsa database, credential and account key rings, Workspace/Attachment/Artifact/DefinitionResource roots, Browser profiles, Sandbox metadata and canonical host/daemon path mapping. Record selected service projects and pending/unknown operation IDs privately.
+2. Stop new admissions and settle or explicitly cancel known work through current authority. Read back uncertain effects; retain their receipts without replay. Stop the tracked API/Vite with `dev-real.sh stop` and every independent writer. Quiesce only this installation's known Browser/Sandbox generations through their controls. A shared Sandbox server need not be stopped; unrelated workloads must remain untouched.
+3. Preserve the stopped SQLite database using SQLite backup semantics, all inventoried roots and original protected configuration/keys together, with private ownership and independent byte/inventory verification. Do not copy a live database alone or assume the API owner lock covers external writers. The controlled-Synthetic `data-backup.py` does not automate this native procedure.
+4. Restore to a distinct isolated target with the matching binary/image and original keys. Reconcile every configured path and server mount mapping deliberately before startup. Verify current login/permissions, exact file bytes, terminal Task/Goal/Workflow identity and pending sign-off state before admitting new work. Keep unresolved native outcomes fenced.
+
+The readiness run qualified native restart/readback and controlled-Synthetic full restore. A complete native cross-root disaster-recovery rehearsal remains separately unqualified; these preservation requirements do not extend the snapshot tool's guarantee.
 
 ## Controlled single-host deployment preflight
 
@@ -266,7 +279,7 @@ The default template selects native Real with SQLite under repository-relative `
 The preferred fast developer loop requires no Docker: ASP.NET backend on localhost:5080 and Vite on localhost:5173 with HTTP/WebSocket proxy. Run native .NET and Vite processes for fast startup, direct debugging, hot reload and no container rebuilds. Initialize an explicitly selected SQLite database with the [one-use bootstrap](#explicit-identity-bootstrap-foundation) before starting. An intentionally ephemeral InMemory host needs the five explicit `Security:EphemeralBootstrap` values on every start. Provider profile and storage selection are independent.
 
 ```sh
-# Copy .env.example to private .env once; fill the API key and five bootstrap fields.
+# Copy .env.example to private .env once; fill the five bootstrap fields.
 pnpm --dir web install --frozen-lockfile
 # New/reset SQLite database only; skip this command for an initialized database.
 scripts/dev-real.sh bootstrap-identity
@@ -800,34 +813,26 @@ Keep the two infrastructure stacks separate: OpenSandbox for coding/Office tests
 
 Only explicit optional maintainer `--build-workbench` preparation uses permanent input-addressed tags and reuses/rebuilds recorded pinned inputs. Normal startup skips that fixture path. Private automatic native handoff and authenticated server readiness remain unchanged. Only OpenSandbox receives the Docker socket.
 
+An explicitly configured `Persistence__WorkspaceRoot` is retained when it is the managed handoff root or one 32-character lowercase hexadecimal child namespace; the launcher derives the corresponding daemon path. This matches contract 5's existing optional namespace, without widening the server allowlist. Outside roots and arbitrary nested names refuse before API launch. Use a stable unique namespace for a separate fresh installation sharing a server, and preserve every installed root. Without an explicit selection the existing shared handoff root remains the default. Do not switch an initialized installation's workspace path without its coordinated stopped-writer storage procedure. Verify both the reusable profile and exact Instance setup before execution.
+
 `AGENTCORE_SANDBOX_PROJECT` (default `agent-core-sandbox`) and `AGENTCORE_SANDBOX_PORT` (18080) select the owned deployment. Normal process tracking/logs and private `stack.json` component/port tracking stay in `local/dev`. Optional `AGENTCORE_DEV_STATE_DIR`, `AGENTCORE_DEV_API_PORT`, `AGENTCORE_DEV_WEB_PORT`, `AGENTCORE_DEV_ENV_FILE` and absolute `AGENTCORE_DEV_API_DATA_DIR` allow isolated local acceptance without touching the normal database. Keep these overrides consistent for start/status/restart/stop. Occupied untracked ports and unverifiable PID ownership fail safely. A pending/external sandbox workload retains the server and returns failure rather than claiming complete cleanup. Restart after restoring server readiness resumes existing durable reconciliation; no shell is replayed.
 
-Packaged application deployment is separate and explicit. For container Core, prepare once and use the generated private interpolation file:
+Packaged authenticated application deployment uses the [HTTPS setup](#docker-compose-integration-and-demo). Its Production profile excludes native Browser/OpenSandbox execution. The app-sandbox overlay's container identity and private-key projection are retained infrastructure mechanisms, not a qualified authenticated Production profile. Base HTTP app examples from earlier deliveries provide static/health inspection only and are not a sign-in path. Real inference uses protected tenant model connections after bootstrap, not a global provider key in Compose.
+
+For native/hybrid execution, manage the standalone trusted-local server through its existing helper:
 
 ```bash
-python3 scripts/opensandbox-compose.py prepare
-# Ordinary key-free Synthetic (no Sandbox dependency):
-python3 scripts/compose.py -f docker-compose.yml up -d --build
-# Real without Sandbox (provider key in private .env):
-python3 scripts/compose.py -f docker-compose.yml -f docker-compose.real.yml up -d --build
-# Explicit Synthetic app with Sandbox (not used by dev-real):
-docker compose --project-name agent-core-sandbox --env-file .env \
-  --env-file local/opensandbox-compose/agent-core-sandbox/compose.env \
-  -f docker-compose.yml -f docker-compose.sandbox.yml \
-  -f docker-compose.app-sandbox.yml up -d --build
-# Real app with Sandbox: add -f docker-compose.real.yml after docker-compose.yml.
-# The Real overlay uses agent-core:real; the key-free overlay uses agent-core:synthetic.
-# Infrastructure only (the native helper uses this same standalone file):
-docker compose --project-name agent-core-sandbox \
-  --env-file local/opensandbox-compose/agent-core-sandbox/compose.env \
-  -f docker-compose.sandbox.yml up -d
+python3 scripts/opensandbox-compose.py up
+python3 scripts/opensandbox-compose.py status
+# Deliberate cleanup only, with your owned API still running:
+# python3 scripts/opensandbox-compose.py stop --api-url http://127.0.0.1:5080
 ```
 
-Synthetic needs no provider key: omit `--env-file .env` if that file does not exist. Use one selected Compose project for server and app. `python3 scripts/opensandbox-compose.py up` manages just the server and prepares its native handoff. `status` checks authenticated readiness; `stop --api-url http://127.0.0.1:5080` asks the owned Core to generation-fence its known Sessions before stopping the server. Manual users must supply their owned API, not an unrelated localhost app. Do not use `down -v` for normal shutdown. The trusted server reads the generated 0600 host key through a Docker secret, then atomically projects it into the project-owned `opensandbox-auth` volume as 1654:1654/0400 in a 0500 directory. Core mounts that volume read-only at `/run/secrets` and keeps its non-root UID; no API key enters its environment. This avoids host UID dependence and Compose ownership attributes: file-source ownership is not remapped ([Docker secret semantics](https://docs.docker.com/reference/compose-file/services/#secrets)), and the tested Compose runtime also ignored environment-source ownership attributes. The volume contains only the private key, separate from server metadata. Only the server receives the socket. Authenticated health, `unless-stopped`, pinned server/execd/egress images and persistent metadata use the existing configuration generator. Core opts into the exact authenticated `http://opensandbox:8080` origin; arbitrary private HTTP remains rejected.
+`up` manages just the server and prepares its private native handoff. Never start a competing server. `status` checks authenticated reachability; it does not qualify a workload image or confer tenant permission. `stop --api-url` asks the specified owned Core to generation-fence known Sessions before stopping the server; never supply an unrelated localhost app. Do not use `down -v` for normal shutdown. The server receives the Docker socket and reads the generated 0600 host key through a Docker secret. The retained container integration projects that key into the separate project-owned `opensandbox-auth` volume with private owner permissions; file-source secret ownership is not remapped by Compose. Native handoff stays backend-only and uses the canonical mount root. Keep server metadata, authentication and Workspace roots with their installation.
 
 On Docker Desktop, the server proxy reaches privately published workload ports through `host.docker.internal`; on native Linux, configuration uses the inspected private default-bridge gateway for host address and published workload ports. The server occupies the Compose network; offline workloads retain upstream default bridge mode because the pinned egress sidecar requires it. Proxy internal resolution is disabled so routing crosses bridges through private published ports. No broad ingress/network-policy exception is added. Native Linux hardware verification for this enhancement must be reported separately from Desktop and portable gateway checks.
 
-One server per daemon remains mandatory. A compatible existing project local runner is reused without claiming shutdown ownership. `up --migrate-local` requires no live sandboxes, preserves its private authentication, stops but retains the old container/metadata, and starts Compose. Foreign or ambiguous servers are left untouched; a second server is rejected. Do not run the acceptance utility's independent server while the normal server is active. Initialization logs are owner-only bounded evidence, not application log text; operators should keep secrets out of setup scripts. Production hardening remains separately deferred under the existing trusted-local threat model.
+One server per daemon remains mandatory. A compatible existing project local runner is reused without claiming shutdown ownership. `up --migrate-local` requires no live sandboxes, preserves its private authentication, stops but retains the old container/metadata, and starts Compose. Foreign or ambiguous servers are left untouched; a second server is rejected. Do not run the acceptance utility's independent server while the normal server is active. Initialization logs are owner-only bounded evidence, not application log text; operators should keep secrets out of setup scripts. The trusted-local Development execution profile remains distinct from the accepted controlled Production Synthetic profile.
 
 ### OCI image onboarding and private pull operations
 
@@ -1051,8 +1056,8 @@ Use Compose **2.24.4 or newer** for the HTTPS overlay’s `!override` port repla
 | Authenticated Synthetic | base, https | Private readable PFX/password and explicit one-use identity bootstrap; loopback 5080 → 8443. |
 | Authenticated Real | base, real, https | Protected tenant model connections configured after bootstrap; same HTTPS/data owner, no second host. |
 | Sandbox infrastructure only | sandbox | `opensandbox-compose.py prepare/up`; generated server image/config/key, owner UID/GID and daemon-visible workspace root; loopback 18080, trusted Docker socket, private auth/metadata volumes. |
-| Packaged app + Sandbox | base, https, sandbox, app-sandbox | Generated private Sandbox env; identical Unix identity and canonical backing root; app waits for Sandbox health. |
-| Real packaged app + Sandbox | base, real, https, sandbox, app-sandbox | Both preceding readiness/configuration requirements; no broader default mounts or listener. |
+| Packaged app + Sandbox | base, https, sandbox, app-sandbox | **Unsupported:** HTTPS selects Production; app-sandbox enables native execution, refused as `unqualified_native_effects`. Use native Development + standalone Sandbox. |
+| Real packaged app + Sandbox | base, real, https, sandbox, app-sandbox | **Unsupported** for the same Production preflight reason. Config interpolation is not runtime qualification; no authenticated packaged native profile is qualified. |
 | Optional CUDA Decision | base, https, decision | Explicit KEV key and pinned cache, NVIDIA runtime/GPU; internal Decision network, no inference host port; disabled/shadow by default. |
 | CUDA service for native host | base, decision, decision.native | `decision-compose.py` includes base to validate the complete model but targets **decision only**; loopback 8009. Native Apple Silicon inference is a separately served backend. |
 | Explicit Decision download | base, decision, decision.native, decision.download | `decision-compose.py download`; adds egress only for explicit cache acquisition, then exits. Normal serving remains offline. |

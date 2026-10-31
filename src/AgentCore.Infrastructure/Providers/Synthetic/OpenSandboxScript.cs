@@ -11,6 +11,14 @@ internal static class OpenSandboxScript
 {
     public static IReadOnlyList<ModelGenerationEvent>? Generate(ModelRequest request)
     {
+        var canonicalResults = (request.Interaction ?? request.Messages).Where(m => m.Role == ModelRole.Tool
+            && m.EvidenceKind != EvidenceMessageKind.Historical && m.ToolCallId?.StartsWith("tenant-workbench-", StringComparison.Ordinal) == true).ToArray();
+        var taskText = SyntheticTaskContext.Text(request);
+        var backgroundTask = request.Context?.Sections.Any(s => s.Id == ContextSectionId.CoreBackground) == true;
+        if (taskText.StartsWith("synthetic-sandbox:canonical-demo", StringComparison.Ordinal)
+            || backgroundTask && request.Context?.Sections.FirstOrDefault(s => s.Id == ContextSectionId.RunTask)?.Message.Text.Contains("synthetic-sandbox:canonical-demo", StringComparison.Ordinal) == true
+            || canonicalResults.Length > 0)
+            return CanonicalDemo(request, canonicalResults, backgroundTask);
         var last = request.Messages.ToList().FindLastIndex(m => m.Role == ModelRole.User);
         var headless = request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded background Session task.", StringComparison.Ordinal));
         // Background intent lives in the typed RunTask, with no fabricated user turn.
@@ -90,6 +98,70 @@ internal static class OpenSandboxScript
             return [new ModelSemanticResponseReady(new("Real sandbox demo completed: Python failure fixed, Node test passed, Excel and Word files validated and published.",new(ModelSpeechMode.None,null),blocks)),new ModelCompleted(ModelStopReason.Completed)];
         }
         return [new ModelTextDelta("Real sandbox scenario completed. Results:\n" + string.Join("\n",results.Select(r => r.Text))),new ModelCompleted(ModelStopReason.Completed)];
+    }
+
+    // Current tenant execution requests exact consent; it never invokes the retired
+    // direct sandbox tool or treats an approval decision as completed SDK work.
+    private static IReadOnlyList<ModelGenerationEvent> CanonicalDemo(ModelRequest request, ModelMessage[] results, bool background)
+    {
+        IReadOnlyList<ModelGenerationEvent> Stop(string reason) => [new ModelTextDelta("Workbench verification did not complete (" + reason + "). Inspect the saved operation; no command was replayed and no output is claimed."), new ModelCompleted(ModelStopReason.Completed)];
+        IReadOnlyList<ModelGenerationEvent> Call(string name, object arguments) =>
+            request.Tools?.Any(t => t.Name == name) == true
+                ? [new ModelToolCallEvent(new("tenant-workbench-" + results.Length, name, JsonSerializer.Serialize(arguments))), new ModelCompleted(ModelStopReason.ToolCalls)]
+                : Stop("authorization_not_offered");
+        if (results.Length == 0)
+        {
+            var authorization = request.Tools?.FirstOrDefault(t => t.Name == ToolCatalog.RequestAuthorization);
+            if (authorization is null) return Stop("authorization_not_offered");
+            using var schema = JsonDocument.Parse(authorization.ParametersJson);
+            string? Profile(JsonElement node)
+            {
+                if (node.ValueKind == JsonValueKind.Object)
+                {
+                    if (node.TryGetProperty("properties", out var properties)
+                        && properties.TryGetProperty("operation", out var operation)
+                        && operation.TryGetProperty("enum", out var operations)
+                        && operations.EnumerateArray().Any(v => v.GetString() == "run_sandbox_command")
+                        && properties.TryGetProperty("profileId", out var profile)
+                        && profile.TryGetProperty("enum", out var ids) && ids.GetArrayLength() == 1)
+                        return ids[0].GetString();
+                    foreach (var property in node.EnumerateObject()) if (Profile(property.Value) is { } found) return found;
+                }
+                else if (node.ValueKind == JsonValueKind.Array)
+                    foreach (var child in node.EnumerateArray()) if (Profile(child) is { } found) return found;
+                return null;
+            }
+            var id = Profile(schema.RootElement);
+            if (id is null) return Stop("unique_verified_profile_required");
+            const string command = "python --version && node --version && python -I -c 'from openpyxl import Workbook,load_workbook; from docx import Document; w=Workbook(); w.active.append([\"Total\",5]); w.save(\"report.xlsx\"); d=Document(); d.add_paragraph(\"Total: 5\"); d.save(\"report.docx\"); assert load_workbook(\"report.xlsx\").active[\"B1\"].value==5; assert Document(\"report.docx\").paragraphs[0].text==\"Total: 5\"; print(\"Office files validated\")' && node -e 'if(2+3!==5)process.exit(1);console.log(\"Node passed\")'";
+            return Call(ToolCatalog.RequestAuthorization, new { operation = "run_sandbox_command", profileId = id,
+                command = new { command, cwd = "/working", timeoutSeconds = 120, background = false } });
+        }
+        using var consent = JsonDocument.Parse(results[0].Text);
+        if (results[0].Name != ToolCatalog.RequestAuthorization) return Stop("unexpected_checkpoint");
+        if (!consent.RootElement.TryGetProperty("outcome", out var outcome) || outcome.GetString() != "completed") return Stop("command_not_completed");
+        if (!consent.RootElement.TryGetProperty("sandbox", out var sandbox) || sandbox.ValueKind != JsonValueKind.Object) return Stop("command_readback_unavailable");
+        if (!sandbox.TryGetProperty("status", out var status) || status.GetString() != "Completed") return Stop("command_not_completed");
+        if (!sandbox.TryGetProperty("exitCode", out var exit) || !exit.TryGetInt32(out var code) || code != 0) return Stop("command_failed");
+        var artifacts = new List<ModelResponseBlock>();
+        foreach (var result in results.Skip(1))
+        {
+            using var publication = JsonDocument.Parse(result.Text);
+            if (result.Name != ToolCatalog.RequestAuthorization
+                || !publication.RootElement.TryGetProperty("outcome", out var published) || published.GetString() != "completed"
+                || !publication.RootElement.TryGetProperty("operationId", out var id) || !Guid.TryParse(id.GetString(), out _)) return Stop("publication_not_completed");
+            artifacts.Add(new(ModelResponseBlockKind.ArtifactReference, ArtifactId: id.GetString()));
+        }
+        if (results.Length is 1 or 2)
+        {
+            var extension = results.Length == 1 ? "xlsx" : "docx";
+            return Call(ToolCatalog.RequestAuthorization, new { operation = "publish_workspace_artifact",
+                artifact = new { path = "/working/report." + extension, displayName = "report." + extension } });
+        }
+        if (results.Length != 3) return Stop("unexpected_checkpoint");
+        const string summary = "Native Workbench completed: Python and Node ran, Excel and Word files validated and published.";
+        return background ? Call(ToolCatalog.WorkComplete, new { outcome = "Response", summary, attentionRequired = false })
+            : [new ModelSemanticResponseReady(new(summary, new(ModelSpeechMode.None, null), artifacts)), new ModelCompleted(ModelStopReason.Completed)];
     }
     private static string Arguments(string name, object? args)
     {

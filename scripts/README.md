@@ -1,6 +1,6 @@
 # Script ownership and effects
 
-Keep documented entrypoints stable. `dev-env.py` owns environment parsing/validation; .NET section keys and uppercase operator inputs are translated explicitly. Launchers must not print private input values. [Operations](../docs/17-observability-and-operations.md) owns runnable setup and recovery instructions; this is an inventory, not another configuration contract.
+Keep documented entrypoints stable. `dev-env.py` owns environment parsing/validation; .NET section keys and uppercase operator inputs are translated explicitly. Launchers must not print private input values. The [quickstart](../docs/local-development-quickstart.md) introduces setup; [Operations](../docs/17-observability-and-operations.md) owns runnable setup and recovery instructions; this is an inventory, not another configuration contract.
 
 | Entrypoint / family | Caller and prerequisites | Effects / destructive boundary | Regression owner |
 | --- | --- | --- | --- |

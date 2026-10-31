@@ -65,12 +65,17 @@ def eventually(read, predicate, label, seconds=60):
 
 
 class ComposeFixture:
-    def __init__(self, project, port, build=False):
-        self.project, self.port, self.build = project, port, build
+    def __init__(self, project, port, build=False, profile='Synthetic'):
+        if profile not in ('Synthetic', 'Real'):
+            raise ValueError('Select Synthetic or Real explicitly.')
+        self.project, self.port, self.build, self.profile = project, port, build, profile
         self.login = 'smoke-' + uuid.uuid4().hex + '@example.test'
         self.password = secrets.token_urlsafe(32)
         self.env = dict(os.environ, COMPOSE_PROJECT_NAME=project, AGENTCORE_COMPOSE_PORT=str(port), AGENTCORE_DRIVE_ENABLED='true')
-        self.compose = ['docker', 'compose', '--env-file', '/dev/null', '-f', str(REPO / 'docker-compose.yml'), '-f', str(REPO / 'docker-compose.https.yml')]
+        self.compose = ['docker', 'compose', '--env-file', '/dev/null', '-f', str(REPO / 'docker-compose.yml')]
+        if profile == 'Real':
+            self.compose += ['-f', str(REPO / 'docker-compose.real.yml')]
+        self.compose += ['-f', str(REPO / 'docker-compose.https.yml')]
         self.started = False
 
     def run(self, *args):
@@ -92,6 +97,7 @@ class ComposeFixture:
             # Private parent directory; the mounted file must be readable by the image's non-root UID.
             pfx.chmod(0o644)
             self.context = ssl.create_default_context(cafile=str(cert))
+            self.ca_file = cert
             self.base = f'https://127.0.0.1:{self.port}'
             self.client = Client(self.base, self.context)
             # Never reuse/reset a deployment or an earlier failed verification volume.
@@ -127,7 +133,7 @@ class ComposeFixture:
                 return self.client.call('/health')
             except (OSError, AssertionError):
                 return None
-        eventually(healthy, lambda health: health and health['status'] == 'healthy' and health['profile'] == 'Synthetic', 'Synthetic HTTPS readiness', 120)
+        eventually(healthy, lambda health: health and health['status'] == 'healthy' and health['profile'] == self.profile, self.profile + ' HTTPS readiness', 120)
 
     def recreate(self):
         self.command('stop', '--timeout', '30')
