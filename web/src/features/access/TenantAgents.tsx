@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { App, Button, Drawer, Empty, Flex, Form, Select, Table, Tag, Typography } from 'antd';
+import { App, Button, Drawer, Dropdown, Empty, Flex, Form, Grid, Select, Table, Tag, Typography } from 'antd';
 import { followAppLink } from '../../app/appLink';
 import { navigateToAppPath } from '../../app/appRoute';
 import { identityRequest, tenantApi, type Page, type TenantContext } from '../../services/identity';
@@ -13,6 +13,7 @@ import { useTenantCommand } from './useTenantCommand';
 
 type Agent = { managedKind?: string | null; principalId: string; systemIdentityId: string; instance: { instanceId: string; revision: number; lifecycle: string; showInChat?: boolean; persona: { name: string; role: string } } };
 export function TenantAgents({ context }: { context: TenantContext }) {
+  const screens = Grid.useBreakpoint();
   const tenant = context.tenant.tenantId; const [page, setPage] = useState(0); const [search, setSearch] = useState(''); const [creating, setCreating] = useState(false); const [visibility, setVisibility] = useState('all');
   const opener = useRef<HTMLElement | null>(null);
   const closeCreation = () => { setCreating(false); requestAnimationFrame(() => opener.current?.isConnected ? opener.current.focus({ preventScroll: true }) : document.querySelector<HTMLElement>('[data-admin-page-heading]')?.focus()); };
@@ -24,8 +25,17 @@ export function TenantAgents({ context }: { context: TenantContext }) {
       dataSource={state.data?.items.filter(row => (visibility === 'all' || (row.instance.showInChat !== false) === (visibility === 'visible'))).filter(row => `${row.instance.persona.name} ${row.instance.persona.role}`.toLowerCase().includes(search.trim().toLowerCase()))}
       pagination={{ ...adminCollectionPagination, current: page + 1, pageSize: 20, total: state.data?.total, showSizeChanger: false, onChange: next => setPage(next - 1) }}
       locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search ? 'No matching agents on this page. Clear search or choose another page.' : 'No agents you can read in this organization.'} /> }} columns={[
-        { title: 'Agent', render: (_, row) => <Flex vertical align="start" gap="var(--ac-space-tight)"><Typography.Link strong href={tenantAgentPath(tenant, row.instance.instanceId, 'profile')} onClick={followAppLink} aria-label={`Profile for ${row.instance.persona.name}`}>{row.instance.persona.name}</Typography.Link><Typography.Text type="secondary">{row.instance.persona.role}</Typography.Text><Flex wrap gap="var(--ac-space-tight)"><Tag>{row.instance.lifecycle}</Tag>{row.managedKind && <Tag>System-managed</Tag>}<Tag>{row.instance.showInChat !== false ? 'Visible in Chat' : 'Hidden from Chat'}</Tag></Flex></Flex> },
-        { title: 'Manage', width: 116, render: (_, row) => <Flex vertical gap="var(--ac-space-compact)"><Typography.Link href={tenantAgentPath(tenant, row.instance.instanceId)} onClick={followAppLink} aria-label={`Access for ${row.instance.persona.name}`}>Access</Typography.Link><Typography.Link href={tenantAgentPath(tenant, row.instance.instanceId, 'connections')} onClick={followAppLink} aria-label={`Connections for ${row.instance.persona.name}`}>Connections</Typography.Link><Typography.Link href={tenantAgentPath(tenant, row.instance.instanceId, 'activity-sessions')} onClick={followAppLink} aria-label={`Activity for ${row.instance.persona.name}`}>Activity</Typography.Link><Typography.Link href={tenantAgentPath(tenant, row.instance.instanceId, 'lifecycle')} onClick={followAppLink} aria-label={`Lifecycle for ${row.instance.persona.name}`}>Lifecycle</Typography.Link></Flex> }
+        { title: 'Agent', render: (_, row) => <Flex vertical align="start" gap="var(--ac-space-tight)"><Typography.Link strong href={tenantAgentPath(tenant, row.instance.instanceId, 'profile')} onClick={followAppLink} aria-label={`Profile for ${row.instance.persona.name}`}>{row.instance.persona.name}</Typography.Link>{!screens.lg && <><Typography.Text type="secondary">{row.instance.persona.role}</Typography.Text><Flex wrap gap="var(--ac-space-tight)"><Tag>{row.instance.lifecycle}</Tag>{row.managedKind && <Tag>System-managed</Tag>}<Tag>{row.instance.showInChat !== false ? 'Visible in Chat' : 'Hidden from Chat'}</Tag></Flex></>}</Flex> },
+        { title: 'Role', responsive: ['lg'], render: (_, row) => row.instance.persona.role },
+        { title: 'Lifecycle', responsive: ['lg'], render: (_, row) => <Tag>{row.instance.lifecycle}</Tag> },
+        { title: 'Managed', responsive: ['lg'], render: (_, row) => row.managedKind ? 'System-managed' : 'Organization' },
+        { title: 'Chat visibility', responsive: ['lg'], render: (_, row) => row.instance.showInChat !== false ? 'Visible' : 'Hidden' },
+        { title: 'Actions', width: 180, render: (_, row) => <Flex wrap gap="var(--ac-space-compact)"><Typography.Link href={tenantAgentPath(tenant, row.instance.instanceId)} onClick={followAppLink} aria-label={`Access for ${row.instance.persona.name}`}>Access</Typography.Link><Dropdown trigger={['click']} menu={{ items: [
+          { key: 'connections', label: <a href={tenantAgentPath(tenant, row.instance.instanceId, 'connections')} onClick={followAppLink} aria-label={`Connections for ${row.instance.persona.name}`}>Connections</a> },
+          { key: 'activity', label: <a href={tenantAgentPath(tenant, row.instance.instanceId, 'activity-sessions')} onClick={followAppLink} aria-label={`Activity for ${row.instance.persona.name}`}>Activity</a> },
+          { key: 'lifecycle', label: <a href={tenantAgentPath(tenant, row.instance.instanceId, 'lifecycle')} onClick={followAppLink} aria-label={`Lifecycle for ${row.instance.persona.name}`}>Lifecycle</a> }
+        ] }}><Button aria-label={`More actions for ${row.instance.persona.name}`}>More</Button></Dropdown></Flex> }
+
       ]} />}
     {creating && <CreateAgent context={context} onClose={closeCreation} />}
   </Flex>;

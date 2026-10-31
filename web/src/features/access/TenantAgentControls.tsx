@@ -5,7 +5,6 @@ import { IdentityCompletionError, IdentityError, identityRequest, tenantApi, typ
 import { tenantAgentApi, type TenantAgentControlsView } from '../../services/tenantAgentConfiguration';
 import type { ExecutionBudgetPolicy } from '../../services/adminApi';
 import type { listModels } from '../../services/api';
-import { followAppLink } from '../../app/appLink';
 import { confirmAction } from '../../app/confirmAction';
 import { AgentConfigurationPanel } from '../admin/AgentConfigurationLayout';
 import { BudgetFields, validExecutionBudgets } from '../admin/ExecutionBudgetsSection';
@@ -13,7 +12,6 @@ import { SelfManagementFields, inheritedManagement, managementDraftOf, managemen
 import { ExecutionModelFields } from '../admin/ExecutionModelFields';
 import { AccessError, AccessLoading } from './AccessFeedback';
 import { TenantAgentHeading } from './TenantAgentHeading';
-import { tenantAccessPath } from './accessRoute';
 import { useAccessDraftGuard } from './useAccessDraftGuard';
 import { useIdentityQuery } from './useIdentityQuery';
 import { useTenantCommand } from './useTenantCommand';
@@ -60,8 +58,8 @@ export function TenantAgentControls({ context, id, page }: { context: TenantCont
     confirmAction(modal, { title: lock ? 'Freeze self-management?' : 'Unfreeze self-management?', content: `Agent: ${view.agent.instance.persona.name}. Organization: ${context.tenant.name}. ${lock ? 'Revoke the saved management policy immediately. Normal tasks and retained content remain available.' : 'Remove the saved lock. The saved mode and areas govern management.'} Unsaved policy edits are preserved and are not applied.`, okText: lock ? 'Freeze self-management' : 'Unfreeze self-management', onOk: () => save(lock) });
   }
   const update = (part: Partial<Draft>) => setDraft(current => current ? { ...current, ...part } : current);
-  return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">{guard.holder}
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link><Button disabled={command.busy} onClick={reload}>Reload controls</Button></Flex>
+  return <Flex vertical gap="var(--ac-space-section)" className="access-settings-layout">{guard.holder}
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Button disabled={command.busy} onClick={reload}>Reload controls</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}
     {committed && <Alert type="info" showIcon title="Changes were saved" description="Read the current configuration before making another change. No command is replayed by Reload." />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={reload} /> : view && draft && <>

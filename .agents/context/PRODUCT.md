@@ -32,7 +32,7 @@ Explicit sign-in/invitation and organization choice. Ordinary Open enters Chat; 
 
 ## Brand Commitments
 
-Agent Core. Quiet dark evergreen surfaces, warm white text, readable mint links and explicit scope context. Native Ant Design controls, honest Synthetic labels and attributable outcomes. No invented claims, proof or successful effects.
+Agent Core. Quiet deep navy surfaces, cool white text, readable blue links and explicit scope context. Native Ant Design controls, honest Synthetic labels and attributable outcomes. No invented claims, proof or successful effects.
 
 ## Evidence on Hand
 

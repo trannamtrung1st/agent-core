@@ -1,35 +1,36 @@
 import { theme, type ThemeConfig } from "antd";
 
-// The product's dark evergreen palette is resolved here for native controls and
+// The product's deep navy palette is resolved here for native controls and
 // AppShell's CSS projection, including portals. Semantic error/warning colors
 // retain Ant Design's independently recognizable status palettes.
 const readableDarkAlgorithm: typeof theme.darkAlgorithm = (seed, map) => ({
   ...theme.darkAlgorithm(seed, map),
-  colorPrimaryHover: "#2f8064",
-  colorPrimaryActive: "#1d624a",
-  colorPrimaryBg: "#203e32",
-  colorPrimaryBgHover: "#294b3e",
-  colorPrimaryBorder: "#4b9e7c",
-  colorPrimaryText: "#86d5af",
-  colorPrimaryTextHover: "#b3e8cd",
-  colorPrimaryTextActive: "#86d5af",
-  colorLink: "#86d5af",
-  colorLinkHover: "#b3e8cd",
-  colorLinkActive: "#86d5af",
-  colorBgLayout: "#0e1613",
-  colorBgContainer: "#16201c",
-  colorBgElevated: "#202d26",
-  colorText: "#e7eee9",
-  colorTextSecondary: "#aebdb3",
-  colorTextTertiary: "#92a499",
-  colorTextPlaceholder: "#92a499",
-  colorBorder: "#40564a",
-  colorBorderSecondary: "#2b3e33"
+  colorPrimary: "#245fbe",
+  colorPrimaryHover: "#2867cc",
+  colorPrimaryActive: "#1d4c9d",
+  colorPrimaryBg: "#1b3455",
+  colorPrimaryBgHover: "#23436b",
+  colorPrimaryBorder: "#657d9c",
+  colorPrimaryText: "#91bdff",
+  colorPrimaryTextHover: "#b9d5ff",
+  colorPrimaryTextActive: "#91bdff",
+  colorLink: "#91bdff",
+  colorLinkHover: "#b9d5ff",
+  colorLinkActive: "#91bdff",
+  colorBgLayout: "#0b1322",
+  colorBgContainer: "#121e30",
+  colorBgElevated: "#1b2b42",
+  colorText: "#eaf1fa",
+  colorTextSecondary: "#b1c1d7",
+  colorTextTertiary: "#98abc4",
+  colorTextPlaceholder: "#98abc4",
+  colorBorder: "#657d9c",
+  colorBorderSecondary: "#374b66"
 });
 export const antdTheme: ThemeConfig = {
   algorithm: readableDarkAlgorithm,
-  token: { colorPrimary: "#27765b", borderRadius: 8, colorTextPlaceholder: "#92a499" },
+  token: { colorPrimary: "#245fbe", borderRadius: 8, colorTextPlaceholder: "#98abc4" },
   components: {
-    Tabs: { itemSelectedColor: "#86d5af", itemHoverColor: "#b3e8cd", itemActiveColor: "#86d5af" }
+    Tabs: { itemSelectedColor: "#91bdff", itemHoverColor: "#b9d5ff", itemActiveColor: "#91bdff" }
   }
 };

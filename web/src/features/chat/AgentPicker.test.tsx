@@ -42,7 +42,7 @@ function openIdentityOptions() {
 }
 
 describe("AgentPicker", () => {
-  it("lists Support and Compliance identities for a new durable chat", () => {
+  it("lists Support and Compliance identities for a new durable chat", async () => {
     const onSelect = vi.fn();
     render(
       <AgentPicker
@@ -61,10 +61,12 @@ describe("AgentPicker", () => {
     expect(screen.getByRole("combobox", { name: "Agent" })).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Speech locale" })).not.toBeInTheDocument();
     expect(screen.getByText("Agent")).toBeInTheDocument();
-    expect(screen.getByText("Sam — Support")).toBeInTheDocument();
+    expect(screen.getByText("Sam")).toBeInTheDocument();
+    expect(screen.queryByText("Sam — Support")).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Model" })).not.toBeInTheDocument();
 
     openIdentityOptions();
+    expect(await screen.findByRole("option", { name: "Sam — Support" })).toBeInTheDocument();
     fireEvent.click(screen.getByTitle("Jordan — Compliance"));
     expect(onSelect).toHaveBeenCalledWith("managed:019944af-00d1-7000-8000-000000000092");
   });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Breadcrumb, Button, Drawer, Dropdown, Flex, Layout, Divider, Tooltip, Typography, theme } from 'antd';
+import { Breadcrumb, Button, Drawer, Dropdown, Flex, Layout, Tooltip, Typography, theme } from 'antd';
 import { ArrowLeftOutlined, DownOutlined, MenuOutlined } from '@ant-design/icons';
 import { navigateToAppPath } from '../../app/appRoute';
 import { AdminNavigationIcon } from './AdminNavigationIcon';
@@ -21,7 +21,6 @@ export type AdminShellContext = {
 };
 
 export function AdminShell({ headingActions, headingMetadata, context, children }: { context: AdminShellContext; headingActions?: ReactNode; headingMetadata?: ReactNode; children: ReactNode }) {
-  const { token } = theme.useToken();
   // The Admin navigation contract uses 1024px; AntD's default lg begins at 992px.
   const [desktop, setDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
   useEffect(() => {
@@ -67,7 +66,7 @@ export function AdminShell({ headingActions, headingMetadata, context, children 
     {context.parentLink && <a className="admin-nav-back" href={context.parentLink.href} onClick={followAppLink}><ArrowLeftOutlined aria-hidden />{context.parentLink.label}</a>}
     {context.organizationNavigation && <Dropdown trigger={['click']} menu={{ items: context.organizationNavigation.map(p => ({ key: p.href, label: p.label })), onClick: ({ key }) => navigateToAppPath(key) }}><Button icon={<MenuOutlined aria-hidden />}>Organization navigation <DownOutlined aria-hidden /></Button></Dropdown>}
     {[...new Set(items.map(p => p.group))].map(group => <details className="admin-nav-group" key={`${context.areaLabel}:${group}:${context.parentLink?.href ?? ''}`} open={group === active.group || group === 'Work' || group === 'Identity' || group === 'Account' || group === 'Platform' || group === ''}>
-      <summary className="admin-nav-group-title">{group || 'Overview'}</summary>
+      <summary className="admin-nav-group-title"><DownOutlined aria-hidden className="admin-nav-chevron" /><span>{group || 'Overview'}</span></summary>
       {items.filter(p => p.group === group).map(p => <Tooltip key={p.id} title={dirtyPages.includes(p.id) ? 'Unsaved changes' : undefined} placement="right" trigger={['hover', 'focus']}><a href={p.href} aria-label={p.label} aria-description={dirtyPages.includes(p.id) ? "Unsaved changes" : undefined} aria-current={active?.id === p.id ? 'page' : undefined} className="admin-nav-link" onClick={event => { followAppLink(event); if (event.defaultPrevented) { menuNavigation.current = true; setMenuOpen(false); } }}><AdminNavigationIcon id={p.id} /><span className="admin-nav-label">{p.label}</span>{dirtyPages.includes(p.id) && <span className="admin-nav-unsaved" aria-hidden="true" />}</a></Tooltip>)}
     </details>)}
   </nav>;
@@ -75,8 +74,8 @@ export function AdminShell({ headingActions, headingMetadata, context, children 
     <Layout.Header className="admin-header">
       <Flex align="center" wrap gap="var(--ac-space-compact)" className="admin-header-inner">
         {!desktop && <Button icon={<MenuOutlined aria-hidden />} aria-label="Open Admin navigation" onClick={e => { cancelMenuFocus(); opener.current = e.currentTarget; menuNavigation.current = false; setMenuOpen(true); }} />}
-        <Flex align="center" gap="var(--ac-space-compact)" className="admin-brand"><Typography.Text strong className="admin-title">Agent Core</Typography.Text><Typography.Text type="secondary" className="admin-brand-area" style={{ fontSize: token.fontSizeSM }}>{context.areaLabel}</Typography.Text></Flex><Divider orientation="vertical" className="admin-brand-divider" />
-        <Breadcrumb aria-label="Admin breadcrumb" className="admin-breadcrumbs" items={[
+        <Flex align="center" gap="var(--ac-space-compact)" className="admin-brand"><Typography.Text strong className="admin-title">Agent Core</Typography.Text></Flex>
+        <Breadcrumb aria-label={`Admin breadcrumb · ${context.areaLabel}`} className="admin-breadcrumbs" items={[
           { title: <span className="admin-breadcrumb-owner" title={context.name}>{context.scopeAction ?? context.name}</span> },
           { title: active?.label ?? 'Page not found' },
         ]} />

@@ -1,3 +1,4 @@
+import { AgentConfigurationPanel } from '../admin/AgentConfigurationLayout';
 import { useState, type ReactNode } from 'react';
 import { Alert, Button, Flex, Form, Input, Typography, message } from 'antd';
 import { appMessageConfig } from '../../app/appFeedback';
@@ -47,13 +48,13 @@ export function AccountProfile({ context }: { context: AccountContext }) {
   };
   return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">{holder}
     <Flex vertical gap="var(--ac-space-tight)"><Typography.Text strong>{context.account.displayName}</Typography.Text><Typography.Text type="secondary">{context.account.loginKey.toLowerCase()}</Typography.Text></Flex>
-    <Typography.Title level={4}>Change password</Typography.Title><Typography.Paragraph type="secondary">Changing your password signs you out on every device. Your organization memberships stay the same.</Typography.Paragraph>
+    <AgentConfigurationPanel title="Change password" label="Change password" description="Changing your password signs you out on every device. Your organization memberships stay the same.">
     <Form form={form} layout="vertical" disabled={busy} onFinish={values => void save(values)} onFinishFailed={reason => showAdminFormValidation(feedback, form, reason)}>
       {error !== undefined && <div className="access-form-error"><Alert type="error" showIcon role="alert" title={accessErrorMessage(error)} /></div>}
       <Form.Item label="Current password" name="currentPassword" rules={[{ required: true, message: 'Enter your current password.' }]}><Input.Password autoComplete="current-password" maxLength={256} /></Form.Item>
       <Form.Item label="New password" name="newPassword" extra="Use 12–256 characters." rules={[{ required: true, message: 'Enter a new password.' }, { min: 12, max: 256, message: 'Use 12–256 characters.' }]}><Input.Password autoComplete="new-password" maxLength={256} /></Form.Item>
       <Form.Item label="Confirm new password" name="confirmPassword" dependencies={['newPassword']} rules={[{ required: true, message: 'Confirm your new password.' }, ({ getFieldValue }) => ({ validator(_, value: string) { return !value || getFieldValue('newPassword') === value ? Promise.resolve() : Promise.reject(new Error('The new passwords do not match.')); } })]}><Input.Password autoComplete="new-password" maxLength={256} /></Form.Item>
       <Button type="primary" htmlType="submit" loading={busy}>Change password</Button>
-    </Form>
+    </Form></AgentConfigurationPanel>
   </Flex>;
 }

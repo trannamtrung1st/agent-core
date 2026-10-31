@@ -1,0 +1,61 @@
+{
+  "primary": {
+    "foreground": "#ffffff",
+    "background": "#245fbe",
+    "contrast": 6.0774,
+    "measurement": "browser computed color + resolved token unit test"
+  },
+  "hover": {
+    "foreground": "#ffffff",
+    "background": "#2867cc",
+    "contrast": 5.3815,
+    "measurement": "browser computed color + resolved token unit test"
+  },
+  "active token": {
+    "foreground": "#ffffff",
+    "background": "#1d4c9d",
+    "contrast": 8.1621,
+    "measurement": "resolved AntD token unit test; no consequential active click"
+  },
+  "body": {
+    "foreground": "#eaf1fa",
+    "background": "#121e30",
+    "contrast": 14.7204,
+    "measurement": "browser computed color + resolved token unit test"
+  },
+  "secondary elevated": {
+    "foreground": "#b1c1d7",
+    "background": "#1b2b42",
+    "contrast": 7.8042,
+    "measurement": "browser computed color + resolved token unit test"
+  },
+  "tertiary/placeholder elevated": {
+    "foreground": "#98abc4",
+    "background": "#1b2b42",
+    "contrast": 6.09,
+    "measurement": "browser computed color + resolved token unit test"
+  },
+  "link elevated": {
+    "foreground": "#91bdff",
+    "background": "#1b2b42",
+    "contrast": 7.4292,
+    "measurement": "browser computed color + resolved token unit test"
+  },
+  "keyboard outline elevated": {
+    "foreground": "#657d9c",
+    "background": "#1b2b42",
+    "contrast": 3.3769,
+    "measurement": "browser computed color + resolved token unit test"
+  },
+  "keyboard outline container": {
+    "foreground": "#657d9c",
+    "background": "#121e30",
+    "contrast": 3.9605,
+    "measurement": "browser computed color + resolved token unit test"
+  },
+  "disabled": {
+    "foreground": "rgba(255,255,255,.25)",
+    "background": "rgba(255,255,255,.08)",
+    "note": "Native disabled state; exempt from enabled-control text contrast. Text/disabled property distinguish unavailable actions."
+  }
+}

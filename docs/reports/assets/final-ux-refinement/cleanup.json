@@ -1,0 +1,16 @@
+{
+  "task_api_and_vite_stopped": true,
+  "ports_checked": [
+    5088,
+    5179
+  ],
+  "listeners": [],
+  "mcp": "No open tabs after browser_close",
+  "disposable_data_removed": [
+    "/tmp/agent-core-navy-runtime",
+    "/tmp/agent-core-navy-runtime-approved",
+    "/tmp/agent-core-navy-array-correction-runtime"
+  ],
+  "raw_review_and_capture_evidence_retained": "/tmp/agent-core-navy",
+  "unrelated_processes": "not stopped"
+}

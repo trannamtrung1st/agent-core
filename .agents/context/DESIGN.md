@@ -1,19 +1,19 @@
 ---
 name: Agent Core
-description: Dark evergreen Ant Design v6 working environment for conversation, creation and administration.
+description: Deep navy Ant Design v6 working environment for conversation, creation and administration.
 colors:
-  primary: "#246750"
-  primaryBg: "#203e32"
-  linkText: "#86d5af"
-  focus: "#b3e8cd"
-  text: "#e7eee9"
-  textSecondary: "#aebdb3"
-  textTertiary: "#92a499"
-  layout: "#0e1613"
-  container: "#16201c"
-  elevated: "#202d26"
-  border: "#2b3e33"
-  borderStrong: "#40564a"
+  primary: "#245fbe"
+  primaryBg: "#1b3455"
+  linkText: "#91bdff"
+  focus: "#b9d5ff"
+  text: "#eaf1fa"
+  textSecondary: "#b1c1d7"
+  textTertiary: "#98abc4"
+  layout: "#0b1322"
+  container: "#121e30"
+  elevated: "#1b2b42"
+  border: "#374b66"
+  borderStrong: "#657d9c"
 typography:
   headline:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif"
@@ -59,13 +59,13 @@ components:
 
 ## Overview
 
-One dark evergreen working environment across conversation, creation and administration. The field-guide direction contributes quiet green grounds, warm white text, readable mint links and precise contextual identity. Standard task layouts and native controls carry interaction. `/docs` owns behavior; this guide describes presentation. Acceptance belongs to the delivery ledger.
+One deep navy working environment across conversation, creation and administration. The owner-selected navy direction contributes quiet navy grounds, cool white text, readable blue links and precise contextual identity. Standard task layouts and native controls carry interaction. `/docs` owns behavior; this guide describes presentation. Acceptance belongs to the delivery ledger.
 
-`web/src/app/antdTheme.ts` owns colors/controls. AntD resolves primary seed `#27765b` to `#246750`; links/surfaces and readable placeholder aliases are explicit. AppShell projects resolved tokens into `--ac-*` variables on the shell/document root, including portals. Never create another page token source.
+`web/src/app/antdTheme.ts` owns colors/controls. The dark algorithm explicitly resolves primary seed `#245fbe` to `#245fbe`; links/surfaces and readable placeholder aliases are explicit. AppShell projects resolved tokens into `--ac-*` variables on the shell/document root, including portals. Never create another page token source.
 
 ## Colors
 
-Mint links and focus contrast with evergreen grounds. Layout/container/elevated surfaces establish hierarchy. Error/warning/success retain Ant Design status palettes and text/icon meanings. Native Office/document canvases retain white presentation within the dark frame.
+Blue links and focus contrast with navy grounds. Layout/container/elevated surfaces establish hierarchy. Error/warning/success retain Ant Design status palettes and text/icon meanings. Native Office/document canvases retain white presentation within the dark frame.
 
 ## Typography
 
@@ -87,7 +87,7 @@ Control radius seed is 8px; resolved large surfaces use 10px. Existing message/c
 
 ## Components
 
-Consume native AntD primitives directly. Reuse AdminShell, AdminPageHeading/AdminOwnerHeading, AgentConfigurationPanel/Layout, AdminCollectionToolbar, useAdminDetailLayout, SessionSandboxFrame, ChatFileCard and FilePreview. Keep their inset, lifecycle, confirmation, save/cancel, per-field inheritance/reset, dirty-guard and uncertain-outcome owners. Tools has named actions and stable opener restoration. Scope menus distinguish organization/account/platform. Text selection and scrollbar roles come from shared tokens. Custom Chat/Workflow motion and scrolling respect reduced-motion CSS; short native AntD transitions remain library-owned. Primary hover is `#2f8064`; its white labels measured 4.7808:1 in the browser, with normal/hover/active contrast guarded by theme tests.
+Consume native AntD primitives directly. Reuse AdminShell, AdminPageHeading/AdminOwnerHeading, AgentConfigurationPanel/Layout, AdminCollectionToolbar, useAdminDetailLayout, SessionSandboxFrame, ChatFileCard and FilePreview. Keep their inset, lifecycle, confirmation, save/cancel, per-field inheritance/reset, dirty-guard and uncertain-outcome owners. Tools has named actions and stable opener restoration. Scope menus distinguish organization/account/platform. Text selection and scrollbar roles come from shared tokens. Custom Chat/Workflow motion and scrolling respect reduced-motion CSS; short native AntD transitions remain library-owned. Primary hover is `#2867cc`; its white labels measured 5.3815:1 in the browser, with normal/hover/active contrast guarded by theme tests.
 
 ## Do's and Don'ts
 
@@ -96,3 +96,7 @@ Consume native AntD primitives directly. Reuse AdminShell, AdminPageHeading/Admi
 - Do record visual review separately from interaction proof.
 - Don't add another UI kit, generic wrappers, per-page palette or decorative theme switch.
 - Don't infer permission, availability or completion from styling or screenshots.
+
+## Structured settings
+
+AgentConfigurationPanel owns cohesive section boundaries; AgentSettingRow owns compact divided descriptive rows and bounded trailing controls. Scalar settings use two columns only when the container permits (34rem); narrow rows stack in reading order. Instructions, scripts, complex lists, budget matrices and native auth forms retain full-width editors. Footers stay adjacent to their section. Do not add autosave, nested cards or a generic settings renderer. Nav groups use 14px semibold labels and a 12px chevron gap; semantic icons follow the shared registry map. Chat groups Agent/retention and keeps option metadata outside the short selected name. Tables use meaningful columns and labeled overflow actions.

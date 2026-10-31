@@ -59,8 +59,8 @@ function MemoryRows({ context, id, scope, session, page, onPage, onBusy, reload 
     {!invalidated && (view.loading ? <AccessLoading /> : view.error ? <AccessError error={view.error} retry={reload} /> : view.data && <>
       <Typography.Text strong>Memory for {view.data.agentName}</Typography.Text>
       <Typography.Text type="secondary">{view.data.retainedCount} readable retained facts. Counts include resolved and superseded facts; deleted rows retain only provenance. Retained Memory remains inspectable when recall is disabled.</Typography.Text>
-      <Table<TenantMemoryItem> className="admin-collection-table" size="small" rowKey="memoryId" dataSource={view.data.items} scroll={{ x: 580 }} locale={{ emptyText: 'No readable learned facts in this scope.' }}
-        pagination={{ current: view.data.page, pageSize: view.data.pageSize, total: view.data.total, showSizeChanger: false, onChange: onPage, disabled: command.busy }} columns={[
+      <>{view.data.total === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No readable learned facts in this scope." /> : <Table<TenantMemoryItem> className="admin-collection-table" size="small" rowKey="memoryId" dataSource={view.data.items} scroll={{ x: 580 }} locale={{ emptyText: 'No readable learned facts in this scope.' }}
+        pagination={{ hideOnSinglePage: true, current: view.data.page, pageSize: view.data.pageSize, total: view.data.total, showSizeChanger: false, onChange: onPage, disabled: command.busy }} columns={[
           { title: 'Subject', key: 'subject', render: (_, item) => <Typography.Text>{item.status === 'Deleted' ? 'Forgotten fact' : item.subject}</Typography.Text> },
           { title: 'Kind', dataIndex: 'kind' }, { title: 'Status', key: 'status', render: (_, item) => <Tag>{item.status}</Tag> },
           { title: 'Action', key: 'action', render: (_, item) => <Button danger size="small" disabled={block || !item.canForget} onClick={() => forget(item)} aria-label={`Forget ${item.subject || 'fact'}`}>Forget</Button> }
@@ -72,7 +72,7 @@ function MemoryRows({ context, id, scope, session, page, onPage, onBusy, reload 
           { key: 'agent', label: 'Origin agent', children: <Typography.Text copyable>{item.originAgentId}</Typography.Text> },
           { key: 'parent', label: 'Source lineage', children: item.sourceMemoryIds?.length ? `${item.sourceMemoryIds.length} retained sources` : item.supersedesMemoryId ?? 'None' },
           { key: 'time', label: 'Updated', children: new Date(item.updatedAt).toLocaleString() }
-        ]} /><TenantMemorySources tenant={tenant} agent={id} scope={scope} session={session} item={item} /></Flex> }} />
+        ]} /><TenantMemorySources tenant={tenant} agent={id} scope={scope} session={session} item={item} /></Flex> }} />}</>
     </>)}
   </Flex>;
 }

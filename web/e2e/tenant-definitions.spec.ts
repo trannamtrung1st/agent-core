@@ -206,13 +206,17 @@ test('resource-only Reader, stale save recovery and tenant switch discard old re
   await expect(page.getByLabel('Definition description', { exact: true })).toHaveValue('Keep this local edit after a stale save.');
   await page.getByRole('button', { name: 'Reload access and keep edits', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save draft', exact: true })).toBeEnabled(); await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+  // Disabled also means in flight. Wait for the actual acknowledgement before reload.
+  await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save draft', exact: true })).toBeDisabled();
   await page.reload(); await expect(page.getByLabel('Definition description', { exact: true })).toHaveValue('Keep this local edit after a stale save.');
   const beta = await request<{ tenantId: string }>(page, '/api/v2/system/tenants', { name: `Other organization ${nonce}`, slug: `definition-other-${nonce}` });
   let release!: () => void; const captured = new Promise<void>(resolve => { release = resolve; }); let entered!: () => void; const waiting = new Promise<void>(resolve => { entered = resolve; });
   await page.route(`**/definition-drafts/${first.draftId}/state`, async route => { const response = await route.fetch(); entered(); await captured; await route.fulfill({ response }).catch(() => {}); });
   await page.goto(`${prefix}/admin/definitions/${first.definitionId}/drafts/${first.draftId}/profile`); await waiting;
-  await page.getByRole('button', { name: /^Switch organization/ }).click(); await page.getByRole('button', { name: `Open Other organization ${nonce}`, exact: true }).click();
+  await page.getByRole('button', { name: /^Switch organization/ }).click();
+  await page.getByRole('dialog', { name: 'Switch organization', exact: true }).getByRole('textbox', { name: 'Search organizations', exact: true }).fill(nonce);
+  await page.getByRole('button', { name: `Open Other organization ${nonce}`, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/t/${beta.tenantId}/admin/access`)); release();
   await openDestination(page, 'Definitions'); await expect(page.getByText('No definitions you can read in this organization.', { exact: true })).toBeVisible();
   await expect(page.getByText(`Scoped reader ${nonce}`, { exact: true })).toHaveCount(0);

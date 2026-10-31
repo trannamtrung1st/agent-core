@@ -1,3 +1,4 @@
+import { AgentConfigurationPanel, AgentSettingRow } from '../admin/AgentConfigurationLayout';
 import { EvaluationGovernanceSettings } from './EvaluationGovernanceSettings';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, App, Button, Checkbox, Descriptions, Drawer, Empty, Flex, Form, Grid, InputNumber, Select, Table, Tag, Typography } from 'antd';
@@ -53,15 +54,13 @@ function ChatRetentionSettings({ context }: { context: TenantContext }) {
   const editable = saved?.canManage && context.permissions.includes('tenant.governance.manage');
   const stale = command.requiresReload || command.error instanceof IdentityError && [403, 404, 409].includes(command.error.status);
   const valid = value === null || Number.isInteger(value) && value >= 1 && value <= 3650;
-  return <Flex vertical gap="var(--ac-space-compact)">
-    <Typography.Title level={3}>Saved Chat retention</Typography.Title>
-    <Typography.Text type="secondary">Organization default · pinned when each chat is created. Existing chats keep their policy. Temporary chats always expire after 24 hours.</Typography.Text>
+  return <AgentConfigurationPanel title="Saved Chat retention" label="Saved Chat retention" bodyGap="default" description="Organization default · pinned when each chat is created. Existing chats keep their policy. Temporary chats always expire after 24 hours.">
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={state.reload} /> : saved ? <>
-      <Flex align="center" wrap gap="var(--ac-space-compact)">
-        <Checkbox checked={value === null} disabled={!editable || command.busy || stale} onChange={event => setDraft(event.target.checked ? null : 30)}>Forever</Checkbox>
-        {value !== null ? <Form.Item label="Days after completion" validateStatus={!valid ? 'error' : undefined} help={!valid ? 'Enter a whole number from 1 to 3650.' : undefined}>
-          <InputNumber aria-label="Saved Chat retention days" min={1} max={3650} precision={0} value={value} disabled={!editable || command.busy || stale} onChange={next => setDraft(next ?? 0)} />
-        </Form.Item> : null}
+      <div className="agent-settings-rows"><AgentSettingRow label={<label htmlFor="retention-forever">Keep saved chats forever</label>} description="Applies to new saved chats only."><Checkbox id="retention-forever" aria-label="Forever" checked={value === null} disabled={!editable || command.busy || stale} onChange={event => setDraft(event.target.checked ? null : 30)} /></AgentSettingRow>
+        {value !== null ? <AgentSettingRow label={<label htmlFor="retention-days">Days after completion</label>}><Form.Item validateStatus={!valid ? 'error' : undefined} help={!valid ? 'Enter a whole number from 1 to 3650.' : undefined}>
+          <InputNumber id="retention-days" aria-label="Saved Chat retention days" min={1} max={3650} precision={0} value={value} disabled={!editable || command.busy || stale} onChange={next => setDraft(next ?? 0)} />
+        </Form.Item></AgentSettingRow> : null}</div>
+      <Flex className="agent-settings-actions" wrap gap="var(--ac-space-compact)">
         <Button type="primary" loading={command.busy} disabled={!editable || stale || !valid || value === saved.savedChatRetentionDays}
           onClick={() => void command.run(signal => identityRequest<ChatRetention>(url, { method: 'PUT', signal, body: { savedChatRetentionDays: value, expectedRevision: saved.securityRevision } }), result => {
             if (result.savedChatRetentionDays !== value || result.securityRevision !== saved.securityRevision + 1) throw new IdentityCompletionError();
@@ -73,7 +72,7 @@ function ChatRetentionSettings({ context }: { context: TenantContext }) {
     </> : null}
     {command.error ? <AccessError error={command.error} /> : null}
     {stale ? <Typography.Text type="secondary">Refresh retention to review the current policy before saving again.</Typography.Text> : null}
-  </Flex>;
+  </AgentConfigurationPanel>;
 }
 
 function PolicyInspector({ context, permission, onClose, onSaved }: { context: TenantContext; permission: string; onClose: () => void; onSaved: () => void }) {

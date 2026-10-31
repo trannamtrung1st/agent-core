@@ -2,13 +2,11 @@ import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Alert, App, Button, Collapse, Empty, Flex, Form, Pagination, Select, Typography } from 'antd';
 import { IdentityCompletionError, IdentityError, identityRequest, type TenantContext } from '../../services/identity';
 import { tenantAgentApi, type TenantAgentVersion, type TenantAgentVersionCatalog, type TenantAgentVersionPreview } from '../../services/tenantAgentConfiguration';
-import { followAppLink } from '../../app/appLink';
 import { confirmAction } from '../../app/confirmAction';
 import { AgentConfigurationPanel } from '../admin/AgentConfigurationLayout';
 import { InstanceVersionChanges } from '../admin/InstanceVersionChanges';
 import { AccessError, AccessLoading } from './AccessFeedback';
 import { TenantAgentHeading } from './TenantAgentHeading';
-import { tenantAccessPath } from './accessRoute';
 import { useAccessDraftGuard } from './useAccessDraftGuard';
 import { useIdentityQuery } from './useIdentityQuery';
 import { useTenantCommand } from './useTenantCommand';
@@ -57,7 +55,7 @@ export function TenantAgentVersion({ context, id }: { context: TenantContext; id
   }
   const denied = readDenied ?? (lostRead(result.error) ? result.error : undefined);
   return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">{guard.holder}
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link><Button ref={reloadButton} disabled={busy} onClick={reload}>Reload versions</Button></Flex>
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Button ref={reloadButton} disabled={busy} onClick={reload}>Reload versions</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}
     {committed && <Alert type="info" showIcon title="Version adoption was saved" description="Read the current configuration before another change. Reload never replays adoption." />}
     {denied ? <AccessError error={denied} retry={reload} /> : catalog.loading ? <AccessLoading /> : catalog.error ? <AccessError error={catalog.error} retry={reload} /> : view && <>

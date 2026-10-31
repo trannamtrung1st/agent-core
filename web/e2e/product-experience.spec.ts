@@ -3,13 +3,14 @@ import path from 'node:path';
 import { test, expect, request, type APIRequestContext, type Page } from '@playwright/test';
 import { canonicalFetch, signInTenant } from './support/tenant-auth';
 import { openConversationTool, openDestination } from './support/experience-navigation';
+import { selectSpreadsheetCell } from './support/spreadsheet';
 
 const base = process.env.CANONICAL_SYNTHETIC_URL!;
 const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password';
 let organizationSlug: string;
 let api: APIRequestContext, tenant: string, agent: string, readerState: Awaited<ReturnType<APIRequestContext['storageState']>>;
 let ownerState: Awaited<ReturnType<APIRequestContext['storageState']>>;
-const captureRoot = process.env.EXPERIENCE_CAPTURE_ROOT ?? '/tmp/agent-core-order6/final';
+const captureRoot = process.env.EXPERIENCE_CAPTURE_ROOT ?? '/tmp/agent-core-final-ux';
 async function call<T>(client: APIRequestContext, url: string, data?: unknown, method = data === undefined ? 'GET' : 'POST'): Promise<T> {
   const csrf = await (await client.get('/api/v2/auth/csrf')).json();
   const response = await canonicalFetch(client, url, { method, data, headers: { 'X-AgentCore-CSRF': csrf.token } });
@@ -18,12 +19,16 @@ async function call<T>(client: APIRequestContext, url: string, data?: unknown, m
 }
 const root = () => `/api/v2/tenants/${tenant}`;
 const route = (suffix = '') => `/t/${tenant}${suffix}`;
-async function settled(page: Page) { await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1); await expect(page.locator('[aria-label="Loading access"]')).toHaveCount(0); }
+async function settled(page: Page) { await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1); await expect(page.locator('[aria-label="Loading access"]')).toHaveCount(0); await expect(page.locator('.ant-spin-spinning')).toHaveCount(0); }
 async function capture(page: Page, name: string, widths = [1440, 768, 390]) {
   fs.mkdirSync(captureRoot, { recursive: true });
   for (const width of widths) {
     await page.setViewportSize({ width, height: width === 768 ? 1024 : width < 768 ? 844 : 900 });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await expect(page.locator('.ant-spin-spinning')).toHaveCount(0);
+    if (width <= 390) for (const label of await page.locator('.agent-setting-description').all()) {
+      if (await label.isVisible() && (await label.innerText()).length > 20) await expect.poll(async () => (await label.boundingBox())?.width ?? 0, { message: 'setting description must retain readable measure' }).toBeGreaterThan(80);
+    }
     await page.screenshot({ path: path.join(captureRoot, `${name}-${width}.png`), animations: 'disabled' });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -46,7 +51,8 @@ test.beforeAll(async () => {
     await call(guest, '/api/v2/auth/register', { login: readerLogin, displayName: 'Review colleague', password: 'synthetic-experience-reader-password', invitation: { tenantId: tenant, invitationId: invite.invitationId, token: invite.token } });
     await call(guest, '/api/v2/auth/login', { login: readerLogin, password: 'synthetic-experience-reader-password' }); readerState = await guest.storageState();
   } finally { await guest.dispose(); }
-  fs.writeFileSync('/tmp/agent-core-order6/experience-fixture.json', JSON.stringify({ tenant, agent, profile: 'Synthetic', base }));
+  fs.mkdirSync(captureRoot, { recursive: true });
+  fs.writeFileSync(path.join(captureRoot, 'experience-fixture.json'), JSON.stringify({ tenant, agent, profile: 'Synthetic', base }));
 });
 test.afterAll(async () => { await api?.dispose(); });
 
@@ -60,7 +66,8 @@ test('J01–J05: first use, actual answer, retained draft, labeled tools and pro
   await page.getByRole('button', { name: 'Open Northstar studio', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/t/${tenant}$`));
   await expect(page.getByRole('combobox', { name: 'Agent', exact: true })).toBeEnabled();
-  await expect(page.getByTitle(/^General Assistant · System-managed —/)).toBeVisible();
+  await expect(page.locator('.agent-picker .ant-select-content')).toContainText('General Assistant');
+  await expect(page.locator('.agent-picker .ant-select-content')).not.toContainText('System-managed');
   await expect(page.getByRole('button', { name: 'Model', exact: true })).toBeEnabled();
   await capture(page, 'chat-empty');
   await expect(page).toHaveScreenshot('chat-empty-1440.png', { animations: 'disabled' });
@@ -188,7 +195,7 @@ test('complete route families retain contextual access across organization, agen
       seen.push({ id: `tenant.${item.id}`, width, path: new URL(page.url()).pathname, heading: await page.getByRole('heading', { level: 1 }).innerText() });
     }
     await page.setViewportSize({ width: 1440, height: 900 });
-    if (['spaces', 'ai-models', 'evaluations', 'approvals', 'members', 'credentials', 'definitions'].includes(item.id)) await capture(page, item.id);
+    await capture(page, `route-tenant-${item.id}`, [1440, 390]);
   }
   await page.goto(tenantAgentPath(tenant, agent, 'profile'));
   for (const item of instancePages) {
@@ -199,15 +206,17 @@ test('complete route families retain contextual access across organization, agen
       seen.push({ id: `agent.${item.id.slice('instance-'.length)}`, width, path: new URL(page.url()).pathname, heading: await page.getByRole('heading', { level: 1 }).innerText() });
     }
     await page.setViewportSize({ width: 1440, height: 900 });
+    await capture(page, `route-agent-${item.id.slice('instance-'.length)}`, [1440, 390]);
   }
   for (const item of systemPages) {
     await openDestination(page, item.label); await settled(page);
     for (const width of [1440, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), item.label + ' system-page overflow').toBe(true);
-      seen.push({ id: `system.${item.pathPage}`, width, path: new URL(page.url()).pathname, heading: await page.getByRole('heading', { level: 1 }).innerText() });
+      seen.push({ id: `system.${item.id}`, width, path: new URL(page.url()).pathname, heading: await page.getByRole('heading', { level: 1 }).innerText() });
     }
     await page.setViewportSize({ width: 1440, height: 900 });
+    await capture(page, `route-system-${item.id}`, [1440, 390]);
   }
   fs.writeFileSync(path.join(captureRoot, 'route-visits.json'), JSON.stringify(seen, null, 2));
   expect(errors).toEqual([]);
@@ -250,4 +259,134 @@ test('J07/J15: Space and Environment authoring retain exact identity and recover
   await capture(page, 'space-environment', [1440, 768, 390, 320]);
   await page.reload(); await page.getByRole('button', { name: 'Release checks', exact: true }).click();
   await expect(page.getByRole('row').filter({ hasText: 'RELEASE_CHANNEL' })).toBeVisible();
+});
+
+
+test('final refinement: Cooperation dependency, compact rows, semantic navigation and collection actions', async ({ page }) => {
+  await page.context().addCookies(ownerState.cookies);
+  await page.goto(route(`/admin/agents/${agent}/settings`)); await settled(page);
+  const panel = page.getByRole('region', { name: 'Cooperation', exact: true });
+  const messages = panel.getByRole('checkbox', { name: 'Accept direct Agent messages', exact: true });
+  const wake = panel.getByRole('checkbox', { name: 'Allow direct-message wake', exact: true });
+  await expect(wake).toBeDisabled(); await messages.check(); await wake.check(); await messages.uncheck();
+  await expect(wake).not.toBeChecked(); await expect(wake).toBeDisabled();
+  await panel.getByRole('spinbutton', { name: 'Maximum concurrent tasks' }).fill('3');
+  await panel.getByRole('button', { name: 'Save cooperation', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Save cooperation', exact: true })).toBeDisabled();
+  await expect(panel.getByRole('button', { name: 'Save cooperation', exact: true })).not.toHaveClass(/ant-btn-loading/);
+  await page.reload(); await settled(page);
+  await expect(panel.getByRole('spinbutton', { name: 'Maximum concurrent tasks' })).toHaveValue('3');
+  await expect(wake).not.toBeChecked(); await expect(wake).toBeDisabled();
+  for (const width of [1440, 1024, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 }); await panel.scrollIntoViewIfNeeded();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const row = panel.locator('.agent-setting-row').first();
+    const label = await row.locator('.agent-setting-description').boundingBox();
+    const control = await row.locator('.agent-setting-control').boundingBox();
+    if (width >= 1024) expect(control!.x).toBeGreaterThan(label!.x + label!.width);
+    else if (width <= 390) expect(control!.x).toBeGreaterThan(label!.x + label!.width);
+    await page.screenshot({ path: path.join(captureRoot, `cooperation-${width}.png`), animations: 'disabled' });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(route('/admin/agents')); await settled(page);
+  for (const title of ['Role', 'Lifecycle', 'Managed', 'Chat visibility', 'Actions']) await expect(page.getByRole('columnheader', { name: title, exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'More actions for General Assistant', exact: true }).click();
+  await page.getByRole('link', { name: 'Connections for General Assistant', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Connections', level: 1, exact: true })).toBeVisible();
+  await capture(page, 'connections-from-more', [1440, 390]);
+});
+
+test('final refinement: nested Definition, model and account pages have rendered dispositions', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.context().addCookies(ownerState.cookies);
+  const revision = (await call<{ revision: number }>(api, root() + '/access/me')).revision;
+  const draft = await call<{ definitionId: string; draftId: string }>(api, root() + '/agent-definitions', { name: 'Navy configuration proof', expectedRevision: revision });
+  const { draftPages } = await import('../src/features/admin/adminNavigation');
+  const visits: { id: string; route: string; widths: number[] }[] = [];
+  for (const item of draftPages) {
+    await page.goto(route(`/admin/definitions/${draft.definitionId}/drafts/${draft.draftId}/${item.path}`)); await settled(page);
+    await capture(page, `route-draft-${item.id}`, [1440, 390]);
+    visits.push({ id: `draft.${item.id}`, route: new URL(page.url()).pathname, widths: [1440, 390] });
+  }
+  for (const item of ['models', 'defaults', 'routing']) {
+    await page.goto(route(`/integrations/ai-models/${item}`)); await settled(page);
+    await capture(page, `route-models-${item}`, [1440, 1024, 768, 390, 320]);
+    visits.push({ id: `models.${item}`, route: new URL(page.url()).pathname, widths: [1440, 1024, 768, 390, 320] });
+  }
+  for (const item of ['profile', 'organizations']) {
+    await page.goto(`/account/${item}`); await settled(page);
+    await capture(page, `route-account-${item}`, [1440, 390, 320]);
+    visits.push({ id: `account.${item}`, route: new URL(page.url()).pathname, widths: [1440, 390, 320] });
+  }
+  await page.goto(route('/admin/spaces')); await settled(page);
+  await page.getByRole('button', { name: 'Create Shared Space', exact: true }).click();
+  const spaceEditor = page.getByRole('dialog', { name: 'Create Shared Space', exact: true });
+  await spaceEditor.getByLabel('Name', { exact: true }).fill('Navy Space proof');
+  await spaceEditor.getByRole('button', { name: 'Save Space', exact: true }).click(); await expect(spaceEditor).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Edit Space', exact: true })).toBeVisible();
+  const segments = new URL(page.url()).pathname.split('/'); const spaceId = segments[segments.indexOf('spaces') + 1];
+  for (const item of ['overview', 'members', 'workspace', 'environments', 'access']) {
+    await page.goto(route(`/admin/spaces/${spaceId}/${item}`)); await settled(page);
+    await capture(page, `route-space-${item}`, [1440, 390]);
+    visits.push({ id: `space.${item}`, route: new URL(page.url()).pathname, widths: [1440, 390] });
+  }
+  fs.writeFileSync(path.join(captureRoot, 'nested-route-visits.json'), JSON.stringify(visits, null, 2));
+});
+
+
+test('final refinement: every inherited settings section retains readable rows and native controls', async ({ page }) => {
+  await page.context().addCookies(ownerState.cookies);
+  await page.goto(route(`/admin/agents/${agent}/settings`)); await settled(page);
+  await page.getByRole('combobox', { name: 'Settings category', exact: true }).click();
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option-content').filter({ hasText: /^All settings$/ }).click();
+  const headers = page.locator('.ant-collapse-header');
+  const current = await call<{ settings: unknown[] }>(api, root() + `/agents/${agent}/editor`);
+  await expect(headers).toHaveCount(current.settings.length);
+  const count = current.settings.length;
+  const sections: { id: string; title: string; widths: number[] }[] = [];
+  for (let index = 0; index < count; index++) {
+    const header = headers.nth(index); const title = (await header.innerText()).replace(/\n/g, ' ');
+    if (await header.getAttribute('aria-expanded') !== 'true') await header.click();
+    const id = await header.locator('.admin-settings-anchor').getAttribute('id');
+    await header.scrollIntoViewIfNeeded();
+    if (id === 'capabilities') {
+      const wideRow = header.locator('..').locator('.agent-setting-row-wide').first();
+      await expect(wideRow.locator('.instance-settings-control').first()).toBeVisible();
+      const content = await wideRow.locator('.agent-setting-control').boundingBox();
+      const selector = await wideRow.locator('.instance-settings-control').first().boundingBox();
+      expect(selector!.width, 'capability lists use the available full-width row').toBeGreaterThan(content!.width * 0.9);
+    }
+    await capture(page, `settings-${id}`, [1440, 390, 320]);
+    sections.push({ id: `settings.${id === 'restrictions' ? 'triggerPolicy' : id}`, title, widths: [1440, 390, 320] });
+    await header.click();
+  }
+  fs.writeFileSync(path.join(captureRoot, 'settings-visits.json'), JSON.stringify(sections, null, 2));
+});
+
+test('final refinement: protected spreadsheet and Word canvases retain native presentation in the navy frame', async ({ page }) => {
+  await page.context().addCookies(ownerState.cookies); await page.goto(route());
+  await expect(page.getByRole('combobox', { name: 'Agent', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Add content', exact: true }).click();
+  const chooser = page.waitForEvent('filechooser'); await page.getByRole('menuitem', { name: /Attach file/ }).click();
+  await (await chooser).setFiles([
+    { name: 'navy.csv', mimeType: 'text/csv', buffer: Buffer.from('Name,Value\nNavy,42\n') },
+    { name: 'presentation.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: fs.readFileSync(path.resolve('e2e/fixtures/file-preview/presentation.xlsx')) },
+    { name: 'with-image.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: fs.readFileSync(path.resolve('e2e/fixtures/file-preview/with-image.docx')) },
+  ]);
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Keep these files available for preview.');
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByText('Hello from synthetic.', { exact: true })).toHaveCount(1);
+  for (const name of ['navy.csv', 'presentation.xlsx', 'with-image.docx']) {
+    await page.getByRole('button', { name: `Preview ${name}`, exact: true }).click();
+    const dialog = page.getByRole('dialog', { name, exact: true }); await expect(dialog).toBeVisible();
+    if (name === 'with-image.docx') await expect(page.frameLocator('iframe[title="Word document preview"]').getByText('Local document header', { exact: true })).toBeVisible();
+    else {
+      await expect(dialog.locator('.file-preview-spreadsheet')).toBeVisible();
+      await selectSpreadsheetCell(dialog, name === 'navy.csv' ? 'A2' : 'B4', name === 'navy.csv' ? 'Navy' : '$1,234.50');
+    }
+    await capture(page, `office-${name.replaceAll('.', '-')}`, [1440, 390, 320]);
+    if (name === 'navy.csv') { await dialog.getByText('Text', { exact: true }).click(); await expect(dialog.locator('pre')).toContainText('Navy,42'); }
+    await page.keyboard.press('Escape'); await expect(dialog).toHaveCount(0);
+  }
 });

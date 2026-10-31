@@ -449,6 +449,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
                           <Typography.Title level={2} className="new-chat-title">
                             What do you want to work on?
                           </Typography.Title>
+                          <div className="new-chat-controls">
                           <AgentPicker
                             onSearch={query => void searchChatAgents(query)}
                             onLoadMore={() => void loadMoreChatAgents()}
@@ -462,11 +463,13 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
                             onIdentityChange={selectChatIdentity}
                             onRetryManagedInstances={() => void reloadChatAgentInstances()}
                           />
-                          <Flex vertical gap={token.paddingXS}>
+                          <Flex vertical gap={token.paddingXS} className="new-chat-retention">
+                            <Typography.Text>Retention</Typography.Text>
                             <Segmented aria-label="Chat retention" value={state.newChatRetentionKind} options={[{ label: 'Saved', value: 'saved' }, { label: 'Temporary', value: 'temporary' }]}
                               onChange={value => useSessionStore.setState({ newChatRetentionKind: value as 'saved' | 'temporary' })} />
                             {state.newChatRetentionKind === 'temporary' ? <Typography.Text type="secondary">Expires 24 hours after creation. Explicit external effects may persist.</Typography.Text> : null}
                           </Flex>
+                          </div>
                           {modelSetup && <Alert type="info" showIcon className="new-chat-model-setup" title={modelSetup.title}
                             description={<Flex vertical align="start" gap="var(--ac-space-default)">
                               <Typography.Text>{modelSetup.description}</Typography.Text>

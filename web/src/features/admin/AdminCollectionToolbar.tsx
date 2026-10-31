@@ -14,7 +14,7 @@ export function AdminCollectionToolbar({ label, value, onChange, filters, showSc
   return (
     <div className="admin-collection-toolbar">
       <Flex align="center" gap={token.paddingXS} wrap>
-      <Input style={{ flex: "1 1 auto", minWidth: 0 }}
+      <Input style={{ flex: "1 1 16rem", minWidth: 0 }}
         aria-label={`Search ${label}`}
         placeholder={`Search ${label}`}
         prefix={<SearchOutlined />}
@@ -33,6 +33,7 @@ export const adminCollectionPagination = {
   defaultPageSize: 10,
   showSizeChanger: true,
   pageSizeOptions: [10, 20, 50],
+  // Keep the total; shared CSS removes only redundant one-page navigation.
   hideOnSinglePage: false,
   showTotal: (total: number) => `${total} ${total === 1 ? "result" : "results"}`,
   responsive: true

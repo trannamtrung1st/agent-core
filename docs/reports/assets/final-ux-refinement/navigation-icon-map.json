@@ -1,0 +1,346 @@
+{
+  "owner": "web/src/features/admin/AdminNavigationIcon.tsx",
+  "unknown": "reviewed iconless fallback plus development warning; never a generic gear",
+  "entries": [
+    {
+      "id": "chat",
+      "icon": "MessageOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "organizations",
+      "icon": "ApartmentOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "members",
+      "icon": "TeamOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "roles",
+      "icon": "SafetyOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "access",
+      "icon": "SafetyOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "audit",
+      "icon": "HistoryOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "governance",
+      "icon": "SafetyOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "my-profile",
+      "icon": "UserOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "instances",
+      "icon": "RobotOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "agents",
+      "icon": "RobotOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "spaces",
+      "icon": "FolderOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "workflows",
+      "icon": "BranchesOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "approvals",
+      "icon": "CheckSquareOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "evaluations",
+      "icon": "ExperimentOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "secrets",
+      "icon": "LockOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "definitions",
+      "icon": "FileTextOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "credentials",
+      "icon": "KeyOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "events",
+      "icon": "ThunderboltOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "ai-models",
+      "icon": "DeploymentUnitOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "system-model-presets",
+      "icon": "DeploymentUnitOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "system-organizations",
+      "icon": "ApartmentOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "system-accounts",
+      "icon": "TeamOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "system-operators",
+      "icon": "SafetyOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "system-audit",
+      "icon": "HistoryOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "browser-privacy",
+      "icon": "SafetyOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "sandboxes",
+      "icon": "CodeOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "sandbox",
+      "icon": "CodeOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "overview",
+      "icon": "InfoCircleOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "profile",
+      "icon": "UserOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "version",
+      "icon": "BranchesOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "settings",
+      "icon": "ControlOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "connections",
+      "icon": "ApiOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "instructions",
+      "icon": "FileTextOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "conversation",
+      "icon": "MessageOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "behavior",
+      "icon": "ControlOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "initiative",
+      "icon": "ThunderboltOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "voice",
+      "icon": "AudioOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "models",
+      "icon": "DeploymentUnitOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "providers",
+      "icon": "ApiOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "execution",
+      "icon": "FieldTimeOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "execution-budgets",
+      "icon": "FieldTimeOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "unattended-model",
+      "icon": "DeploymentUnitOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "skills",
+      "icon": "ToolOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "resources",
+      "icon": "FolderOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "workspace",
+      "icon": "FolderOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "capabilities",
+      "icon": "SafetyOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "self-management",
+      "icon": "SettingOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "trigger-policy",
+      "icon": "NodeIndexOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "memory-policy",
+      "icon": "DatabaseOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "automations",
+      "icon": "FieldTimeOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "unattended",
+      "icon": "RobotOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "memory",
+      "icon": "DatabaseOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "experience",
+      "icon": "ExperimentOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "state-isolation",
+      "icon": "SafetyOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "state",
+      "icon": "InfoCircleOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "sessions",
+      "icon": "MessageOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "runs",
+      "icon": "HistoryOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "activity-sessions",
+      "icon": "MessageOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "activity-runs",
+      "icon": "HistoryOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "lifecycle",
+      "icon": "IdcardOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "effective",
+      "icon": "ProfileOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "versions",
+      "icon": "BranchesOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "drafts",
+      "icon": "FileTextOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "metadata",
+      "icon": "UnorderedListOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "test-publish",
+      "icon": "CloudUploadOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "advanced-json",
+      "icon": "CodeOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "identity",
+      "icon": "IdcardOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    },
+    {
+      "id": "catalog",
+      "icon": "AppstoreOutlined",
+      "treatment": "semantic icon; instance- prefix normalizes to the same conceptual destination"
+    }
+  ]
+}

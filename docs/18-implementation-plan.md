@@ -985,6 +985,8 @@ The [General Assistant review stabilization](reports/general-assistant-stabiliza
 
 Status: **accepted 2026-10-31 for the controlled local Synthetic working tree**. The [experience contract](product-experience-contract.md) owns the selected product/navigation direction; [delivery ledger](reports/product-experience-delivery-2026-10-30.md), [coverage manifest](reports/assets/product-experience/coverage.json) and [independent review](reports/product-experience-independent-review-2026-10-31.md) own executed evidence and external limits. All AC01–AC22 pass within that profile; verdict Ready with Minor Improvements. The ledger identifies exact uncommitted source, not a new CI-accepted commit. Stop Order 6 refinement; hand off to local self-host readiness and owner manual validation without starting their implementation. Sequence: discovery and live baseline → product direction → shared design proof → full vertical migration → rendered/interaction verification → bounded polish, documentation and independent review. Local self-host readiness, owner manual validation and Group Chat retain their following roadmap positions. Hosted CI requires explicit opt-in.
 
+The owner-directed final refinement supersedes the previous visual palette only and is tracked separately in the [navy refinement ledger](reports/final-ux-refinement-2026-10-31.md). It preserves Order 6 IA, domain ownership and acceptance history while qualifying descriptive settings panels, compact collections and semantic navigation through focused local Synthetic checks. This follow-up does not start self-host readiness, owner manual validation or Group Chat.
+
 
 
 Mark each item with source/evidence links and pass/blocked status. **All mandatory items must pass for Order 6 acceptance.**

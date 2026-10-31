@@ -7,7 +7,7 @@ import type { TenantRuntimeState } from '../../services/tenantRuntimeState';
 import { AgentConfigurationPanel } from '../admin/AgentConfigurationLayout';
 import { useAdminDetailLayout } from '../admin/useAdminDetailLayout';
 import { AccessError, AccessLoading } from './AccessFeedback';
-import { tenantAccessPath, tenantAgentPath } from './accessRoute';
+import { tenantAgentPath } from './accessRoute';
 import { TenantAgentHeading } from './TenantAgentHeading';
 import { useIdentityQuery } from './useIdentityQuery';
 
@@ -35,7 +35,7 @@ function TenantStateObservation({ context, id }: { context: TenantContext; id: s
   const expired = !!observed && Date.parse(observed.freshThroughUtc) <= now;
   const issue = (kind: string) => observed?.issues.find(item => item.kind === kind)?.code;
   return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link><Button disabled={state.loading} onClick={state.reload}>Refresh state</Button></Flex>
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Button disabled={state.loading} onClick={state.reload}>Refresh state</Button></Flex>
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={state.reload} /> : view && observed && <>
       <TenantAgentHeading view={{ agent: view.agent, canUpdate: false }} configuration={false} archivedDescription="Runtime observations remain read-only for this archived agent." />
       <Typography.Paragraph type="secondary">Only resources you can read contribute. Counts grant no execution authority and do not prove login, logout or remote cleanup. Refresh observes existing resources without starting work.</Typography.Paragraph>

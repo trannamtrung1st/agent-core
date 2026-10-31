@@ -50,7 +50,10 @@ test('managed default ordinary Chat, hide, retained conversation, non-destructiv
     expect(candidates.total).toBe(1); expect(candidates.items[0].systemManaged).toBe(true);
     const id = candidates.items[0].instanceId, resource = root + `/agents/${id}`;
     await signInTenant(page, login, password); await page.goto(`/t/${tenant}`);
-    await expect(page.getByText(/General Assistant · System-managed/)).toBeVisible();
+    await expect(page.locator('.agent-picker .ant-select-content')).toContainText('General Assistant');
+    await page.getByRole('combobox', { name: 'Agent', exact: true }).click();
+    await expect(page.locator('.ant-select-dropdown:visible')).toContainText('General Assistant · System-managed');
+    await page.keyboard.press('Escape');
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Hello General Assistant'); await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('Hello from synthetic.', { exact: true })).toHaveCount(1);
     const conversation = page.url(); expect(conversation).toContain('/c/');

@@ -1,6 +1,6 @@
 import { RetainedAdminPage } from './RetainedAdminPage';
 import { routeTabLabel } from "../../app/appLink";
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Flex, Tabs, Typography, theme } from 'antd';
 
 /** Product section shared by Admin collections and Definition/Instance configuration.
@@ -23,6 +23,19 @@ export function AgentConfigurationPanel({ title, description, label, extra, chil
     </Flex>
     {bodyGap ? <Flex vertical gap={gaps[bodyGap]} className={bodyClasses}>{children}</Flex> : <div className={bodyClasses}>{children}</div>}
   </section>;
+}
+
+/** A descriptive settings row. Persistence and native form validation remain at the caller. */
+export function AgentSettingRow({ label, description, children, fullWidth = false }: {
+  label: ReactNode; description?: ReactNode; children: ReactNode; fullWidth?: boolean;
+}) {
+  const id = useId();
+  return <div role="group" aria-describedby={description ? `${id}-description` : undefined} className={`agent-setting-row${fullWidth ? ' agent-setting-row-wide' : ''}`}>
+    <div className="agent-setting-description"><div id={`${id}-label`} className="agent-setting-label">{label}</div>
+      {description && <Typography.Text id={`${id}-description`} type="secondary">{description}</Typography.Text>}
+    </div>
+    <div className="agent-setting-control">{children}</div>
+  </div>;
 }
 
 /** Shared configuration navigation; each owner supplies its own forms and commands. */

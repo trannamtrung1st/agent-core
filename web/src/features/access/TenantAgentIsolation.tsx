@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Flex, Form, Select, Typography } from 'antd';
-import { followAppLink } from '../../app/appLink';
 import { IdentityCompletionError, IdentityError, identityRequest, type TenantContext } from '../../services/identity';
 import { tenantAgentApi, type TenantIsolationPlan, type TenantIsolationView } from '../../services/tenantAgentConfiguration';
 import { deriveIsolationPreset, isolationValue, type IsolationDraft, type IsolationPlan } from '../../services/stateIsolation';
@@ -10,7 +9,6 @@ import { AgentConfigurationPanel } from '../admin/AgentConfigurationLayout';
 import { StateIsolationPolicyFields, StateIsolationToggleField } from '../admin/StateIsolationPolicyFields';
 import { TenantAgentHeading } from './TenantAgentHeading';
 import { AccessError, AccessLoading } from './AccessFeedback';
-import { tenantAccessPath } from './accessRoute';
 import { useAccessDraftGuard } from './useAccessDraftGuard';
 import { useIdentityQuery } from './useIdentityQuery';
 import { useTenantCommand } from './useTenantCommand';
@@ -55,7 +53,7 @@ function TenantIsolationEditor({ context, id }: { context: TenantContext; id: st
     return <Flex wrap gap="var(--ac-space-compact)"><Typography.Text type="secondary">{inherited ? 'Inherited from Definition' : 'Instance override'}</Typography.Text><Button type="link" size="small" disabled={disabled || inherited} onClick={() => patch(section, field)}>Use Definition default</Button></Flex>;
   };
   return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">{guard.holder}
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link><Button disabled={command.busy} onClick={reload}>Reload configuration</Button></Flex>
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Button disabled={command.busy} onClick={reload}>Reload configuration</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}
     {saved && <Alert type="success" showIcon title="Configuration saved" description="The coordinated metadata change is saved. New Runs use the updated policy." />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={reload} /> : !lostAccess && view && configuration && <>

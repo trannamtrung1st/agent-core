@@ -96,6 +96,7 @@ export function AgentPicker({
         filterOption={onSearch ? false : undefined}
         onSearch={onSearch ? query => { clearTimeout(searchTimer.current); searchTimer.current = setTimeout(() => onSearch(query), 250); } : undefined}
         options={options}
+        labelRender={({ value, label }) => managedInstances.find(item => managedChatIdentityKey(item.instanceId) === value)?.name ?? label}
         showSearch
         optionFilterProp="label"
         onChange={(nextKey) => onIdentityChange(nextKey)}

@@ -1,3 +1,4 @@
+import { AgentSettingRow } from './AgentConfigurationLayout';
 import { Checkbox, Flex, theme, Typography } from "antd";
 import { useId, useRef } from "react";
 
@@ -23,16 +24,15 @@ export function AutomationTriggerPermissions({ values, enabled, disabled, onChan
   const partial = selected.length === 1;
   const write = (next: string[]) => onChange([...new Set(next)]);
   const permission = (p: typeof automationTriggerPermissions[number]) => (
-    <Flex key={p.value} vertical gap={token.paddingXXS}>
-      <Checkbox checked={values.includes(p.value)} disabled={disabled} aria-describedby={`${id}-${p.value}`}
+    <AgentSettingRow key={p.value} label={<label htmlFor={`${id}-${p.value}-control`}>{p.label}</label>} description={<span id={`${id}-${p.value}`}>{p.description}</span>}>
+      <Checkbox id={`${id}-${p.value}-control`} aria-label={p.label} checked={values.includes(p.value)} disabled={disabled} aria-describedby={`${id}-${p.value}`}
         onChange={e => {
           if (p.value !== "schedule") pausedChoices.current = null;
           write(e.target.checked ? [...values, p.value] : values.filter(value => value !== p.value));
-        }}>{p.label}</Checkbox>
-      <Typography.Text id={`${id}-${p.value}`} type="secondary" style={{ paddingInlineStart: token.paddingLG }}>{p.description}</Typography.Text>
-    </Flex>
+        }} />
+    </AgentSettingRow>
   );
-  return <section aria-label="Automation trigger permissions" className="admin-draft-form-section">
+  return <section aria-label="Automation trigger permissions" className="admin-draft-form-section agent-settings-rows">
     <Typography.Text strong>Automation trigger permissions</Typography.Text>
     {!enabled && <Typography.Text type="secondary">Automation is disabled. These permissions stay configured but do not authorize execution.</Typography.Text>}
     {permission(automationTriggerPermissions[0])}

@@ -11,7 +11,7 @@ import type { InstanceSettingsTransport } from '../admin/useInstanceSettingsCont
 import { useAdminDetailLayout } from '../admin/useAdminDetailLayout';
 import { SandboxVerificationDetails } from '../sandbox/SandboxVerificationDetails';
 import { TenantAgentHeading } from './TenantAgentHeading';
-import { tenantAccessPath, tenantSandboxPath } from './accessRoute';
+import { tenantSandboxPath } from './accessRoute';
 import { AccessError, AccessLoading } from './AccessFeedback';
 import { useAccessDraftGuard } from './useAccessDraftGuard';
 import { useIdentityQuery } from './useIdentityQuery';
@@ -42,7 +42,7 @@ export function TenantAgentSandbox({ context, id }: { context: TenantContext; id
   }), [tenant, id]);
   const reloadSaved = () => { focusAfterRead.current = true; setRefresh(value => value + 1); };
   return <Flex ref={pane} tabIndex={-1} aria-label="Instance Sandbox configuration" vertical gap="var(--ac-space-section)" className="access-bounded-form">{guard.holder}
-    <Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link>
+
     {view && <TenantAgentHeading view={{ agent: { instance: { persona: { name: view.instanceName }, lifecycle: view.lifecycle, activeVersion: view.definitionVersion } }, canUpdate: view.canManage }} readOnlyDescription="Changing this saved Sandbox setup requires update and Sandbox management access on this exact agent. Verification has its own permission check." />}
     {view && !view.completeCatalog && <Alert type="info" showIcon title="Profile access is limited" description="Only readable Definition-authorized profiles are shown. Hidden profiles and their defaults are omitted." />}
     {view && !view.section && <Alert type="info" showIcon title="Saved Sandbox settings are restricted" description="The complete saved setup is unavailable with your current profile access. Readable profiles and separately authorized verification remain available below." />}

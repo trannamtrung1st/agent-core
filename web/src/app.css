@@ -20,7 +20,7 @@ body,
 #root {
   height: 100%;
   margin: 0;
-  background: #000;
+  background: var(--ac-color-layout, #0b1322);
 }
 
 ::selection {
@@ -1776,6 +1776,7 @@ body,
 .admin-settings-intro { max-inline-size: 72ch; }
 
 .admin-definition-panel-body {
+  container-type: inline-size;
   padding: var(--ac-space-section);
 }
 
@@ -2808,15 +2809,13 @@ body,
 .admin-navigation { display: flex; flex-direction: column; gap: var(--ac-space-section); padding: var(--ac-space-default); }
 .admin-nav-group { min-width: 0; }
 .admin-nav-group > .admin-nav-link { margin-block-start: var(--ac-space-tight); }
-.admin-nav-group-title { padding: var(--ac-space-compact); font-size: var(--ac-font-size-label); color: var(--ac-color-text-secondary); cursor: pointer; }
+.admin-nav-group-title { display: flex; align-items: center; gap: var(--ac-space-default); padding: var(--ac-space-compact); font-size: 14px; font-weight: 600; min-height: 40px; list-style: none; color: var(--ac-color-text-secondary); cursor: pointer; }
 .admin-nav-group-title:focus-visible { outline: 2px solid var(--ac-color-focus); outline-offset: -2px; }
 .admin-nav-link, .admin-nav-back { min-height: 40px; box-sizing: border-box; display: flex; align-items: center; gap: var(--ac-space-default); padding: var(--ac-space-compact); border-radius: var(--ac-radius-control); color: var(--ac-color-text-secondary); overflow-wrap: anywhere; }
 .admin-nav-link:hover, .admin-nav-back:hover { background: var(--ac-color-fill); color: var(--ac-color-text); }
 .admin-nav-link[aria-current="page"] { background: var(--ac-color-primary-bg); color: var(--ac-color-text); }
 .admin-nav-owner { padding-inline: var(--ac-space-compact); overflow-wrap: anywhere; }
 .admin-brand { flex-shrink: 0; }
-.admin-brand-area { margin: 0; font-size: var(--ac-font-size-label); }
-.admin-brand-divider { height: 24px; border-color: var(--ac-color-border); margin-inline: var(--ac-space-compact); }
 .admin-nav-icon { flex-shrink: 0; font-size: 16px; }
 .admin-nav-link > span:not(.anticon) { min-width: 0; }
 .admin-nav-label { flex: 1; }
@@ -2824,11 +2823,11 @@ body,
 .admin-nav-link[aria-current="page"] .admin-nav-unsaved { background: var(--ac-color-text); }
 .instance-settings-field-label { min-height: 32px; }
 .instance-settings-field-label .ant-btn { flex-shrink: 0; }
-.admin-breadcrumbs { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
+.admin-breadcrumbs { flex: 1 1 320px; min-width: 0; overflow-wrap: anywhere; }
 .admin-breadcrumbs ol { flex-wrap: nowrap; }
 .admin-breadcrumbs li { min-width: 0; flex-shrink: 0; }
 .admin-breadcrumbs li:has(.admin-breadcrumb-owner) { flex-shrink: 1; }
-.admin-breadcrumb-owner { display: inline-block; vertical-align: top; max-inline-size: min(24rem, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-breadcrumb-owner { display: flex; max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-header-actions { margin-inline-start: auto; }
 .admin-owner-title { min-width: 0; }
 .admin-owner-metadata { min-width: 0; }
@@ -2847,10 +2846,8 @@ body,
 @media (max-width: 767px) {
   .admin-header .admin-header-inner { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
   .admin-header .admin-header-actions { grid-column: 3; grid-row: 1; margin-inline-start: 0; flex-wrap: nowrap; }
-  .admin-brand-divider { display: none; }
   .admin-header .admin-title { font-size: 14px !important; }
   .admin-brand { gap: var(--ac-space-tight) !important; }
-  .admin-brand-area { display: none; }
   .instance-settings-field-label { min-height: 40px; }
   .admin-breadcrumbs { grid-column: 1 / -1; grid-row: 2; }
   .admin-breadcrumbs-scoped li:first-child,
@@ -2978,11 +2975,11 @@ body,
   .access-organization-row > .access-row-summary { flex: 1 1 12rem; }
   .access-tenant-switcher { max-inline-size: 7rem; }
   .chat-header-inner .access-tenant-switcher { max-inline-size: min(20rem, 45vw); }
-  :is(.access-editor-drawer, .access-auth-form, .access-bounded-form) :is(input.ant-input:not(.ant-input-affix-wrapper input), .ant-input-affix-wrapper) { min-height: 40px; }
+  :is(.access-editor-drawer, .access-auth-form, .access-bounded-form, .access-settings-layout) :is(input.ant-input:not(.ant-input-affix-wrapper input), .ant-input-affix-wrapper) { min-height: 40px; }
   .access-editor-drawer .ant-btn, .access-auth-form .ant-btn { min-height: 40px; }
 }
 @media (max-width: 767px) {
-  .access-bounded-form .ant-btn, .access-layout .admin-collection-table .ant-btn { min-height: 40px; }
+  :is(.access-bounded-form, .access-settings-layout) .ant-btn, .access-layout .admin-collection-table .ant-btn { min-height: 40px; }
 }
 
 .tenant-definition-json { white-space: pre-wrap; overflow-wrap: anywhere; max-inline-size: 100%; }
@@ -3032,3 +3029,63 @@ body,
   .chat-header-inner .access-tenant-switcher { flex: 1 1 auto; max-inline-size: none; min-inline-size: 0; }
   .chat-header-actions { width: 100%; }
 }
+
+/* Settings composition: one panel per responsibility, native controls and saves. */
+.access-settings-layout { max-inline-size: 72rem; width: 100%; min-width: 0; }
+.agent-settings-rows { display: flex; flex-direction: column; max-width: none; gap: 0; min-width: 0; }
+.agent-setting-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(12rem, 20rem); align-items: center; gap: var(--ac-space-section); padding-block: var(--ac-space-default); min-width: 0; }
+.agent-setting-row + .agent-setting-row { border-block-start: 1px solid var(--ac-color-border); }
+.agent-setting-description, .agent-setting-control { min-width: 0; overflow-wrap: anywhere; }
+.agent-setting-description { display: flex; flex-direction: column; gap: var(--ac-space-tight); }
+.agent-setting-label { font-weight: 500; }
+.agent-setting-control { display: flex; justify-content: end; }
+.agent-setting-control > .ant-form-item { width: 100%; margin-block-end: 0; }
+.agent-setting-control .ant-form-item-control-input-content { display: flex; justify-content: end; }
+.agent-setting-control .ant-checkbox-wrapper { min-height: 32px; min-width: 32px; justify-content: center; align-items: center; }
+.agent-setting-control .ant-select, .agent-setting-control .ant-input { width: 100%; }
+.agent-setting-row-wide { grid-template-columns: minmax(0, 1fr); gap: var(--ac-space-compact); }
+.agent-setting-row-wide .agent-setting-control { justify-content: start; }
+.agent-setting-row-wide .agent-setting-control > * { width: 100%; }
+.agent-settings-actions { justify-content: end; align-items: center; border-block-start: 1px solid var(--ac-color-border); padding-block-start: var(--ac-space-default); }
+/* The settings container, rather than the viewport, determines when controls stack. */
+.agent-settings-rows { container-type: inline-size; }
+@container (max-width: 34rem) {
+  .agent-setting-row { grid-template-columns: minmax(0, 1fr); gap: var(--ac-space-compact); }
+  .agent-setting-control, .agent-setting-control .ant-form-item-control-input-content { justify-content: start; }
+}
+.new-chat-controls { display: flex; align-items: start; flex-wrap: wrap; gap: var(--ac-space-section); width: min(100%, 36rem); text-align: start; }
+.new-chat-controls > .agent-picker { flex: 1 1 17rem; width: auto; }
+.new-chat-retention { flex: 0 1 auto; max-width: 100%; }
+.new-chat-retention > .ant-typography-secondary { max-inline-size: 22rem; }
+.admin-nav-group-title::-webkit-details-marker { display: none; }
+.admin-nav-chevron { flex-shrink: 0; font-size: 12px; transform: rotate(-90deg); }
+.admin-nav-group[open] > .admin-nav-group-title .admin-nav-chevron { transform: none; }
+.admin-nav-group > .admin-nav-link { padding-inline-start: calc(var(--ac-space-compact) + 24px); }
+.admin-breadcrumb-owner .access-tenant-switcher { max-inline-size: min(28rem, 100%); }
+.access-organization-actions { flex: 0 0 auto; }
+.workflow-diagram .react-flow__controls-button { background: var(--ac-color-container); color: var(--ac-color-text); border-color: var(--ac-color-border); }
+.workflow-diagram .react-flow__controls-button svg { fill: currentColor; }
+.workflow-diagram .react-flow__controls-button:hover { background: var(--ac-color-elevated); }
+@media (max-width: 767px) {
+  .admin-breadcrumb-owner .access-tenant-switcher { max-inline-size: min(24rem, 65vw); }
+  .agent-setting-control .ant-checkbox-wrapper { min-height: 40px; min-width: 40px; }
+  .agent-setting-control .ant-input-number { min-height: 40px; }
+}
+@container (max-width: 34rem) {
+  .agent-setting-row:has(input[type="checkbox"]), .agent-setting-row:has(.ant-switch) { grid-template-columns: minmax(0, 1fr) auto; }
+}
+/* Native pagination retains totals on a single page, without inert navigation. */
+.ant-pagination:has(> .ant-pagination-prev.ant-pagination-disabled):has(> .ant-pagination-next.ant-pagination-disabled) > :is(.ant-pagination-prev, .ant-pagination-next, .ant-pagination-item) { display: none; }
+/* Definition fields share the same rows; narrative/metadata editors remain full width. */
+.admin-definition-settings .admin-settings-form, .self-management-fields { max-width: none; }
+.admin-definition-profile .agent-setting-row, .admin-draft-metadata-row .agent-setting-row { grid-template-columns: minmax(0, 1fr); }
+.agent-setting-control > :is(.ant-select, .ant-input) { width: 100%; }
+.agent-setting-control > .ant-input-number { width: 12rem; max-width: 100%; }
+.admin-definition-settings .admin-draft-form-section:has(> .agent-setting-row) { gap: 0; }
+.admin-definition-settings .admin-draft-form-section:has(> .agent-setting-row) > .ant-typography { margin-block-end: var(--ac-space-section); }
+.self-management-fields > .ant-form-item { padding-block: var(--ac-space-default); margin-block-end: 0; }
+/* Standalone draft switches use their section as the responsive query owner. */
+.admin-draft-form-section { container-type: inline-size; }
+
+/* Full-width settings lists must not retain scalar control width caps. */
+.agent-setting-row-wide .instance-settings-control { max-width: none; }

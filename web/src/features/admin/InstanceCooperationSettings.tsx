@@ -5,6 +5,8 @@ import { tenantAgentApi, type TenantAgentEditor } from '../../services/tenantAge
 import type { AgentCooperation } from '../../services/tenantTasks';
 import { useTenantCommand } from '../access/useTenantCommand';
 
+import { AgentConfigurationPanel, AgentSettingRow } from './AgentConfigurationLayout';
+
 const off: AgentCooperation = { acceptTasks: false, acceptDirectMessages: false, allowDirectMessageWake: false, maxConcurrentTasks: 2 };
 export function InstanceCooperationSettings({ tenant, instance, view, disabled, onSaved, onDirtyChange, onBusyChange }: {
   tenant: string; instance: string; view: TenantAgentEditor; disabled: boolean; onSaved: () => void;
@@ -21,16 +23,15 @@ export function InstanceCooperationSettings({ tenant, instance, view, disabled, 
     void command.run(signal => identityRequest(tenantAgentApi(tenant, instance, '/cooperation'), { method: 'PUT', signal,
       body: { cooperation: values, expectedRevision: view.securityRevision, expectedInstanceRevision: view.agent.instance.revision } }), () => { setDirty(false); onSaved(); });
   }
-  return <Flex vertical gap={token.paddingXS}>
-    <Typography.Title level={5} style={{ margin: 0 }}>Cooperation</Typography.Title>
-    <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Acceptance is off by default. The worker keeps its own permissions, Space and model. Direct-message wake can spend its own bounded execution budget.</Typography.Paragraph>
+  return <AgentConfigurationPanel title="Cooperation" label="Cooperation" description="Acceptance is off by default. The worker keeps its own permissions, Space and model. Direct-message wake can spend its own bounded execution budget.">
     {command.error ? <Alert type="error" showIcon title={command.error instanceof Error ? command.error.message : 'Cooperation could not be saved. Reload settings before trying again.'} /> : null}
-    <Form form={form} layout="vertical" disabled={!canUpdate || disabled || command.busy} onValuesChange={changed => { if (changed.acceptDirectMessages === false) form.setFieldValue('allowDirectMessageWake', false); setDirty(true); }} onFinish={save}>
-      <Form.Item name="acceptTasks" valuePropName="checked"><Checkbox>Accept delegated tasks</Checkbox></Form.Item>
-      <Form.Item name="acceptDirectMessages" valuePropName="checked"><Checkbox>Accept direct Agent messages</Checkbox></Form.Item>
-      <Form.Item name="allowDirectMessageWake" valuePropName="checked"><Checkbox disabled={!acceptMessages || !canUpdate || disabled || command.busy}>Allow direct-message wake</Checkbox></Form.Item>
-      <Form.Item name="maxConcurrentTasks" label="Maximum concurrent tasks" rules={[{ required: true, type: 'number', min: 1, max: 8 }]}><InputNumber min={1} max={8} /></Form.Item>
-      <Button type="primary" htmlType="submit" loading={command.busy} disabled={!dirty || !canUpdate || disabled || command.requiresReload}>Save cooperation</Button>
+    <Form form={form} layout="vertical" className="agent-settings-rows" disabled={!canUpdate || disabled || command.busy} onValuesChange={changed => { if (changed.acceptDirectMessages === false) form.setFieldValue('allowDirectMessageWake', false); setDirty(true); }} onFinish={save}>
+      <AgentSettingRow label={<label htmlFor="cooperation-tasks">Accept delegated tasks</label>} description="Allow other agents to request accountable work."><Form.Item name="acceptTasks" valuePropName="checked"><Checkbox id="cooperation-tasks" aria-label="Accept delegated tasks" /></Form.Item></AgentSettingRow>
+      <AgentSettingRow label={<label htmlFor="cooperation-messages">Accept direct Agent messages</label>} description="Receive messages under this agent’s own authority."><Form.Item name="acceptDirectMessages" valuePropName="checked"><Checkbox id="cooperation-messages" aria-label="Accept direct Agent messages" /></Form.Item></AgentSettingRow>
+      <AgentSettingRow label={<label htmlFor="cooperation-wake">Allow direct-message wake</label>} description={acceptMessages ? 'A received message may start bounded execution.' : 'Enable direct Agent messages first.'}><Form.Item name="allowDirectMessageWake" valuePropName="checked"><Checkbox id="cooperation-wake" aria-label="Allow direct-message wake" disabled={!acceptMessages || !canUpdate || disabled || command.busy} /></Form.Item></AgentSettingRow>
+      <AgentSettingRow label={<label htmlFor="cooperation-concurrency">Maximum concurrent tasks</label>} description="From 1 to 8 simultaneous tasks."><Form.Item name="maxConcurrentTasks" rules={[{ required: true, type: 'number', min: 1, max: 8 }]}><InputNumber id="cooperation-concurrency" aria-label="Maximum concurrent tasks" min={1} max={8} /></Form.Item></AgentSettingRow>
+      <Flex className="agent-settings-actions" wrap gap={token.paddingXS}>
+      <Button type="primary" htmlType="submit" loading={command.busy} disabled={!dirty || !canUpdate || disabled || command.requiresReload}>Save cooperation</Button>{dirty && <Typography.Text type="secondary">Unsaved changes</Typography.Text>}</Flex>
     </Form>
-  </Flex>;
+  </AgentConfigurationPanel>;
 }

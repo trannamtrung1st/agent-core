@@ -15,7 +15,7 @@ import { isPersonaDraftDirty, parsePersonaJson, personaFieldsToJson, syncPersona
 import { TenantAgentPresentation } from './TenantAgentPresentation';
 import { TenantAgentHeading } from './TenantAgentHeading';
 import { AccessError, AccessLoading } from './AccessFeedback';
-import { tenantSpacePath, tenantAccessPath, tenantAgentPath } from './accessRoute';
+import { tenantSpacePath, tenantAgentPath } from './accessRoute';
 import { useAccessDraftGuard } from './useAccessDraftGuard';
 import { useIdentityQuery } from './useIdentityQuery';
 import { useTenantCommand } from './useTenantCommand';
@@ -41,8 +41,8 @@ function TenantAgentProfile({ context, id }: { context: TenantContext; id: strin
     setError(undefined);
     void command.run(signal => identityRequest<{ instance: TenantAgentEditor['agent']['instance'] }>(tenantAgentApi(tenant, id, '/persona'), { method: 'PUT', signal, body: { persona: value, expectedRevision: view.securityRevision, expectedInstanceRevision: view.agent.instance.revision, expectedPersonaRevision: view.agent.instance.personaRevision } }), result => { setPersona(result.instance.persona); setSaved(result.instance.persona); setJson(personaFieldsToJson(result.instance.persona)); message.success('Persona saved. New Runs use the updated guidance.'); state.reload(); });
   };
-  return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">{guard.holder}
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link><Button disabled={command.busy} onClick={reload}>Reload profile</Button></Flex>
+  return <Flex vertical gap="var(--ac-space-section)" className="access-settings-layout">{guard.holder}
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Button disabled={command.busy} onClick={reload}>Reload profile</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={reload} /> : view && persona && <>
       <TenantAgentHeading view={view} />
@@ -73,8 +73,8 @@ function TenantAgentSettings({ context, id }: { context: TenantContext; id: stri
     patch: (_, section, set, clear, signal) => patchTenantAgentSettings(tenant, id, section, set, clear, signal),
     models: signal => identityRequest<Awaited<ReturnType<typeof listModels>>>(tenantApi(tenant, '/chat/models'), { signal })
   }), [tenant, id]);
-  return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">{guard.holder}
-    <Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link>
+  return <Flex vertical gap="var(--ac-space-section)" className="access-settings-layout">{guard.holder}
+
     {view && <TenantAgentHeading view={view} />}
     <InstanceSettingsSection systemManaged={!!view?.agent.managedKind} confirmationContext={view ? `Agent: ${view.agent.instance.persona.name}. Organization: ${context.tenant.name}.` : undefined} refreshKey={settingsEpoch} saveBlocked={cooperationDirty} externalBusy={cooperationBusy || presentationBusy} instanceId={id} archived={!view?.canUpdate || view.agent.instance.lifecycle !== 'Active'} transport={transport} onUpdated={() => {}} onDirtyChange={setDirty} onBusyChange={setBusy} />
     <Typography.Link href={tenantAgentPath(tenant, id, 'state-isolation')} onClick={followAppLink}>Configure continuity, memory and voice availability</Typography.Link>

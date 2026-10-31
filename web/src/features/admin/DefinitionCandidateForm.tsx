@@ -6,7 +6,7 @@ import { useId } from "react";
 import { type AdminAuthoringOptions } from "../../services/adminApi";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { draftSettingGroups,type DraftPage } from './adminNavigation';
-import { AgentConfigurationPanel,AgentIdentitySections } from "./AgentConfigurationLayout";
+import { AgentConfigurationPanel,AgentIdentitySections,AgentSettingRow } from "./AgentConfigurationLayout";
 import { AutomationTriggerPermissions } from "./AutomationTriggerPermissions";
 import {
 applyVoiceEnabled,
@@ -90,7 +90,7 @@ export function DefinitionCandidateForm({
               <Typography.Text strong>Definition ID</Typography.Text>
               <Typography.Text aria-label="Definition ID">{readString(candidate, ["definitionId"])}</Typography.Text>
             </div>
-            <div className="admin-draft-field-grid admin-settings-field-grid">
+            <div className="agent-settings-rows">
               <TextField
                 readOnly={readOnly}
                 label="Definition name"
@@ -190,7 +190,7 @@ export function DefinitionCandidateForm({
             {
               key: "conversationPolicy", label: "Conversation", children: (
                 <section className="admin-draft-form-section admin-settings-form" aria-label="Conversation">
-                  <div className="admin-draft-field-grid admin-settings-field-grid">
+                  <div className="agent-settings-rows">
                     <SelectField
                       label="Response length"
                       value={readString(candidate, ["conversationPolicy", "responseLength"])}
@@ -239,7 +239,7 @@ export function DefinitionCandidateForm({
             {
               key: "behaviorPolicy", label: "Behavior", children: (
                 <section className="admin-draft-form-section admin-settings-form" aria-label="Behavior">
-                  <div className="admin-draft-field-grid admin-settings-field-grid">
+                  <div className="agent-settings-rows">
                     <SelectField
                       label="Interruption style"
                       value={readString(candidate, ["behaviorPolicy", "interruptionStyle"])}
@@ -280,7 +280,7 @@ export function DefinitionCandidateForm({
                       onCandidateChange(patchRecord(candidate, ["initiativePolicy"], { enabled: checked }))
                     }
                   />
-                  <div className="admin-draft-field-grid admin-settings-field-grid">
+                  <div className="agent-settings-rows">
                     <NumberField
                       label="Silence threshold"
                       hint="Milliseconds. 1,000 to 120,000."
@@ -364,7 +364,7 @@ export function DefinitionCandidateForm({
                       }))
                     }
                   />
-                  <div className="admin-draft-field-grid admin-settings-field-grid">
+                  <div className="agent-settings-rows">
                     <TextField
                       readOnly={readOnly}
                       label="Voice id"
@@ -450,7 +450,7 @@ export function DefinitionCandidateForm({
                       }
                     />
                   ))}
-                  <div className="admin-draft-field-grid admin-settings-field-grid">
+                  <div className="agent-settings-rows">
                     <NumberField
                       label="Max active registrations"
                       value={readNumber(candidate, ["triggerPolicy", "maxActiveRegistrations"])}
@@ -528,7 +528,7 @@ export function DefinitionCandidateForm({
                   <Typography.Text type="secondary" className="admin-draft-field-hint">
                     Speech aliases are required when voice is on and must stay empty when voice is off. If this server has one speech recognizer and one synthesizer, turning voice on selects them. Otherwise, select both. Advanced JSON does not gain aliases on save.
                   </Typography.Text>
-                  <div className="admin-draft-field-grid admin-settings-field-grid">
+                  <div className="agent-settings-rows">
                     <SelectField
                       label="Speech recognizer"
                       allowClear
@@ -672,32 +672,14 @@ function TextField({
   onChange: (value: string) => void;
 }) {
   const hintId = useId();
-  return (
-    <label className="admin-draft-field">
-      <Typography.Text>{label}</Typography.Text>
-      {readOnly || multiline ? <Input.TextArea
-        aria-label={label}
-        aria-describedby={hint ? hintId : undefined}
-        value={value}
-        disabled={disabled}
-        readOnly={readOnly}
-        rows={multiline ? 3 : undefined}
-        autoSize={readOnly}
-        onChange={(event) => onChange(event.target.value)}
-      /> : <Input
-        aria-label={label}
-        aria-describedby={hint ? hintId : undefined}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      />}
-      {hint ? (
-        <Typography.Text id={hintId} type="secondary" className="admin-draft-field-hint">
-          {hint}
-        </Typography.Text>
-      ) : null}
-    </label>
-  );
+  const id = useId();
+  return <AgentSettingRow label={<label htmlFor={id}>{label}</label>} fullWidth={multiline || readOnly}
+    description={hint ? <span id={hintId}>{hint}</span> : undefined}>
+    {readOnly || multiline ? <Input.TextArea id={id} aria-label={label} aria-describedby={hint ? hintId : undefined}
+      value={value} disabled={disabled} readOnly={readOnly} rows={multiline ? 3 : undefined} autoSize={readOnly}
+      onChange={event => onChange(event.target.value)} /> : <Input id={id} aria-label={label}
+      aria-describedby={hint ? hintId : undefined} value={value} disabled={disabled} onChange={event => onChange(event.target.value)} />}
+  </AgentSettingRow>;
 }
 
 function NumberField({
@@ -717,29 +699,14 @@ function NumberField({
   step?: number;
   onChange: (value: number | null) => void;
 }) {
-  const hintId = useId();
-  const errorId = useId();
-  return (
-    <label className="admin-draft-field">
-      <Typography.Text>{label}</Typography.Text>
-      <InputNumber
-        aria-label={label}
-        aria-describedby={[hint ? hintId : null, error ? errorId : null].filter(Boolean).join(" ") || undefined}
-        aria-invalid={error ? true : undefined}
-        status={error ? "error" : undefined}
-        value={value}
-        disabled={disabled}
-        step={step}
-        onChange={(next) => onChange(typeof next === "number" ? next : null)}
-      />
-      {hint ? (
-        <Typography.Text id={hintId} type="secondary" className="admin-draft-field-hint">
-          {hint}
-        </Typography.Text>
-      ) : null}
-      {error ? <Typography.Text id={errorId} type="danger" role="alert">{error}</Typography.Text> : null}
-    </label>
-  );
+  const hintId = useId(); const errorId = useId(); const id = useId();
+  return <AgentSettingRow label={<label htmlFor={id}>{label}</label>} description={<>
+    {hint && <span id={hintId}>{hint}</span>}{error && <Typography.Text id={errorId} type="danger" role="alert">{error}</Typography.Text>}
+  </>}><InputNumber id={id} aria-label={label}
+    aria-describedby={[hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined}
+    aria-invalid={error ? true : undefined} status={error ? 'error' : undefined} value={value} disabled={disabled} step={step}
+    onChange={next => onChange(typeof next === 'number' ? next : null)} />
+  </AgentSettingRow>;
 }
 
 function labeledOptions(
@@ -771,34 +738,16 @@ function SelectField({
   hint?: string;
   onChange: (value: string | string[]) => void;
 }) {
-  const hintId = useId();
-  const empty = mode === "multiple" ? (value as string[]).length === 0 : value === "";
-  return (
-    <label className="admin-draft-field">
-      <Typography.Text>{label}</Typography.Text>
-      <Select
-        aria-label={label}
-        aria-describedby={hint ? hintId : undefined}
-        mode={mode}
-        allowClear={allowClear}
-        value={empty ? undefined : value}
-        options={options}
-        disabled={disabled}
-        onChange={(next) => {
-          if (mode === "multiple") {
-            onChange(Array.isArray(next) ? next : []);
-            return;
-          }
-          onChange(typeof next === "string" ? next : "");
-        }}
-      />
-      {hint ? (
-        <Typography.Text id={hintId} type="secondary" className="admin-draft-field-hint">
-          {hint}
-        </Typography.Text>
-      ) : null}
-    </label>
-  );
+  const hintId = useId(); const id = useId();
+  const empty = mode === 'multiple' ? (value as string[]).length === 0 : value === '';
+  return <AgentSettingRow label={<label htmlFor={id}>{label}</label>} fullWidth={mode === 'multiple'}
+    description={hint ? <span id={hintId}>{hint}</span> : undefined}>
+    <Select id={id} aria-label={label} aria-describedby={hint ? hintId : undefined} mode={mode} allowClear={allowClear}
+      value={empty ? undefined : value} options={options} disabled={disabled} onChange={next => {
+        if (mode === 'multiple') { onChange(Array.isArray(next) ? next : []); return; }
+        onChange(typeof next === 'string' ? next : '');
+      }} />
+  </AgentSettingRow>;
 }
 
 function SwitchField({
@@ -813,11 +762,7 @@ function SwitchField({
   onChange: (checked: boolean) => void;
 }) {
   const id = useId();
-  const { token } = theme.useToken();
-  return (
-    <Flex align="center" gap={token.paddingSM} className="admin-settings-switch-row">
-      <Typography.Text><label htmlFor={id}>{label}</label></Typography.Text>
-      <Switch id={id} aria-label={label} checked={checked} disabled={disabled} onChange={onChange} />
-    </Flex>
-  );
+  return <AgentSettingRow label={<label htmlFor={id}>{label}</label>}>
+    <Switch id={id} aria-label={label} checked={checked} disabled={disabled} onChange={onChange} />
+  </AgentSettingRow>;
 }

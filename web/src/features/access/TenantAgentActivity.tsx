@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Flex, Typography } from 'antd';
-import { followAppLink } from '../../app/appLink';
+import { Button, Flex } from 'antd';
 import { navigateToAppPath } from '../../app/appRoute';
 import type { TenantContext } from '../../services/identity';
 import { tenantAgentApi, type TenantAgentEditor } from '../../services/tenantAgentConfiguration';
@@ -10,7 +9,7 @@ import { InstanceSessionsSection } from '../admin/InstanceActivitySection';
 import { InstanceRunsSection } from '../admin/InstanceRunsSection';
 import { AccessError, AccessLoading } from './AccessFeedback';
 import { TenantAgentHeading } from './TenantAgentHeading';
-import { tenantAccessPath, tenantAgentPath } from './accessRoute';
+import { tenantAgentPath } from './accessRoute';
 import { useIdentityQuery } from './useIdentityQuery';
 
 export function TenantAgentActivity({ context, id, page }: { context: TenantContext; id: string; page: 'activity-sessions' | 'activity-runs' }) {
@@ -24,7 +23,7 @@ export function TenantAgentActivity({ context, id, page }: { context: TenantCont
   useEffect(() => { const sync = () => setRunId(readRun()); window.addEventListener('popstate', sync); return () => window.removeEventListener('popstate', sync); }, []);
   const select = (run?: string) => { if (run) runOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; const params = new URLSearchParams(window.location.search); if (run) params.set('run', run); else params.delete('run'); navigateToAppPath(path + (params.size ? `?${params}` : '')); };
   return <Flex vertical gap="var(--ac-space-section)">
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link>
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)">
       <Button onClick={() => { view.reload(); setReload(value => value + 1); }}>Reload Activity</Button></Flex>
     {view.loading ? <AccessLoading /> : view.error ? <AccessError error={view.error} retry={view.reload} /> : view.data && <>
       <TenantAgentHeading view={view.data} configuration={false} archivedDescription="Activity remains readable. Restore this instance before continuing its conversations." />

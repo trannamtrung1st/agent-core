@@ -1,3 +1,4 @@
+import { AgentConfigurationPanel, AgentSettingRow } from '../admin/AgentConfigurationLayout';
 import { useEffect, useState, type RefObject } from 'react';
 import { Alert, Button, Flex, Form, Select, Typography } from 'antd';
 import { identityRequest, type TenantContext } from '../../services/identity';
@@ -30,27 +31,26 @@ export function ModelDefaultEditor({ context, catalog, saved, dirtyChanged, relo
     catch (error) { setFresh(false); throw error; }
   }, () => { guard.release(); setDirty(false); saved(); });
   const choiceLabel = (id: string | null) => { const offering = baseline.offerings.find(item => item.offeringId === id); return offering ? offeringLabel(offering, baseline) : id ? 'Current default unavailable' : 'No default'; };
-  return <><Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">
+  return <><AgentConfigurationPanel title="Organization default" label="Organization default" bodyGap="section">
     {guard.holder}
-    <Typography.Title level={4}>Organization default</Typography.Title>
     <Typography.Paragraph type="secondary">Definitions, Instances and new conversations inherit this choice unless they have an explicit override. Admitted Runs and continuations keep their exact captured route. A shared system preset is never an execution default.</Typography.Paragraph>
     {!baseline.access.canManageDefault && <Alert type="info" showIcon title="Read-only default" description="Organization-wide model management permission is required to change this default." />}
     {!selected && <Alert type="info" showIcon title="No readable default selected" description="Choose an available offering to start conversations that inherit the organization default. No provider is chosen automatically." />}
     {selected && !availability?.available && <Alert type="warning" showIcon title="Selected default unavailable" description={availabilityLabel(availability?.reason ?? '')} />}
     {referenceError !== undefined && <AccessError error={referenceError} />}{command.error !== undefined && <AccessError error={command.error} />}{reader.error !== undefined && <AccessError error={reader.error} />}
     {!fresh && <Alert type="warning" showIcon title="Reload before saving again" description="Your choice is retained. Reload the current default, compare it below, then deliberately save again." />}
-    <Form layout="vertical" disabled={busy || !baseline.access.canManageDefault}>
-      <Form.Item label="Default model"><Select aria-label="Default model" value={selected ?? ''} options={[{ value: '', label: 'No default — refuse inherited model execution', disabled: false }, ...choices]} onChange={value => { setSelected(value || null); setEffort(null); setDirty(true); }} /></Form.Item>
-      {model && model.capabilities.reasoningEfforts.length > 0 && <Form.Item label="Default reasoning effort"><Select aria-label="Default reasoning effort" value={effort ?? ''} options={[
+    <Form layout="vertical" className="agent-settings-rows" disabled={busy || !baseline.access.canManageDefault}>
+      <AgentSettingRow label={<label htmlFor="organization-default-model">Default model</label>}><Form.Item><Select id="organization-default-model" aria-label="Default model" value={selected ?? ''} options={[{ value: '', label: 'No default — refuse inherited model execution', disabled: false }, ...choices]} onChange={value => { setSelected(value || null); setEffort(null); setDirty(true); }} /></Form.Item></AgentSettingRow>
+      {model && model.capabilities.reasoningEfforts.length > 0 && <AgentSettingRow label={<label htmlFor="organization-default-effort">Default reasoning effort</label>}><Form.Item><Select id="organization-default-effort" aria-label="Default reasoning effort" value={effort ?? ''} options={[
         { value: '', label: `Use model default (${model.capabilities.defaultReasoningEffort ?? 'unspecified'})` }, ...model.capabilities.reasoningEfforts.map(value => ({ value, label: value }))
-      ]} onChange={value => { setEffort(value || null); setDirty(true); }} /></Form.Item>}
+      ]} onChange={value => { setEffort(value || null); setDirty(true); }} /></Form.Item></AgentSettingRow>}
     </Form>
     <Typography.Text type="secondary">Current saved default: {baseline.offerings.find(item => item.offeringId === baseline.settings.defaultOfferingId) ? offeringLabel(baseline.offerings.find(item => item.offeringId === baseline.settings.defaultOfferingId)!, baseline) : 'No readable default'} · {baseline.settings.defaultReasoningEffort ?? 'Model default effort'} · revision {baseline.settings.revision}.</Typography.Text>
-    <Flex wrap gap="var(--ac-space-compact)"><Button ref={reloadRef} disabled={busy} onClick={reload}>Reload current default</Button><Button type="primary" loading={command.busy} disabled={busy || !dirty || !fresh || command.requiresReload || !baseline.access.canManageDefault || !!selected && !availability?.available} onClick={() => {
+    <Flex className="agent-settings-actions" wrap gap="var(--ac-space-compact)"><Button ref={reloadRef} disabled={busy} onClick={reload}>Reload current default</Button><Button type="primary" loading={command.busy} disabled={busy || !dirty || !fresh || command.requiresReload || !baseline.access.canManageDefault || !!selected && !availability?.available} onClick={() => {
       if (baseline.settings.defaultOfferingId) { setPending({ selected, effort }); return; }
       void save({ selected, effort });
     }}>Save organization default</Button></Flex>
-  </Flex>{pending && baseline.settings.defaultOfferingId && <ModelImpactConfirmation tenant={tenant}
+  </AgentConfigurationPanel>{pending && baseline.settings.defaultOfferingId && <ModelImpactConfirmation tenant={tenant}
     target={{ kind: 'offering', id: baseline.settings.defaultOfferingId, label: 'Organization default' }} revision={baseline.securityRevision}
     changes={[`Default model: ${choiceLabel(baseline.settings.defaultOfferingId)} → ${choiceLabel(pending.selected)}`,
       `Default effort: ${baseline.settings.defaultReasoningEffort ?? 'Model default'} → ${pending.effort ?? 'Model default'}`,

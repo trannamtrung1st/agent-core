@@ -2,13 +2,11 @@ import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Alert, App, Button, Empty, Flex, Input, Pagination, Switch, Table, Tag, Typography } from 'antd';
 import { IdentityCompletionError, IdentityError, identityRequest, type TenantContext } from '../../services/identity';
 import { tenantAgentApi, type TenantSkillDetail, type TenantSkillEditor, type TenantSkillItem } from '../../services/tenantAgentConfiguration';
-import { followAppLink } from '../../app/appLink';
 import { confirmAction } from '../../app/confirmAction';
 import { AgentConfigurationPanel } from '../admin/AgentConfigurationLayout';
 import { SkillDrawer, type SkillDrawerValue } from '../admin/SkillDrawer';
 import { AccessError, AccessLoading } from './AccessFeedback';
 import { TenantAgentHeading } from './TenantAgentHeading';
-import { tenantAccessPath } from './accessRoute';
 import { useAccessDraftGuard } from './useAccessDraftGuard';
 import { useIdentityQuery } from './useIdentityQuery';
 import { useTenantCommand } from './useTenantCommand';
@@ -51,7 +49,7 @@ export function TenantAgentSkills({ context, id }: { context: TenantContext; id:
     });
   }
   return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">{guard.holder}
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to Agents</Typography.Link><Button ref={reloadButton} disabled={busy || !!selection} onClick={reload}>Reload Skills</Button></Flex>
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Button ref={reloadButton} disabled={busy || !!selection} onClick={reload}>Reload Skills</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}
     {committed && <Alert type="info" showIcon title="Skill change was saved" description="Reload reads current facts and never replays a command." />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={reload} /> : view && <>

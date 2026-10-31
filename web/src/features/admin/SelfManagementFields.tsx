@@ -1,4 +1,5 @@
-import type { CSSProperties } from 'react';
+import { AgentSettingRow } from './AgentConfigurationLayout';
+import { useId, type CSSProperties } from 'react';
 import { Button, Checkbox, Flex, Form, Select, Switch, Typography, theme } from 'antd';
 import type { HarnessMode, HarnessScope, ManagementAutoApply, SelfManagementPolicy, SelfManagementView, ManagementOverrides } from '../../services/adminApi';
 
@@ -42,6 +43,7 @@ export function SelfManagementFields({ value, defaults, disabled, definition = f
   onChange: (value: SelfManagementDraft) => void;
 }) {
   const { token } = theme.useToken();
+  const rowId = useId();
   const optionStyle = {
     gap: token.paddingXS,
     '--self-management-checkbox-offset': `${(token.fontSize * token.lineHeight - token.controlInteractiveSize) / 2}px`
@@ -50,13 +52,13 @@ export function SelfManagementFields({ value, defaults, disabled, definition = f
   const modeLabel = definition ? 'Default self-management mode' : 'Self-management mode';
   const areasLabel = definition ? 'Default allowed areas' : 'Allowed management areas';
   const automaticLabel = definition ? 'Default automatic changes' : 'Managed automatic changes';
-  return <Flex vertical gap={token.padding} className="self-management-fields">
-    <Form.Item label={modeLabel} extra="Off removes management tools and procedures. Assisted changes wait for approval; Managed uses only explicitly delegated safe changes.">
-      <Select aria-label={modeLabel} value={value.mode ?? 'inherit'} disabled={disabled}
+  return <Flex vertical className="self-management-fields agent-settings-rows">
+    <AgentSettingRow label={<label htmlFor={`${rowId}-mode`}>{modeLabel}</label>} description="Off removes management tools and procedures. Assisted changes wait for approval; Managed uses only explicitly delegated safe changes."><Form.Item>
+      <Select id={`${rowId}-mode`} aria-label={modeLabel} value={value.mode ?? 'inherit'} disabled={disabled}
         onChange={next => update({ mode: next === 'inherit' ? null : next as HarnessMode })}
         options={[...(!definition ? [{ value: 'inherit', label: `Inherit (${defaults.mode === 'Disabled' ? 'Off' : defaults.mode})` }] : []),
           { value: 'Disabled', label: 'Off' }, { value: 'Assisted', label: 'Assisted' }, { value: 'Managed', label: 'Managed' }]} />
-    </Form.Item>
+    </Form.Item></AgentSettingRow>
     <Form.Item label={areasLabel} extra={`These areas add a management gate; IAM permissions and Definition capability still apply. With no areas selected, the agent has no management access.${definition ? '' : value.scopes === null ? ' Source: Definition defaults.' : ' Source: Instance override.'}`}>
       <Flex vertical gap={token.paddingXS}>
         {!definition && <Button disabled={disabled} style={{ alignSelf: 'flex-start' }} onClick={() => update({ scopes: null })}>Inherit areas</Button>}
@@ -77,15 +79,15 @@ export function SelfManagementFields({ value, defaults, disabled, definition = f
     <Typography.Text type="secondary">Read-only · On demand · version 1. These are stored choices. Off/Frozen suppresses both; effective availability also requires selected Definition capabilities and current IAM authority. Inspect Skills for capability blockers.</Typography.Text>
     {(['configurationAssistance', 'harnessAuthoring'] as const).map(key => {
       const label = key === 'configurationAssistance' ? 'Configuration assistance' : 'Harness authoring';
-      return <Form.Item key={key} label={label}>
-        {definition ? <label className="self-management-procedure-choice"><Switch aria-label={`Default ${label.toLowerCase()} procedure`} disabled={disabled}
+      return <AgentSettingRow key={key} label={<label htmlFor={`${rowId}-${key}`}>{label}</label>}><Form.Item>
+        {definition ? <label className="self-management-procedure-choice"><Switch id={`${rowId}-${key}`} aria-label={`Default ${label.toLowerCase()} procedure`} disabled={disabled}
           checked={value[key] ?? defaults.builtInSkills?.[key] ?? true} onChange={enabled => update({ [key]: enabled })} /></label>
-          : <Select aria-label={`${label} procedure`} disabled={disabled}
+          : <Select id={`${rowId}-${key}`} aria-label={`${label} procedure`} disabled={disabled}
             value={value[key] === null ? 'inherit' : value[key] ? 'enabled' : 'disabled'}
             options={[{ value: 'inherit', label: `Inherit (${(defaults.builtInSkills?.[key] ?? true) ? 'Enabled' : 'Disabled'})` },
               { value: 'enabled', label: 'Enabled' }, { value: 'disabled', label: 'Disabled' }]}
             onChange={next => update({ [key]: next === 'inherit' ? null : next === 'enabled' })} />}
-      </Form.Item>;
+      </Form.Item></AgentSettingRow>;
     })}
   </Flex>;
 }

@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, App, Button, Descriptions, Flex, Tag, Typography } from 'antd';
 import { confirmAction } from '../../app/confirmAction';
-import { followAppLink } from '../../app/appLink';
 import { IdentityError, type TenantContext } from '../../services/identity';
 import { changeAgentLifecycle, readAgentLifecycle, type AgentLifecycle, type LifecycleAction, type LifecycleResult } from '../../services/tenantAgentLifecycle';
 import { AgentConfigurationPanel } from '../admin/AgentConfigurationLayout';
 import { useAdminDetailLayout } from '../admin/useAdminDetailLayout';
 import { AccessLoading, accessErrorMessage } from './AccessFeedback';
-import { tenantAccessPath } from './accessRoute';
 
 const blockers = { system_managed_instance: 'System-managed instance. Archive and decommission are unavailable; use Visible in Chat to change new-chat selection.', archive_required: 'Archive this instance before permanent retirement.', agent_in_use: 'Retained Sessions, learned memory, Automations or execution history still reference this instance. Archive keeps it inactive without breaking history.',
   browser_profile_busy: 'A Browser profile reset is still pending. Read its saved outcome in Connections before retiring this instance.', agent_decommissioned: 'This identity has been permanently retired.' };
@@ -53,7 +51,7 @@ export function TenantAgentLifecycle({ context, id }: { context: TenantContext; 
   }
   const retired = view?.decommissioned || result?.action === 'decommission'; const disabled = loading || busy || blocked;
   return <Flex vertical gap="var(--ac-space-section)">
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant,'agents')} onClick={followAppLink}>Back to Agents</Typography.Link><Button ref={reloadButton} disabled={busy || loading} onClick={() => void load()}>Reload lifecycle</Button></Flex>
+    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Button ref={reloadButton} disabled={busy || loading} onClick={() => void load()}>Reload lifecycle</Button></Flex>
     {error !== undefined && <Alert type="error" showIcon role="alert" title={accessErrorMessage(error)} />}
     {blocked && !loading && <Alert type="warning" showIcon title="Read current lifecycle before another action" description="Reload reads saved facts and current access. It does not repeat the previous command." />}
     {result && result.action !== 'decommission' && <Alert type="success" showIcon role="status" title={result.action === 'archive' ? 'Archive saved' : 'Restore saved'} description="The status change was saved. Reload lifecycle to inspect current facts." />}

@@ -3,7 +3,7 @@ import { Alert, App, Button, Flex, Switch, Typography } from 'antd';
 import { confirmAction } from '../../app/confirmAction';
 import { identityRequest, IdentityCompletionError, IdentityError, type TenantContext } from '../../services/identity';
 import { tenantAgentApi, readTenantAgentEditor, type TenantAgentEditor } from '../../services/tenantAgentConfiguration';
-import { AgentConfigurationPanel } from '../admin/AgentConfigurationLayout';
+import { AgentConfigurationPanel, AgentSettingRow } from '../admin/AgentConfigurationLayout';
 import { AccessError } from './AccessFeedback';
 import { useTenantEditorCommand } from './useTenantEditorCommand';
 
@@ -53,11 +53,10 @@ export function TenantAgentPresentation({ context, id, view, disabled, onSaved, 
     });
   }
   return <AgentConfigurationPanel title="Chat visibility" label="Chat visibility and system defaults" bodyGap="default">
-    <Flex wrap align="center" gap="var(--ac-space-default)"><Switch aria-label="Visible in Chat" checked={view.agent.instance.showInChat !== false} disabled={blocked} loading={command.busy} onChange={setVisibility} /><Typography.Text>Visible in Chat</Typography.Text></Flex>
-    <Typography.Paragraph type="secondary">Only controls new-chat selection; does not stop this agent or existing conversations.</Typography.Paragraph>
+    <AgentSettingRow label="Visible in Chat" description="Only controls new-chat selection; does not stop this agent or existing conversations. Changes save immediately."><Switch aria-label="Visible in Chat" checked={view.agent.instance.showInChat !== false} disabled={blocked} loading={command.busy} onChange={setVisibility} /></AgentSettingRow>
     {command.error !== undefined && <AccessError error={command.error} />}
     {command.unknown && <Alert type="warning" showIcon title="Outcome needs confirmation" description="Reload current settings to inspect the saved result before taking another deliberate action. This command will not be replayed automatically." />}
-    <Flex wrap gap="var(--ac-space-compact)"><Button data-agent-presentation-reload ref={reloadButton} disabled={disabled || command.busy} onClick={reload}>Reload current settings</Button>
+    <Flex className="agent-settings-actions" wrap gap="var(--ac-space-compact)"><Button data-agent-presentation-reload ref={reloadButton} disabled={disabled || command.busy} onClick={reload}>Reload current settings</Button>
       {view.agent.canResetDefaults && <Button data-agent-reset-defaults ref={resetButton} disabled={blocked} onClick={reset}>Reset to System Defaults</Button>}</Flex>
   </AgentConfigurationPanel>;
 }

@@ -47,3 +47,15 @@ it('retires the previously loaded Session when its visible ID draft changes', as
   const input = await screen.findByRole('textbox', { name: 'Session ID' }); fireEvent.change(input, { target: { value: '11111111-1111-1111-1111-111111111111' } }); fireEvent.click(screen.getByRole('button', { name: 'Load Session memory' }));
   await screen.findByText('Private fact'); fireEvent.change(input, { target: { value: '22222222-2222-2222-2222-222222222222' } }); expect(screen.queryByText('Private fact')).not.toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Forget readable scope' })).not.toBeInTheDocument(); expect(commands).toHaveLength(0);
 });
+
+it('preserves pagination recovery when a requested page empties but the scope still has facts', async () => {
+  saved.total = 26; saved.retainedCount = 26; await open();
+  const region = screen.getByRole('region', { name: 'Your learned Memory' });
+  saved = { ...saved, items: [], page: 2 };
+  fireEvent.click(region.querySelector('.ant-pagination-next button')!);
+  await waitFor(() => expect(screen.queryByText('Private fact')).not.toBeInTheDocument());
+  await waitFor(() => expect(region.querySelector('.ant-pagination-prev')).not.toHaveClass('ant-pagination-disabled'));
+  saved = { ...saved, page: 1, items: [{ memoryId: 'remaining', scope: 'identityUser', kind: 'Preference', status: 'Active', subject: 'Remaining fact', content: 'Retained', revision: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), originAgentId: 'agent', source: 'userExplicit', canForget: true }] };
+  fireEvent.click(region.querySelector('.ant-pagination-prev button')!);
+  await screen.findByText('Remaining fact');
+});
