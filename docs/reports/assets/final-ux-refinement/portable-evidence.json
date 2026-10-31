@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "archive": "visual-evidence.zip",
+  "sha256": "f74026d14ed831a3134bbca9bbee00a3326537a39860e9c464d7b1a6bf0cd13c",
+  "bytes": 40525367,
+  "source_commit": "d3e9272c090136ff8f0de6aec3849c9d59d5b18b",
+  "original_code_and_test_digest": "efcf42ada18c868e75e54eddb311724526ff786a50dfe7217dbefc34f2de0d19",
+  "captures": 548,
+  "selected_final_captures": 240,
+  "earlier_or_supplemental_captures": 308,
+  "metadata_records": 14,
+  "index": "index.html",
+  "manifest": "manifest.json",
+  "verifier": "verify.py",
+  "external_dependencies": "none; Python standard library for hash verification"
+}

@@ -1,0 +1,18 @@
+{
+  "archive_sha256": "f74026d14ed831a3134bbca9bbee00a3326537a39860e9c464d7b1a6bf0cd13c",
+  "zip_crc": "pass",
+  "isolated_extraction": "pass",
+  "original_pngs_verified": 548,
+  "supporting_records_verified": 14,
+  "offline_gallery_links_checked": 1648,
+  "external_gallery_links": 0,
+  "tampered_capture_rejected": true,
+  "verification_output": "Verified 548 original PNGs and 14 evidence records.",
+  "application_tests": "not run; documentation and evidence preservation only",
+  "hosted_ci": "not requested or run",
+  "markdown_files_checked": 3,
+  "relative_markdown_links_checked": 93,
+  "markdown_errors": [],
+  "original_code_and_test_fingerprint_drift": [],
+  "source_inventory": "401 compositions; zero missing/orphaned/source drift"
+}
