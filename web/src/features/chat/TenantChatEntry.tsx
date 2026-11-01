@@ -44,7 +44,7 @@ export function TenantChatEntry({ tenantId }: { tenantId: string }) {
       { key: '/account/profile', label: 'Your account' },
       { key: 'sign-out', label: 'Sign out', disabled: signingOut }
     ], onClick: ({ key }) => key === 'sign-out' ? void signOut() : navigateToAppPath(key) }}>
-      <Button icon={<MenuOutlined aria-hidden />} aria-label="Workspace menu" loading={signingOut}>Menu</Button>
+      <Button className="chat-workspace-menu" icon={<MenuOutlined aria-hidden />} title="Workspace menu" aria-label="Workspace menu" loading={signingOut}><span className="chat-workspace-menu-label">Menu</span></Button>
     </Dropdown>
   </Flex>} />;
 }

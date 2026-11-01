@@ -2,6 +2,10 @@
 
 Shared Chat file feedback distinguishes expired authentication, denied reads, missing files and ordinary transfer failure using source-owned safe messages. Artifact metadata is retired on read loss; historical Attachment thumbnail URLs are revoked on download read loss. Draft content and the existing explicit Retry actions remain intact. File cards and shared previews reuse Ant Design v6 without layout/token changes.
 
+## Responsive presentation
+
+The shared administration frame and portaled access editors use consistent 40px native input, Select, number and button hit areas below 768px. Composite password/search fields retain their native inner padding; multi-line fields and multi-selects can grow. Account creation, invitations, organization switching and completed-work review reuse the same editor presentation rules and the existing centered, viewport-bounded Modal container with a scrolling body. Long organization catalogs retain internal scrolling, search and pagination without moving the dialog header offscreen. On phones at or below 480px, setup/recovery Alert actions move below their explanatory text. Chat uses named icon buttons for Tools and the workspace menu at that width so organization context retains usable space; desktop labels remain visible. Organization icons keep their native width while names truncate. Existing token gaps, form validation, draft guards and focus restoration stay with their current owners.
+
 ## Dynamic model administration
 
 New Chat waits for identity and catalog loading to settle before explaining setup. An empty scoped catalog offers **Connect a provider** only to a current connection administrator; other users see owner guidance. An unavailable inherited default with selectable offerings explains **Choose a model for this chat** and optionally links an authorized administrator to Defaults. Explicit selection hides the guide. Missing inherited labels remain **Organization default** or **Agent default**, never a raw default token. The guide reuses the identity composition width and native Alert/Flex/Button; narrow actions retain forty-pixel hits.

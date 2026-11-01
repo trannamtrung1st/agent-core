@@ -1,0 +1,261 @@
+[
+  {
+    "id": "draft.overview",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/overview",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.profile",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/profile",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.instructions",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/instructions",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.conversation",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/conversation",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.behavior",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/interruption",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.initiative",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/initiative",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.voice",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/voice",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.models",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/models",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.providers",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/providers",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.execution",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/execution",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.state-isolation",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/state-isolation",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.sandbox",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/sandbox",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.skills",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/skills",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.resources",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/resources",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.capabilities",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/capabilities",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.memory-policy",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/memory-policy",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.trigger-policy",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/trigger-policy",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.self-management",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/self-management",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.metadata",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/metadata",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.test-publish",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/test-publish",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "draft.advanced-json",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/definitions/01a192ed-de41-7f7e-857b-610a6041bcc9/drafts/01a192ed-de41-72bc-8b94-5e036bcfb573/advanced-json",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "models.models",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/integrations/ai-models/models",
+    "widths": [
+      1440,
+      1024,
+      768,
+      390,
+      320
+    ]
+  },
+  {
+    "id": "models.defaults",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/integrations/ai-models/defaults",
+    "widths": [
+      1440,
+      1024,
+      768,
+      390,
+      320
+    ]
+  },
+  {
+    "id": "models.routing",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/integrations/ai-models/routing",
+    "widths": [
+      1440,
+      1024,
+      768,
+      390,
+      320
+    ]
+  },
+  {
+    "id": "account.profile",
+    "route": "/account/profile",
+    "widths": [
+      1440,
+      390,
+      320
+    ]
+  },
+  {
+    "id": "account.organizations",
+    "route": "/account/organizations",
+    "widths": [
+      1440,
+      390,
+      320
+    ]
+  },
+  {
+    "id": "space.overview",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/spaces/810d04e2-775d-490a-835f-9be07e71ca5a/overview",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "space.members",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/spaces/810d04e2-775d-490a-835f-9be07e71ca5a/members",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "space.workspace",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/spaces/810d04e2-775d-490a-835f-9be07e71ca5a/workspace",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "space.environments",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/spaces/810d04e2-775d-490a-835f-9be07e71ca5a/environments",
+    "widths": [
+      1440,
+      390
+    ]
+  },
+  {
+    "id": "space.access",
+    "route": "/t/01a192ec-c97b-746d-9d7b-77e79b7bb469/admin/spaces/810d04e2-775d-490a-835f-9be07e71ca5a/access",
+    "widths": [
+      1440,
+      390
+    ]
+  }
+]

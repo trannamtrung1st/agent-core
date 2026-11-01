@@ -2448,17 +2448,17 @@ body,
 .self-management-options .ant-checkbox { align-self: flex-start; margin-block-start: var(--self-management-checkbox-offset); }
 .harness-procedure { white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-approval .ant-modal-container,
-:is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-modal-container {
+:is(.access-editor-drawer, .admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-modal-container {
   display: flex;
   flex-direction: column;
   max-height: calc(100dvh - 2 * var(--ac-space-section));
 }
 .chat-approval .ant-modal-header,
 .chat-approval .ant-modal-footer,
-:is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-modal-header,
-:is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-modal-footer { flex-shrink: 0; }
+:is(.access-editor-drawer, .admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-modal-header,
+:is(.access-editor-drawer, .admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-modal-footer { flex-shrink: 0; }
 :is(.chat-approval, .isolation-preset-dialog, .model-impact-dialog) .ant-modal-title { padding-inline-end: calc(2 * var(--ac-space-section)); }
-:is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-modal-body { min-height: 0; overflow-y: auto; }
+:is(.access-editor-drawer, .admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog, .model-impact-dialog) .ant-modal-body { min-height: 0; overflow-y: auto; }
 .admin-config-form .credential-metadata-row { margin-block-end: 0; }
 .chat-approval .ant-modal-body {
   display: flex;
@@ -2963,7 +2963,8 @@ body,
 .access-organization-row { display: flex; align-items: center; gap: var(--ac-space-section); justify-content: space-between; padding-block: var(--ac-space-section); border-block-end: 1px solid var(--ac-color-border); }
 .access-row-summary { min-width: 0; overflow-wrap: anywhere; }
 .access-tenant-switcher { max-inline-size: min(20rem, 35vw); }
-.access-tenant-switcher > span:not(.anticon) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.access-tenant-switcher > .ant-btn-icon { flex-shrink: 0; }
+.access-tenant-switcher > span:not(.ant-btn-icon) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .access-role-select { flex: 1 1 15rem; min-width: 0; }
 .access-editor-drawer .ant-drawer-body { overflow-wrap: anywhere; }
 .access-editor-drawer .ant-typography { max-inline-size: 72ch; }
@@ -2974,12 +2975,16 @@ body,
   .access-organization-row { align-items: start; flex-wrap: wrap; }
   .access-organization-row > .access-row-summary { flex: 1 1 12rem; }
   .access-tenant-switcher { max-inline-size: 7rem; }
-  .chat-header-inner .access-tenant-switcher { max-inline-size: min(20rem, 45vw); }
-  :is(.access-editor-drawer, .access-auth-form, .access-bounded-form, .access-settings-layout) :is(input.ant-input:not(.ant-input-affix-wrapper input), .ant-input-affix-wrapper) { min-height: 40px; }
-  .access-editor-drawer .ant-btn, .access-auth-form .ant-btn { min-height: 40px; }
+  /* Native controls share the mobile hit size across pages and portaled editors. */
+  :is(.access-layout, .access-editor-drawer, .access-auth-form) :is(input.ant-input:not(.ant-input-affix-wrapper input), .ant-input-affix-wrapper, .ant-select, .ant-input-number, .ant-btn) { min-height: 40px; }
+  :is(.access-layout, .access-editor-drawer, .access-auth-form) .ant-input-number-input { min-height: 38px; }
+  :is(.access-layout, .access-editor-drawer, .access-auth-form) .ant-checkbox-wrapper { min-height: 40px; align-items: center; }
+  .access-editor-drawer :is(.ant-modal-close, .ant-drawer-close) { min-width: 40px; min-height: 40px; }
 }
-@media (max-width: 767px) {
-  :is(.access-bounded-form, .access-settings-layout) .ant-btn, .access-layout .admin-collection-table .ant-btn { min-height: 40px; }
+@media (max-width: 480px) {
+  /* Recovery/setup actions must not take the explanatory text's reading width. */
+  :is(.access-layout, .access-editor-drawer) .ant-alert:has(.ant-alert-actions) { flex-wrap: wrap; row-gap: var(--ac-space-compact); }
+  :is(.access-layout, .access-editor-drawer) .ant-alert-actions { flex-basis: 100%; margin-inline-start: 0; }
 }
 
 .tenant-definition-json { white-space: pre-wrap; overflow-wrap: anywhere; max-inline-size: 100%; }
@@ -3028,6 +3033,10 @@ body,
   .chat-header-session-actions > .ant-flex { display: contents; }
   .chat-header-inner .access-tenant-switcher { flex: 1 1 auto; max-inline-size: none; min-inline-size: 0; }
   .chat-header-actions { width: 100%; }
+}
+@media (max-width: 480px) {
+  .chat-header-tools-label, .chat-workspace-menu-label { display: none; }
+  .chat-header-inner :is(.chat-header-tools, .chat-workspace-menu) { width: 40px; padding-inline: 0; flex-shrink: 0; }
 }
 
 /* Settings composition: one panel per responsibility, native controls and saves. */

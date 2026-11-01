@@ -33,7 +33,7 @@ export function OrganizationsList({ selectedTenantId, switching = false, chat = 
 }
 export function TenantSwitcher({ tenantId, name, chat = false }: { tenantId: string; name: string; chat?: boolean }) {
   const [open, setOpen] = useState(false);
-  return <><Button className="access-tenant-switcher" icon={<ApartmentOutlined aria-hidden />} title={name} onClick={() => setOpen(true)} aria-label={`Switch organization. Current: ${name}`}><span>{name}</span></Button><Modal width={640} title="Switch organization" open={open} onCancel={() => setOpen(false)} footer={null} destroyOnHidden><OrganizationsList selectedTenantId={tenantId} switching chat={chat} /></Modal></>;
+  return <><Button className="access-tenant-switcher" icon={<ApartmentOutlined aria-hidden />} title={name} onClick={() => setOpen(true)} aria-label={`Switch organization. Current: ${name}`}><span>{name}</span></Button><Modal centered className="access-editor-drawer" width={640} title="Switch organization" open={open} onCancel={() => setOpen(false)} footer={null} destroyOnHidden><OrganizationsList selectedTenantId={tenantId} switching chat={chat} /></Modal></>;
 }
 export function CreateOrganization({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false); const [busy, setBusy] = useState(false); const [dirty, setDirty] = useState(false); const [error, setError] = useState<unknown>();
@@ -45,7 +45,7 @@ export function CreateOrganization({ onCreated }: { onCreated: () => void }) {
     try { await identityRequest('/api/v2/system/tenants', { method: 'POST', body: values }); setDirty(false); setOpen(false); form.resetFields(); onCreated(); void feedback.success('Organization created. You are its first owner.'); }
     catch (reason) { setError(reason); } finally { setBusy(false); }
   };
-  return <>{holder}{guard.holder}<Button type="primary" onClick={() => { setError(undefined); setOpen(true); }}>Create organization</Button><Modal title="Create organization" open={open} onCancel={guard.close} footer={null} destroyOnHidden>
+  return <>{holder}{guard.holder}<Button type="primary" onClick={() => { setError(undefined); setOpen(true); }}>Create organization</Button><Modal centered className="access-editor-drawer" title="Create organization" open={open} onCancel={guard.close} footer={null} destroyOnHidden>
     <Form form={form} layout="vertical" disabled={busy} onValuesChange={() => setDirty(true)} onFinish={values => void save(values)} onFinishFailed={reason => showAdminFormValidation(feedback, form, reason)}>
       <Typography.Paragraph type="secondary">Organizations keep members, agents and access separate. You will be the first owner.</Typography.Paragraph>
       {error !== undefined && <Alert type="error" showIcon role="alert" title={accessErrorMessage(error)} />}

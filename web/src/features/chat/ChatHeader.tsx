@@ -134,14 +134,14 @@ export function ChatHeader({
             ) : null}
               {workActions}
             </Flex>}>
-              <Badge dot={attentionCount > 0}><Button icon={<MoreOutlined aria-hidden />} aria-label={attentionCount > 0 ? `Conversation tools, ${attentionCount} need attention` : 'Conversation tools'} ref={node => {
+              <Badge dot={attentionCount > 0}><Button className="chat-header-tools" icon={<MoreOutlined aria-hidden />} title="Conversation tools" aria-label={attentionCount > 0 ? `Conversation tools, ${attentionCount} need attention` : 'Conversation tools'} ref={node => {
                 const button = node instanceof HTMLButtonElement ? node : null;
                 toolsButton.current = button;
                 for (const ref of [filesButtonRef, sandboxButtonRef, backgroundButtonRef, ...workButtonRefs]) {
                   if (typeof ref === 'function') ref(button);
                   else if (ref) ref.current = button;
                 }
-              }}>Tools</Button></Badge>
+              }}><span className="chat-header-tools-label">Tools</span></Button></Badge>
             </Popover>}
 
             {additionalActions}

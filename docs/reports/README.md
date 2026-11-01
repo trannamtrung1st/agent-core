@@ -1,5 +1,7 @@
 # Delivery evidence
 
+[UI layout review and polish — 1 November 2026](ui-layout-polish-2026-11-01.md): shared mobile control sizing, Chat alignment, readable feedback and bounded Account dialogs, with screenshot review and focused Synthetic journeys.
+
 Product Experience Transformation: [accepted local Synthetic delivery](product-experience-delivery-2026-10-30.md), 2026-10-31; [independent review](product-experience-independent-review-2026-10-31.md): Ready with Minor Improvements. Its exact working-source digest and local evidence are separate from the committed Production Hardening CI baseline.
 
 

@@ -28,7 +28,7 @@ function ReviewDialog({ context, id, close }: { context: TenantContext; id: stri
   const [selected, setSelected] = useState<Selected>(); const count = useRef(0);
   const conversations = useMemo(() => tenantAutomationConversations(context.tenant.tenantId), [context.tenant.tenantId]);
   const inspect = () => setSelected({ kind, id: sourceId, epoch: ++count.current });
-  return <Modal open title="Review completed work" onCancel={close} closable={!busy} keyboard={!busy} mask={{ closable: !busy }}
+  return <Modal open centered className="access-editor-drawer" title="Review completed work" onCancel={close} closable={!busy} keyboard={!busy} mask={{ closable: !busy }}
     footer={<Button disabled={busy} onClick={close}>Close</Button>}>
     <Flex vertical gap="var(--ac-space-section)">
       <Typography.Paragraph>Queue one background review of a stable conversation or completed Run. The agent inspects the selected source under its own current access. Inspection and recording may require separate approval.</Typography.Paragraph>

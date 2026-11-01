@@ -10,7 +10,7 @@ const results = process.env.EXPERIENCE_RUN_ROOT ??= fs.mkdtempSync(path.join(os.
 process.env.TENANT_CHAT_TEST_BASE_URL = process.env.CANONICAL_SYNTHETIC_URL;
 export default defineConfig({
   ...canonical,
-  testMatch: ['access-foundation.spec.ts', 'product-experience.spec.ts', 'managed-general-assistant.spec.ts', 'tenant-chat.spec.ts', 'tenant-model-management.spec.ts', 'tenant-approval-independence.spec.ts', 'tenant-definitions.spec.ts', 'task-delegation.spec.ts', 'session-goals.spec.ts', 'session-goals-stabilization.spec.ts', 'tenant-voice.spec.ts',
+  testMatch: ['ui-layout-consistency.spec.ts', 'access-foundation.spec.ts', 'product-experience.spec.ts', 'managed-general-assistant.spec.ts', 'tenant-chat.spec.ts', 'tenant-model-management.spec.ts', 'tenant-approval-independence.spec.ts', 'tenant-definitions.spec.ts', 'task-delegation.spec.ts', 'session-goals.spec.ts', 'session-goals-stabilization.spec.ts', 'tenant-voice.spec.ts',
     'tenant-automations.spec.ts', 'tenant-agent-access.spec.ts', 'tenant-runtime-state.spec.ts', 'system-browser-privacy.spec.ts', 'tenant-instance-version.spec.ts', 'tenant-events.spec.ts', 'tenant-credentials.spec.ts', 'tenant-isolation.spec.ts', 'tenant-instance-resources.spec.ts', 'tenant-continuity.spec.ts', 'tenant-instance-skills.spec.ts', 'tenant-instance-controls.spec.ts', 'tenant-browser-profile.spec.ts', 'system-administration.spec.ts', 'system-operators.spec.ts'],
   timeout: 120_000,
   expect: { timeout: 15_000 },

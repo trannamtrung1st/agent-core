@@ -1,0 +1,92 @@
+[
+  {
+    "id": "settings.instructions",
+    "title": "Additional instructions Inherited",
+    "widths": [
+      1440,
+      390,
+      320
+    ]
+  },
+  {
+    "id": "settings.conversationPolicy",
+    "title": "Conversation Inherited",
+    "widths": [
+      1440,
+      390,
+      320
+    ]
+  },
+  {
+    "id": "settings.behaviorPolicy",
+    "title": "Behavior Inherited",
+    "widths": [
+      1440,
+      390,
+      320
+    ]
+  },
+  {
+    "id": "settings.initiativePolicy",
+    "title": "Initiative Inherited",
+    "widths": [
+      1440,
+      390,
+      320
+    ]
+  },
+  {
+    "id": "settings.voice",
+    "title": "Voice Inherited",
+    "widths": [
+      1440,
+      390,
+      320
+    ]
+  },
+  {
+    "id": "settings.modelDefaults",
+    "title": "Model defaults Inherited",
+    "widths": [
+      1440,
+      390,
+      320
+    ]
+  },
+  {
+    "id": "settings.capabilities",
+    "title": "Capabilities Inherited",
+    "widths": [
+      1440,
+      390,
+      320
+    ]
+  },
+  {
+    "id": "settings.triggerPolicy",
+    "title": "Trigger restrictions Inherited",
+    "widths": [
+      1440,
+      390,
+      320
+    ]
+  },
+  {
+    "id": "settings.providerPreferences",
+    "title": "Provider preferences Inherited",
+    "widths": [
+      1440,
+      390,
+      320
+    ]
+  },
+  {
+    "id": "settings.evaluationPolicy",
+    "title": "Evaluation hooks Inherited",
+    "widths": [
+      1440,
+      390,
+      320
+    ]
+  }
+]
