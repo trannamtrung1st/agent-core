@@ -93,7 +93,7 @@ public sealed partial class TenantSessionAccessTests
                     await Refused(platformOperator, beta, HttpStatusCode.Forbidden, "not_member");
                 }
             }
-            Assert.Equal(366, privatePairs); Assert.Equal(347, tenantPairs);
+            Assert.Equal(365, privatePairs); Assert.Equal(346, tenantPairs);
             Assert.Equal(alphaBefore.Tenant.Revision, (await security.ReadTenantAsync(alpha))!.Tenant.Revision);
             Assert.Equal(betaBefore.Tenant.Revision, (await security.ReadTenantAsync(beta))!.Tenant.Revision);
             Assert.Equal(alphaAudit, (await security.ReadAuditAsync(alpha, 200)).Count);
@@ -133,10 +133,11 @@ public sealed partial class TenantSessionAccessTests
                 .Select(item => (method: item.GetProperty("method").GetString()!, route: item.GetProperty("route").GetString()!)).ToHashSet();
             Assert.Equal(156, added.Count); Assert.DoesNotContain(added, retained.Contains);
             var retiredSuccessors = manifest.RootElement.GetProperty("retiredAfterBaseline").EnumerateArray().ToArray();
-            Assert.Equal(13, retiredSuccessors.Length);
+            Assert.Equal(14, retiredSuccessors.Length);
             var retiredPairs = retiredSuccessors.Select(item => (method: item.GetProperty("method").GetString()!, route: item.GetProperty("route").GetString()!)).ToHashSet();
-            Assert.True(retiredPairs.IsSubsetOf(retained));
-            var supported = retained.Except(retiredPairs).Union(added).ToHashSet();
+            // Retirement also applies to routes added after the original frozen baseline.
+            Assert.True(retiredPairs.IsSubsetOf(retained.Union(added)));
+            var supported = retained.Union(added).Except(retiredPairs).ToHashSet();
             var mapped = actual.Where(item => item.route.StartsWith("/api/", StringComparison.Ordinal)).ToHashSet();
             Assert.True(supported.SetEquals(mapped), "Canonical route inventory differs. Missing: "
                 + string.Join(", ", supported.Except(mapped).OrderBy(p => p.route).ThenBy(p => p.method))

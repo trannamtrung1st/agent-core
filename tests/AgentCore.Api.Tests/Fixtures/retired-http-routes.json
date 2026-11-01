@@ -2523,6 +2523,10 @@
     {
       "method": "POST",
       "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/evaluation-scenarios/{scenarioId}/run"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/chat-visibility"
     }
   ],
   "canonicalInventorySource": "d83bc2944bc2121dd02590df0941fabd85b38c47"

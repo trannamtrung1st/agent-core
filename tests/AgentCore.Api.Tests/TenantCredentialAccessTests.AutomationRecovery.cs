@@ -72,9 +72,20 @@ public sealed partial class TenantCredentialAccessTests
                 if (mode == "archived")
                 {
                     Assert.Equal(0, await second.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8));
-                    Assert.Equal(AgentRunStatus.Queued, (await runs.FindTenantRunAsync(tenant, runId))!.Status); Assert.Empty(model.Requests);
-                    var restored = await owner.PutAsJsonAsync($"/api/v2/tenants/{tenant}/agents/{instance}/lifecycle", new { lifecycle = 0, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 });
+                    var cancelled = (await runs.FindTenantRunAsync(tenant, runId))!;
+                    Assert.Equal(AgentRunStatus.Cancelled, cancelled.Status); Assert.True(cancelled.CancellationRequested); Assert.Null(cancelled.Claim); Assert.Empty(model.Requests);
+                    var currentAgent = (await Json(await owner.GetAsync($"/api/v2/tenants/{tenant}/agents/{instance}"))).GetProperty("instance");
+                    Assert.Equal("Disabled", currentAgent.GetProperty("lifecycle").GetString());
+                    var restored = await owner.PutAsJsonAsync($"/api/v2/tenants/{tenant}/agents/{instance}/lifecycle", new { lifecycle = 0, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = currentAgent.GetProperty("revision").GetInt64() });
                     Assert.True(restored.IsSuccessStatusCode, await restored.Content.ReadAsStringAsync());
+                    Assert.Equal(0, await second.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8));
+                    var retained = (await runs.FindTenantRunAsync(tenant, runId))!;
+                    Assert.Equal(AgentRunStatus.Cancelled, retained.Status); Assert.Equal(cancelled.Revision, retained.Revision); Assert.Empty(model.Requests);
+                    Assert.Null(retained.Admission.ExecutionContext!.OriginalInitiatorPrincipalId); Assert.Null(retained.Owner.ProfileIdOrNull);
+                    Assert.Equal(0, await second.Services.GetRequiredService<TenantAutomationService>().AdmitDueAsync());
+                    Assert.Single((await runs.ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: instance)).Items);
+                    var original = await second.Services.GetRequiredService<ITenantAutomationStore>().FindTenantOccurrenceAsync(tenant, retained.Admission.Activation.TriggerOccurrenceId!.Value);
+                    Assert.Equal(runId, original!.AcceptedAgentRunId); Assert.Equal(0, second.Outbound); return;
                 }
                 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                 while (!(run = (await runs.FindTenantRunAsync(tenant, runId, deadline.Token))!).IsTerminal)

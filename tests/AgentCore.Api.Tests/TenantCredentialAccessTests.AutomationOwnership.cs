@@ -203,7 +203,15 @@ public sealed partial class TenantCredentialAccessTests
             using var restored = await owner.PutAsJsonAsync(api + $"/agents/{instance}/lifecycle", new { lifecycle = 0,
                 expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision + 1 });
             Assert.True(restored.IsSuccessStatusCode, await restored.Content.ReadAsStringAsync());
-            Assert.True(TenantAutomationRules.Same(saved, (await store.FindTenantAutomationAsync(tenant, id))!));
+            var missed = (await store.FindTenantAutomationAsync(tenant, id))!;
+            Assert.Equal(AutomationStatus.Expired, missed.Status); Assert.Null(missed.NextOccurrenceAtUtc);
+            Assert.Equal(saved.Instructions, missed.Instructions);
+            Assert.True(saved.Schedule.SemanticEquals(missed.Schedule));
+            Assert.Equal(saved.ModelPreference, missed.ModelPreference); Assert.Equal(saved.ExecutionTarget, missed.ExecutionTarget);
+            Assert.Equal(0, missed.OccurrenceCount);
+            Assert.Equal(0, await factory.Services.GetRequiredService<TenantAutomationService>().AdmitDueAsync());
+            Assert.Empty((await factory.Services.GetRequiredService<ITenantRunStore>().ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: instance)).Items);
+            Assert.Empty(model.Requests); return;
         }
         if (mode == "requester-policy")
         {

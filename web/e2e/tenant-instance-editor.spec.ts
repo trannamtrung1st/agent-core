@@ -11,9 +11,7 @@ async function call<T>(api: APIRequestContext, path: string, body?: unknown, met
 }
 async function signIn(page: Page, email = login, secret = password) { await signInTenant(page, email, secret); }
 async function navigateTo(page: Page, name: 'Profile' | 'Settings') {
-  const toggle = page.getByRole('button', { name: 'Open Admin navigation', exact: true });
-  if (await toggle.isVisible()) await toggle.click();
-  await page.getByRole('link', { name, exact: true }).click();
+  await openDestination(page, name);
 }
 type Editor = { securityRevision: number; agent: { instance: { revision: number; personaRevision: number; persona: { name: string; role: string; description: string; tone: string } } }; settings: { section: string; overrides: Record<string, unknown>; effective: Record<string, unknown>; sources: Record<string, string> }[] };
 async function fixture() {
@@ -48,6 +46,10 @@ test('320px Profile form/JSON, guarded navigation, stale save and independent se
     await page.getByRole('button', { name: 'Save persona', exact: true }).click(); await expect(page.getByRole('button', { name: 'Save persona', exact: true })).toBeDisabled();
     expect((await f.read()).agent.instance.persona.name).toBe('Regional operations and customer support');
     await navigateTo(page, 'Settings');
+    const category = page.getByRole('combobox', { name: 'Settings category', exact: true });
+    await category.click(); await category.press('ArrowUp'); await category.press('Enter');
+    await expect(page.locator('.ant-select-dropdown:visible')).toHaveCount(0);
+    await expect(page.getByRole('main').getByText('All settings', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: /^Conversation(?: Conversation: Instance override)?$/ }).click(); await page.getByRole('textbox', { name: 'Language', exact: true }).fill('fr-FR');
     await page.getByRole('button', { name: 'Behavior', exact: true }).click(); await page.getByRole('switch', { name: 'Acknowledge interruption', exact: true }).click();
     await page.getByRole('button', { name: 'Save Conversation', exact: true }).click(); await expect(page.getByRole('button', { name: 'Save Conversation', exact: true })).toBeDisabled();
