@@ -59,7 +59,7 @@ test('stale preflight requires fresh observation and disabled profile stays read
     await panel.getByRole('button', { name: 'Reset Browser profile', exact: true }).click(); const dialog = page.getByRole('dialog', { name: 'Reset this Browser profile?', exact: true });
     await page.screenshot({ path: test.info().outputPath('narrow-confirmation.png') }); await dialog.getByRole('button', { name: 'Reset Browser profile', exact: true }).click(); await expect(panel.getByText('Profile reset confirmed', { exact: true })).toBeVisible();
     const saved = await call<{ instanceRevision: number }>(f.api, f.profile); await call(f.api, f.root + `/agents/${f.id}/lifecycle`, { lifecycle: 1, expectedRevision: await f.revision(), expectedInstanceRevision: saved.instanceRevision }, 'PUT');
-    await panel.getByRole('button', { name: 'Reload Browser state', exact: true }).click(); await expect(panel.getByText('Restore this instance before resetting its Browser profile.', { exact: true })).toBeVisible();
+    await panel.getByRole('button', { name: 'Reload Browser state', exact: true }).click(); await expect(panel.getByText('Enable this agent before resetting its Browser profile.', { exact: true })).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Reset Browser profile', exact: true })).toBeDisabled(); expect(posts).toBe(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   } finally { await f.api.dispose(); }

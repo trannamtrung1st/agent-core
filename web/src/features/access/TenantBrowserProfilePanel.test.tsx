@@ -77,7 +77,7 @@ it.each([403, 409])('clears the old observation after refusal %s and uses newly 
 it.each(['readonly', 'archived', 'busy'] as const)('explains %s facts without granting reset authority', async mode => {
   view = { ...view, canReset: false, lifecycle: mode === 'archived' ? 'Archived' : 'Active', busy: mode === 'busy' }; show();
   expect(await screen.findByRole('button', { name: 'Reset Browser profile' })).toBeDisabled();
-  expect(screen.getByText(mode === 'archived' ? /Restore this instance/ : mode === 'busy' ? /Browser is busy/ : /Reset requires Browser management access/)).toBeVisible(); expect(posts()).toHaveLength(0);
+  expect(screen.getByText(mode === 'archived' ? /Enable this agent/ : mode === 'busy' ? /Browser is busy/ : /Reset requires Browser management access/)).toBeVisible(); expect(posts()).toHaveLength(0);
 });
 
 it('retains independent Browser facts when credential bindings are denied', async () => {

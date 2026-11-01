@@ -48,7 +48,7 @@ public static class TenantAutomationPresetRules
         var management = ManagementPolicyResolver.Resolve(definition, agent.Instance);
         return Templates.Select(p => {
             var reasons = new List<string>();
-            if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) reasons.Add("Restore the Agent before enabling automatic work.");
+            if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) reasons.Add("Enable the Agent before enabling automatic work.");
             if (p.TriggerKind == "coreEvent" ? !OccurrenceCompatibility.Allows(definition, TriggerSourceKind.CoreEvent)
                 : !TriggerDurableSchedulingPolicy.AllowsScheduledOccurrence(definition) || definition.TriggerPolicy?.AllowWeekly != true)
                 reasons.Add(p.TriggerKind == "coreEvent" ? "Allow Built-in events in the active Definition." : "Allow weekly scheduling in the active Definition.");

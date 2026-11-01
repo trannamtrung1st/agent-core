@@ -57,7 +57,7 @@ export function TenantBrowserProfilePanel({ tenant, id, organization, onReset }:
       <Flex vertical gap="var(--ac-space-tight)"><Typography.Text>{view.profilePresent ? 'Saved Browser profile present' : 'No saved Browser profile'}</Typography.Text><Typography.Text type="secondary">Open persistent views: {view.liveViews}</Typography.Text></Flex>
       {savedNotice && <Alert showIcon type={savedNotice.type} title={savedNotice.title} description={savedNotice.description} />}
       {view.busy ? <Typography.Paragraph type="secondary">The Browser is busy. Reload Browser state after the current work settles.</Typography.Paragraph>
-        : view.lifecycle !== 'Active' ? <Typography.Paragraph type="secondary">Restore this instance before resetting its Browser profile.</Typography.Paragraph>
+        : view.lifecycle !== 'Active' ? <Typography.Paragraph type="secondary">Enable this agent before resetting its Browser profile.</Typography.Paragraph>
           : !view.canReset && view.lastReset?.status !== 'pending' && <Typography.Paragraph type="secondary">Reset requires Browser management access as well as Agent and Browser read access.</Typography.Paragraph>}
       <Flex wrap gap="var(--ac-space-compact)"><Button ref={resetButton} danger disabled={!view.canReset || blocked} onClick={reset}>Reset Browser profile</Button></Flex>
     </>)}

@@ -76,7 +76,7 @@
     "web/src/features/access/TenantAutomationContextFields.tsx": "39d2274e9ded41c5fb98d565544891256889ab243b2b7e8136da7e13da9fc76c",
     "web/src/features/access/TenantAutomationEventActivity.tsx": "6a083cfb65f917a08e4c57ae611f216d0c6d32b447a87acd4f767cce8f1f7ef6",
     "web/src/features/access/TenantAutomationEventFields.tsx": "e15ed8db43ca468864d6a66bc8c795440bde72e5a5a025a99a6a1abecdf41ae4",
-    "web/src/features/access/TenantBrowserProfilePanel.tsx": "c1d8b24d481857f76afa8078e340ec1c5ce8cef71473f5a57a5c936af4a83b9f",
+    "web/src/features/access/TenantBrowserProfilePanel.tsx": "86f894daca13c58e9a098b2f227c023574298370da0ea1d08308a4316ba7d1a1",
     "web/src/features/access/TenantCredentialEditor.tsx": "c45ecb76c12f32da197795043f27762b60f30529470cedcb85d831db6ed2ef5e",
     "web/src/features/access/TenantCredentials.tsx": "a7bc63b984149dde092f8b1fc6d09e29833548819062412b406c6c59639fc35d",
     "web/src/features/access/TenantDefinitionCapabilities.tsx": "2444b9977fbd0bf89ae99dbcb9cf10edc63ac9a869662a0c8945e20baea83229",
