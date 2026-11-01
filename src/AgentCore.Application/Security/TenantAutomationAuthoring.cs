@@ -13,7 +13,7 @@ public static class TenantAutomationAuthoring
     public static Automation Build(TenantAgent agent, AgentDefinition policy, Automation? current, TenantAutomationChange change,
         TriggerProvenance provenance, DateTimeOffset at, IModelCatalog models, IIdGenerator ids, IEventFilterEvaluator? filters)
     {
-        if (agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+        if (agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
         if (current?.Status is AutomationStatus.Cancelled or AutomationStatus.Completed or AutomationStatus.Expired) throw new ArgumentException("A terminal Automation cannot be re-authored.");
         if (change.StartWorkflow is null && (change.Enabled || current is null || current.ModelPreference != change.ModelPreference))
             ExecutionModelPolicy.RequireSelectable(models, change.ModelPreference);

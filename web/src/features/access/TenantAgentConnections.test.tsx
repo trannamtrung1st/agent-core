@@ -66,9 +66,9 @@ it('does not confuse readable credentials with bind authority', async () => {
   expect(await within(dialog).findByText('Bind access is required')).toBeVisible(); expect(within(dialog).getByRole('button', { name: 'Save binding' })).toBeDisabled();
 });
 
-it('hides editing for read-only/archived views and removes protected content after a denied reload', async () => {
-  current = { ...view, canUpdate: false, lifecycle: 'Archived', removableBindingIds: [] }; await open();
+it('hides editing for read-only/disabled views and removes protected content after a denied reload', async () => {
+  current = { ...view, canUpdate: false, lifecycle: 'Disabled', removableBindingIds: [] }; await open();
   expect(screen.queryByRole('button', { name: 'Add binding' })).not.toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Remove binding primary' })).not.toBeInTheDocument();
-  expect(screen.getByText('Archived instance')).toBeVisible(); denied = true; fireEvent.click(screen.getByRole('button', { name: 'Reload connections' }));
+  expect(screen.getByText('Disabled agent')).toBeVisible(); denied = true; fireEvent.click(screen.getByRole('button', { name: 'Reload connections' }));
   await screen.findByText(/You do not have permission/); expect(screen.queryByText('Exact shared account')).not.toBeInTheDocument(); expect(screen.queryByText('Alex <safe>')).not.toBeInTheDocument();
 });

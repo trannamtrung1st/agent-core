@@ -61,6 +61,6 @@ it('requires matching saved setup and evidence witnesses before a verification P
 it('keeps partial-catalog verification independent while omitting inaccessible configuration', async () => {
   current.completeCatalog = false; current.section = null; current.canManage = false; await open(); await screen.findByText('Saved Sandbox settings are restricted'); expect(screen.queryByRole('textbox', { name: 'Instance initialization script' })).not.toBeInTheDocument(); await waitFor(() => expect(screen.getByRole('button', { name: 'Verify Instance setup' })).toBeEnabled()); expect(screen.queryByText('hidden-profile')).not.toBeInTheDocument();
 });
-it('shows archived inspection and disables settings and unauthorized verification', async () => {
-  current.lifecycle = 'Archived'; current.canManage = false; verification.canVerify = false; verification.status = 'Inactive'; await open(); await screen.findByText('Archived instance'); expect(screen.getByRole('spinbutton', { name: 'CPU cores' })).toBeDisabled(); await screen.findByText('Inactive instance'); expect(screen.getByRole('button', { name: 'Verify Instance setup' })).toBeDisabled();
+it('shows disabled inspection and disables settings and unauthorized verification', async () => {
+  current.lifecycle = 'Disabled'; current.canManage = false; verification.canVerify = false; verification.status = 'Inactive'; await open(); await screen.findByText('Disabled agent'); expect(screen.getByRole('spinbutton', { name: 'CPU cores' })).toBeDisabled(); await screen.findByText('Inactive instance'); expect(screen.getByRole('button', { name: 'Verify Instance setup' })).toBeDisabled();
 });

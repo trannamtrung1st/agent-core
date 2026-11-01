@@ -19,7 +19,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var directory=new DirectoryInfo(AppContext.BaseDirectory);while(directory is not null&&!Directory.Exists(Path.Combine(directory.FullName,"agents")))directory=directory.Parent;
         var templates=new FileAgentDefinitionStore(Path.Combine(directory!.FullName,"agents"),SyntheticProviderAliases.Default);
         var agents=new TenantAgentService(f.Iam,(ITenantAgentStore)f.Iam,templates,f.Authorizer,f.Ids,TimeProvider.System,ownedDefinitions:f.Definitions);
-        var agent=await agents.CreateFromPublicationAsync(human.PrincipalId,first.TenantId,id,1,3,initiator:human);await agents.SetLifecycleAsync(human.PrincipalId,first.TenantId,agent.Instance.InstanceId,AgentInstanceLifecycle.Archived,4,1,initiator:human);
+        var agent=await agents.CreateFromPublicationAsync(human.PrincipalId,first.TenantId,id,1,3,initiator:human);await agents.SetLifecycleAsync(human.PrincipalId,first.TenantId,agent.Instance.InstanceId,AgentInstanceLifecycle.Disabled,4,1,initiator:human);
         var witness=new AdminDefinitionDeleteWitness([],[new(1,1)]);Assert.Equal("definition_in_use",(await Assert.ThrowsAsync<SecurityConflictException>(()=>f.Service.DeleteAsync(human.PrincipalId,first.TenantId,id,witness,5).AsTask())).ReasonCode);
         var root=Path.Combine(Path.GetTempPath(),"retired-definition-owner-"+Guid.NewGuid().ToString("N"));var browser=new NativePlaywrightBrowser(new(){Enabled=false,ProfileRoot=Path.Combine(root,"profiles")},null);
         try {

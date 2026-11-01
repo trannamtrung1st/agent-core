@@ -43,7 +43,7 @@ public sealed partial class SqliteAgentInstanceStore
     {
         var id = m.InstanceId.ToString("D");
         var owner = await db.AgentInstances.SingleOrDefaultAsync(r => r.InstanceId == id, ct) ?? throw AgentCoreErrors.NotFound("Agent Instance was not found.");
-        if (owner.Lifecycle != "Active") throw AgentCoreErrors.Validation("Archived instances are read-only.");
+        if (owner.Lifecycle != "Active") throw AgentCoreErrors.Validation("Disabled instances are read-only.");
         if (owner.Revision != m.ExpectedInstanceRevision) throw AgentCoreErrors.Conflict("Instance revision is stale.");
         var collection = await db.AgentInstanceResources.Where(r => r.InstanceId == id).ToArrayAsync(ct);
         var resourceId = m.DeleteResourceId ?? m.Resource?.ResourceId;

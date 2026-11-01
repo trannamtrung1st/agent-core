@@ -37,7 +37,7 @@ function TenantStateObservation({ context, id }: { context: TenantContext; id: s
   return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">
     <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Button disabled={state.loading} onClick={state.reload}>Refresh state</Button></Flex>
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={state.reload} /> : view && observed && <>
-      <TenantAgentHeading view={{ agent: view.agent, canUpdate: false }} configuration={false} archivedDescription="Runtime observations remain read-only for this archived agent." />
+      <TenantAgentHeading view={{ agent: view.agent, canUpdate: false }} configuration={false} disabledDescription="Runtime observations remain read-only for this disabled agent." />
       <Typography.Paragraph type="secondary">Only resources you can read contribute. Counts grant no execution authority and do not prove login, logout or remote cleanup. Refresh observes existing resources without starting work.</Typography.Paragraph>
       <Typography.Text type="secondary">Observed {new Date(observed.observedAtUtc).toLocaleString()} · Valid through {new Date(observed.freshThroughUtc).toLocaleString()}</Typography.Text>
       {expired ? <Alert type="warning" showIcon title="This observation expired" description="Refresh state to read current counts and permissions." /> : <>

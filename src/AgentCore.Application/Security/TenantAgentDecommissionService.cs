@@ -25,10 +25,10 @@ public sealed class TenantAgentDecommissionService(IIamStore security, ITenantAg
         var before = await Require(tenant, instance, human, false, ct); var after = await Require(tenant, instance, human, false, ct);
         if (before.State.Tenant.Revision != after.State.Tenant.Revision || before.Snapshot.Agent.Instance.Revision != after.Snapshot.Agent.Instance.Revision) throw new SecurityConflictException("stale_revision");
         var snapshot = after.Snapshot; var agent = snapshot.Agent; var retired = snapshot.Status == IdentityStatus.Removed;
-        var blocker = agent.ManagedKind is not null ? "system_managed_instance" : retired ? "agent_decommissioned" : agent.Instance.Lifecycle != AgentInstanceLifecycle.Archived ? "archive_required"
+        var blocker = agent.ManagedKind is not null ? "system_managed_instance" : retired ? "agent_decommissioned" : agent.Instance.Lifecycle != AgentInstanceLifecycle.Disabled ? "disabled_required"
             : snapshot.References.HasReferences ? "agent_in_use" : agent.Instance.BrowserProfileReset?.Status == "pending" ? "browser_profile_busy" : null;
         var canDecommission = blocker is null && await TenantAgentDecommissionRules.Allowed(after.State, human.PrincipalId, instance, authorizer, true, ct);
-        var canUpdate = agent.ManagedKind is null && !retired && (await authorizer.CheckAsync(human.PrincipalId, "agents.update", TenantAgentDecommissionRules.Scope(tenant, instance), ct)).Allowed;
+        var canUpdate = !retired && (await authorizer.CheckAsync(human.PrincipalId, "agents.update", TenantAgentDecommissionRules.Scope(tenant, instance), ct)).Allowed;
         var final = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct);
         if (final.Tenant.Revision != after.State.Tenant.Revision) throw new SecurityConflictException("stale_revision");
         return new(instance, agent.Instance.Persona.Name, agent.Instance.Lifecycle.ToString(), agent.Instance.Revision, after.State.Tenant.Revision,

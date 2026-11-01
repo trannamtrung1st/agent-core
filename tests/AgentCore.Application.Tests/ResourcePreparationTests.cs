@@ -97,7 +97,7 @@ public sealed class ResourcePreparationTests
             _ => Definition.SelfManagement
         } };
         if (fence == "frozen") owner = owner with { HarnessManagement = new(Definition.SelfManagement! with { Frozen = true }, Overrides: new()) };
-        if (fence == "archived") owner = owner with { Lifecycle = AgentInstanceLifecycle.Archived };
+        if (fence == "archived") owner = owner with { Lifecycle = AgentInstanceLifecycle.Disabled };
         Assert.Throws<AgentCoreException>(() => TenantAgentResourcePreparation.Choice(owner, definition, new([], []), new([], []), [source],
             "definition:" + source.ResourceId.ToString("D"), false, null, 0, SkillAuthor.Agent, At));
     }

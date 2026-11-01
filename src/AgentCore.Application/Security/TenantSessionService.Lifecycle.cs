@@ -20,7 +20,7 @@ public sealed partial class TenantSessionService
         {
             var parent = await agents.FindTenantAgentAsync(tenant, current.Owner.AgentInstanceId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
             await Require(state, initiator.PrincipalId, "agents.chat", AccessScope.ForResource(tenant, "agent", current.Owner.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false);
-            if (parent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+            if (parent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
             TenantSessionRules.RequireExecutor(state, parent);
         }
         if (state.Tenant.Revision != expectedSecurityRevision || current.Snapshot.Revision != change.ExpectedSessionRevision) throw new SecurityConflictException("stale_revision");

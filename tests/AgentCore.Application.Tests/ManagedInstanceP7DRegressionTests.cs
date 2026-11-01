@@ -82,9 +82,9 @@ public sealed class ManagedInstanceP7DRegressionTests
 
             var archived = await NativeInstanceSeed.LifecycleAsync(instances, clock,
                 managed.InstanceId,
-                AgentInstanceLifecycle.Archived,
+                AgentInstanceLifecycle.Disabled,
                 managed.Revision);
-            Assert.Equal(AgentInstanceLifecycle.Archived, archived.Lifecycle);
+            Assert.Equal(AgentInstanceLifecycle.Disabled, archived.Lifecycle);
 
             var after = await work.GetAsync(owner, workItemId);
             Assert.NotNull(after);

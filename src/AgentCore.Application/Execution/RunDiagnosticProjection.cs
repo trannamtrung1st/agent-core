@@ -10,7 +10,8 @@ public sealed record RunAttemptDiagnostic(int Attempt, string Code, string? Reas
 public sealed record RunProtocolRecovery(string Reason, string? Channel, string Eligibility,
     string? Strategy = null, string? Outcome = null);
 public sealed record RunExecutionDiagnostic(int RemainingBudgetMs, string? LastTool, int RecordedToolResults,
-    IReadOnlyList<RunAttemptDiagnostic> FailedAttempts, RunProtocolRecovery? ProtocolRecovery = null);
+    IReadOnlyList<RunAttemptDiagnostic> FailedAttempts, RunProtocolRecovery? ProtocolRecovery = null, RunCompactionDiagnostic? Compaction = null);
+public sealed record RunCompactionDiagnostic(int Count, int CompactedMessages, int BeforeEstimatedTokens, int AfterEstimatedTokens);
 
 public static class RunDiagnosticProjection
 {
@@ -34,6 +35,7 @@ public static class RunDiagnosticProjection
             recovery = recovery with { Outcome = run.Status == AgentRunStatus.Cancelled ? "cancelled" : "failed" };
         return new(checkpoint.RemainingOverallBudgetMs, tools.LastOrDefault()?.Name, tools.Length,
             attempts.TakeLast(AgentRunLimits.DefaultMaxAttempts).ToArray(),
-            recovery);
+            recovery, AgentRunToolCallCheckpoint.ReadExecutionState(checkpoint).Compaction is { } compact
+                ? new(compact.Count, compact.ThroughMessageCount, compact.BeforeEstimatedTokens, compact.AfterEstimatedTokens) : null);
     }
 }

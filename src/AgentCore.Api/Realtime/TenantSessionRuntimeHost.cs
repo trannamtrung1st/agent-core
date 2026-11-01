@@ -115,7 +115,7 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
         lock (_gate)
         {
             if (_stopping) return false;
-            if (attempt.RequestSettled || _cancelling.Contains((run.Owner.TenantId!.Value, run.AgentRunId)) || _quiescentWrites.Contains(run.SessionId) || sessionWriteEpoch != _sessionWriteEpoch) refused = true;
+            if (_disabling.Contains((run.Owner.TenantId!.Value, run.AgentInstanceId)) || attempt.RequestSettled || _cancelling.Contains((run.Owner.TenantId!.Value, run.AgentRunId)) || _quiescentWrites.Contains(run.SessionId) || sessionWriteEpoch != _sessionWriteEpoch) refused = true;
             else if (_live.TryGetValue(run.SessionId, out var raced))
             {
                 if (raced.Run.AgentRunId == run.AgentRunId && raced.Run.Claim!.Generation == claim.Generation) existing = raced;

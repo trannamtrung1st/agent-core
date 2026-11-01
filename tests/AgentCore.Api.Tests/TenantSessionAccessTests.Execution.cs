@@ -83,7 +83,7 @@ public sealed partial class TenantSessionAccessTests
         var storage = services.GetRequiredService<ITenantRuntimeStore>(); var now = services.GetRequiredService<TimeProvider>().GetUtcNow();
         run = await storage.ApplyTenantRuntimeCommandAsync(run.Owner, runId, new AgentRunCommand.Claim(run.Revision, now, Guid.NewGuid(), now.AddMinutes(5)), Guid.NewGuid());
         Assert.NotNull(await services.GetRequiredService<TenantRunExecutionAuthority>().CurrentDefinitionAsync(run));
-        await agents.SetLifecycleAsync(human, tenant, instance, AgentCore.Domain.Definitions.AgentInstanceLifecycle.Archived, await Revision(owner, tenant), 1);
+        await agents.SetLifecycleAsync(human, tenant, instance, AgentCore.Domain.Definitions.AgentInstanceLifecycle.Disabled, await Revision(owner, tenant), 1);
         Assert.Null(await services.GetRequiredService<TenantRunExecutionAuthority>().CurrentDefinitionAsync(run));
         Assert.True(await services.GetRequiredService<ITenantRunDispatcher>().DispatchAsync(run));
         var denied = (await runs.FindTenantRunAsync(tenant, runId))!;

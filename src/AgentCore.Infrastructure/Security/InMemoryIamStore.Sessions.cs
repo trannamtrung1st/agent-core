@@ -30,7 +30,7 @@ public sealed partial class InMemoryIamStore
                 var root = sessionBacking.ReadTenantSession(next.Tenant.TenantId, change.SessionId)?.Owner;
                 var parent = root is null ? null : FindTenantAgentAsync(root.TenantId, root.AgentInstanceId, ct).Result;
                 if (parent is null) return ValueTask.FromResult<TenantSession?>(null);
-                if (parent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+                if (parent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
                 TenantSessionRules.RequireExecutor(before, parent);
             }
             var prior = sessionBacking.ReadTenantSession(next.Tenant.TenantId, change.SessionId);

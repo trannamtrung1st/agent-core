@@ -61,7 +61,7 @@ public static class IsolationConfigurationPlanner
         CancellationToken ct = default, bool observeBrowser = true)
     {
         var blocked = new List<string>();
-        if (owner.Lifecycle != AgentInstanceLifecycle.Active) blocked.Add("Archived Instance configuration is read-only.");
+        if (owner.Lifecycle != AgentInstanceLifecycle.Active) blocked.Add("Disabled Instance configuration is read-only.");
         var current = owner.SettingsOverrides ?? new();
         var next = Patch(current, draft);
         AgentDefinition? effective = null;

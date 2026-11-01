@@ -62,7 +62,7 @@ public sealed partial class IamIdentityIntegrationTests
         Assert.Equal(next.Tenant.Revision, (await f.Store.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
 
         var archived = await f.AgentService().SetLifecycleAsync(owner.OwnerPrincipalId, owner.TenantId, owned.InstanceId,
-            AgentInstanceLifecycle.Archived, next.Tenant.Revision, revision);
+            AgentInstanceLifecycle.Disabled, next.Tenant.Revision, revision);
         Assert.Equal(publicBinding, Assert.Single(await bindings.ListBindingsAsync()));
         Assert.Empty(await bindings.ListBindingsAsync(owned.InstanceId));
         await Denied(() => bindings.BindAsync(privateBinding with { BindingId = f.Ids.NewId() }, archived.Instance.Revision).AsTask());

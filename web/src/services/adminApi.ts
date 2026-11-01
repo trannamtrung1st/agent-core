@@ -224,7 +224,6 @@ export type AdminResourceContentStored = {
 };
 
 export type AdminAgentInstance = {
-  showInChat?: boolean;
   cooperation?: import("./tenantTasks").AgentCooperation;
   instanceId: string;
   definitionId: string;

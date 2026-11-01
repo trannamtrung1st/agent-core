@@ -5,7 +5,7 @@ import { theme, type ThemeConfig } from "antd";
 // retain Ant Design's independently recognizable status palettes.
 const readableDarkAlgorithm: typeof theme.darkAlgorithm = (seed, map) => ({
   ...theme.darkAlgorithm(seed, map),
-  colorPrimary: "#245fbe",
+  colorPrimary: seed.colorPrimary,
   colorPrimaryHover: "#2867cc",
   colorPrimaryActive: "#1d4c9d",
   colorPrimaryBg: "#1b3455",

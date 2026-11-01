@@ -34,6 +34,7 @@ export type ResponseProgressKind =
   | "readingAttachments"
   | "runningTool"
   | "waitingExternal"
+  | "optimizingContext"
   | "finalizing";
 
 export type ResponseProgressState = "started" | "updated" | "completed" | "failed";
@@ -122,6 +123,7 @@ export type PendingSendItem = {
 };
 
 export type SessionView = {
+  agentEnabled?: boolean;
   retentionKind: "saved" | "temporary";
   retentionDueAtUtc: string | null;
   agentCompletion: string;
@@ -186,6 +188,7 @@ export type SessionView = {
 };
 
 export const emptySession = (): SessionView => ({
+  agentEnabled: true,
   connection: "idle",
   sessionId: null,
   attachmentId: null,
@@ -267,6 +270,7 @@ const progressKinds = new Set<ResponseProgressKind>([
   "readingAttachments",
   "runningTool",
   "waitingExternal",
+  "optimizingContext",
   "finalizing"
 ]);
 
@@ -413,8 +417,8 @@ export function isSessionModelBusy(
   return state.modelMutationPending || state.liveResponseId != null || isInFlightOutput(state.outputState);
 }
 
-export function isReadonlySession(state: Pick<SessionView, "sessionId" | "status">): boolean {
-  return state.sessionId != null && state.status === "ended";
+export function isReadonlySession(state: Pick<SessionView, "sessionId" | "status" | "agentEnabled">): boolean {
+  return state.sessionId != null && (state.status === "ended" || state.agentEnabled === false);
 }
 
 export function historyFromPayload(raw: unknown): HistoryEntry[] {
@@ -695,6 +699,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         && !history.some((entry) => entry.role === "assistant" && entry.responseId === activeResponseId);
       return {
         ...state,
+        agentEnabled: true,
         connection: "ready",
         attachmentId: event.attachmentId,
         sessionId: event.sessionId,

@@ -26,9 +26,9 @@ export function TenantAgentActivity({ context, id, page }: { context: TenantCont
     <Flex wrap justify="space-between" gap="var(--ac-space-compact)">
       <Button onClick={() => { view.reload(); setReload(value => value + 1); }}>Reload Activity</Button></Flex>
     {view.loading ? <AccessLoading /> : view.error ? <AccessError error={view.error} retry={view.reload} /> : view.data && <>
-      <TenantAgentHeading view={view.data} configuration={false} archivedDescription="Activity remains readable. Restore this instance before continuing its conversations." />
+      <TenantAgentHeading view={view.data} configuration={false} disabledDescription="Activity remains readable. Enable this instance to send new messages." />
       <InstanceCommunicationSection key={`${tenant}:${id}:${context.principalId}`} tenant={tenant} instance={id} />
-      {page === 'activity-sessions' ? <InstanceSessionsSection key={`${source.scope}:${reload}`} instanceId={id} open archived={view.data.agent.instance.lifecycle !== 'Active'} source={source} activityPath={path} /> : <>
+      {page === 'activity-sessions' ? <InstanceSessionsSection key={`${source.scope}:${reload}`} instanceId={id} open disabled={view.data.agent.instance.lifecycle !== 'Active'} source={source} activityPath={path} /> : <>
         <InstanceRunsSection key={`${source.scope}:${reload}`} instanceId={id} open inline onClose={() => undefined} source={source} activityPath={path} onRun={select} />
         <InstanceRunsSection instanceId={id} open={!!runId} selectedAgentRunId={runId} detailsOnly afterClose={() => { if (runOpener.current?.isConnected) runOpener.current.focus(); }} onClose={() => select()} source={source} activityPath={path} />
       </>}

@@ -16,7 +16,7 @@ public static class TenantSessionContextRules
         if (request.TransitionId == Guid.Empty || request.SpaceId == Guid.Empty || request.EnvironmentId == Guid.Empty || request.Owner != saved.Owner
             || request.Owner.TenantId != state.Tenant.TenantId || agent.TenantId != request.Owner.TenantId || agent.Instance.InstanceId != saved.Owner.AgentInstanceId
             || agent.PrincipalId != saved.Owner.ExecutorPrincipalId || selection.TenantId != saved.Owner.TenantId) throw new AccessDeniedException("tenant_context_mismatch");
-        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
         if (saved.Snapshot.DurablyDeletedAt is not null || saved.Snapshot.ArchivedAt is not null || saved.Snapshot.Status is SessionStatus.Ended or SessionStatus.Ending
             || saved.Snapshot.LifecycleStatus is SessionLifecycleStatus.Completed or SessionLifecycleStatus.Cancelled) throw new SecurityConflictException("session_read_only");
         if (state.Tenant.Revision != request.ExpectedSecurityRevision || agent.Instance.Revision != request.ExpectedInstanceRevision

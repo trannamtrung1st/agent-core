@@ -3,6 +3,7 @@ import { lifecycleOutcomeLabel } from "./sessionLifecycle";
 import { interruptReasonLabel } from "./interruptReason";
 
 export type StatusSource = {
+  agentEnabled?: boolean;
   connection: string;
   pendingVoice: boolean;
   voiceLive: boolean;
@@ -18,7 +19,7 @@ export type StatusSource = {
   liveInterruptReason?: string | null;
   connectionError?: string | null;
   activeProgress?: {
-    kind: "preparing" | "readingAttachments" | "runningTool" | "waitingExternal" | "finalizing";
+    kind: "preparing" | "readingAttachments" | "runningTool" | "waitingExternal" | "optimizingContext" | "finalizing";
     message?: string | null;
   } | null;
 };
@@ -70,6 +71,7 @@ export function conversationStatus(source: StatusSource): string {
 }
 
 function idleLabel(source: StatusSource): string {
+  if (source.agentEnabled === false) return "Agent disabled";
   if (source.sessionStatus === "ended") {
     return lifecycleOutcomeLabel(source.lifecycleStatus);
   }
@@ -102,6 +104,8 @@ export function progressActivityLabel(kind: NonNullable<StatusSource["activeProg
       return "Running tools…";
     case "waitingExternal":
       return "Waiting…";
+    case "optimizingContext":
+      return "Optimizing context…";
     case "finalizing":
       return "Finalizing response…";
     default:
@@ -201,6 +205,7 @@ export function mapAgentActivity(source: StatusSource): AgentActivityState {
 }
 
 export function conversationStatusLabel(source: StatusSource): string {
+  if (source.agentEnabled === false) return "Agent disabled";
   const activity = mapAgentActivity(source);
   if (activity.kind === "idle") {
     return idleLabel(source);
@@ -234,6 +239,7 @@ export function conversationStatusTone(text: string): "live" | "wait" | "alarm" 
     text === "Reconnecting…" ||
     text === "Reconnecting" ||
     text === "Ended" ||
+    text === "Agent disabled" ||
     text === "Completed" ||
     text === "Expired" ||
     text === "Cancelled" ||

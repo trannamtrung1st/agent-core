@@ -14,7 +14,7 @@ export type InstanceSettingsTransport = {
   models: (signal?: AbortSignal) => ReturnType<typeof listModels>;
 };
 /** Exact-owner reads and independent sparse section drafts; pages only select presentation. */
-export function useInstanceSettingsController(instanceId: string, archived: boolean, active: boolean, onUpdated: () => void, externalRevision: number | undefined, deferRefresh: boolean | undefined, transport: InstanceSettingsTransport) {
+export function useInstanceSettingsController(instanceId: string, readOnly: boolean, active: boolean, onUpdated: () => void, externalRevision: number | undefined, deferRefresh: boolean | undefined, transport: InstanceSettingsTransport) {
   const { message } = App.useApp();
   const [sections, setSections] = useState<SettingsSection[] | null>(null);
   const [drafts, setDrafts] = useState<Record<string, SettingsDraft>>({});
@@ -48,7 +48,7 @@ export function useInstanceSettingsController(instanceId: string, archived: bool
   }
   async function save(section: SettingsSection, reset = false) {
     const draft = reset ? { set: {}, clear: Object.keys(section.overrides) } : drafts[section.section] ?? emptyDraft();
-    if (archived || busy || !sections || !Object.keys(draft.set).length && !draft.clear.length) return;
+    if (readOnly || busy || !sections || !Object.keys(draft.set).length && !draft.clear.length) return;
     const request = epoch.current; let committed = false; saving.current = true; setBusy(true); setError(null);
     try {
       await transport.patch(instanceId, section, draft.set, draft.clear, scope.current.signal);
@@ -72,7 +72,7 @@ export function useInstanceSettingsController(instanceId: string, archived: bool
     finally { if (request === epoch.current) { saving.current = false; setBusy(false); setLoading(false); } }
   }
   async function saveAll(expectedRevision: number): Promise<number> {
-    if (archived || saving.current || !sections) throw new Error('Read current settings before saving.');
+    if (readOnly || saving.current || !sections) throw new Error('Read current settings before saving.');
     const pending = sections.filter(section => { const draft = drafts[section.section]; return draft && (Object.keys(draft.set).length || draft.clear.length); });
     const request = epoch.current; let nextRevision = expectedRevision; let nextSecurityRevision = sections[0]?.securityRevision; let committed = 0;
     saving.current = true; setBusy(true); setError(null);

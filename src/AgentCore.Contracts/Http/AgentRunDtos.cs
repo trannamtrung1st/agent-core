@@ -41,7 +41,8 @@ public sealed record RunAttemptDiagnosticResponse(int Attempt, string Code, stri
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Transport = null);
 public sealed record RunProtocolRecoveryResponse(string Reason, string? Channel, string Eligibility, string? Strategy, string? Outcome);
 public sealed record RunExecutionDiagnosticResponse(int RemainingBudgetMs, string? LastTool, int RecordedToolResults,
-    IReadOnlyList<RunAttemptDiagnosticResponse> FailedAttempts, RunProtocolRecoveryResponse? ProtocolRecovery = null);
+    IReadOnlyList<RunAttemptDiagnosticResponse> FailedAttempts, RunProtocolRecoveryResponse? ProtocolRecovery = null, RunCompactionDiagnosticResponse? Compaction = null);
+public sealed record RunCompactionDiagnosticResponse(int Count, int CompactedMessages, int BeforeEstimatedTokens, int AfterEstimatedTokens);
 
 public sealed record ContextManifestResponse(int ContextFormatVersion, int CoreContractVersion,
     IReadOnlyList<ContextManifestSectionResponse> Sections, string Fingerprint, IReadOnlyDictionary<string, ContextFieldSourceResponse>? FieldSources = null);

@@ -255,6 +255,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
     (entry) => entry.responseId === state.liveResponseId && entry.role === "assistant"
   );
   const statusSource = {
+    agentEnabled: state.agentEnabled,
     connection: state.connection,
     pendingVoice,
     voiceLive,
@@ -392,7 +393,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
             />
           </Header>
           <Content className="app-content">
-            {state.sessionId && !expired && <TenantSessionContext key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} session={state.sessionId} refreshKey={`${state.agentRunId ?? ''}:${state.liveResponseId ?? ''}`} />}
+            {state.sessionId && !expired && <TenantSessionContext key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} session={state.sessionId} disabledAgent={state.agentEnabled === false} refreshKey={`${state.agentRunId ?? ''}:${state.liveResponseId ?? ''}`} />}
             {tenantError !== undefined && <div className="conversation-column conversation-banners"><AccessError error={tenantError} /></div>}
             {state.routeNotice || state.connection === "failed" ? (
               <div className="conversation-column conversation-banners">
@@ -487,7 +488,7 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
                   {readonly ? (
                     <Flex align="center" justify="center" wrap gap={16}>
                       <Typography.Text type="secondary" className="conversation-ended-note">
-                        {state.lifecycleStatus === "completed" && state.lifecycleSource === "agent" ? `Conversation completed by agent${state.lifecycleReason ? ` · ${state.lifecycleReason}` : ""}` : terminalSessionNote(state.lifecycleStatus)}
+                        {state.agentEnabled === false ? "Agent disabled. History is kept. Enable the agent in Agent Management to start future work." : state.lifecycleStatus === "completed" && state.lifecycleSource === "agent" ? `Conversation completed by agent${state.lifecycleReason ? ` · ${state.lifecycleReason}` : ""}` : terminalSessionNote(state.lifecycleStatus)}
                       </Typography.Text>
                       <Button aria-label="Start another chat" onClick={() => handleNewChat()}>New chat</Button>
                     </Flex>

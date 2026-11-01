@@ -43,7 +43,7 @@ public sealed partial class SqliteIamStore
             {
                 var parent = await OwnedAgents(db, root.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == root.AgentInstanceId, ct).ConfigureAwait(false);
                 if (parent is null) return false;
-                if (parent.Instance.Lifecycle != "Active") throw new AccessDeniedException("agent_archived");
+                if (parent.Instance.Lifecycle != "Active") throw new AccessDeniedException("agent_disabled");
                 TenantSessionRules.RequireExecutor((await ReadTenantAsync(db, root.TenantId, ct).ConfigureAwait(false))!, Owned(parent));
             }
             var previous = SqliteMemoryStore.ToSnapshot(row, []);

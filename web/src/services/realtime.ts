@@ -240,6 +240,20 @@ async function invoke(
     result?: Record<string, unknown>;
   };
   if (chatTenantId && (connection !== active || connectionEpoch !== epoch)) return { accepted: false };
+  if (chatTenantId && method === 'SendText' && result.error?.category === 'Authorization'
+    && ['agent_disabled', 'executor_unavailable', 'tenant_runtime_unavailable'].includes(result.error.code ?? '')) {
+    const session = useSessionStore.getState().sessionId;
+    if (session) {
+      try {
+        const current = await getSession(session);
+        if (current.agentEnabled === false && sameSessionId(useSessionStore.getState().sessionId, session)) {
+          useSessionStore.setState({ agentEnabled: false, activeProgress: null });
+          disarmCapture('explicit'); abortPlayback(); void releaseClientSpeech();
+          return result;
+        }
+      } catch { /* The ordinary current-human denial path below remains authoritative. */ }
+    }
+  }
   // A late Stop acknowledgement for a superseded response must not reattach the new response.
   if (method === 'CancelResponse' && responseId && useSessionStore.getState().liveResponseId !== responseId
     && ['StaleCommand', 'StaleAttachment', 'stale_revision'].includes(result.error?.code ?? '')) return result;
@@ -1768,6 +1782,12 @@ async function startConnection(
   sessionId: string,
   options?: { syncUrl?: "push" | "replace" | "none" }
 ): Promise<void> {
+  if (chatTenantId) {
+    const availabilityEpoch = connectionEpoch;
+    const current = await getSession(sessionId);
+    if (connectionEpoch !== availabilityEpoch) return;
+    if (current.agentEnabled === false) { await showEndedSession(sessionId, { syncUrl: options?.syncUrl !== 'none' }); return; }
+  }
   const keepPreparedCapture = capture.isPrepared() && useSessionStore.getState().preflightReady;
   if (!keepPreparedCapture && !voiceModeRequested) {
     voiceEpoch += 1;
@@ -2276,6 +2296,7 @@ export async function openSessionById(
 
   try {
     const view = await getSession(sessionId);
+    if (view.agentEnabled === false) return showEndedSession(sessionId, options);
     return openCatalogSession(
       {
         sessionId,
@@ -2498,6 +2519,7 @@ async function showPausedSession(
 
   try {
     const view = await getSession(sessionId);
+    if (view.agentEnabled === false) return showEndedSession(sessionId, options);
     if (view.status === "ended") {
       return showEndedSession(sessionId, options);
     }
@@ -2549,7 +2571,7 @@ async function showEndedSession(
   options?: { syncUrl?: boolean }
 ): Promise<OpenSessionResult> {
   const snapshot = useSessionStore.getState();
-  if (sameSessionId(snapshot.sessionId, sessionId) && isReadonlySession(snapshot) && snapshot.connection === "idle") {
+  if (sameSessionId(snapshot.sessionId, sessionId) && isReadonlySession(snapshot) && snapshot.connection === "idle" && snapshot.agentEnabled !== false) {
     useSessionStore.setState({ routeNotice: null });
     if (options?.syncUrl !== false) {
       syncBrowserSessionPath(sessionId, "push");
@@ -2581,11 +2603,11 @@ async function showEndedSession(
 
   try {
     const view = await getSession(sessionId);
-    if (view.status === "paused" && requiresExplicitResume(view.pauseReason)) {
+    if (view.agentEnabled !== false && view.status === "paused" && requiresExplicitResume(view.pauseReason)) {
       return showPausedSession(sessionId, options);
     }
 
-    if (view.status !== "ended") {
+    if (view.status !== "ended" && view.agentEnabled !== false) {
       await startConnection(sessionId, { syncUrl: "none" });
       await refreshCatalog(true);
       return useSessionStore.getState().connection === "ready" ? "ready" : "failed";
@@ -2605,7 +2627,8 @@ async function showEndedSession(
       agentName: identity.name,
       agentRole: identity.role,
       voiceAvailable: false,
-      status: "ended",
+      status: view.status,
+      agentEnabled: view.agentEnabled,
       retentionKind: view.retentionKind ?? "saved", retentionDueAtUtc: view.retentionDueAtUtc ?? null,
       agentCompletion: view.agentCompletion ?? "disabled", lifecycleReason: view.lifecycleReason ?? null, lifecycleSource: view.lifecycleSource ?? null,
       lifecycleStatus: view.lifecycleStatus ?? "ended",
@@ -2637,7 +2660,7 @@ async function showEndedSession(
 async function openEndedIfTerminal(sessionId: string): Promise<OpenSessionResult | null> {
   try {
     const view = await getSession(sessionId);
-    if (view.status !== "ended") {
+    if (view.status !== "ended" && view.agentEnabled !== false) {
       return null;
     }
   } catch {

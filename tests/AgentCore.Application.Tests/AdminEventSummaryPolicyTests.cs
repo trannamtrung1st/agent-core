@@ -109,7 +109,7 @@ public sealed class AdminEventSummaryPolicyTests
     }
 
     [Fact]
-    public void InstanceArchived_summary_includes_lifecycle_transition()
+    public void InstanceDisabled_summary_includes_lifecycle_transition()
     {
         var append = AdminEventFactory.InstanceLifecycleChanged(
             Guid.NewGuid(),
@@ -118,9 +118,9 @@ public sealed class AdminEventSummaryPolicyTests
             Guid.Parse("019944af-00d1-7000-8000-000000000095"),
             1,
             AgentInstanceLifecycle.Active,
-            AgentInstanceLifecycle.Archived,
+            AgentInstanceLifecycle.Disabled,
             2);
-        Assert.Equal(AdminEventOperationKind.InstanceArchived, append.Operation);
+        Assert.Equal(AdminEventOperationKind.InstanceDisabled, append.Operation);
         AdminEventSummaryPolicy.ValidateAppend(append);
     }
 

@@ -22,7 +22,7 @@ afterEach(cleanup);
 
 it('retires an acknowledged section after an unreadable response and explicitly reloads without replaying it', async () => {
   const transport = { list: vi.fn().mockResolvedValue(sections()), patch: vi.fn().mockRejectedValue(new IdentityCompletionError()), models: vi.fn().mockResolvedValue({ models: [], defaultOfferingId: null }) };
-  render(<ConfigProvider><App><InstanceSettingsSection sandboxContext={fixtureSandbox} instanceId="tenant-agent" archived={false} onUpdated={() => {}} transport={transport} /></App></ConfigProvider>);
+  render(<ConfigProvider><App><InstanceSettingsSection sandboxContext={fixtureSandbox} instanceId="tenant-agent" readOnly={false} onUpdated={() => {}} transport={transport} /></App></ConfigProvider>);
   await editVoiceWithOtherDraft();
   await screen.findByText(/Settings were saved\./);
   expect(screen.queryByRole('button', { name: 'Save Voice' })).not.toBeInTheDocument();
@@ -35,7 +35,7 @@ it('retires an acknowledged section after an unreadable response and explicitly 
 
 it('makes a tenant model catalog failure visible and retries only its read', async () => {
   const transport = { list: vi.fn().mockResolvedValue(sections()), patch: vi.fn(), models: vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ models: [], defaultOfferingId: null }) };
-  render(<ConfigProvider><App><InstanceSettingsSection sandboxContext={fixtureSandbox} instanceId="tenant-agent" archived={false} onUpdated={() => {}} transport={transport} /></App></ConfigProvider>);
+  render(<ConfigProvider><App><InstanceSettingsSection sandboxContext={fixtureSandbox} instanceId="tenant-agent" readOnly={false} onUpdated={() => {}} transport={transport} /></App></ConfigProvider>);
   fireEvent.click(await screen.findByRole('button', { name: 'Reload models' }));
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Reload models' })).not.toBeInTheDocument());
   expect(transport.models).toHaveBeenCalledTimes(2); expect(transport.patch).not.toHaveBeenCalled();
@@ -69,7 +69,7 @@ async function editVoiceWithOtherDraft() {
 it('refreshes dependent sections after saving while retaining unrelated drafts and expansion', async () => {
   vi.mocked(api.listInstanceSettings).mockResolvedValueOnce(sections()).mockResolvedValue(sections(2, false));
   vi.mocked(api.patchInstanceSettings).mockResolvedValue(sections(2, false)[0]);
-  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
+  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" readOnly={false} onUpdated={() => {}} /></App></ConfigProvider>);
   await editVoiceWithOtherDraft();
   await waitFor(() => expect(screen.getByRole('textbox', { name: 'Speech recognizer' })).toHaveValue(''));
   expect(screen.getByRole('textbox', { name: 'Language' })).toHaveValue('fr-FR');
@@ -80,7 +80,7 @@ it('refreshes dependent sections after saving while retaining unrelated drafts a
 it('reports a committed save when refresh fails and recovers without replaying it or losing other drafts', async () => {
   vi.mocked(api.listInstanceSettings).mockResolvedValueOnce(sections()).mockRejectedValueOnce(new Error('Read unavailable.')).mockResolvedValue(sections(2, false));
   vi.mocked(api.patchInstanceSettings).mockResolvedValue(sections(2, false)[0]);
-  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
+  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" readOnly={false} onUpdated={() => {}} /></App></ConfigProvider>);
   await editVoiceWithOtherDraft();
   expect(await screen.findByText(/Settings were saved\. Read unavailable\./)).toBeVisible();
   expect(screen.queryByRole('button', { name: 'Save Voice' })).not.toBeInTheDocument();
@@ -101,7 +101,7 @@ it('uses host-default reasoning choices for an explicit inherited preference and
     definitionId: 'agent', definitionVersion: 1, overrides: { preference: { mode: 'inherit', reasoning: { mode: 'modelDefault' } } },
     effective: { preference: { mode: 'inherit', reasoning: { mode: 'modelDefault' } } }, definitionDefaults: { preference: { mode: 'fixed', offeringId: 'definition', reasoning: { mode: 'fixed', effort: 'max' } } },
     sources: { preference: 'instance' }, configurationHash: 'hash' }]);
-  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
+  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" readOnly={false} onUpdated={() => {}} /></App></ConfigProvider>);
   fireEvent.click(await screen.findByRole('button', { name: /^Model defaults/ }));
   const effort = screen.getByRole('combobox', { name: 'Instance reasoning' });
   await waitFor(() => expect(effort).toBeEnabled());
@@ -116,7 +116,7 @@ it('ignores a late settings refresh after switching owners', async () => {
   const pending = new Promise<settingsTypes.SettingsSection[]>(resolve => { finishRefresh = resolve; });
   vi.mocked(api.listInstanceSettings).mockResolvedValueOnce(sections()).mockReturnValueOnce(pending).mockResolvedValue(sections());
   vi.mocked(api.patchInstanceSettings).mockResolvedValue(sections(2, false)[0]);
-  const fixture = (instanceId: string) => <ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId={instanceId} archived={false} onUpdated={() => {}} /></App></ConfigProvider>;
+  const fixture = (instanceId: string) => <ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId={instanceId} readOnly={false} onUpdated={() => {}} /></App></ConfigProvider>;
   const { rerender } = render(fixture('owner'));
   await editVoiceWithOtherDraft();
   await waitFor(() => expect(api.listInstanceSettings).toHaveBeenCalledTimes(2));
@@ -132,7 +132,7 @@ it('finishes the committed save after leaving and re-entering the settings tab d
   const pending = new Promise<settingsTypes.SettingsSection[]>(resolve => { finishRefresh = resolve; });
   vi.mocked(api.listInstanceSettings).mockResolvedValueOnce(sections()).mockReturnValueOnce(pending).mockResolvedValue(sections(2, false));
   vi.mocked(api.patchInstanceSettings).mockResolvedValue(sections(2, false)[0]);
-  const fixture = (active: boolean) => <ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" active={active} archived={false} onUpdated={() => {}} /></App></ConfigProvider>;
+  const fixture = (active: boolean) => <ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" active={active} readOnly={false} onUpdated={() => {}} /></App></ConfigProvider>;
   const { rerender } = render(fixture(true));
   await editVoiceWithOtherDraft();
   await waitFor(() => expect(api.listInstanceSettings).toHaveBeenCalledTimes(2));
@@ -146,7 +146,7 @@ it('finishes the committed save after leaving and re-entering the settings tab d
 
 it('edits inherited values without writing and discards a local draft back to Definition defaults', async () => {
   vi.mocked(api.listInstanceSettings).mockResolvedValue(sections());
-  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
+  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" readOnly={false} onUpdated={() => {}} /></App></ConfigProvider>);
   fireEvent.click(await screen.findByRole('button', { name: 'Conversation' }));
   const language = screen.getByRole('textbox', { name: 'Language' });
   expect(language).toBeEnabled();
@@ -166,7 +166,7 @@ it('shows override provenance only in focusable tooltips and removes it after re
   const saved = sections(2, false);
   vi.mocked(api.listInstanceSettings).mockResolvedValueOnce(inherited).mockResolvedValueOnce(saved).mockResolvedValue(inherited);
   vi.mocked(api.patchInstanceSettings).mockResolvedValue(saved[0]);
-  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
+  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" readOnly={false} onUpdated={() => {}} /></App></ConfigProvider>);
   fireEvent.click(await screen.findByRole('button', { name: 'Voice' }));
   expect(screen.queryByText('Definition default')).not.toBeInTheDocument();
   expect(screen.queryByText('Using the selected Definition’s defaults.')).not.toBeInTheDocument();
@@ -193,7 +193,7 @@ it('explains published restrictions before saving while allowing independent tog
     sources: { acknowledgeInterruption: 'definition', avoidUnsupportedClaims: 'definition' }, configurationHash: 'hash',
     constraints: { avoidUnsupportedClaims: { requiredBoolean: true, minimum: null, maximum: null, reason: 'Avoid unsupported claims is required by the selected Definition and cannot be disabled for this Instance.' } } };
   vi.mocked(api.listInstanceSettings).mockResolvedValue([fixture]);
-  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
+  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" readOnly={false} onUpdated={() => {}} /></App></ConfigProvider>);
   fireEvent.click(await screen.findByRole('button', { name: 'Behavior' }));
   expect(screen.getByRole('switch', { name: 'Avoid unsupported claims' })).toBeDisabled();
   const restriction = screen.getByRole('button', { name: 'Avoid unsupported claims: Definition restriction' });
@@ -211,7 +211,7 @@ it('edits sandbox storage in MiB while saving exact sparse bytes and preserving 
   const section:settingsTypes.SettingsSection={section:'sandboxPolicy',instanceRevision:1,definitionId:'agent',definitionVersion:1,overrides:{},effective,definitionDefaults:effective,sources:{storageBytes:'profile'},configurationHash:'hash',constraints:{storageBytes:{minimum:1,maximum:262144000,requiredBoolean:null,reason:'Profile ceiling'}}};
   fixtureSandbox.profiles = [profile];
   vi.mocked(api.listInstanceSettings).mockResolvedValue([section]);
-  render(<ConfigProvider theme={{token:{motion:false}}}><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" page="sandbox" archived={false} onUpdated={()=>{}} /></App></ConfigProvider>);
+  render(<ConfigProvider theme={{token:{motion:false}}}><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" page="sandbox" readOnly={false} onUpdated={()=>{}} /></App></ConfigProvider>);
   const storage=await screen.findByRole('spinbutton',{name:'Canonical /working storage (MiB)'});
   expect(storage).toHaveValue('250');
   fireEvent.change(storage,{target:{value:'128.5'}});
@@ -236,7 +236,7 @@ it('retains unavailable model and effort explicitly without silently choosing th
     definitionId: 'agent', definitionVersion: 1, overrides: { preference: { mode: 'fixed', offeringId: retired, reasoning: { mode: 'fixed', effort: 'high' } } },
     effective: { preference: { mode: 'fixed', offeringId: retired, reasoning: { mode: 'fixed', effort: 'high' } } }, definitionDefaults: { preference: { mode: 'inherit' } },
     sources: { preference: 'instance' }, configurationHash: 'hash' }]);
-  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
+  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" readOnly={false} onUpdated={() => {}} /></App></ConfigProvider>);
   fireEvent.click(await screen.findByRole('button', { name: /^Model defaults/ }));
   expect(await screen.findByText(`Unavailable · ${retired}`, { exact: true })).toBeVisible();
   expect(screen.getByText('high · Unavailable', { exact: true })).toBeVisible();
@@ -254,7 +254,7 @@ it('clears an inherited unsupported effort when explicitly changing the model', 
     overrides: {}, effective: { preference: { mode: 'fixed', offeringId: 'host', reasoning: { mode: 'fixed', effort: 'high' } } }, definitionDefaults: { preference: { mode: 'fixed', offeringId: 'host', reasoning: { mode: 'fixed', effort: 'high' } } },
     sources: { preference: 'definition' }, configurationHash: 'hash' };
   vi.mocked(api.listInstanceSettings).mockResolvedValue([section]); vi.mocked(api.patchInstanceSettings).mockResolvedValue(section);
-  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
+  render(<ConfigProvider><App><InstanceSettingsSection transport={fixtureTransport} sandboxContext={fixtureSandbox} instanceId="owner" readOnly={false} onUpdated={() => {}} /></App></ConfigProvider>);
   fireEvent.click(await screen.findByRole('button', { name: /^Model defaults/ }));
   fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Instance model' }));
   fireEvent.click(await screen.findByTitle('Scripted Beta · Offline Synthetic'));

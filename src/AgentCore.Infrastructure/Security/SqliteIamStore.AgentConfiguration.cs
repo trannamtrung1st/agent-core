@@ -34,7 +34,7 @@ public sealed partial class SqliteIamStore
         TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, bool system, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next);
-        IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, change.InstanceId, AgentInstanceLifecycle.Active, audit);
+        IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, change.InstanceId, next.SystemIdentities.Single(i => i.AgentInstanceId == change.InstanceId).Status == IdentityStatus.Active ? AgentInstanceLifecycle.Active : AgentInstanceLifecycle.Disabled, audit);
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var tenant = await db.Set<Tenant>().SingleOrDefaultAsync(t => t.TenantId == next.Tenant.TenantId, ct).ConfigureAwait(false);
@@ -98,7 +98,7 @@ public sealed partial class SqliteIamStore
         }
         if (change.Skill is { } skill) await SqliteAgentInstanceStore.StageSkillsAsync(db, skill, null, ct).ConfigureAwait(false);
         if (change.Resource is { } resource) await SqliteAgentInstanceStore.StageResourcesAsync(db, resource, null, ct).ConfigureAwait(false);
-        row.ShowInChat = updated.ShowInChat; row.PersonaCustomized = updated.PersonaCustomized;
+        row.PersonaCustomized = updated.PersonaCustomized;
         row.PersonaRevision = updated.PersonaRevision; row.ActiveVersion = updated.ActiveVersion;
         var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         row.SettingsOverridesJson = updated.SettingsOverrides is null ? null : JsonSerializer.Serialize(updated.SettingsOverrides, json);

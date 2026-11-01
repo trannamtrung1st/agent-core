@@ -902,7 +902,8 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
             var safeMessage = phase == "follow-up"
                 ? $"Provider rejected follow-up request ({status})."
                 : $"Provider rejected the request ({status}).";
-            return new ProviderFailure(ProviderErrorCode.InvalidRequest, safeMessage);
+            return new ProviderFailure(ProviderErrorCode.InvalidRequest, safeMessage, FailureReason:
+                diagnostic.Code is "context_length_exceeded" or "context_window_exceeded" or "max_context_length" ? "contextLength" : null);
         }
 
         return status switch

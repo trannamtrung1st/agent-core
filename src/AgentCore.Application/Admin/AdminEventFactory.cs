@@ -181,8 +181,8 @@ public static class AdminEventFactory
     {
         var operation = (fromLifecycle, toLifecycle) switch
         {
-            (AgentInstanceLifecycle.Active, AgentInstanceLifecycle.Archived) => AdminEventOperationKind.InstanceArchived,
-            (AgentInstanceLifecycle.Archived, AgentInstanceLifecycle.Active) => AdminEventOperationKind.InstanceUnarchived,
+            (AgentInstanceLifecycle.Active, AgentInstanceLifecycle.Disabled) => AdminEventOperationKind.InstanceDisabled,
+            (AgentInstanceLifecycle.Disabled, AgentInstanceLifecycle.Active) => AdminEventOperationKind.InstanceEnabled,
             _ => throw AgentCoreErrors.Validation("Unsupported managed instance lifecycle transition.")
         };
         var append = new AdminEventAppend(

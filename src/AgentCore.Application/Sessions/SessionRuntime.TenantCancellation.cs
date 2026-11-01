@@ -12,6 +12,43 @@ public sealed partial class SessionRuntime
     private sealed record TenantRunCancellationReceived(EventContext Context, TenantRunCancellation Request,
         TenantRunCancellationService Service, TaskCompletionSource<AgentRun> Completed) : SessionInput(Context);
 
+    private sealed record AgentDisableReceived(EventContext Context,
+        Func<ConversationEntry?, CancellationToken, ValueTask<TenantAgent>> Commit,
+        TaskCompletionSource<TenantAgent> Completed) : SessionInput(Context);
+
+    public async ValueTask<TenantAgent> CommitAgentDisableAsync(
+        Func<ConversationEntry?, CancellationToken, ValueTask<TenantAgent>> commit, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var completed = new TaskCompletionSource<TenantAgent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        BeginWork();
+        if (!Enqueue(new AgentDisableReceived(NewContext(), commit, completed), urgent: true))
+            throw new AccessDeniedException("tenant_runtime_unavailable");
+        return await completed.Task.ConfigureAwait(false);
+    }
+    private async Task HandleAgentDisableAsync(AgentDisableReceived input, CancellationToken ct)
+    {
+        TenantAgent saved;
+        try
+        {
+            if (_activeEntryId is not null && !_responseTerminal) UpdateStreamingAssistant();
+            var response = _activeEntryId is { } entry ? _snapshot.Entries.FirstOrDefault(e => e.EntryId == entry) : null;
+            saved = await input.Commit(response, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) { input.Completed.TrySetException(ex); return; }
+        _tenantTerminalCommitted = true;
+        _responseLifecycle = ResponseLifecycle.Superseded;
+        _allowQueuedSuffixAutoDispatch = false;
+        ClearAgentRunTerminalPending();
+        try
+        {
+            if (_activeResponseId is { } response)
+                await TerminalizeActiveResponseAsync(input.Context, response, ct, "agentDisabled", requestPersist: false).ConfigureAwait(false);
+        }
+        catch (Exception ex) { DiagnosticLog.Warning(_logger, ex, _ids.NewId(), "Disabled agent cleanup did not settle."); }
+        finally { _boundAgentRun = null; input.Completed.TrySetResult(saved); }
+    }
+
     public async Task<AgentRun> CancelTenantRunAsync(TenantRunCancellation request, TenantRunCancellationService service, CancellationToken ct = default)
     {
         var completed = new TaskCompletionSource<AgentRun>(TaskCreationOptions.RunContinuationsAsynchronously);

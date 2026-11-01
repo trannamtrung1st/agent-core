@@ -121,7 +121,7 @@ public sealed partial class TenantSpaceService(IIamStore security, ITenantSpaceS
         if (space.Revision != expectedSpaceRevision) throw new SecurityConflictException("stale_revision");
         await authorizer.RequireAsync(actor, "agents.read", AccessScope.ForResource(tenant, "agent", instance.ToString("D")), ct).ConfigureAwait(false);
         var agent = await agents.FindTenantAgentAsync(tenant, instance, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        if (agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+        if (agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
         var old = (await spaces.ReadMembershipsAsync(tenant, id, ct).ConfigureAwait(false)).SingleOrDefault(m => m.InstanceId == instance);
         if ((old?.Revision ?? 0) != expectedMembershipRevision) throw new SecurityConflictException("stale_revision");
         var at = Now(); var member = new SpaceMembership(tenant, id, instance, responsibility, instructions, disabled, added, checked(expectedMembershipRevision + 1), old?.CreatedAt ?? at, at).Freeze();

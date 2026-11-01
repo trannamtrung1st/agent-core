@@ -35,7 +35,7 @@ public sealed class TenantAgentDecommissionTests
     private static TenantAgentDecommissionService Service(Fixture f, IBrowser browser, ITenantAgentWorkspaceCleanup workspace, ITenantAgentDecommissionStore? store = null) =>
         new(f.Iam, store ?? (ITenantAgentDecommissionStore)f.Iam, f.Identity, f.Authorizer, f.Clock, new(), Cleanup(f, browser, workspace));
     private static Task<TenantAgent> Archive(Fixture f, Setup s) => f.Agents.SetLifecycleAsync(s.Human.PrincipalId, s.Tenant, s.Agent.Instance.InstanceId,
-        AgentInstanceLifecycle.Archived, State(f,s).Result!.Tenant.Revision, ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(s.Tenant,s.Agent.Instance.InstanceId).Result!.Instance.Revision, initiator: s.Human).AsTask();
+        AgentInstanceLifecycle.Disabled, State(f,s).Result!.Tenant.Revision, ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(s.Tenant,s.Agent.Instance.InstanceId).Result!.Instance.Revision, initiator: s.Human).AsTask();
     private static string PrivateHome(Fixture f, Guid tenant, Guid instance) => AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), tenant,
         ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(tenant, instance).GetAwaiter().GetResult()!.SpaceId);
     private static string Profile(Fixture f, Setup s) => Path.Combine(f.Root,"profiles","tenants",s.Tenant.ToString("D"),"agents",s.Agent.Instance.InstanceId.ToString("D"));
@@ -46,7 +46,7 @@ public sealed class TenantAgentDecommissionTests
     {
         await using var f=await Fixture.Create(sqlite,builtInAuthority:true);var s=await Prepare(f);var browser=Browser(f);var workspace=Workspace(f);var service=Service(f,browser,workspace);
         try {
-            var view=await service.ReadAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human);Assert.False(view.CanDecommission);Assert.Equal("archive_required",view.Blocker);
+            var view=await service.ReadAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human);Assert.False(view.CanDecommission);Assert.Equal("disabled_required",view.Blocker);
             var privateSpaceId=(await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(s.Tenant,s.Agent.Instance.InstanceId))!.SpaceId;
             var role=await f.Access.SaveRoleAsync(s.Human.PrincipalId,s.Tenant,null,"Retirement scoped role",["agents.read","agents.chat","workspaces.read"],(await State(f,s))!.Tenant.Revision);
             await f.Access.AssignRoleAsync(s.Human.PrincipalId,s.Tenant,s.Agent.PrincipalId,role.RoleId,AccessScope.ForTenant(s.Tenant),(await State(f,s))!.Tenant.Revision);
@@ -226,7 +226,7 @@ public sealed class TenantAgentDecommissionTests
             });
             var service=Service(f,browser,workspace,store);var view=await service.ReadAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human);
             await Assert.ThrowsAnyAsync<Exception>(()=>service.DecommissionAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human,view.SecurityRevision,view.InstanceRevision,f.Ids.NewId()).AsTask());
-            Assert.Equal("private retained state", File.ReadAllText(home)); var kept = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(s.Tenant,s.Agent.Instance.InstanceId))!; Assert.Equal(AgentInstanceLifecycle.Archived, kept.Instance.Lifecycle); Assert.DoesNotContain(await f.Iam.ReadAuditAsync(s.Tenant,200),a=>a.Action==TenantAgentDecommissionRules.Action);
+            Assert.Equal("private retained state", File.ReadAllText(home)); var kept = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(s.Tenant,s.Agent.Instance.InstanceId))!; Assert.Equal(AgentInstanceLifecycle.Disabled, kept.Instance.Lifecycle); Assert.DoesNotContain(await f.Iam.ReadAuditAsync(s.Tenant,200),a=>a.Action==TenantAgentDecommissionRules.Action);
         }finally{await browser.StopAsync(CancellationToken.None);}
     }
     [Theory] [InlineData(false)] [InlineData(true)]

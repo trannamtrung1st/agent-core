@@ -27,7 +27,7 @@ public static class IamStateRules
             throw new ArgumentException("Invalid Instance transaction.");
         var identity = next.SystemIdentities.SingleOrDefault(i => i.AgentInstanceId == instanceId);
         var status = lifecycle == AgentInstanceLifecycle.Active ? IdentityStatus.Active : IdentityStatus.Suspended;
-        if (identity is null || identity.Status != status) throw new ArgumentException("Instance identity/lifecycle mismatch.");
+        if (identity is null || identity.Status != status || !next.Principals.Any(p => p.PrincipalId == identity.PrincipalId && p.Status == status)) throw new ArgumentException("Instance identity/lifecycle mismatch.");
     }
     public static void ValidateAgentContinuity(IReadOnlyList<SystemIdentity> previous, TenantSecurityState next)
     {
@@ -35,7 +35,7 @@ public static class IamStateRules
             if (!next.SystemIdentities.Any(i => i.SystemIdentityId == identity.SystemIdentityId
                 && i.TenantId == identity.TenantId && i.PrincipalId == identity.PrincipalId && i.Kind == identity.Kind
                 && i.AgentInstanceId == identity.AgentInstanceId && i.ManagedKind == identity.ManagedKind
-                && (identity.ManagedKind is null || i.Status == IdentityStatus.Active) && (identity.Status != IdentityStatus.Removed || i.Status == IdentityStatus.Removed)))
+                && (identity.ManagedKind is null || i.Status != IdentityStatus.Removed) && (identity.Status != IdentityStatus.Removed || i.Status == IdentityStatus.Removed)))
                 throw new ArgumentException("Agent identity backing and ownership are immutable; retain a status tombstone.");
     }
     public static TenantSecurityState Freeze(TenantSecurityState state)
@@ -53,7 +53,7 @@ public static class IamStateRules
         Require(state.Principals.All(p => p.TenantId == tenantId && p.PrincipalId != Guid.Empty && Enum.IsDefined(p.Status) && Enum.IsDefined(p.Kind)));
         Require(state.Principals.Select(p => p.PrincipalId).Distinct().Count() == state.Principals.Count);
         Require(state.SystemIdentities.All(i => i.TenantId == tenantId && i.Kind == SystemIdentityKind.Agent && i.AgentInstanceId is { } agent && agent != Guid.Empty && Enum.IsDefined(i.Status)));
-        Require(state.SystemIdentities.All(i => i.ManagedKind is null || i.ManagedKind == ManagedGeneralAssistant.Kind && i.Status == IdentityStatus.Active));
+        Require(state.SystemIdentities.All(i => i.ManagedKind is null || i.ManagedKind == ManagedGeneralAssistant.Kind && i.Status != IdentityStatus.Removed));
         Require(state.SystemIdentities.Where(i => i.ManagedKind is not null).Select(i => i.ManagedKind).Distinct().Count() == state.SystemIdentities.Count(i => i.ManagedKind is not null));
         Require(state.SystemIdentities.Select(i => i.AgentInstanceId).Distinct().Count() == state.SystemIdentities.Count);
         Require(state.SystemIdentities.Select(i => i.SystemIdentityId).Distinct().Count() == state.SystemIdentities.Count);

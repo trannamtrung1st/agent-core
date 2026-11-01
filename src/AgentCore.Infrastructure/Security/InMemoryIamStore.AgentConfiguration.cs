@@ -30,7 +30,7 @@ public sealed partial class InMemoryIamStore
         TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, bool system, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
-        IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, change.InstanceId, AgentInstanceLifecycle.Active, audit);
+        IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, change.InstanceId, next.SystemIdentities.Single(i => i.AgentInstanceId == change.InstanceId).Status == IdentityStatus.Active ? AgentInstanceLifecycle.Active : AgentInstanceLifecycle.Disabled, audit);
         lock (_gate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (isolationBacking.IsolationGate)
         {
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult<TenantAgent?>(null);
@@ -84,7 +84,7 @@ public sealed partial class InMemoryIamStore
                 DefinitionSkills: change.DefinitionSkills, AutomationPolicyChanges: change.AutomationPolicyChanges,
                 SetSettingsOverrides: change.SetSettingsOverrides, SettingsOverrides: change.SettingsOverrides,
                 SetExecutionBudgets: change.SetExecutionBudgets, ExecutionBudgets: change.ExecutionBudgets,
-                SetUnattendedModel: change.SetUnattendedModel, UnattendedModel: change.UnattendedModel, HarnessManagement: change.HarnessManagement, Cooperation: change.Cooperation, ShowInChat: change.ShowInChat,
+                SetUnattendedModel: change.SetUnattendedModel, UnattendedModel: change.UnattendedModel, HarnessManagement: change.HarnessManagement, Cooperation: change.Cooperation,
                 PersonaCustomized: change.ResetDefaults ? false : change.SystemAdoption ? current.Instance.PersonaCustomized : change.Persona is not null ? true : null, ResetDefinitionState: change.ResetDefaults), at, ct).Result;
             if (change.Isolation is { } mutation)
             {

@@ -15,7 +15,7 @@ public sealed record TenantConversationRecipient(TenantSessionRoot Owner, long S
 public sealed record TenantConversationView(TenantSessionRoot Owner, string Title, long Revision, long SecurityRevision,
     SessionMode Mode, SessionStatus Status, SessionLifecycleStatus LifecycleStatus, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt,
     PublicAgentDescriptor Agent, SessionModelSelection? Model, SessionRetentionKind RetentionKind, DateTimeOffset? RetentionDueAtUtc,
-    AgentCompletionAuthority AgentCompletion, string? LifecycleReason, LifecycleTransitionSource? LifecycleSource, AgentCore.Domain.Models.ModelPreference? ModelPreference = null);
+    AgentCompletionAuthority AgentCompletion, string? LifecycleReason, LifecycleTransitionSource? LifecycleSource, AgentCore.Domain.Models.ModelPreference? ModelPreference = null, bool AgentEnabled = true);
 
 public sealed class TenantConversationService(IIamStore security, ITenantSessionStore sessions, ITenantConversationStore content,
     IdentityService identity, IamAuthorizer authorizer, TenantArtifactService? artifactAccess = null, TenantAttachmentService? attachmentAccess = null, VoiceAvailability? voice = null, TenantComposerReferenceService? composer = null)
@@ -63,7 +63,8 @@ public sealed class TenantConversationService(IIamStore security, ITenantSession
         if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
         var s = saved.Snapshot;
         return new(saved.Owner, s.Title, s.Revision, state.Tenant.Revision, s.Mode, s.Status, s.LifecycleStatus, s.CreatedAt, s.UpdatedAt,
-            PublicHistory.FromSnapshot(s, voiceAvailable: voice?.IsAvailable(s.Definition, AgentCore.Application.Speech.SpeechLocale.Resolve(s).Effective) == true), s.ModelSelection, s.RetentionKind, s.RetentionDueAtUtc, (s.CompletionPolicy ?? SessionCompletionPolicy.Default).AgentCompletion, s.LifecycleReason, s.LifecycleSource, s.ModelPreference);
+            PublicHistory.FromSnapshot(s, voiceAvailable: voice?.IsAvailable(s.Definition, AgentCore.Application.Speech.SpeechLocale.Resolve(s).Effective) == true), s.ModelSelection, s.RetentionKind, s.RetentionDueAtUtc, (s.CompletionPolicy ?? SessionCompletionPolicy.Default).AgentCompletion, s.LifecycleReason, s.LifecycleSource, s.ModelPreference, state.SystemIdentities.Any(i => i.AgentInstanceId == saved.Owner.AgentInstanceId && i.Status == IdentityStatus.Active)
+                && state.Principals.Any(p => p.PrincipalId == saved.Owner.ExecutorPrincipalId && p.Status == IdentityStatus.Active));
     }
     public async ValueTask<TenantConversationHistory> ReadAsync(Guid tenant, Guid session, TenantSessionInitiator human,
         long? after = null, long? before = null, int limit = 50, CancellationToken ct = default)

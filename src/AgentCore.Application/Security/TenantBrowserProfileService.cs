@@ -21,7 +21,7 @@ public sealed class TenantBrowserProfileService(IIamStore security, ITenantAgent
         var owner = new TenantBrowserAgentOwner(tenant, instance, agent.PrincipalId);
         if (!TenantBrowserProfileRules.Matches(owner, agent) || !await TenantBrowserProfileRules.Allowed(state, owner, human.PrincipalId, authorizer, manage, ct))
             throw new AccessDeniedException("permission_denied");
-        if (manage && agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+        if (manage && agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
         return (state, agent, owner);
     }
     private async ValueTask<TenantBrowserProfileObservation> Observe(TenantBrowserAgentOwner owner, CancellationToken ct)

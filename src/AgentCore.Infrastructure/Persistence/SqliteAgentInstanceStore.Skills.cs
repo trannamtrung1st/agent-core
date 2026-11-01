@@ -52,7 +52,7 @@ public sealed partial class SqliteAgentInstanceStore
     {
         var ownerId = m.InstanceId.ToString("D");
         var owner = await db.AgentInstances.SingleOrDefaultAsync(s => s.InstanceId == ownerId, ct) ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
-        if (owner.Lifecycle != "Active") throw AgentCoreErrors.Validation("Archived instances cannot change Skills.");
+        if (owner.Lifecycle != "Active") throw AgentCoreErrors.Validation("Disabled instances cannot change Skills.");
         if (owner.Revision != m.ExpectedInstanceRevision) throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
         if (m.DefinitionState is { } state)
         {

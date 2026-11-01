@@ -30,11 +30,10 @@ public sealed partial class TenantAgentAccessTests
         var initial = await Json(await client.GetAsync(resource + "/editor"));
         Assert.Equal("GeneralAssistant", initial.GetProperty("agent").GetProperty("managedKind").GetString());
         var versions = await Json(await client.GetAsync(resource + "/versions")); Assert.False(versions.GetProperty("canAdopt").GetBoolean());
-        Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsJsonAsync(resource + "/lifecycle", new { lifecycle = 1, expectedRevision = await Revision(client, tenant), expectedInstanceRevision = 1 })).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsJsonAsync(resource + "/active-version", new { version = 35, expectedRevision = await Revision(client, tenant), expectedInstanceRevision = 1 })).StatusCode);
-        var hidden = await client.PutAsJsonAsync(resource + "/chat-visibility", new { showInChat = false, expectedRevision = await Revision(client, tenant), expectedInstanceRevision = 1 });
+        var hidden = await client.PutAsJsonAsync(resource + "/lifecycle", new { lifecycle = 1, expectedRevision = await Revision(client, tenant), expectedInstanceRevision = 1 });
         Assert.Equal(HttpStatusCode.OK, hidden.StatusCode);
-        var empty = await Json(await client.GetAsync(root + "/chat/agents")); Assert.Equal(0, empty.GetProperty("total").GetInt32()); Assert.Equal("no_visible_agents", empty.GetProperty("emptyReason").GetString());
+        var empty = await Json(await client.GetAsync(root + "/chat/agents")); Assert.Equal(0, empty.GetProperty("total").GetInt32()); Assert.Equal("no_enabled_agents", empty.GetProperty("emptyReason").GetString());
         var search = await Json(await client.GetAsync(root + "/chat/agents?q=General")); Assert.Equal(0, search.GetProperty("total").GetInt32());
         Assert.Equal(1, (await Json(await client.GetAsync(root + "/agents"))).GetProperty("total").GetInt32());
         var operation = Guid.NewGuid(); var revision = await Revision(client, tenant);
@@ -42,7 +41,7 @@ public sealed partial class TenantAgentAccessTests
         var reset = await client.PostAsJsonAsync(resource + "/reset-defaults", resetBody); Assert.Equal(HttpStatusCode.OK, reset.StatusCode);
         Assert.Equal("applied", (await Json(reset)).GetProperty("status").GetString());
         Assert.Equal("already_applied", (await Json(await client.PostAsJsonAsync(resource + "/reset-defaults", resetBody))).GetProperty("status").GetString());
-        var editor = await Json(await client.GetAsync(resource + "/editor")); Assert.False(editor.GetProperty("agent").GetProperty("instance").GetProperty("showInChat").GetBoolean());
+        var editor = await Json(await client.GetAsync(resource + "/editor")); Assert.Equal("Disabled", editor.GetProperty("agent").GetProperty("instance").GetProperty("lifecycle").GetString());
         var org = await Json(await client.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Managed second", slug = "managed-second" }));
         var second = org.GetProperty("tenantId").GetGuid();
         var inventory = await Json(await client.GetAsync($"/api/v2/tenants/{second}/agents"));

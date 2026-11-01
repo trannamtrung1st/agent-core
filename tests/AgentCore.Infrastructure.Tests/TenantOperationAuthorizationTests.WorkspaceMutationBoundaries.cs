@@ -42,7 +42,7 @@ public sealed partial class TenantOperationAuthorizationTests
                 Assert.NotEqual(target.Human.AuthenticationSessionId, next.SessionId);
             }
             if (change == "archive") await f.Agents.SetLifecycleAsync(setup.Owner.PrincipalId, setup.Tenant,
-                setup.Agent.Instance.InstanceId, AgentInstanceLifecycle.Archived, revision, setup.Agent.Instance.Revision);
+                setup.Agent.Instance.InstanceId, AgentInstanceLifecycle.Disabled, revision, setup.Agent.Instance.Revision);
             if (change == "security") await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Unrelated security change", ["agents.read"], revision);
             if (change == "delete")
             {

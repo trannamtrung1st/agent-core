@@ -145,7 +145,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var inventory = Assert.Single(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Execution is not null);
         Assert.Equal("effective_permissions_inspected", inventory.ReasonCode); Assert.Null(inventory.Execution!.Permission);
         await f.Agents.SetLifecycleAsync(setup.Owner.PrincipalId, setup.Tenant, setup.Agent.Instance.InstanceId,
-            AgentCore.Domain.Definitions.AgentInstanceLifecycle.Archived, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision, setup.Agent.Instance.Revision);
+            AgentCore.Domain.Definitions.AgentInstanceLifecycle.Disabled, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision, setup.Agent.Instance.Revision);
         var error = await Assert.ThrowsAsync<AccessDeniedException>(() => operations.CheckAsync(reference, "agents.read", "agent", setup.Agent.Instance.InstanceId.ToString("D")).AsTask());
         Assert.Equal("executor_unavailable", error.ReasonCode);
         var denied = Assert.Single(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Action == "authorization.operation" && a.Decision == "denied");

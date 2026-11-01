@@ -62,7 +62,7 @@ describe("instanceManagedControls persona sync", () => {
 
   it("rejects lifecycle, version, memory, trigger, revision, and effective-config fields", () => {
     const extras: Record<string, unknown> = {
-      lifecycle: "Archived",
+      lifecycle: "Disabled",
       activeVersion: 2,
       memory: { sessionMemory: true },
       triggers: [],

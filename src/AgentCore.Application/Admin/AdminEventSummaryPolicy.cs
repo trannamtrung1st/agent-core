@@ -162,7 +162,7 @@ public static class AdminEventSummaryPolicy
     private static readonly HashSet<string> InstanceLifecycleNames = new(StringComparer.Ordinal)
     {
         nameof(AgentInstanceLifecycle.Active),
-        nameof(AgentInstanceLifecycle.Archived)
+        nameof(AgentInstanceLifecycle.Disabled)
     };
 
     private static readonly HashSet<string> DraftCreatedSourceKinds = new(StringComparer.Ordinal)
@@ -331,7 +331,7 @@ public static class AdminEventSummaryPolicy
                 return;
             }
 
-            if (append.Operation is AdminEventOperationKind.InstanceArchived or AdminEventOperationKind.InstanceUnarchived)
+            if (append.Operation is AdminEventOperationKind.InstanceDisabled or AdminEventOperationKind.InstanceEnabled or AdminEventOperationKind.InstanceArchived or AdminEventOperationKind.InstanceUnarchived)
             {
                 ValidateInstanceLifecycleChangedSummary(document.RootElement);
                 return;

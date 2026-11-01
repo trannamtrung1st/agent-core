@@ -113,7 +113,7 @@ public static class AdminEventReplayPolicy
         }
 
         if (existingEvent.Operation != historyAppend.Operation
-            || existingEvent.Operation is not (AdminEventOperationKind.InstanceArchived or AdminEventOperationKind.InstanceUnarchived))
+            || existingEvent.Operation is not (AdminEventOperationKind.InstanceDisabled or AdminEventOperationKind.InstanceEnabled or AdminEventOperationKind.InstanceArchived or AdminEventOperationKind.InstanceUnarchived))
         {
             throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
         }

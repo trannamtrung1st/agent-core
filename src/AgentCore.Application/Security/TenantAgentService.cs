@@ -8,7 +8,7 @@ namespace AgentCore.Application.Security;
 public sealed class TenantAgentService(IIamStore security, ITenantAgentStore agents, IBuiltInAgentDefinitionStore templates,
     IamAuthorizer authorizer, IIdGenerator ids, TimeProvider time, AdminLifecycleCoordinator? lifecycleGate = null,
     SandboxPolicyEnforcement? sandbox = null, ITenantDefinitionStore? ownedDefinitions = null, TenantBrowserRetirementService? browserRetirement = null,
-    ManagedGeneralAssistantService? assistant = null, IdentityService? identity = null)
+    ManagedGeneralAssistantService? assistant = null, IdentityService? identity = null, ITenantRunControl? runControl = null)
 {
     public async ValueTask<bool> RetryGeneralAssistantSetupAsync(Guid tenant, HumanSessionReference human, CancellationToken ct = default)
     {
@@ -105,8 +105,15 @@ public sealed class TenantAgentService(IIamStore security, ITenantAgentStore age
     {
         if (!Enum.IsDefined(lifecycle)) throw new ArgumentException("Unknown agent lifecycle.");
         var state = await ReadForChangeAsync(actorId, tenantId, "agents.update", Scope(tenantId, instanceId), expectedRevision, ct).ConfigureAwait(false);
-        var owned = state.SystemIdentities.Single(i => i.AgentInstanceId == instanceId);
-        if (owned.ManagedKind is not null) throw new SecurityConflictException("system_managed_instance");
+        var owned = state.SystemIdentities.SingleOrDefault(i => i.AgentInstanceId == instanceId) ?? throw new AccessDeniedException("resource_unavailable");
+        var currentAgent = await agents.FindTenantAgentAsync(tenantId, instanceId, ct).ConfigureAwait(false)
+            ?? throw new AccessDeniedException("resource_unavailable");
+        var principal = state.Principals.Single(p => p.PrincipalId == owned.PrincipalId);
+        if (owned.Status == IdentityStatus.Removed || principal.Status == IdentityStatus.Removed
+            || currentAgent.Instance.Lifecycle == AgentInstanceLifecycle.Disabled && (owned.Status != IdentityStatus.Suspended || principal.Status != IdentityStatus.Suspended)
+            || lifecycle == AgentInstanceLifecycle.Active && currentAgent.Instance.Lifecycle == AgentInstanceLifecycle.Active
+                && (owned.Status != IdentityStatus.Active || principal.Status != IdentityStatus.Active))
+            throw new AccessDeniedException("executor_unavailable");
         var status = lifecycle == AgentInstanceLifecycle.Active ? IdentityStatus.Active : IdentityStatus.Suspended;
         var next = Advance(state with
         {
@@ -114,11 +121,17 @@ public sealed class TenantAgentService(IIamStore security, ITenantAgentStore age
             Principals = state.Principals.Select(p => p.PrincipalId == owned.PrincipalId ? p with { Status = status } : p).ToArray()
         });
         var now = time.GetUtcNow();
-        var updated = await agents.TrySetTenantAgentLifecycleAsync(next, expectedRevision, instanceId, expectedInstanceRevision, lifecycle,
-            now, Audit(tenantId, actorId, lifecycle == AgentInstanceLifecycle.Active ? "agents.restore" : "agents.archive", instanceId, now), ct, initiator).ConfigureAwait(false)
-            ?? throw new SecurityConflictException("stale_revision");
-        if (sandbox is not null) await sandbox.EnforceAsync(instanceId, ct).ConfigureAwait(false);
-        if (browserRetirement is not null) await browserRetirement.ReconcileAsync(tenantId, instance: instanceId, ct: ct).ConfigureAwait(false);
+        async ValueTask<TenantAgent> Commit(IReadOnlyList<AgentCore.Domain.Conversation.ConversationEntry> responses, CancellationToken token) =>
+            await agents.TrySetTenantAgentLifecycleAsync(next, expectedRevision, instanceId, expectedInstanceRevision, lifecycle,
+                now, Audit(tenantId, actorId, lifecycle == AgentInstanceLifecycle.Active ? "agents.enable" : "agents.disable", instanceId, now), token, initiator, responses).ConfigureAwait(false)
+                ?? throw new SecurityConflictException("stale_revision");
+        var updated = lifecycle == AgentInstanceLifecycle.Disabled && runControl is not null
+            ? await runControl.CommitAgentDisableAsync(tenantId, instanceId, Commit, ct).ConfigureAwait(false)
+            : await Commit([], ct).ConfigureAwait(false);
+        if (lifecycle == AgentInstanceLifecycle.Disabled && runControl is not null)
+            await runControl.StopDisabledAgentAsync(tenantId, instanceId, CancellationToken.None).ConfigureAwait(false);
+        if (lifecycle == AgentInstanceLifecycle.Active && sandbox is not null) await sandbox.EnforceAsync(instanceId, ct).ConfigureAwait(false);
+        if (lifecycle == AgentInstanceLifecycle.Active && browserRetirement is not null) await browserRetirement.ReconcileAsync(tenantId, instance: instanceId, ct: ct).ConfigureAwait(false);
         return updated;
     }
 

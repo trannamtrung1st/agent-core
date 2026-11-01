@@ -82,7 +82,7 @@ public static class TenantVoiceRules
             if (!(await iam.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get(permission), scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("permission_denied");
         TenantSessionRules.RequireExecutor(state, agent);
-        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
         TenantHumanInputRules.Eligible(saved.Snapshot);
     }
     public static void Shape(TenantVoiceModeChange request, TenantSession saved, TenantAgent agent, TenantSecurityState state)

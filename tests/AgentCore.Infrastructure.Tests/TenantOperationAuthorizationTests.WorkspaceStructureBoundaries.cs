@@ -142,7 +142,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.True(result.Completed); var physical = AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), s.Tenant, SpaceId(s));
         Assert.True(Directory.Exists(Path.Combine(physical, "literal"))); Assert.False(Directory.Exists(Path.Combine(physical, "substituted")));
         result = await files.StructureTenantAsync(owner, [new("mkdir", Path: "/home/archived-write")], async ct => {
-            await f.Agents.SetLifecycleAsync(s.Owner.PrincipalId, s.Tenant, s.Agent.Instance.InstanceId, AgentInstanceLifecycle.Archived, (await f.Iam.ReadTenantAsync(s.Tenant, ct))!.Tenant.Revision, s.Agent.Instance.Revision, ct);
+            await f.Agents.SetLifecycleAsync(s.Owner.PrincipalId, s.Tenant, s.Agent.Instance.InstanceId, AgentInstanceLifecycle.Disabled, (await f.Iam.ReadTenantAsync(s.Tenant, ct))!.Tenant.Revision, s.Agent.Instance.Revision, ct);
         });
         Assert.False(result.Completed); Assert.False(result.MutationsMayHaveOccurred); Assert.False(Directory.Exists(Path.Combine(physical, "archived-write")));
     }

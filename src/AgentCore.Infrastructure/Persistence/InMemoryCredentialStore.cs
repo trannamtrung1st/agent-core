@@ -107,7 +107,7 @@ public sealed partial class InMemoryCredentialStore(InMemoryAgentInstanceStore i
     {
         RequireLegacyContext(id);
         var instance = instances.FindAsync(id).Result ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
-        if (instance.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Forbidden("Archived agent credentials are read-only.");
+        if (instance.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Forbidden("Disabled agent credentials are read-only.");
         if (instance.Revision != revision) throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
     }
     private void RequireLegacyContext(Guid id)

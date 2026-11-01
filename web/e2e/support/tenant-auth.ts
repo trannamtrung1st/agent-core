@@ -50,7 +50,7 @@ export async function prepareOrdinaryChat(api: APIRequestContext, tenant: string
   const defaults = await call(root + '/chat/agents');
   for (const managed of defaults.items.filter((item: { systemManaged: boolean }) => item.systemManaged)) {
     const editor = await call(`${root}/agents/${managed.instanceId}/editor`);
-    await call(`${root}/agents/${managed.instanceId}/chat-visibility`, { showInChat: false,
+    await call(`${root}/agents/${managed.instanceId}/lifecycle`, { lifecycle: 1,
       expectedRevision: editor.securityRevision, expectedInstanceRevision: editor.agent.instance.revision });
   }
 }

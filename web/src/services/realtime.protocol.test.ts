@@ -49,6 +49,10 @@ vi.mock("@microsoft/signalr-protocol-msgpack", () => ({
   MessagePackHubProtocol: hub.MessagePackHubProtocol
 }));
 
+vi.mock('./api', async original => ({ ...await original<typeof import('./api')>(),
+  getSession: vi.fn(async () => ({ sessionId: '11111111-2222-4333-8444-555555555555', agentEnabled: true }))
+}));
+
 import { bytesOf, retryConnection } from "./realtime";
 
 const sessionId = "11111111-2222-4333-8444-555555555555";

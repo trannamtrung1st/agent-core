@@ -153,7 +153,7 @@ public sealed class TenantSessionIntegrationTests
             if (boundary == "revoke") await f.Access.RevokeAssignmentAsync(owner.OwnerPrincipalId, owner.TenantId, assignment.AssignmentId, await Revision());
             if (boundary == "logout") await f.Identity.SignOutAsync(login.SessionId);
             if (boundary == "password") await f.Identity.ChangePasswordAsync(member.Account.AccountId, "strong-session-password", "strong-session-new-password");
-            if (boundary == "archive") await f.Agents.SetLifecycleAsync(owner.OwnerPrincipalId, owner.TenantId, agent.Instance.InstanceId, AgentInstanceLifecycle.Archived, await Revision(), 1);
+            if (boundary == "archive") await f.Agents.SetLifecycleAsync(owner.OwnerPrincipalId, owner.TenantId, agent.Instance.InstanceId, AgentInstanceLifecycle.Disabled, await Revision(), 1);
             if (boundary == "compete")
             {
                 var ownerLogin = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;

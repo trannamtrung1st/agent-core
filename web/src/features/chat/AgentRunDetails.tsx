@@ -89,6 +89,10 @@ export function AgentRunDetails({ run, onChange, showContextProvenance = false, 
     {run.sourceBackgroundSessionId ? <Typography.Text type="secondary">Background result from <ConversationDestination sessionId={run.sourceBackgroundSessionId} /></Typography.Text> : null}
     {run.taskIntent ? <ReadingRegion label="Original task" text={run.taskIntent} /> : null}
     {run.progress ? <Typography.Paragraph className="background-work-progress" style={{ marginBottom: 0 }}>{run.progress}</Typography.Paragraph> : null}
+    {run.executionDiagnostic?.compaction && <section aria-label="Context optimization" className="background-work-detail-section"><Flex vertical gap={token.paddingXS}>
+      <Typography.Text strong>Context optimized {run.executionDiagnostic.compaction.count} times</Typography.Text>
+      <Typography.Text type="secondary">{run.executionDiagnostic.compaction.compactedMessages} earlier messages summarized · estimated input {run.executionDiagnostic.compaction.beforeEstimatedTokens} → {run.executionDiagnostic.compaction.afterEstimatedTokens} tokens. Exact execution receipts are retained.</Typography.Text>
+    </Flex></section>}
     {run.executionDiagnostic?.protocolRecovery ? <section aria-label="Response recovery" className="background-work-detail-section">
       <Flex vertical gap={token.paddingXS}>
         <Typography.Text strong>Response recovery</Typography.Text>

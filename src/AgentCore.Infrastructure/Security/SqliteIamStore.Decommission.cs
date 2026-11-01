@@ -36,7 +36,7 @@ public sealed partial class SqliteIamStore : ITenantAgentDecommissionStore
                 && receipt.Target == key && receipt.ActorPrincipalId == human.PrincipalId && row.Instance.Revision == expectedInstanceRevision + 1;
         if (state.SystemIdentities.Any(i => i.AgentInstanceId == instance && i.ManagedKind is not null)) throw new SecurityConflictException("system_managed_instance");
         if (state.Tenant.Revision != expectedSecurityRevision || row.Instance.Revision != expectedInstanceRevision || row.Identity.Status == IdentityStatus.Removed) return false;
-        if (row.Instance.Lifecycle != nameof(AgentInstanceLifecycle.Archived)) throw new SecurityConflictException("archive_required");
+        if (row.Instance.Lifecycle != nameof(AgentInstanceLifecycle.Disabled)) throw new SecurityConflictException("disabled_required");
         if ((await TenantDeletionReferenceQueries.CountInstanceAsync(db, key, ct, tenant)).HasReferences) throw new SecurityConflictException("agent_in_use");
         if (SqliteAgentInstanceStore.Map(row.Instance).BrowserProfileReset?.Status == "pending") throw new SecurityConflictException("browser_profile_busy");
         var privateHome = await db.Set<SpaceRecord>().SingleAsync(s => s.TenantId == tenant && s.OwnerInstanceId == key && s.DeletedAt == null, ct);
@@ -72,7 +72,7 @@ public sealed partial class SqliteIamStore : ITenantAgentDecommissionStore
         from identity in db.Set<IamSystemIdentityRow>().AsNoTracking()
         join instance in db.AgentInstances.AsNoTracking() on identity.AgentInstanceId equals instance.InstanceId
         where identity.TenantId != null && identity.Status == IdentityStatus.Removed && identity.Kind == SystemIdentityKind.Agent
-            && instance.Lifecycle == nameof(AgentInstanceLifecycle.Archived)
+            && instance.Lifecycle == nameof(AgentInstanceLifecycle.Disabled)
             && db.Set<Principal>().Any(p => p.PrincipalId == identity.PrincipalId && p.Status == IdentityStatus.Removed)
             && db.Set<AuthorizationAudit>().Any(a => a.TenantId == identity.TenantId && a.Action == TenantAgentDecommissionRules.Action && a.Target == instance.InstanceId && a.ReasonCode == "agent_decommissioned")
         select new AgentJoin { Identity = identity, Instance = instance };

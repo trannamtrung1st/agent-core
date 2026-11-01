@@ -467,6 +467,7 @@ public enum ResponseProgressKind
     ReadingAttachments,
     RunningTool,
     WaitingExternal,
+    OptimizingContext,
     Finalizing
 }
 

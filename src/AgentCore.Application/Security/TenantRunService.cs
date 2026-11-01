@@ -77,7 +77,7 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         await Require(state, initiator.PrincipalId, "spaces.read", TenantSpaceService.Scope(tenant, spaceContext.SpaceId), ct).ConfigureAwait(false);
         if (spaceContext.EnvironmentId is not null) await Require(state, initiator.PrincipalId, "environments.read", TenantSpaceService.Scope(tenant, spaceContext.SpaceId), ct).ConfigureAwait(false);
         if (agent.PrincipalId != session.Owner.ExecutorPrincipalId) throw new AccessDeniedException("executor_unavailable");
-        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
         TenantSessionRules.RequireExecutor(state, agent);
         var sources = new List<AttachmentRecord>(requested.Length);
         foreach (var id in requested)

@@ -42,7 +42,7 @@ public sealed class TenantRunCancellationService(IIamStore security, ITenantRunS
 
 public static class TenantRunCancellationRules
 {
-    public static ConversationEntry[] ResponseEntries(IReadOnlyList<ConversationEntry> before, AgentRun run, ConversationEntry? response, DateTimeOffset at)
+    public static ConversationEntry[] ResponseEntries(IReadOnlyList<ConversationEntry> before, AgentRun run, ConversationEntry? response, DateTimeOffset at, string reason = "userStop")
     {
         var entries = before.ToList();
         if (response is not null)
@@ -64,7 +64,7 @@ public static class TenantRunCancellationRules
                 if (prior.Status == EntryStatus.Streaming) entries[index] = response;
             }
         }
-        return entries.Select(e => Interrupt(e, run, at)).ToArray();
+        return entries.Select(e => Interrupt(e, run, at, reason)).ToArray();
     }
     public static AgentRun Cancel(AgentRun run, DateTimeOffset at)
     {
@@ -73,9 +73,9 @@ public static class TenantRunCancellationRules
         return requested.Status == AgentRunStatus.Running
             ? requested.CommitCancellation(requested.Revision, requested.Claim!.Generation, null, at) : requested;
     }
-    public static ConversationEntry Interrupt(ConversationEntry entry, AgentRun run, DateTimeOffset at) =>
+    public static ConversationEntry Interrupt(ConversationEntry entry, AgentRun run, DateTimeOffset at, string reason = "userStop") =>
         entry.Role == ConversationRole.Assistant && entry.ResponseId == run.ResponseId && entry.Status == EntryStatus.Streaming
-            ? entry with { Status = EntryStatus.Interrupted, InterruptReason = "userStop", CompletedAt = at } : entry;
+            ? entry with { Status = EntryStatus.Interrupted, InterruptReason = reason, CompletedAt = at } : entry;
     public static TenantApprovalRequest? Approval(TenantApprovalRequest? request, AgentRun run, AgentRun? source, DateTimeOffset at)
     {
         if (request is null) return null;

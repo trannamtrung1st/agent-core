@@ -33,7 +33,7 @@ export function AgentPicker({
   const [setupError, setSetupError] = useState<string | null>(null);
   useEffect(() => () => clearTimeout(searchTimer.current), []);
   const empty = tenantChatEmptyReason();
-  const emptyText = empty === 'no_visible_agents' ? 'No visible agents. Ask an organization owner to make an agent visible in Chat.'
+  const emptyText = empty === 'no_enabled_agents' ? 'No enabled agents available. Ask an organization owner to enable an agent in Agent Management.'
     : empty === 'setup_pending' ? 'Default assistant setup pending. An organization owner can retry setup or check Agent Management and model setup.'
     : empty === 'no_chat_permission' ? 'No Chat permission. Ask an organization owner for access to an agent.'
     : 'No matching agents. Try another search or reload the list.';

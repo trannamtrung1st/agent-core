@@ -22,7 +22,7 @@ public sealed partial class TenantRunAdmissionTests
         var baseline = (await f.BuiltIns.GetAsync("examiner", 1))!;
         var instances = Enumerable.Range(0, 1024).Select(i => new AgentInstance(f.Ids.NewId(), baseline.Id, baseline.Version,
             baseline.Identity with { Name = $"Ångström {i:D4}", Role = "Café support", Tone = "private-search-marker" },
-            AgentInstanceLifecycle.Active, at, at, ShowInChat: i % 3 != 0)).ToArray();
+            i % 3 != 0 ? AgentInstanceLifecycle.Active : AgentInstanceLifecycle.Disabled, at, at)).ToArray();
         if (sqlite)
         {
             await using var db = f.Contexts!.CreateDbContext();
@@ -41,7 +41,7 @@ public sealed partial class TenantRunAdmissionTests
         var store = DispatchProxy.Create<ITenantAgentStore, ChatStoreProbe>(); var probe = (ChatStoreProbe)(object)store; probe.Inner = backing;
         var chat = f.ChatService(store);
         var first = await chat.ListAgentsAsync(setup.Tenant, setup.Owner, pageSize: 30, query: "åNGSTRÖM");
-        Assert.Equal(instances.Count(i => i.ShowInChat), first.Total); Assert.Equal(30, first.Items.Count);
+        Assert.Equal(instances.Count(i => i.Lifecycle == AgentInstanceLifecycle.Active), first.Total); Assert.Equal(30, first.Items.Count);
         Assert.Equal(0, probe.Finds); Assert.Equal(1, probe.Pages); if (sqlite) Assert.Equal(2, commands.Reads);
         var last = await chat.ListAgentsAsync(setup.Tenant, setup.Owner, page: first.Total / 30, pageSize: 30, query: "CAFÉ");
         Assert.Equal(first.Total, last.Total); Assert.Equal(first.Total % 30, last.Items.Count);

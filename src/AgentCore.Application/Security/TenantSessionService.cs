@@ -25,7 +25,7 @@ public sealed partial class TenantSessionService(IIamStore security, ITenantAgen
         foreach (var key in new[] { "sessions.create", "sessions.read" }) await Require(state, initiator.PrincipalId, key, AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
         var parent = await agents.FindTenantAgentAsync(tenant, instance, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         await Require(state, initiator.PrincipalId, "agents.chat", AccessScope.ForResource(tenant, "agent", instance.ToString("D")), ct).ConfigureAwait(false);
-        if (parent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+        if (parent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
         TenantSessionRules.RequireExecutor(state, parent);
         if (state.Tenant.Revision != expectedSecurityRevision || parent.Instance.Revision != expectedInstanceRevision) throw new SecurityConflictException("stale_revision");
         if (!Enum.IsDefined(retentionKind)) throw AgentCoreErrors.Validation("Unknown retention kind.");

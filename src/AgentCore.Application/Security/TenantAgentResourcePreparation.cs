@@ -15,7 +15,7 @@ internal static class TenantAgentResourcePreparation
     private static AgentDefinition Definition(AgentInstance owner, AgentDefinition baseline, SkillAuthor actor, HarnessManagementScope scope)
     {
         if (owner.Lifecycle != AgentInstanceLifecycle.Active)
-            throw AgentCoreErrors.Validation("Archived instances are read-only.");
+            throw AgentCoreErrors.Validation("Disabled instances are read-only.");
         var definition = InstanceSettingsResolver.Resolve(baseline, owner.SettingsOverrides) with {
             SelfManagement = ManagementPolicyResolver.Resolve(baseline, owner)
         };

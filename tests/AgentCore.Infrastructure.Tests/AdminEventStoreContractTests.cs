@@ -175,7 +175,7 @@ public abstract class AdminEventStoreContractTests
                 instanceId,
                 1,
                 AgentInstanceLifecycle.Active,
-                AgentInstanceLifecycle.Archived,
+                AgentInstanceLifecycle.Disabled,
                 2);
             await store.AppendAsync(append, CancellationToken.None);
         });

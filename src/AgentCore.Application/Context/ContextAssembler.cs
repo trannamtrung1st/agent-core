@@ -16,7 +16,7 @@ public enum ContextSectionId
     CoreConfigurationAssistance, CoreHarnessAuthoring, CoreNoProgressBrowser, CoreTriggerAuthorization, CoreAutomationHistory, CoreScheduling, CoreMemoryReceipts, CoreInitiativePlan,
     AgentIdentity, AgentInstructions, Policies, Session, Space, SpaceInstructions, MembershipInstructions, Environment, RunTask, Capabilities, SkillCatalog, Skills, InstanceSkills,
     Scheduling, ExecutionFacts, ExecutionPhase, PreviousExecution, TenantRequester,
-    Summary, Profile, Memory, MemoryReceipts, SchedulingEvidence, Experience, Continuity, References, Attachments, Trigger, History, CurrentUserTask, ToolResults, ApprovalOutcome
+    Summary, Profile, Memory, MemoryReceipts, SchedulingEvidence, Experience, Continuity, References, Attachments, Trigger, History, CurrentUserTask, ToolResults, ApprovalOutcome, RunSummary, CoreRunCompaction
 }
 
 /// <summary>Only platform-selected procedures can create Core sections. No arbitrary content factory exists for Core.</summary>
@@ -26,7 +26,7 @@ public enum CoreProcedure
     BackgroundReport, ConfigurationContinuation, BrowserLifecycle, Cleanup, Finalization, BackgroundFinalization,
     SandboxRecovery, InvalidStrategies, CheckpointCapacity, BackgroundCheckpointCapacity, TerminalBrowser,
     ChallengedBrowser, Dialog, RepeatedDialog, BrowserObservation, Initiative, Completion, Compaction, DraftEvaluation,
-    ProtocolRepair, SemanticResponse, NoProgressBrowser, TriggerAuthorization, AutomationHistory, Scheduling, MemoryReceipts, VoiceOutput, AttachmentReading, AttachmentReread, StateObservation
+    ProtocolRepair, SemanticResponse, NoProgressBrowser, TriggerAuthorization, AutomationHistory, Scheduling, MemoryReceipts, VoiceOutput, AttachmentReading, AttachmentReread, StateObservation, RunCompaction
 }
 
 public sealed record ContextSection
@@ -106,7 +106,7 @@ public sealed record ContextSection
     public static ContextSection Evidence(ContextSectionId id, ContextSourceKind source, string text, string? revision = null)
     {
         if (!Enum.IsDefined(id) || !Enum.IsDefined(source) || id < ContextSectionId.Summary
-            || source is ContextSourceKind.AgentCore or ContextSourceKind.BuiltInSkill)
+            || source is ContextSourceKind.AgentCore or ContextSourceKind.BuiltInSkill || id == ContextSectionId.CoreRunCompaction)
             throw new ArgumentException("Invalid Evidence section or source.");
         return new(id, ContextLayer.Evidence, source, ContextSemantics.UntrustedData,
             new(ModelRole.User, text), revision);
@@ -178,20 +178,20 @@ public static class ContextAssembler
             throw new ArgumentException("Essential context exceeds its budget; instructions cannot be truncated.");
         ValidateInteraction(transcript);
         var sections = context.Sections;
-        // A resumed effect's recorded result must survive optional history/memory pressure.
-        var evidenceCharacters = sections.Where(s => s.Id == ContextSectionId.ApprovalOutcome).Sum(s => s.Message.Text.Length);
+        // Required evidence survives optional history/memory pressure without becoming authority.
+        var evidenceCharacters = sections.Where(s => s.Id is ContextSectionId.ApprovalOutcome or ContextSectionId.RunSummary).Sum(s => s.Message.Text.Length);
         if (evidenceCharacters > MaxOptionalEvidenceCharacters) throw new ArgumentException("Essential operation evidence exceeds its budget.");
         var selected = new List<ContextSection>();
         var entries = new List<ContextManifestEntry>();
         foreach (var section in sections)
         {
             var entry = Entry(section.Id.ToString(), section.Layer, section.Source, section.Semantics, section.SourceRevision, section.Message);
-            if (section.Layer == ContextLayer.Evidence && section.Id != ContextSectionId.ApprovalOutcome && evidenceCharacters + section.Message.Text.Length > MaxOptionalEvidenceCharacters)
+            if (section.Layer == ContextLayer.Evidence && section.Id is not (ContextSectionId.ApprovalOutcome or ContextSectionId.RunSummary) && evidenceCharacters + section.Message.Text.Length > MaxOptionalEvidenceCharacters)
                 entries.Add(entry with { Omitted = true, OriginalCharacters = entry.Characters, Characters = 0, Utf8Bytes = 0, EstimatedTokens = 0 });
             else
             {
                 selected.Add(section); entries.Add(entry);
-                if (section.Layer == ContextLayer.Evidence && section.Id != ContextSectionId.ApprovalOutcome) evidenceCharacters += section.Message.Text.Length;
+                if (section.Layer == ContextLayer.Evidence && section.Id is not (ContextSectionId.ApprovalOutcome or ContextSectionId.RunSummary)) evidenceCharacters += section.Message.Text.Length;
             }
         }
         entries.AddRange(transcript.Select((m, i) => Entry("interaction-" + i, ContextLayer.Evidence,

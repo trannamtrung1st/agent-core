@@ -24,6 +24,12 @@ public static class AgentRunActionHash
         try
         {
             using var document = JsonDocument.Parse(payloadJson);
+            // Exact anchors emitted by the current checkpoint writer for losslessly compressed proof.
+            // These are operation hashes, never generated summary claims.
+            if (document.RootElement.TryGetProperty("BrowserActionHashes", out var anchors)
+                && anchors.ValueKind == JsonValueKind.Array
+                && anchors.EnumerateArray().Any(value => value.ValueKind == JsonValueKind.String && value.GetString() == actionHash))
+                return true;
             if (!document.RootElement.TryGetProperty("Messages", out var messages)
                 || messages.ValueKind != JsonValueKind.Array)
             {
@@ -64,7 +70,7 @@ public static class AgentRunActionHash
     }
 
     // Domain keeps only the recovery vocabulary; provider DTOs and tool metadata stay outside it.
-    private static bool IsBrowserInteraction(string name) => name is
+    public static bool IsBrowserInteraction(string name) => name is
         "browser.click" or "browser.hover" or "browser.drag" or "browser.drop" or "browser.type"
         or "browser.fill_form" or "browser.select_option" or "browser.press_key" or "browser.upload"
         or "browser.fill_credential" or "browser.tabs" or "browser.dialog" or "browser.resize"

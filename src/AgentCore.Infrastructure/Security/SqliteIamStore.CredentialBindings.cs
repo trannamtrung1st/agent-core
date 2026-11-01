@@ -37,7 +37,7 @@ public sealed partial class SqliteIamStore
             // Inventory joins default to no tracking; this transaction must update the backing Instance.
             var parent = await OwnedAgents(db, next.Tenant.TenantId).AsTracking().SingleOrDefaultAsync(item => item.Instance.InstanceId == binding.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false);
             if (parent is null || parent.Instance.Revision != expectedInstanceRevision) return false;
-            if (parent.Instance.Lifecycle != nameof(AgentInstanceLifecycle.Active)) throw new AccessDeniedException("agent_archived");
+            if (parent.Instance.Lifecycle != nameof(AgentInstanceLifecycle.Active)) throw new AccessDeniedException("agent_disabled");
             if (!await StageTenantCredentialBinding(db, next.Tenant.TenantId, binding, false, expectedCredentialRevision, audit, ct).ConfigureAwait(false)) return false;
             parent.Instance.Revision++; parent.Instance.UpdatedAtUtc = binding.UpdatedAtUtc.ToUnixTimeMilliseconds(); result = Owned(parent); return true;
         }, ct, initiator).ConfigureAwait(false);
@@ -53,7 +53,7 @@ public sealed partial class SqliteIamStore
         {
             var parent = await OwnedAgents(db, next.Tenant.TenantId).AsTracking().SingleOrDefaultAsync(item => item.Instance.InstanceId == instanceId.ToString("D"), ct).ConfigureAwait(false);
             if (parent is null || parent.Instance.Revision != expectedInstanceRevision) return false;
-            if (parent.Instance.Lifecycle != nameof(AgentInstanceLifecycle.Active)) throw new AccessDeniedException("agent_archived");
+            if (parent.Instance.Lifecycle != nameof(AgentInstanceLifecycle.Active)) throw new AccessDeniedException("agent_disabled");
             var binding = await OwnedCredentialBindings(db, next.Tenant.TenantId, instanceId).SingleOrDefaultAsync(b => b.BindingId == bindingId.ToString("D"), ct).ConfigureAwait(false);
             if (binding is null || binding.Revision != expectedBindingRevision) return false;
             if (!await StageTenantCredentialBinding(db, next.Tenant.TenantId, MapBinding(binding), true, 0, audit, ct).ConfigureAwait(false)) return false;

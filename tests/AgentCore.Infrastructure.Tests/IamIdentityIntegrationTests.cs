@@ -311,8 +311,8 @@ public sealed partial class IamIdentityIntegrationTests
         await Assert.ThrowsAsync<AccessDeniedException>(() => service.ReadAsync(b.Users.Single().PrincipalId, b.Tenant.TenantId, first.Instance.InstanceId).AsTask());
         state = (await f.Store.ReadTenantAsync(a.TenantId))!;
         var archived = await service.SetLifecycleAsync(a.OwnerPrincipalId, a.TenantId, first.Instance.InstanceId,
-            AgentInstanceLifecycle.Archived, state.Tenant.Revision, first.Instance.Revision);
-        Assert.Equal(AgentInstanceLifecycle.Archived, (await ((ITenantAgentStore)f.Store).FindTenantAgentAsync(a.TenantId, first.Instance.InstanceId))!.Instance.Lifecycle);
+            AgentInstanceLifecycle.Disabled, state.Tenant.Revision, first.Instance.Revision);
+        Assert.Equal(AgentInstanceLifecycle.Disabled, (await ((ITenantAgentStore)f.Store).FindTenantAgentAsync(a.TenantId, first.Instance.InstanceId))!.Instance.Lifecycle);
         Assert.False((await f.Authorizer.CheckAsync(first.PrincipalId, "agents.read", AccessScope.ForResource(a.TenantId, "agent", first.Instance.InstanceId.ToString("D")))).Allowed);
         var auditCount = (await f.Store.ReadAuditAsync(a.TenantId, 200)).Count;
         await Assert.ThrowsAsync<SecurityConflictException>(() => service.SetLifecycleAsync(a.OwnerPrincipalId, a.TenantId,
@@ -324,7 +324,7 @@ public sealed partial class IamIdentityIntegrationTests
         Assert.Equal(first.PrincipalId, restored.PrincipalId); Assert.Equal(first.SystemIdentityId, restored.SystemIdentityId);
         Assert.True((await f.Authorizer.CheckAsync(first.PrincipalId, "agents.read", AccessScope.ForResource(a.TenantId, "agent", first.Instance.InstanceId.ToString("D")))).Allowed);
         var legacy = await Assert.ThrowsAsync<AccessDeniedException>(() => f.Instances.UpdateWithExpectedRevisionAsync(
-            new(first.Instance.InstanceId, restored.Instance.Revision, Lifecycle: AgentInstanceLifecycle.Archived), f.Time.GetUtcNow()).AsTask());
+            new(first.Instance.InstanceId, restored.Instance.Revision, Lifecycle: AgentInstanceLifecycle.Disabled), f.Time.GetUtcNow()).AsTask());
         Assert.Equal("tenant_context_required", legacy.ReasonCode);
         state = (await f.Store.ReadTenantAsync(a.TenantId))!;
         var rebound = state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 },

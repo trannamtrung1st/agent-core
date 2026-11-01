@@ -37,13 +37,13 @@ describe("Instance Activity", () => {
     expect(window.location.pathname).toBe("/account/organizations");
     expect(new URLSearchParams(window.location.search).get("returnTo")).toContain("/activity/sessions");
   });
-  it("retains archived Instance inspection without offering a new attachment", async () => {
+  it("retains disabled Instance inspection with retained conversation access", async () => {
     vi.mocked(listInstanceSessions).mockResolvedValue({ items: [row("session")], nextCursor: null, hasMore: false });
-    render(<InstanceSessionsSection source={source} instanceId="instance" open archived />);
+    render(<InstanceSessionsSection source={source} instanceId="instance" open disabled />);
     fireEvent.click(await screen.findByRole("link", { name: "Planning notes" }));
     expect(await screen.findByText("History session")).toBeVisible();
-    expect(screen.getByText("Open conversation").closest("a")).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByText(/Archived Agent Instance/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open conversation" })).not.toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText(/Agent disabled/)).toBeVisible();
   });
   it("deduplicates sessions across changing cursor pages and keeps search in the URL", async () => {
     vi.mocked(listInstanceSessions).mockResolvedValueOnce({ items: [row("session")], nextCursor: "older", hasMore: true }).mockResolvedValueOnce({ items: [row("session"), row("older", "Older work")], nextCursor: null, hasMore: false });

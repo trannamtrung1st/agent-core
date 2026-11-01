@@ -53,7 +53,7 @@ public sealed class ManagedGeneralAssistantTests
         var (owner, human) = await Bootstrap(f); var service = Coordinator(f, f.BuiltIns); var tenant = owner.TenantId;
         var results = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => service.ReconcileAsync(tenant).AsTask()));
         var agent = results[0]; Assert.All(results, item => Assert.Equal(agent.Instance.InstanceId, item.Instance.InstanceId));
-        Assert.Equal(ManagedGeneralAssistant.Kind, agent.ManagedKind); Assert.True(agent.Instance.ShowInChat); Assert.False(agent.Instance.PersonaCustomized);
+        Assert.Equal(ManagedGeneralAssistant.Kind, agent.ManagedKind); Assert.Equal(AgentInstanceLifecycle.Active, agent.Instance.Lifecycle); Assert.False(agent.Instance.PersonaCustomized);
         Assert.Equal("General Assistant", agent.Instance.Persona.Name);
         var state = (await f.Iam.ReadTenantAsync(tenant))!;
         Assert.Single(state.SystemIdentities, i => i.ManagedKind is not null);
@@ -69,7 +69,7 @@ public sealed class ManagedGeneralAssistantTests
             var reopened = new SqliteIamStore(f.Contexts!, builtIns: f.BuiltIns);
             var durable = (await reopened.FindTenantAgentAsync(tenant, agent.Instance.InstanceId))!;
             Assert.Equal(agent.ManagedKind, durable.ManagedKind); Assert.Equal(space.SpaceId, (await reopened.FindPrivateSpaceAsync(tenant, agent.Instance.InstanceId))!.SpaceId);
-            Assert.True(durable.Instance.ShowInChat);
+            Assert.Equal(AgentInstanceLifecycle.Active, durable.Instance.Lifecycle);
             await using var db = f.Contexts!.CreateDbContext(); Assert.False(db.Database.HasPendingModelChanges());
         }
         var ordinary = await f.Agents.CreateAsync(human.PrincipalId, tenant, ManagedGeneralAssistant.DefinitionId, 36, await Revision(f, tenant));
@@ -82,10 +82,16 @@ public sealed class ManagedGeneralAssistantTests
             await using var unique = f.Contexts!.CreateDbContext();
             await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => unique.Database.ExecuteSqlInterpolatedAsync($"UPDATE SystemIdentities SET ManagedKind={ManagedGeneralAssistant.Kind} WHERE AgentInstanceId={ordinary.Instance.InstanceId.ToString("D")}"));
         }
-        await f.Agents.SetLifecycleAsync(human.PrincipalId, tenant, ordinary.Instance.InstanceId, AgentInstanceLifecycle.Archived, await Revision(f, tenant), ordinary.Instance.Revision);
+        await f.Agents.SetLifecycleAsync(human.PrincipalId, tenant, ordinary.Instance.InstanceId, AgentInstanceLifecycle.Disabled, await Revision(f, tenant), ordinary.Instance.Revision);
         var currentRevision = await Revision(f, tenant);
-        await Assert.ThrowsAsync<SecurityConflictException>(() => f.Agents.SetLifecycleAsync(human.PrincipalId, tenant, agent.Instance.InstanceId,
-            AgentInstanceLifecycle.Archived, currentRevision, agent.Instance.Revision).AsTask());
+        var disabled = await f.Agents.SetLifecycleAsync(human.PrincipalId, tenant, agent.Instance.InstanceId,
+            AgentInstanceLifecycle.Disabled, currentRevision, agent.Instance.Revision, initiator: human);
+        Assert.Equal(AgentInstanceLifecycle.Disabled, disabled.Instance.Lifecycle);
+        var reconciled = await Coordinator(f, f.BuiltIns).ReconcileAsync(tenant);
+        Assert.Equal(disabled, reconciled);
+        var disabledState = (await f.Iam.ReadTenantAsync(tenant))!;
+        Assert.Equal(IdentityStatus.Suspended, disabledState.SystemIdentities.Single(i => i.PrincipalId == agent.PrincipalId).Status);
+        Assert.Equal(IdentityStatus.Suspended, disabledState.Principals.Single(i => i.PrincipalId == agent.PrincipalId).Status);
     }
 
     [Theory] [InlineData(false)] [InlineData(true)]
@@ -93,9 +99,11 @@ public sealed class ManagedGeneralAssistantTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var (owner, human) = await Bootstrap(f);
         var tenant = owner.TenantId; var agent = await Coordinator(f, f.BuiltIns).ReconcileAsync(tenant); var config = Configuration(f, f.BuiltIns);
-        agent = await config.SetChatVisibilityAsync(human.PrincipalId, tenant, agent.Instance.InstanceId, false, await Revision(f, tenant), agent.Instance.Revision, initiator: human);
+        agent = await f.Agents.SetLifecycleAsync(human.PrincipalId, tenant, agent.Instance.InstanceId, AgentInstanceLifecycle.Disabled, await Revision(f, tenant), agent.Instance.Revision, initiator: human);
         var hidden = await f.ChatService().ListAgentsAsync(tenant, human, query: "General Assistant"); Assert.Empty(hidden.Items); Assert.Equal(0, hidden.Total);
         Assert.Single((await ((ITenantAgentStore)f.Iam).ListTenantAgentsAsync(tenant, null, 0, 30)).Items);
+        agent = await f.Agents.SetLifecycleAsync(human.PrincipalId, tenant, agent.Instance.InstanceId, AgentInstanceLifecycle.Active,
+            await Revision(f, tenant), agent.Instance.Revision, initiator: human);
         var supplement = System.Text.Json.JsonSerializer.SerializeToElement("Answer with care.");
         agent = await config.PatchSettingsAsync(human.PrincipalId, tenant, agent.Instance.InstanceId, "instructions", await Revision(f, tenant), agent.Instance.Revision,
             new Dictionary<string, System.Text.Json.JsonElement> { ["agentInstructions"] = supplement }, [], initiator: human);
@@ -110,6 +118,8 @@ public sealed class ManagedGeneralAssistantTests
         var localResource = await config.UpsertResourceAsync(human.PrincipalId, tenant, agent.Instance.InstanceId, await Revision(f, tenant), localSkill.InstanceRevision,
             new(null, null, "local/retained.txt", AgentDefinitionResourceKind.Reference, "text/plain", System.Text.Encoding.UTF8.GetBytes("RETAINED-LOCAL-RESOURCE")), initiator: human);
         agent = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(tenant, agent.Instance.InstanceId))!;
+        agent = await f.Agents.SetLifecycleAsync(human.PrincipalId, tenant, agent.Instance.InstanceId, AgentInstanceLifecycle.Disabled,
+            await Revision(f, tenant), agent.Instance.Revision, initiator: human);
         var before = (await f.Iam.ReadTenantAsync(tenant))!; var privateSpace = (await ((ITenantSpaceStore)f.Iam).FindPrivateSpaceAsync(tenant, agent.Instance.InstanceId))!;
         var home = AgentWorkspacePhysicalPaths.SpaceHomeDirectory(Path.Combine(f.Root, "workspaces"), tenant, privateSpace.SpaceId);
         Directory.CreateDirectory(home); var retainedFile = Path.Combine(home, "retained.txt"); await File.WriteAllTextAsync(retainedFile, "RETAINED-FILE");
@@ -119,7 +129,7 @@ public sealed class ManagedGeneralAssistantTests
         var again = await config.ResetDefaultsAsync(human.PrincipalId, tenant, agent.Instance.InstanceId, operation, before.Tenant.Revision, expected, initiator: human);
         Assert.Equal("already_applied", again.Status);
         var saved = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(tenant, agent.Instance.InstanceId))!;
-        Assert.False(saved.Instance.ShowInChat); Assert.False(saved.Instance.PersonaCustomized); Assert.Null(saved.Instance.SettingsOverrides);
+        Assert.Equal(AgentInstanceLifecycle.Disabled, saved.Instance.Lifecycle); Assert.False(saved.Instance.PersonaCustomized); Assert.Null(saved.Instance.SettingsOverrides);
         Assert.Equal("RETAINED-FILE", await File.ReadAllTextAsync(retainedFile));
         Assert.Contains((await config.ReadSkillsAsync(human.PrincipalId, tenant, agent.Instance.InstanceId)).Items, item => item.Key == localSkill.Skill.Key);
         Assert.Equal("RETAINED-LOCAL-RESOURCE", System.Text.Encoding.UTF8.GetString((await config.ReadResourceContentAsync(human.PrincipalId, tenant, agent.Instance.InstanceId, localResource.Resource!.Key)).Bytes));
@@ -132,7 +142,7 @@ public sealed class ManagedGeneralAssistantTests
         {
             var reopen = new SqliteIamStore(f.Contexts!, builtIns: f.BuiltIns);
             var durable = (await reopen.FindTenantAgentAsync(tenant, agent.Instance.InstanceId))!;
-            Assert.False(durable.Instance.ShowInChat); Assert.False(durable.Instance.PersonaCustomized);
+            Assert.Equal(AgentInstanceLifecycle.Disabled, durable.Instance.Lifecycle); Assert.False(durable.Instance.PersonaCustomized);
         }
     }
 
@@ -143,9 +153,9 @@ public sealed class ManagedGeneralAssistantTests
         var source = new ReleaseCatalog(f.BuiltIns, 35); var service = Coordinator(f, source); var tenant = owner.TenantId;
         var agent = await service.ReconcileAsync(tenant); Assert.Equal(35, agent.Instance.ActiveVersion);
         var config = Configuration(f, source);
-        agent = await config.SetChatVisibilityAsync(human.PrincipalId, tenant, agent.Instance.InstanceId, false, await Revision(f, tenant), agent.Instance.Revision, initiator: human);
+        agent = await f.Agents.SetLifecycleAsync(human.PrincipalId, tenant, agent.Instance.InstanceId, AgentInstanceLifecycle.Disabled, await Revision(f, tenant), agent.Instance.Revision, initiator: human);
         source.Version = 36; var updated = await service.ReconcileAsync(tenant);
-        Assert.Equal(36, updated.Instance.ActiveVersion); Assert.False(updated.Instance.ShowInChat); Assert.Equal("General Assistant", updated.Instance.Persona.Name);
+        Assert.Equal(36, updated.Instance.ActiveVersion); Assert.Equal(AgentInstanceLifecycle.Disabled, updated.Instance.Lifecycle); Assert.Equal("General Assistant", updated.Instance.Persona.Name);
         Assert.Equal(agent.PrincipalId, updated.PrincipalId);
         var currentRevision = await Revision(f, tenant);
         await Assert.ThrowsAsync<SecurityConflictException>(() => config.AdoptVersionAsync(human.PrincipalId, tenant, updated.Instance.InstanceId, 35,
@@ -172,19 +182,26 @@ public sealed class ManagedGeneralAssistantTests
         var first = await runs.SubmitTextAsync(tenant, session.Owner.SessionId, human, f.Ids.NewId(), "First accepted request", await Revision(f, tenant), session.Revision);
         var firstPin = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(tenant, first.RunId))!;
         Assert.Equal(35, firstPin.DefinitionVersion);
-        agent = await config.SetChatVisibilityAsync(human.PrincipalId, tenant, agent.Instance.InstanceId, false, await Revision(f, tenant), agent.Instance.Revision, initiator: human);
+        agent = await f.Agents.SetLifecycleAsync(human.PrincipalId, tenant, agent.Instance.InstanceId, AgentInstanceLifecycle.Disabled, await Revision(f, tenant), agent.Instance.Revision, initiator: human);
         source.Version = 36;
         Assert.Equal(35, (await f.RunConfiguration(source).CurrentResourcesAsync(tenant, agent.Instance.InstanceId)).Definition.Version);
         await Assert.ThrowsAsync<SecurityConflictException>(() => f.RunConfiguration(source).ResolveInSpaceAsync(tenant, agent.Instance.InstanceId, session.ContextSelection!, CancellationToken.None).AsTask());
-        var adopted = await coordinator.ReconcileAsync(tenant); Assert.Equal("Personal assistant", adopted.Instance.Persona.Name); Assert.False(adopted.Instance.ShowInChat);
+        var adopted = await coordinator.ReconcileAsync(tenant); Assert.Equal("Personal assistant", adopted.Instance.Persona.Name); Assert.Equal(AgentInstanceLifecycle.Disabled, adopted.Instance.Lifecycle);
         Assert.Equal(35, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(tenant, first.RunId))!.DefinitionVersion);
-        await runs.CancelAsync(tenant, first.RunId, human, await Revision(f, tenant), firstPin.Revision);
+        Assert.Equal(AgentCore.Domain.Conversation.AgentRunStatus.Cancelled,
+            (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(tenant, first.RunId))!.Status);
+        var disabledRevision = await Revision(f, tenant);
+        var disabledSession = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(tenant, session.Owner.SessionId))!;
+        await Assert.ThrowsAsync<AccessDeniedException>(() => runs.SubmitTextAsync(tenant, session.Owner.SessionId, human,
+            f.Ids.NewId(), "Must be refused", disabledRevision, disabledSession.Snapshot.Revision).AsTask());
+        agent = await f.Agents.SetLifecycleAsync(human.PrincipalId, tenant, adopted.Instance.InstanceId, AgentInstanceLifecycle.Active,
+            await Revision(f, tenant), adopted.Instance.Revision, initiator: human);
         var current = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(tenant, session.Owner.SessionId))!;
         var second = await runs.SubmitTextAsync(tenant, session.Owner.SessionId, human, f.Ids.NewId(), "Next accepted request", await Revision(f, tenant), current.Snapshot.Revision);
         var secondPin = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(tenant, second.RunId))!;
         Assert.Equal(36, secondPin.DefinitionVersion); Assert.Equal("Personal assistant", secondPin.PinnedPersona.Name);
         Assert.Equal(2, (await ((ITenantRunStore)f.Iam).ListTenantRunIdsAsync(tenant, session.Owner.SessionId)).Count);
-        Assert.Empty((await f.ChatService().ListAgentsAsync(tenant, human)).Items);
+        Assert.Single((await f.ChatService().ListAgentsAsync(tenant, human)).Items);
     }
 
     private sealed class EmptyModels : IModelCatalog
@@ -236,7 +253,7 @@ public sealed class ManagedGeneralAssistantTests
             await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
         }
         var saved = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(owner.TenantId, ordinary.Instance.InstanceId))!;
-        Assert.Null(saved.ManagedKind); Assert.True(saved.Instance.ShowInChat); Assert.False(saved.Instance.PersonaCustomized);
+        Assert.Null(saved.ManagedKind); Assert.Equal(AgentInstanceLifecycle.Active, saved.Instance.Lifecycle); Assert.False(saved.Instance.PersonaCustomized);
         Assert.Equal(ordinary.PrincipalId, saved.PrincipalId); Assert.Equal(ordinary.Instance.Persona, saved.Instance.Persona);
         var managed = await Coordinator(f, f.BuiltIns).ReconcileAsync(owner.TenantId);
         Assert.NotEqual(saved.Instance.InstanceId, managed.Instance.InstanceId);

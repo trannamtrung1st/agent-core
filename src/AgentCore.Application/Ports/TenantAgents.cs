@@ -26,7 +26,7 @@ public sealed record TenantAgentConfigurationChange(Guid InstanceId, long Expect
     bool SetUnattendedModel = false, AgentCore.Domain.Models.ModelPreference? UnattendedModel = null,
     HarnessManagementState? HarnessManagement = null, SkillMutation? Skill = null, InstanceResourceMutation? Resource = null,
     HumanSessionReference? Initiator = null, TenantIsolationMutation? Isolation = null, HarnessManagementState? HarnessAssessment = null,
-    PreparedManagementBinding? Binding = null, AgentCore.Domain.Tasks.AgentCooperationPolicy? Cooperation = null, bool? ShowInChat = null, bool ResetDefaults = false, bool SystemAdoption = false);
+    PreparedManagementBinding? Binding = null, AgentCore.Domain.Tasks.AgentCooperationPolicy? Cooperation = null, bool ResetDefaults = false, bool SystemAdoption = false);
 
 public sealed record TenantIsolationMetadata(long ExperienceRevision, bool ExperienceEnabled, long MaintenanceRevision, bool AllowMaintenance);
 public sealed record IsolationOwnerRevisions(long Instance, long Experience, long Maintenance);
@@ -52,5 +52,6 @@ public interface ITenantAgentStore
         AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
     ValueTask<TenantAgent?> TrySetTenantAgentLifecycleAsync(TenantSecurityState next, long expectedSecurityRevision,
         Guid instanceId, long expectedInstanceRevision, AgentInstanceLifecycle lifecycle, DateTimeOffset at,
-        AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
+        AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null,
+        IReadOnlyList<AgentCore.Domain.Conversation.ConversationEntry>? responses = null);
 }

@@ -8,17 +8,10 @@ using AgentCore.Domain.Tasks;
 namespace AgentCore.Application.Security;
 
 public sealed record TenantAgentResetResult(Guid OperationId, Guid InstanceId, long InstanceRevision, int AppliedVersion,
-    string Status, string RetainedData = "Conversations, memory, files, credentials, local Skills/resources, IAM and Chat visibility are retained.");
+    string Status, string RetainedData = "Conversations, memory, files, credentials, local Skills/resources, IAM and availability are retained.");
 
 public sealed partial class TenantAgentConfigurationService
 {
-    public ValueTask<TenantAgent> SetChatVisibilityAsync(Guid actor, Guid tenant, Guid id, bool show,
-        long securityRevision, long instanceRevision, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate(id, async token =>
-    {
-        var state = await ChangeState(actor, tenant, id, securityRevision, token);
-        return await Commit(actor, tenant, state, new(id, instanceRevision, ShowInChat: show), "agents.chat-visibility.update", token, initiator);
-    }, ct);
-
     public ValueTask<TenantAgentResetResult> ResetDefaultsAsync(Guid actor, Guid tenant, Guid id, Guid operation,
         long securityRevision, long instanceRevision, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate<TenantAgentResetResult>(id, async token =>
     {

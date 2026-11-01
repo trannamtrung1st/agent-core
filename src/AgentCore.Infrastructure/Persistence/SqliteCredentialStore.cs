@@ -99,7 +99,7 @@ public sealed class SqliteCredentialStore(IDbContextFactory<AgentCoreDbContext> 
     {
         await RequireLegacyContext(db, id, ct);
         var row = await db.AgentInstances.SingleOrDefaultAsync(a => a.InstanceId == id.ToString("D"), ct) ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
-        if (row.Lifecycle != "Active") throw AgentCoreErrors.Forbidden("Archived agent credentials are read-only.");
+        if (row.Lifecycle != "Active") throw AgentCoreErrors.Forbidden("Disabled agent credentials are read-only.");
         if (row.Revision != revision) throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
         row.Revision++;
         row.UpdatedAtUtc = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();

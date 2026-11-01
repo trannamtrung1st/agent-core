@@ -49,7 +49,7 @@ public sealed partial class InMemoryAgentInstanceStore
         {
             if (!tenant && _tenantOwnedInstances.Contains(m.InstanceId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
             var owner = _instances.GetValueOrDefault(m.InstanceId) ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
-            if (owner.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Validation("Archived instances cannot change Skills.");
+            if (owner.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Validation("Disabled instances cannot change Skills.");
             if (owner.Revision != m.ExpectedInstanceRevision) throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
             var states = new Dictionary<string, AgentDefinitionSkillState>(_definitionSkillStates.GetValueOrDefault(m.InstanceId) ?? []);
             var skills = new Dictionary<string, AgentInstanceSkill>(_instanceSkills.GetValueOrDefault(m.InstanceId) ?? []);

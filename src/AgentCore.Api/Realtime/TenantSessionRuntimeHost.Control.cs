@@ -7,6 +7,38 @@ namespace AgentCore.Api.Realtime;
 
 public sealed partial class TenantSessionRuntimeHost : ITenantRunControl
 {
+    private readonly HashSet<(Guid Tenant, Guid Instance)> _disabling = [];
+    public async ValueTask<TenantAgent> CommitAgentDisableAsync(Guid tenant, Guid instance,
+        Func<IReadOnlyList<ConversationEntry>, CancellationToken, ValueTask<TenantAgent>> commit, CancellationToken ct = default)
+    {
+        Live[] live;
+        lock (_gate)
+        {
+            if (_stopping || !_disabling.Add((tenant, instance))) throw new AccessDeniedException("tenant_runtime_unavailable");
+            _sessionWriteEpoch++; // Fence claims still loading across this availability transaction.
+            live = _live.Values.Where(l => l.Run.Owner.TenantId == tenant && l.Run.AgentInstanceId == instance)
+                .OrderBy(l => l.Run.SessionId).ToArray();
+        }
+        var responses = new List<ConversationEntry>();
+        // Each owning mailbox stays quiescent until the single lifecycle transaction settles.
+        // The registration fence also covers claims that were loading when this command began.
+        ValueTask<TenantAgent> Enter(int index, CancellationToken token) => index == live.Length
+            ? commit(responses, token)
+            : live[index].Runtime.CommitAgentDisableAsync(async (response, mailboxToken) =>
+            {
+                if (response is not null) responses.Add(response);
+                return await Enter(index + 1, mailboxToken).ConfigureAwait(false);
+            }, token);
+        try { return await Enter(0, ct).ConfigureAwait(false); }
+        finally { lock (_gate) _disabling.Remove((tenant, instance)); }
+    }
+    public ValueTask StopDisabledAgentAsync(Guid tenant, Guid instance, CancellationToken ct = default)
+    {
+        Live[] stopped;
+        lock (_gate) stopped = _live.Values.Where(l => l.Run.Owner.TenantId == tenant && l.Run.AgentInstanceId == instance).ToArray();
+        foreach (var live in stopped) StopTokens(live);
+        return ValueTask.CompletedTask;
+    }
     private readonly HashSet<(Guid Tenant, Guid Run)> _cancelling = [];
     public async ValueTask<AgentRun> CancelAsync(TenantRunCancellation request, CancellationToken ct = default)
     {

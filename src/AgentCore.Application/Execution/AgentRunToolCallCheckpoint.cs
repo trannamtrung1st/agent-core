@@ -1,5 +1,7 @@
 using AgentCore.Application.Context;
 using System.Text;
+using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Encodings.Web;
@@ -23,11 +25,14 @@ public sealed record ToolLoopExecutionState(RunPhase Phase = RunPhase.Work, stri
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TenantExperienceSourceReference>? TenantExperienceSourceReads = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TenantExperienceFactSource>? TenantExperienceSources = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<AgentCore.Domain.Security.TenantAutomationReadReference>? TenantAutomationReadSources = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<AgentCore.Domain.Security.TenantManagementReadReference>? TenantManagementReadSources = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<AgentCore.Domain.Security.TenantManagementReadReference>? TenantManagementReadSources = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RunContextSummary? Compaction = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int CompactionAttempts = 0,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool ContextOverflowRetried = false);
 
 public static class AgentRunToolCallCheckpoint
 {
-    public const int FormatVersion = 2;
+    public const int FormatVersion = 3;
     public const string CompletionCallId = "work-complete";
     public const string FinishRequired = """{"error":"finish_required","reason":"checkpoint_capacity","message":"Finish from evidence already collected; do not request more tools."}""";
     public static string FinishRequiredResult(int budget) => Encoding.UTF8.GetByteCount(FinishRequired) <= budget ? FinishRequired
@@ -128,11 +133,68 @@ public static class AgentRunToolCallCheckpoint
         IReadOnlyList<ModelMessage> messages,
         bool observationRequired = false,
         string? blockedActionHash = null, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null, string? protocolRepairReason = null, ToolLoopExecutionState? executionState = null) =>
-        JsonSerializer.Serialize(new Document(
-            Phase,
-            InteractionMessages(messages).Select(MessageDto.From).ToArray(),
-            observationRequired,
-            blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState, ProtocolFailures.RepairKind(protocolRepairReason), BrowserContractCutover.Version, FormatVersion, ContextAssembler.CoreContractVersion, executionState ?? new()), CheckpointJson);
+        WriteDocument(messages, observationRequired, blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState, protocolRepairReason, executionState);
+
+    private static string WriteDocument(IReadOnlyList<ModelMessage> messages, bool observationRequired, string? blockedActionHash,
+        IReadOnlyList<string>? loadedCapabilityIds, int capabilityLoadCount, ExecutionSkillState? skillState, string? protocolRepairReason, ToolLoopExecutionState? executionState)
+    {
+        InteractionMessages(messages);
+        var boundary = executionState?.Compaction?.ThroughMessageCount ?? 0;
+        if (boundary < 0 || boundary > messages.Count) throw new ArgumentException("Invalid compaction boundary.");
+        string? archive = null; string? hash = null;
+        if (boundary > 0)
+        {
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(messages.Take(boundary).Select(MessageDto.From).ToArray(), CheckpointJson);
+            if (bytes.Length > RunContextCompaction.MaxExpandedProofBytes) throw new ArgumentException("Compaction proof exceeds recovery capacity.");
+            hash = Convert.ToHexString(SHA256.HashData(bytes));
+            using var output = new MemoryStream();
+            using (var gzip = new GZipStream(output, CompressionLevel.SmallestSize, leaveOpen: true)) gzip.Write(bytes);
+            archive = Convert.ToBase64String(output.ToArray());
+        }
+        return JsonSerializer.Serialize(new Document(Phase, messages.Skip(boundary).Select(MessageDto.From).ToArray(),
+            observationRequired, blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState,
+            ProtocolFailures.RepairKind(protocolRepairReason), BrowserContractCutover.Version, FormatVersion,
+            ContextAssembler.CoreContractVersion, executionState ?? new(), archive, hash,
+            boundary == 0 ? null : messages.Take(boundary).SelectMany(m => m.ToolCalls ?? [])
+                .Where(c => AgentRunActionHash.IsBrowserInteraction(c.Name))
+                .Select(c => AgentRunActionHash.Compute(c.Name, JsonSerializer.Deserialize<JsonElement>(c.ArgumentsJson)))
+                .Distinct(StringComparer.Ordinal).ToArray()), CheckpointJson);
+    }
+
+    private static ModelMessage[] Expand(Document document)
+    {
+        var summary = document.ExecutionState?.Compaction;
+        if (summary is null)
+        {
+            if (document.ArchivedMessages is not null || document.ArchivedMessagesHash is not null) throw new FormatException("Unexpected compaction proof.");
+            return document.Messages.Select(m => m.ToMessage()).ToArray();
+        }
+        if (summary.Version != RunContextCompaction.Version || summary.Count is < 1 or > RunContextCompaction.MaxCompactions
+            || summary.ThroughMessageCount < 1 || !RunContextCompaction.ValidSummary(summary.Text)
+            || document.ArchivedMessages is null || document.ArchivedMessages.Length > AgentRunLimits.MaxCheckpointBytes)
+            throw new FormatException("Invalid compaction state.");
+        using var source = new MemoryStream(Convert.FromBase64String(document.ArchivedMessages));
+        using var gzip = new GZipStream(source, CompressionMode.Decompress);
+        using var decoded = new MemoryStream();
+        var buffer = new byte[8192]; int count;
+        while ((count = gzip.Read(buffer)) > 0)
+        {
+            if (decoded.Length + count > RunContextCompaction.MaxExpandedProofBytes) throw new FormatException("Compaction proof exceeds recovery capacity.");
+            decoded.Write(buffer, 0, count);
+        }
+        var bytes = decoded.ToArray();
+        if (Convert.ToHexString(SHA256.HashData(bytes)) != document.ArchivedMessagesHash) throw new FormatException("Compaction proof checksum mismatch.");
+        var prefix = JsonSerializer.Deserialize<MessageDto[]>(bytes) ?? throw new FormatException("Missing compaction proof.");
+        if (prefix.Length != summary.ThroughMessageCount || prefix.Any(m => m.Role is not ("User" or "Assistant" or "Tool")))
+            throw new FormatException("Compaction proof boundary mismatch.");
+        var proof = prefix.Select(m => m.ToMessage()).ToArray();
+        var hashes = proof.SelectMany(m => m.ToolCalls ?? []).Where(c => AgentRunActionHash.IsBrowserInteraction(c.Name))
+            .Select(c => AgentRunActionHash.Compute(c.Name, JsonSerializer.Deserialize<JsonElement>(c.ArgumentsJson)))
+            .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal);
+        if (!hashes.SequenceEqual((document.BrowserActionHashes ?? []).Order(StringComparer.Ordinal)))
+            throw new FormatException("Compaction operation anchors mismatch.");
+        return proof.Concat(document.Messages.Select(m => m.ToMessage())).ToArray();
+    }
 
     private static IReadOnlyList<ModelMessage> InteractionMessages(IReadOnlyList<ModelMessage> messages)
     {
@@ -248,7 +310,7 @@ public static class AgentRunToolCallCheckpoint
             var document = JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson);
             if (document is null || !string.Equals(document.Phase, Phase, StringComparison.Ordinal) || document.Messages is null
                 || document.ContextFormatVersion != FormatVersion || document.CoreContractVersion != ContextAssembler.CoreContractVersion
-                || document.ExecutionState is not { } state || !Enum.IsDefined(state.Phase)
+                || document.ExecutionState is not { } state || !Enum.IsDefined(state.Phase) || state.CompactionAttempts is < 0 or > RunContextCompaction.MaxCompactions
                 || state.Phase == RunPhase.Finalization && !RunFinalization.IsReason(state.FinalizationReason)
                 || document.ProtocolRepair is { } repair && !Enum.IsDefined(repair)
                 || document.Messages.Any(m => m.Role is not ("User" or "Assistant" or "Tool")))
@@ -256,12 +318,12 @@ public static class AgentRunToolCallCheckpoint
                 return false;
             }
 
-            messages = document.Messages.Select(message => message.ToMessage()).ToArray();
+            messages = Expand(document);
             observationRequired = document.ObservationRequired;
             blockedActionHash = document.BlockedActionHash;
             return true;
         }
-        catch (Exception ex) when (ex is JsonException or FormatException)
+        catch (Exception ex) when (ex is JsonException or FormatException or InvalidDataException or ArgumentException)
         {
             return false;
         }
@@ -279,7 +341,7 @@ public static class AgentRunToolCallCheckpoint
             return;
         }
         if (document is not { Phase: Phase, Messages: not null } || document.BrowserContractVersion == BrowserContractCutover.Version) return;
-        if (document.Messages.Any(message => message.Name?.StartsWith("browser.", StringComparison.Ordinal) == true
+        if (Expand(document).Any(message => message.Name?.StartsWith("browser.", StringComparison.Ordinal) == true
             || message.ToolCalls?.Any(call => call.Name.StartsWith("browser.", StringComparison.Ordinal)) == true))
             throw AgentCore.Application.Sessions.AgentCoreErrors.Conflict("A browser Run from the retired contract cannot resume. Cancel it and start a new Session; its receipts remain historical evidence.");
     }
@@ -326,7 +388,10 @@ public static class AgentRunToolCallCheckpoint
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? LoadedCapabilityIds = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int CapabilityLoadCount = 0, ExecutionSkillState? SkillState = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ProtocolRepairKind? ProtocolRepair = null, int? BrowserContractVersion = null, int ContextFormatVersion = 0,
-        int CoreContractVersion = 0, ToolLoopExecutionState? ExecutionState = null);
+        int CoreContractVersion = 0, ToolLoopExecutionState? ExecutionState = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ArchivedMessages = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ArchivedMessagesHash = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? BrowserActionHashes = null);
 
     private sealed record MessageDto(
         string Role,

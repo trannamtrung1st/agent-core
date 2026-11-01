@@ -144,7 +144,7 @@ public sealed class SkillActivationTests
         Assert.Null(Assert.Single((await store.ReadSkillsAsync(owner.InstanceId)).DefinitionStates).EnabledOverride);
         Assert.Empty((await store.ReadSkillsAsync(owner.InstanceId)).InstanceSkills);
         await Assert.ThrowsAsync<AgentCoreException>(() => NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "create", input: new("Bad", "Bad", "No grant", SkillProjection.Always, true, ["shell"]), actor: SkillAuthor.Agent).AsTask());
-        await NativeInstanceSeed.LifecycleAsync(store, clock, owner.InstanceId, AgentInstanceLifecycle.Archived, owner.Revision);
+        await NativeInstanceSeed.LifecycleAsync(store, clock, owner.InstanceId, AgentInstanceLifecycle.Disabled, owner.Revision);
         await Assert.ThrowsAsync<AgentCoreException>(() => NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "create", input: new("Local", "Local", "Local", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent).AsTask());
     }
     internal static AgentDefinition Definition(int version, params SkillSpec[] skills) => SampleDefinitions.Examiner with { Version = version, Skills = skills, ExecutionPolicy = DefinitionExecutionPolicy.Empty, SelfManagement = new(HarnessManagementMode.Assisted, [HarnessManagementScope.Skills], [], [], BuiltInSkills: new(false, false)) };

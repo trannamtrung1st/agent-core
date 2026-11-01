@@ -43,7 +43,7 @@ public static class TenantSessionForegroundRules
             if (!decision.Allowed) throw new AccessDeniedException(decision.ReasonCode);
         }
         TenantSessionRules.RequireExecutor(state, agent);
-        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
         if (state.Tenant.Revision != request.SecurityRevision || agent.Instance.Revision != request.InstanceRevision
             || (live ? saved.Snapshot.Revision < request.ObservedSessionRevision : saved.Snapshot.Revision != request.ObservedSessionRevision))
             throw new SecurityConflictException("stale_revision");

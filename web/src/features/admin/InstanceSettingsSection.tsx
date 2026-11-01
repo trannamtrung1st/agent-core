@@ -31,12 +31,12 @@ const numerics = new Set(['cpu','memoryMiB','maxCommandSeconds','idleTtlSeconds'
 
 
 export type InstanceSandboxContext = { profiles: readonly Pick<SandboxProfile, 'id' | 'name' | 'availability'>[] | null; summary: (state: { dirty: boolean; busy: boolean; revision?: number }) => ReactNode };
-export function InstanceSettingsSection({ instanceId, archived, active = true, page, onDirtyChange, onBusyChange, onUpdated, transport, confirmationContext, sandboxContext, saveBlocked = false, externalBusy = false, refreshKey, systemManaged = false }: { systemManaged?: boolean; instanceId: string; archived: boolean; active?: boolean; page?: InstancePage; onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void; onUpdated: () => void; transport: InstanceSettingsTransport; confirmationContext?: string; sandboxContext?: InstanceSandboxContext; saveBlocked?: boolean; externalBusy?: boolean; refreshKey?: number }) {
+export function InstanceSettingsSection({ instanceId, readOnly, active = true, page, onDirtyChange, onBusyChange, onUpdated, transport, confirmationContext, sandboxContext, saveBlocked = false, externalBusy = false, refreshKey, systemManaged = false }: { systemManaged?: boolean; instanceId: string; readOnly: boolean; active?: boolean; page?: InstancePage; onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void; onUpdated: () => void; transport: InstanceSettingsTransport; confirmationContext?: string; sandboxContext?: InstanceSandboxContext; saveBlocked?: boolean; externalBusy?: boolean; refreshKey?: number }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const [expanded, setExpanded] = useState<string[]>([]);
   const [category, setCategory] = useState<keyof typeof settingCategories>('Conversation');
   const formId = useId();
-  const settings = useInstanceSettingsController(instanceId, archived, active, onUpdated, refreshKey, false, transport);
+  const settings = useInstanceSettingsController(instanceId, readOnly, active, onUpdated, refreshKey, false, transport);
   const sections = settings.sections;
   const drafts = settings.drafts;
   const { setDrafts, error, models, defaultOfferingId, save, saveAll, change, inherit } = settings;
@@ -79,7 +79,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
             const value = draft.clear.includes(field) ? section.definitionDefaults?.[field] ?? null : field in draft.set ? draft.set[field] : inherited;
             const constraint = section.constraints?.[field];
             const locked = typeof constraint?.requiredBoolean === 'boolean';
-            const disabled = archived || busy || draft.clear.includes(field) || locked;
+            const disabled = readOnly || busy || draft.clear.includes(field) || locked;
             const label = systemManaged && field === 'agentInstructions' ? 'Additional instructions' : (section.section === 'stateIsolationPolicy' ? isolationLabels[field] : labels[field]) ?? field[0].toUpperCase() + field.slice(1);
             const id = `${formId}-${section.section}-${field}`;
             const boolean = typeof inherited === 'boolean';
@@ -91,7 +91,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
               <label htmlFor={id}>{label}</label>
               {status && <Tooltip trigger={['hover', 'focus', 'click']} title={`${status}. ${section.section === "sandboxPolicy" ? "Inherited value" : "Definition default"}: ${defaultText}.`}><Button type="text" size="small" icon={<InfoCircleOutlined />} aria-label={`${label}: ${status}`} /></Tooltip>}
               {constraint && <Tooltip trigger={['hover', 'focus', 'click']} title={constraint.reason}><Button type="text" size="small" icon={<LockOutlined />} aria-label={`${label}: ${section.section === "sandboxPolicy" && field !== "profileId" && field !== "allowedProfileIds" ? "Profile ceiling" : "Definition restriction"}`} /></Tooltip>}
-              {field in section.overrides && <Tooltip trigger={['hover', 'focus']} title={section.section === "sandboxPolicy" ? "Reset to inherited value" : "Reset to Definition default"}><Button type="text" size="small" icon={<UndoOutlined />} aria-label={`Reset ${label}`} disabled={archived || busy || draft.clear.includes(field)} onClick={() => inherit(section, field)} /></Tooltip>}
+              {field in section.overrides && <Tooltip trigger={['hover', 'focus']} title={section.section === "sandboxPolicy" ? "Reset to inherited value" : "Reset to Definition default"}><Button type="text" size="small" icon={<UndoOutlined />} aria-label={`Reset ${label}`} disabled={readOnly || busy || draft.clear.includes(field)} onClick={() => inherit(section, field)} /></Tooltip>}
             </Flex>;
             let control;
             if (boolean) control = <Switch id={id} aria-label={label} checked={value === true} disabled={disabled} onChange={v => change(section, field, v)} />;
@@ -122,11 +122,11 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
           })}
         </Form>
         <Flex className="agent-settings-actions" wrap gap={token.paddingXS}>
-          {!configuration.managed && <Button type="primary" aria-label={`Save ${title}`} disabled={archived || busy || saveBlocked || !changed} loading={busy} onClick={() => void save(section)}>Save</Button>}
-          {!configuration.managed && <Button aria-label={`Discard ${title} changes`} disabled={busy || archived || !changed && Object.keys(section.overrides).length > 0} onClick={() => {
+          {!configuration.managed && <Button type="primary" aria-label={`Save ${title}`} disabled={readOnly || busy || saveBlocked || !changed} loading={busy} onClick={() => void save(section)}>Save</Button>}
+          {!configuration.managed && <Button aria-label={`Discard ${title} changes`} disabled={busy || readOnly || !changed && Object.keys(section.overrides).length > 0} onClick={() => {
             setDrafts(current => ({ ...current, [section.section]: emptyDraft() }));
           }}>Discard</Button>}
-          <Button aria-label={`Reset ${title} to Definition`} disabled={archived || busy || saveBlocked || !Object.keys(section.overrides).length} onClick={() => confirmAction(modal, { title: `Reset ${title}?`, content: `Clears only this section’s overrides and discards its unsaved edits. Other settings and budget profiles are preserved.${confirmationContext ? ` ${confirmationContext}` : ''}`, okText: "Reset section", onOk: () => resetSection(section) })}>{section.section === "sandboxPolicy" ? "Reset to inherited" : "Reset"}</Button>
+          <Button aria-label={`Reset ${title} to Definition`} disabled={readOnly || busy || saveBlocked || !Object.keys(section.overrides).length} onClick={() => confirmAction(modal, { title: `Reset ${title}?`, content: `Clears only this section’s overrides and discards its unsaved edits. Other settings and budget profiles are preserved.${confirmationContext ? ` ${confirmationContext}` : ''}`, okText: "Reset section", onOk: () => resetSection(section) })}>{section.section === "sandboxPolicy" ? "Reset to inherited" : "Reset"}</Button>
         </Flex>
         <Typography.Text type="secondary">Instance adopted v{section.definitionVersion} · revision {section.instanceRevision}</Typography.Text>
       </Flex> };

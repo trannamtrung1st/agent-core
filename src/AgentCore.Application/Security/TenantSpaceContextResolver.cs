@@ -13,7 +13,7 @@ public sealed class TenantSpaceContextResolver(ITenantSpaceStore spaces, ITenant
         Guid tenant, Guid instance, Guid spaceId, Guid? environmentId, long environmentSelectionEpoch, CancellationToken ct)
     {
         var agent = await agents.FindTenantAgentAsync(tenant, instance, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("executor_unavailable");
-        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
         var space = await spaces.FindSpaceAsync(tenant, spaceId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("space_unavailable");
         var membership = (await spaces.ReadMembershipsAsync(tenant, spaceId, ct).ConfigureAwait(false)).SingleOrDefault(m => m.InstanceId == instance)
             ?? throw new AccessDeniedException("space_membership_unavailable");

@@ -285,6 +285,20 @@ public sealed class TriggerScheduleCalculatorTests
         return TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, zone).DateTime);
     }
 
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public void Availability_reenable_skips_missed_slots_without_executing_or_resetting_the_schedule(bool oneShot)
+    {
+        var at = Created.AddDays(2);
+        var value = Sample(oneShot ? new OneShotSchedule(Created, "UTC") : new FixedIntervalSchedule(60, Created, null, null), Created, null);
+        var result = AgentCore.Application.Security.AgentAvailabilityPolicy.SkipMissedSchedule(value, at);
+        Assert.Equal(value.AutomationId, result.AutomationId); Assert.Equal(value.Instructions, result.Instructions);
+        Assert.Equal(value.OccurrenceCount, result.OccurrenceCount); Assert.Equal(value.TriggerRevision, result.TriggerRevision);
+        Assert.Equal(value.Revision + 1, result.Revision);
+        if (oneShot) { Assert.Equal(AutomationStatus.Expired, result.Status); Assert.Null(result.NextOccurrenceAtUtc); }
+        else { Assert.Equal(AutomationStatus.Active, result.Status); Assert.Equal(at.AddMinutes(1), result.NextOccurrenceAtUtc); }
+        Assert.Equal(result, AgentCore.Application.Security.AgentAvailabilityPolicy.SkipMissedSchedule(result, at));
+    }
+
     private static Automation Sample(
         TriggerSchedule schedule,
         DateTimeOffset next,

@@ -13,7 +13,7 @@ public sealed record GoalRunReference(Guid GoalId, Guid CheckpointId, long PlanR
 public sealed record TenantActivityRun(Guid RunId, Guid SessionId, Guid AgentInstanceId, TrustedExecutionContext Context,
     AgentRunStatus Status, long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, ActivationKind ActivationKind,
     AgentRunOutputContract OutputContract, string ModelOfferingId, int AttemptCount, int MaxAttempts, string? ProgressSummary, string? Objective, string? OutcomeText, AgentRunOutcomeKind? OutcomeKind,
-    string? FailureCode, string? FailureSummary, Guid? DiagnosticId, bool CancellationRequested, bool CanCancel, AgentCore.Domain.Models.ModelDecisionEvidence? ModelDecision = null, string? ReasoningEffort = null, AgentCore.Application.Evaluations.RunVerificationSummary? VerificationSummary = null, GoalRunReference? Goal = null);
+    string? FailureCode, string? FailureSummary, Guid? DiagnosticId, bool CancellationRequested, bool CanCancel, AgentCore.Domain.Models.ModelDecisionEvidence? ModelDecision = null, string? ReasoningEffort = null, AgentCore.Application.Evaluations.RunVerificationSummary? VerificationSummary = null, GoalRunReference? Goal = null, AgentCore.Application.Execution.RunExecutionDiagnostic? ExecutionDiagnostic = null);
 public sealed record TenantActivityDelivery(string Status, Guid? TargetSessionId, string? Reason);
 public sealed record TenantBackgroundDetail(TenantActivitySession Session, TenantActivityRun? InitialRun,
     string? InitialTitle, TenantActivityDelivery? CompletionDelivery);
@@ -152,7 +152,7 @@ public sealed class TenantActivityService(IIamStore security, ITenantSessionStor
                 && await Can(state, human.PrincipalId, "agents.chat", AccessScope.ForResource(state.Tenant.TenantId, "agent", run.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false), run.PinnedModel.Decision, run.PinnedModel.ReasoningEffort, await Verification(state, run, human, ct),
             run.Admission.GoalWork is { } bound && await Can(state, human.PrincipalId, "goals.read", TenantSessionRules.Scope(state.Tenant.TenantId, run.SessionId), ct)
                 && await Can(state, human.PrincipalId, "spaces.read", TenantSpaceService.Scope(state.Tenant.TenantId, bound.SpaceId), ct)
-                ? new(bound.GoalId, bound.CheckpointId, bound.PlanRevision) : null);
+                ? new(bound.GoalId, bound.CheckpointId, bound.PlanRevision) : null, AgentCore.Application.Execution.RunDiagnosticProjection.From(run));
     private async ValueTask<AgentCore.Application.Evaluations.RunVerificationSummary?> Verification(TenantSecurityState state, AgentRun run, TenantSessionInitiator human, CancellationToken ct)
     {
         if (evaluations is null) return null;

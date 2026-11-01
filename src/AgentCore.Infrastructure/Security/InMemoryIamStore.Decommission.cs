@@ -41,7 +41,7 @@ public sealed partial class InMemoryIamStore : ITenantAgentDecommissionStore
                     && snapshot.Agent.Instance.Revision == expectedInstanceRevision + 1);
             if (state.SystemIdentities.Any(i => i.AgentInstanceId == instance && i.ManagedKind is not null)) throw new SecurityConflictException("system_managed_instance");
         if (state.Tenant.Revision != expectedSecurityRevision || snapshot.Agent.Instance.Revision != expectedInstanceRevision || snapshot.Status == IdentityStatus.Removed) return ValueTask.FromResult(false);
-            if (snapshot.Agent.Instance.Lifecycle != AgentInstanceLifecycle.Archived) throw new SecurityConflictException("archive_required");
+            if (snapshot.Agent.Instance.Lifecycle != AgentInstanceLifecycle.Disabled) throw new SecurityConflictException("disabled_required");
             if (snapshot.References.HasReferences) throw new SecurityConflictException("agent_in_use");
             if (snapshot.Agent.Instance.BrowserProfileReset?.Status == "pending") throw new SecurityConflictException("browser_profile_busy");
             var privateHome = _spaces.Values.Single(s => s.TenantId == tenant && s.OwnerInstanceId == instance && s.DeletedAt is null);
@@ -52,7 +52,7 @@ public sealed partial class InMemoryIamStore : ITenantAgentDecommissionStore
             var changedEnvironments = _environments.Values.Where(e => e.TenantId == tenant && e.SpaceId == privateHome.SpaceId && e.DeletedAt is null)
                 .Select(e => e with { Revision = checked(e.Revision + 1), UpdatedAt = audit.At, DeletedAt = audit.At }).ToArray();
             var next = TenantAgentDecommissionRules.Retire(state, instance, snapshot.Agent.PrincipalId, privateHome.SpaceId);
-            _ = instances.SetTenantLifecycleAsync(instance, expectedInstanceRevision, AgentInstanceLifecycle.Archived, audit.At, ct).Result;
+            _ = instances.SetTenantLifecycleAsync(instance, expectedInstanceRevision, AgentInstanceLifecycle.Disabled, audit.At, ct).Result;
             instances.PurgeSkills(instance); credentials?.RetireTenantBindings(tenant, instance);
             foreach (var space in changedSpaces) _spaces[(tenant, space.SpaceId)] = space;
             foreach (var member in _spaceMemberships.Keys.Where(k => k.Tenant == tenant && k.Instance == instance).ToArray()) _spaceMemberships.Remove(member);
@@ -78,7 +78,7 @@ public sealed partial class InMemoryIamStore : ITenantAgentDecommissionStore
         var state = _tenants.GetValueOrDefault(owner.TenantId);
         var identity = state?.SystemIdentities.SingleOrDefault(i => i.AgentInstanceId == owner.AgentInstanceId && i.PrincipalId == owner.ExecutorPrincipalId && i.Status == IdentityStatus.Removed);
         return identity is not null && state!.Principals.Any(p => p.PrincipalId == owner.ExecutorPrincipalId && p.Status == IdentityStatus.Removed)
-            && instances.FindTenantBackingAsync(owner.AgentInstanceId).Result?.Lifecycle == AgentInstanceLifecycle.Archived
+            && instances.FindTenantBackingAsync(owner.AgentInstanceId).Result?.Lifecycle == AgentInstanceLifecycle.Disabled
             && _audit.Any(a => a.TenantId == owner.TenantId && a.Action == TenantAgentDecommissionRules.Action && a.Target == owner.AgentInstanceId.ToString("D") && a.ReasonCode == "agent_decommissioned");
     }
     public ValueTask<bool> IsAgentDecommissionedAsync(TenantBrowserAgentOwner owner, CancellationToken ct = default)

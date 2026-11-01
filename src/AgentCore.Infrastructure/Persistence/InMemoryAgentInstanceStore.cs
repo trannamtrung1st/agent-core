@@ -477,7 +477,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
         AdminEventAppend historyAppend,
         AgentInstanceRevisionUpdate update)
     {
-        if (existingEvent.Operation is not (AdminEventOperationKind.InstanceArchived or AdminEventOperationKind.InstanceUnarchived))
+        if (existingEvent.Operation is not (AdminEventOperationKind.InstanceDisabled or AdminEventOperationKind.InstanceEnabled or AdminEventOperationKind.InstanceArchived or AdminEventOperationKind.InstanceUnarchived))
         {
             throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
         }
@@ -618,7 +618,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
             var next = instance with
             {
                 ActiveVersion = update.ActiveVersion ?? instance.ActiveVersion,
-                ShowInChat = update.ShowInChat ?? instance.ShowInChat, PersonaCustomized = update.PersonaCustomized ?? (update.Persona is not null || instance.PersonaCustomized),
+                PersonaCustomized = update.PersonaCustomized ?? (update.Persona is not null || instance.PersonaCustomized),
                 Persona = persona,
                 Lifecycle = update.Lifecycle ?? instance.Lifecycle,
                 UpdatedAt = updatedAt,

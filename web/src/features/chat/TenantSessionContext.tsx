@@ -7,18 +7,18 @@ import { useAccessDraftGuard } from '../access/useAccessDraftGuard';
 import { useIdentityQuery } from '../access/useIdentityQuery';
 import { useTenantEditorCommand } from '../access/useTenantEditorCommand';
 
-export function TenantSessionContext({ tenant, session, refreshKey }: { tenant: string; session: string; refreshKey: string }) {
+export function TenantSessionContext({ tenant, session, refreshKey, disabledAgent = false }: { tenant: string; session: string; refreshKey: string; disabledAgent?: boolean }) {
   const view = useIdentityQuery<SessionContextView>(sessionContextApi(tenant, session), refreshKey); const [open, setOpen] = useState(false); const [editingView, setEditingView] = useState<SessionContextView>(); const opener = useRef<HTMLButtonElement>(null);
   useEffect(() => { const refresh = () => view.reload(); window.addEventListener('focus', refresh); return () => window.removeEventListener('focus', refresh); }, [tenant, session]);
   useEffect(() => { if (view.error instanceof IdentityError && [401, 403, 404].includes(view.error.status)) { setOpen(false); setEditingView(undefined); } }, [view.error]);
   const close = () => { setOpen(false); requestAnimationFrame(() => opener.current?.focus()); };
   return <Flex vertical gap="var(--ac-space-compact)" className="conversation-column conversation-banners">
-    <Flex wrap align="center" gap="var(--ac-space-compact)"><Button ref={opener} disabled={!view.data} onClick={() => { setEditingView(view.data); setOpen(true); }} aria-label="Session Space">Space: {view.data?.space?.name ?? (view.loading ? 'Loading…' : 'Unavailable')}</Button>
+    <Flex wrap align="center" gap="var(--ac-space-compact)"><Button ref={opener} disabled={!view.data || disabledAgent} onClick={() => { setEditingView(view.data); setOpen(true); }} aria-label="Session Space">Space: {view.data?.space?.name ?? (view.loading ? 'Loading…' : 'Unavailable')}</Button>
       {view.data?.space?.environmentsEnabled && <Typography.Text type="secondary">Environment: {view.data.environment?.name ?? (view.data.selection.environmentId ? 'Unavailable' : 'None')}</Typography.Text>}
       {view.data?.state === 'pending_next_turn' && <Typography.Text role="status" type="secondary">Pending next turn</Typography.Text>}
     </Flex>
     {view.error && <AccessError error={view.error} retry={view.reload} />}
-    {view.data?.state === 'stale' && <Alert showIcon type="warning" title="Saved context is unavailable" description="Choose an available Space or clear the Environment before starting new work. Current Runs keep their original context." />}
+    {!disabledAgent && view.data?.state === 'stale' && <Alert showIcon type="warning" title="Saved context is unavailable" description="Choose an available Space or clear the Environment before starting new work. Current Runs keep their original context." />}
     {open && (editingView ? <ContextEditor key={`${tenant}:${session}`} tenant={tenant} session={session} saved={editingView} onClose={close} onSaved={() => { close(); view.reload(); }} /> : <Drawer open title="Session context" onClose={close}>{view.error ? <AccessError error={view.error} retry={view.reload} /> : <AccessLoading />}</Drawer>)}
   </Flex>;
 }

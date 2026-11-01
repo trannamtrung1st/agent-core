@@ -14,6 +14,8 @@ export function interruptReasonLabel(reason: string | null | undefined): string 
       return "Disconnected";
     case "modeChange":
       return "Mode changed";
+    case "agentDisabled":
+      return "Agent disabled";
     case "deactivated":
       return "Paused";
     case "ended":

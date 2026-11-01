@@ -72,7 +72,7 @@ public sealed class AgentBrowserProfileTests
             var denied = await executor.ExecuteAsync(BrowserDefinition(), Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission);
             Assert.Contains("Trusted tenant execution is required", denied.Text);
             Assert.Equal(0, browser.NavigateCalls); Assert.Null(browser.BoundAgent);
-            await instances.UpdateWithExpectedRevisionAsync(new(instanceId, 1, Lifecycle: AgentInstanceLifecycle.Archived), now);
+            await instances.UpdateWithExpectedRevisionAsync(new(instanceId, 1, Lifecycle: AgentInstanceLifecycle.Disabled), now);
             foreach (var blocked in new[] { call, new ModelToolCall("snapshot", ToolCatalog.BrowserSnapshot, "{}"), new ModelToolCall("click", ToolCatalog.BrowserClick, """{"target":{"by":"role","value":"button","name":"el_aaaaaaaaaaaaaaaaaaaaaa"}}""") })
                 Assert.Contains("forbidden", (await executor.ExecuteAsync(BrowserDefinition(), Guid.NewGuid(), blocked, ToolLimits.MaxOutputBytes, admission: admission)).Text);
             Assert.Equal(0, browser.NavigateCalls); Assert.Equal(0, browser.ObserveCalls); Assert.Equal(0, browser.ActCalls); Assert.True(File.Exists(marker));

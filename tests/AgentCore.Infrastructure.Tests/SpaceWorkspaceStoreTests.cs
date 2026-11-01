@@ -225,7 +225,7 @@ public sealed class SpaceWorkspaceStoreTests
             }
             f.Owner = homes[0]; f.Other = homes[1]; return f;
         }
-        internal async Task Archive() => await backing.Agents.SetLifecycleAsync(human.PrincipalId, Owner.TenantId, InstanceId, AgentInstanceLifecycle.Archived,
+        internal async Task Archive() => await backing.Agents.SetLifecycleAsync(human.PrincipalId, Owner.TenantId, InstanceId, AgentInstanceLifecycle.Disabled,
             (await backing.Iam.ReadTenantAsync(Owner.TenantId))!.Tenant.Revision, 1, initiator: human);
         public void Dispose() => backing.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }

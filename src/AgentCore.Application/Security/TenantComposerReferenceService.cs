@@ -46,7 +46,7 @@ public sealed partial class TenantComposerReferenceService(IIamStore security, I
         await Permission(state, human.PrincipalId, "agents.chat", AgentScope(tenant, instance), ct).ConfigureAwait(false);
         var agent = await agents.FindTenantAgentAsync(tenant, instance, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         TenantSessionRules.RequireExecutor(state, agent);
-        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
         return (state, agent);
     }
     private async ValueTask HumanFence(Guid tenant, Guid instance, TenantSessionInitiator human, TenantSecurityState state, TenantAgent agent, CancellationToken ct)

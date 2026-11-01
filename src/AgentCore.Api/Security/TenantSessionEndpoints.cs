@@ -64,7 +64,7 @@ public static class TenantSessionEndpoints
         group.MapGet("/{sessionId:guid}/conversation", (Guid sessionId, HttpContext http, TenantConversationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http); var view = await service.ReadViewAsync(actor.TenantId, sessionId, Initiator(http, actor), ct).ConfigureAwait(false);
-            return Results.Json(new { view.Owner.TenantId, view.Owner.SessionId, view.Owner.AgentInstanceId, view.Title, view.Revision, view.SecurityRevision,
+            return Results.Json(new { view.Owner.TenantId, view.Owner.SessionId, view.Owner.AgentInstanceId, view.Title, view.Revision, view.SecurityRevision, view.AgentEnabled,
                 mode = view.Mode.ToString().ToLowerInvariant(), pendingMode = (string?)null, status = view.Status.ToString().ToLowerInvariant(),
                 lifecycleStatus = LifecycleTransition.ToWire(view.LifecycleStatus), view.CreatedAt, view.UpdatedAt,
                 agentId = view.Agent.Id, agentVersion = view.Agent.Version, agentName = view.Agent.Name, agentRole = view.Agent.Role,

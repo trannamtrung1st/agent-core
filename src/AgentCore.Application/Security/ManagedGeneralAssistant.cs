@@ -40,7 +40,7 @@ public static class ManagedGeneralAssistant
     }
     public static void Require(TenantAgent agent)
     {
-        if (agent.ManagedKind != Kind || agent.Instance.DefinitionId != DefinitionId || agent.Instance.Lifecycle != AgentInstanceLifecycle.Active)
+        if (agent.ManagedKind != Kind || agent.Instance.DefinitionId != DefinitionId)
             throw new AccessDeniedException("system_managed_instance_required");
     }
     public static void Protect(TenantAgent agent)
@@ -61,7 +61,7 @@ public static class ManagedGeneralAssistant
             if (owner.ManagedKind is not null || audit.ActorPrincipalId == Guid.Empty) throw new ArgumentException("Use trusted managed provisioning.");
             return;
         }
-        if (owner.ManagedKind != Kind || instance.DefinitionId != DefinitionId || instance.PersonaCustomized || !instance.ShowInChat
+        if (owner.ManagedKind != Kind || instance.DefinitionId != DefinitionId || instance.PersonaCustomized
             || audit.ActorPrincipalId != Guid.Empty || audit.Action != ProvisionAction || audit.Target != instance.InstanceId.ToString("D"))
             throw new ArgumentException("Invalid system General Assistant provisioning.");
         foreach (var (key, permissions) in new[] { (StarterRole, ConversationPermissions), (FilesRole, FilePermissions), (ContextRole, ContextPermissions) })

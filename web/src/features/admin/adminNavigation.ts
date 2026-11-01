@@ -35,7 +35,7 @@ export const instancePages = [
   { id: 'state', path: 'state', label: 'State', group: 'Operations', description: 'Observe hosted and durable activity, Browser and Sandbox availability.', aliases: ['runtime state', 'live resources', 'partial', 'isolation'] },
   {"id": "sessions", "path": "activity/sessions", "label": "Sessions", "group": "Operations", "description": "Durable conversation context and exact Session inspection.", "aliases": ["Activity", "conversation", "history"]},
   {"id": "runs", "path": "activity/runs", "label": "Runs", "group": "Operations", "description": "Independent execution diagnostics and original Run results.", "aliases": ["Activity", "AgentRun", "execution"]},
-  {"id": "lifecycle", "path": "lifecycle", "label": "Lifecycle", "group": "Operations", "description": "Archive, restore and explicitly delete this Instance.", "aliases": ["archive", "unarchive", "delete"]},
+  {"id": "lifecycle", "path": "lifecycle", "label": "Lifecycle", "group": "Operations", "description": "Enable, disable or permanently retire this agent.", "aliases": ["enable", "disable", "decommission"]},
   {"id": "effective", "path": "effective", "label": "Effective configuration", "group": "Diagnostics", "description": "Read-only resolved configuration and Browser provider diagnostics.", "aliases": ["provenance", "Host", "readiness"]},
 ] as const;
 export const definitionPages = [

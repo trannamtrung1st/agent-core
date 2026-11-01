@@ -10,8 +10,8 @@ public static class TenantAgentConfigurationRules
     {
         if (managed && change.ActiveVersion is not null && !change.SystemAdoption && !change.ResetDefaults) throw new SecurityConflictException("system_managed_instance");
         if (!managed && (change.ResetDefaults || change.SystemAdoption)) throw new ArgumentException("A managed Instance is required.");
-        if (current.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Validation("Archived Instances are read-only.");
-        var operations = (change.ShowInChat is null ? 0 : 1) + (change.Persona is null ? 0 : 1) + (change.ActiveVersion is null ? 0 : 1)
+        if (current.Lifecycle != AgentInstanceLifecycle.Active && !change.SystemAdoption && !change.ResetDefaults) throw AgentCoreErrors.Validation("Disabled Instances are read-only.");
+        var operations = (change.Persona is null ? 0 : 1) + (change.ActiveVersion is null ? 0 : 1)
             + (change.SetSettingsOverrides ? 1 : 0) + (change.SetExecutionBudgets ? 1 : 0)
             + (change.Cooperation is null ? 0 : 1) + (change.SetUnattendedModel ? 1 : 0) + (change.HarnessManagement is null ? 0 : 1)
             + (change.Skill is null ? 0 : 1) + (change.Resource is null ? 0 : 1) + (change.Binding is null ? 0 : 1);
@@ -42,10 +42,10 @@ public static class TenantAgentConfigurationRules
             throw new ArgumentException("Use one exact changed binding for this Instance.");
         if (current.Revision != change.ExpectedInstanceRevision || change.Persona is not null && current.PersonaRevision != change.ExpectedPersonaRevision)
             throw new SecurityConflictException("stale_revision");
-        if (change.SystemAdoption && (change.ResetDefaults || change.ShowInChat is not null || change.SetSettingsOverrides || change.SetExecutionBudgets || change.SetUnattendedModel
+        if (change.SystemAdoption && (change.ResetDefaults || change.SetSettingsOverrides || change.SetExecutionBudgets || change.SetUnattendedModel
             || change.HarnessManagement is not null || change.HarnessAssessment is not null || change.Skill is not null || change.Resource is not null || change.Binding is not null || change.Cooperation is not null
             || current.PersonaCustomized && change.Persona is not null)) throw new ArgumentException("System adoption preserves explicit user configuration.");
-        if (change.ResetDefaults && (change.Skill is not null || change.Resource is not null || change.Binding is not null || change.HarnessAssessment is not null || change.ShowInChat is not null || !change.SetSettingsOverrides || change.SettingsOverrides is not null
+        if (change.ResetDefaults && (change.Skill is not null || change.Resource is not null || change.Binding is not null || change.HarnessAssessment is not null || !change.SetSettingsOverrides || change.SettingsOverrides is not null
             || !change.SetExecutionBudgets || change.ExecutionBudgets is not null || !change.SetUnattendedModel || change.UnattendedModel is not null
             || change.Persona is null || change.ActiveVersion is null || change.Cooperation != new AgentCore.Domain.Tasks.AgentCooperationPolicy()))
             throw new ArgumentException("A complete non-destructive reset is required.");
@@ -77,7 +77,6 @@ public static class TenantAgentConfigurationRules
         return current with { Persona = change.Persona ?? current.Persona, ActiveVersion = change.ActiveVersion ?? current.ActiveVersion,
             PersonaRevision = current.PersonaRevision + (change.Persona is not null && change.Persona != current.Persona ? 1 : 0),
             Revision = checked(current.Revision + 1), UpdatedAt = at,
-            ShowInChat = change.ShowInChat ?? current.ShowInChat,
             PersonaCustomized = change.ResetDefaults ? false : change.SystemAdoption ? current.PersonaCustomized : change.Persona is not null || current.PersonaCustomized,
             SettingsOverrides = change.SetSettingsOverrides ? change.SettingsOverrides?.Copy() : current.SettingsOverrides,
             Cooperation = change.Cooperation ?? current.Cooperation,

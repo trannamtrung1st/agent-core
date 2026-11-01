@@ -35,7 +35,7 @@ public sealed partial class InMemoryIamStore
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); ValidateAgentActor(before, audit.ActorPrincipalId); EnsureReferences(next, audit, ct: ct);
             var parent = FindTenantAgentAsync(next.Tenant.TenantId, instanceId, ct).Result;
             if (parent is null || parent.Instance.Revision != expectedInstanceRevision) return null;
-            if (parent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+            if (parent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
             RequireAgentHuman(next.Tenant.TenantId, audit.ActorPrincipalId, initiator);
             var apply = prepare(); if (apply is null) return null;
             var removed = removedBinding is { } bindingId ? CredentialBacking().ReadTenantBindings(next.Tenant.TenantId, instanceId).Single(b => b.Binding.BindingId == bindingId) : null;

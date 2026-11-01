@@ -59,10 +59,10 @@ function TenantAgentProfile({ context, id }: { context: TenantContext; id: strin
 function TenantAgentSettings({ context, id }: { context: TenantContext; id: string }) {
   const tenant = context.tenant.tenantId; const [view, setView] = useState<TenantAgentEditor>(); const [dirty, setDirty] = useState(false); const [busy, setBusy] = useState(false);
   const [presentationBusy, setPresentationBusy] = useState(false);
-  const presentationFocus = useRef<'visibility' | 'reset' | 'reload' | null>(null);
+  const presentationFocus = useRef<'reset' | 'reload' | null>(null);
   useEffect(() => {
     if (!view || !presentationFocus.current) return;
-    const selector = presentationFocus.current === 'visibility' ? '[role="switch"][aria-label="Visible in Chat"]' : presentationFocus.current === 'reset' ? '[data-agent-reset-defaults]' : '[data-agent-presentation-reload]';
+    const selector = presentationFocus.current === 'reset' ? '[data-agent-reset-defaults]' : '[data-agent-presentation-reload]';
     presentationFocus.current = null;
     requestAnimationFrame(() => document.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true }));
   }, [view]);
@@ -76,7 +76,7 @@ function TenantAgentSettings({ context, id }: { context: TenantContext; id: stri
   return <Flex vertical gap="var(--ac-space-section)" className="access-settings-layout">{guard.holder}
 
     {view && <TenantAgentHeading view={view} />}
-    <InstanceSettingsSection systemManaged={!!view?.agent.managedKind} confirmationContext={view ? `Agent: ${view.agent.instance.persona.name}. Organization: ${context.tenant.name}.` : undefined} refreshKey={settingsEpoch} saveBlocked={cooperationDirty} externalBusy={cooperationBusy || presentationBusy} instanceId={id} archived={!view?.canUpdate || view.agent.instance.lifecycle !== 'Active'} transport={transport} onUpdated={() => {}} onDirtyChange={setDirty} onBusyChange={setBusy} />
+    <InstanceSettingsSection systemManaged={!!view?.agent.managedKind} confirmationContext={view ? `Agent: ${view.agent.instance.persona.name}. Organization: ${context.tenant.name}.` : undefined} refreshKey={settingsEpoch} saveBlocked={cooperationDirty} externalBusy={cooperationBusy || presentationBusy} instanceId={id} readOnly={!view?.canUpdate || view.agent.instance.lifecycle !== 'Active'} transport={transport} onUpdated={() => {}} onDirtyChange={setDirty} onBusyChange={setBusy} />
     <Typography.Link href={tenantAgentPath(tenant, id, 'state-isolation')} onClick={followAppLink}>Configure continuity, memory and voice availability</Typography.Link>
     {view && <TenantAgentPresentation context={context} id={id} view={view} disabled={dirty || busy || cooperationDirty || cooperationBusy} onBusyChange={setPresentationBusy} onSaved={focus => { presentationFocus.current = focus; setSettingsEpoch(value => value + 1); }} />}
     {view && <InstanceCooperationSettings key={`${tenant}:${id}`} tenant={tenant} instance={id} view={view} disabled={dirty || busy || presentationBusy} onDirtyChange={setCooperationDirty} onBusyChange={setCooperationBusy} onSaved={() => setSettingsEpoch(value => value + 1)} />}

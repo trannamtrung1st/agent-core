@@ -396,6 +396,7 @@ public static class SessionEventMapper
         ResponseProgressKind.ReadingAttachments => "readingAttachments",
         ResponseProgressKind.RunningTool => "runningTool",
         ResponseProgressKind.WaitingExternal => "waitingExternal",
+        ResponseProgressKind.OptimizingContext => "optimizingContext",
         ResponseProgressKind.Finalizing => "finalizing",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported progress kind.")
     };

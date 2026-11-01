@@ -1044,6 +1044,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case CancelResponseReceived cancel:
                     await HandleCancelAsync(cancel, cancellationToken).ConfigureAwait(false);
                     break;
+                case AgentDisableReceived agentDisable:
+                    await HandleAgentDisableAsync(agentDisable, cancellationToken).ConfigureAwait(false);
+                    break;
                 case TenantRunCancellationReceived tenantCancel:
                     await HandleTenantRunCancellationAsync(tenantCancel, cancellationToken).ConfigureAwait(false);
                     break;
@@ -2573,6 +2576,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             messages = await (_tenantAttachments ?? throw new InvalidOperationException("Tenant attachment binding is required."))
                 .RehydrateReadImagesAsync(attachmentRun, messages, model.Capabilities.Vision, cancellationToken).ConfigureAwait(false);
         var executionState = AgentRunToolCallCheckpoint.ReadExecutionState(checkpoint);
+        var runSummary = executionState.Compaction;
+        var compactionAttempts = executionState.CompactionAttempts;
+        var lastCompactionAttemptMessages = -1;
+        var contextOverflowRetried = executionState.ContextOverflowRetried;
         var attachmentSources = AgentCore.Application.Security.TenantAttachmentContextRules.Merge(executionState.TenantAttachmentSources, request.TenantAttachmentSources);
         var profileSource = executionState.TenantProfileSource;
         var memorySources = TenantMemoryOperationReferences.Read(checkpoint);
@@ -2652,7 +2659,119 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return new(finalizationReason is not null ? RunPhase.Finalization : cleanupPhase ? RunPhase.Cleanup : RunPhase.Work,
             finalizationReason, cleanupStartedAtMessage, failedAttempts.ToArray(), latestManifest, request.ResponseId, completionCorrectionAttempted, protocolRecovery,
             attachmentSources.Count == 0 ? null : attachmentSources, profileSource, memorySources.Count == 0 ? null : memorySources,
-            historicalSources.Count == 0 ? null : historicalSources, experienceSourceReads.Count == 0 ? null : experienceSourceReads, experienceFacts.Count == 0 ? null : experienceFacts, automationReadSources.Count == 0 ? null : automationReadSources, managementReadSources.Count == 0 ? null : managementReadSources);
+            historicalSources.Count == 0 ? null : historicalSources, experienceSourceReads.Count == 0 ? null : experienceSourceReads, experienceFacts.Count == 0 ? null : experienceFacts, automationReadSources.Count == 0 ? null : automationReadSources, managementReadSources.Count == 0 ? null : managementReadSources, runSummary, compactionAttempts, contextOverflowRetried);
+        }
+        TenantRunProfileObservation? profileObservation = null;
+        TenantMemoryObservation? memoryObservation = null;
+        TenantExperienceObservation? experienceObservation = null;
+        async ValueTask RequireSummarySources(CancellationToken token)
+        {
+            async ValueTask RequireOtherSources(CancellationToken sourceToken)
+            {
+                await RequireProviderRunAuthorityAsync(cause, request.ResponseId, sourceToken).ConfigureAwait(false);
+                await RequireTenantAttachmentSourcesAsync(_boundAgentRun, attachmentSources, sourceToken).ConfigureAwait(false);
+                if (_tenantProfiles is not null && _boundAgentRun is { } profileRun)
+                    await _tenantProfiles.RequireProjectionAsync(profileRun, profileObservation, sourceToken).ConfigureAwait(false);
+                if (_tenantMemory is not null && _boundAgentRun is { } memoryRun)
+                    await _tenantMemory.RequireProjectionAsync(memoryRun, memoryObservation, sourceToken).ConfigureAwait(false);
+                if (_tenantExperience is not null && _boundAgentRun is { } experienceRun)
+                    await _tenantExperience.RequireProjectionAsync(experienceRun, experienceObservation, sourceToken).ConfigureAwait(false);
+            }
+            if (_runtimeOwner is not null && _boundAgentRun is { } imageRun && TenantBrowserArtifactRules.HasCapture(messages))
+                await (_tenantContinuations ?? throw new InvalidOperationException("Tenant continuation binding is required."))
+                    .RequireBrowserImageSourcesAsync(imageRun, messages, token, RequireOtherSources).ConfigureAwait(false);
+            else await RequireOtherSources(token).ConfigureAwait(false);
+        }
+        async Task<bool> CompactRunAsync(ModelRequest working, bool force = false)
+        {
+            var run = _boundAgentRun;
+            var safe = run is { Status: AgentRunStatus.Running, CancellationRequested: false }
+                && !run.RequiresEffectReconciliation && run.Wait is null && finalizationReason is null && !cleanupPhase
+                && repairReason is null && _publishedDisplayLength == 0 && ToolLimits.MaxOutputBytes - outputBytes >= 32 * 1024
+                && (overallDeadline is null || overallDeadline - _time.GetUtcNow() > finalizationReserve + TimeSpan.FromSeconds(20));
+            if (compactionAttempts >= RunContextCompaction.MaxCompactions || lastCompactionAttemptMessages == messages.Count) return false;
+            var inputTokens = (working.ContextManifest?.Sections.Sum(s => s.EstimatedTokens)
+                ?? (working.Messages.Sum(m => m.Text.Length) + 3) / 4)
+                + (JsonSerializer.Serialize(working.Tools).Length + 3) / 4
+                + working.MaxOutputTokens + 2000
+                + working.Messages.Sum(m => (m.Parts?.Count(p => p is ModelImageContent) ?? 0) * 1024);
+            var inputCharacters = checked(inputTokens * 4);
+            var checkpointBytes = Encoding.UTF8.GetByteCount(AgentRunToolCallCheckpoint.Write(messages, executionState: State()));
+            var boundary = RunContextCompaction.SelectBoundary(messages, runSummary, safe, inputCharacters, checkpointBytes, force);
+            if (boundary == 0) return false;
+            lastCompactionAttemptMessages = messages.Count;
+            compactionAttempts++;
+            // Persist the attempt before generation. Crash/restart cannot restart an unbounded summary loop.
+            await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
+                overallDeadline, generateToken, repairReason, ActiveExecutionMs(), State()).ConfigureAwait(false);
+            await RequireSummarySources(generateToken).ConfigureAwait(false);
+            using var summaryCts = CancellationTokenSource.CreateLinkedTokenSource(generateToken);
+            using var summaryTimer = ScheduleCancel(_time, summaryCts, TimeSpan.FromSeconds(15));
+            var summaryText = new StringBuilder();
+            var complete = false;
+            var operation = _ids.NewId();
+            var progressStarted = false;
+            var began = _time.GetUtcNow();
+            using var progressCts = CancellationTokenSource.CreateLinkedTokenSource(summaryCts.Token);
+            async Task PublishProgress()
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(500), _time, progressCts.Token).ConfigureAwait(false);
+                progressStarted = true;
+                await MailboxModelAsync(cause, request.ResponseId, new RunCompactionProgress(operation, true), progressCts.Token).ConfigureAwait(false);
+            }
+            var progress = PublishProgress();
+            bool Reject(string reason)
+            {
+                RuntimeTelemetry.RecordDiagnostic("run.compaction.rejected", _time.GetUtcNow().Subtract(began).TotalMilliseconds, reason);
+                return false;
+            }
+            try
+            {
+                var summaryRequest = RunContextCompaction.SummaryRequest(request.ResponseId, messages, boundary, runSummary, request.ReasoningEffort, working.Context!.Text(ContextSectionId.RunTask) + "\n" + working.Context.Text(ContextSectionId.CurrentUserTask) + "\n" + string.Join("\n", (request.Interaction ?? []).Where(m => m.Role == ModelRole.User).Select(m => m.Text)));
+                await foreach (var item in model.GenerateAsync(model.PrepareRequest(summaryRequest), summaryCts.Token).ConfigureAwait(false))
+                {
+                    if (item is ModelTextDelta chunk)
+                    {
+                        outputBytes = checked(outputBytes + Encoding.UTF8.GetByteCount(chunk.Text));
+                        summaryText.Append(chunk.Text);
+                        if (summaryText.Length > RunContextCompaction.MaxSummaryCharacters || outputBytes >= ToolLimits.MaxOutputBytes) break;
+                    }
+                    else if (item is ModelCompleted { Reason: ModelStopReason.Completed }) complete = true;
+                    else if (item is ModelFailed or ModelToolCallEvent) break;
+                }
+                await RequireSummarySources(generateToken).ConfigureAwait(false);
+                var text = summaryText.ToString().Trim();
+                if (!complete || !RunContextCompaction.ValidSummary(text)) return Reject("invalid_summary");
+                var before = messages.Skip(runSummary?.ThroughMessageCount ?? 0).Take(boundary - (runSummary?.ThroughMessageCount ?? 0)).Sum(m => m.Text.Length) + (runSummary?.Text.Length ?? 0);
+                if (before - text.Length < 4096) return Reject("no_reduction");
+                var candidate = new RunContextSummary(RunContextCompaction.Version, text, boundary, (runSummary?.Count ?? 0) + 1,
+                    (inputCharacters + 3) / 4, (Math.Max(0, inputCharacters - before + text.Length) + 3) / 4);
+                var old = runSummary;
+                runSummary = candidate;
+                try
+                {
+                    if (!AgentRunToolCallCheckpoint.TryWriteWithReserve(messages, false, null,
+                        AgentRunToolCallCheckpoint.CompletionReserve(trigger.Kind), out var payload, executionState: State())
+                        || Encoding.UTF8.GetByteCount(payload) >= checkpointBytes) { runSummary = old; return Reject("checkpoint_capacity"); }
+                    await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
+                        overallDeadline, generateToken, repairReason, ActiveExecutionMs(), State()).ConfigureAwait(false);
+                }
+                catch { runSummary = old; throw; }
+                RuntimeTelemetry.Record("run.compaction", _time.GetUtcNow().Subtract(began).TotalMilliseconds);
+                return true;
+            }
+            catch (OperationCanceledException) when (!generateToken.IsCancellationRequested) { return Reject("summary_timeout"); }
+            catch (Exception failure) when (failure is not (OperationCanceledException or AgentCoreException or AgentCore.Application.Security.AccessDeniedException or AgentCore.Application.Security.SecurityConflictException))
+            {
+                return Reject("provider_failure");
+            }
+            finally
+            {
+                await progressCts.CancelAsync().ConfigureAwait(false);
+                try { await progress.ConfigureAwait(false); }
+                catch (OperationCanceledException) { }
+                if (progressStarted) await MailboxModelAsync(cause, request.ResponseId, new RunCompactionProgress(operation, false), CancellationToken.None).ConfigureAwait(false);
+            }
         }
         var cleanupRequested = executionRun?.Admission.ExecutionBudget?.RequestedCleanup
             ?? AgentRunAdmissionFactory.RequestsCleanup(trigger.Text ?? "");
@@ -2841,9 +2960,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     working = working with { Context = working.Context!.Upsert(semanticRecovery) };
                 working = working with { Context = PromptContextBuilder.WithRequesterContext(working.Context!, _boundAgentRun?.Admission.ExecutionContext,
                     await RequesterContextAsync(_boundAgentRun, generateToken).ConfigureAwait(false)) };
-                TenantRunProfileObservation? profileObservation = null;
-                TenantMemoryObservation? memoryObservation = null;
-                TenantExperienceObservation? experienceObservation = null;
+                profileObservation = null;
+                memoryObservation = null;
+                experienceObservation = null;
                 if (_runtimeOwner is not null)
                 {
                     // Metadata/native collection may itself await a live restriction. Refresh at
@@ -2869,7 +2988,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     && TenantBrowserArtifactRules.HasCapture(messages))
                     messages = await (_tenantContinuations ?? throw new InvalidOperationException("Tenant continuation binding is required."))
                         .RehydrateBrowserImagesAsync(browserRun, messages, model.Capabilities.Vision, generateToken).ConfigureAwait(false);
-                working = ContextAssembler.Project(working, transcript: (request.Interaction ?? []).Concat(messages).ToArray());
+                working = RunContextCompaction.Project(working, request.Interaction ?? [], messages, runSummary);
+                if (!resumingBatch && await CompactRunAsync(working).ConfigureAwait(false))
+                    working = RunContextCompaction.Project(working, request.Interaction ?? [], messages, runSummary);
                 working = model.PrepareRequest(working);
                 latestManifest = working.ContextManifest;
                 if (profileSource is not null || memorySources.Count > 0 || historicalSources.Count > 0 || experienceSourceReads.Count > 0 || experienceFacts.Count > 0 || automationReadSources.Count > 0 || managementReadSources.Count > 0)
@@ -2890,25 +3011,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
                 if (!resumingBatch)
                 {
-                    async ValueTask RequireOtherSources(CancellationToken token)
-                    {
-                        await RequireProviderRunAuthorityAsync(cause, request.ResponseId, token).ConfigureAwait(false);
-                        await RequireTenantAttachmentSourcesAsync(_boundAgentRun, attachmentSources, token).ConfigureAwait(false);
-                        if (_tenantProfiles is not null && _boundAgentRun is { } profileRun)
-                            await _tenantProfiles.RequireProjectionAsync(profileRun, profileObservation, token).ConfigureAwait(false);
-                        if (_tenantMemory is not null && _boundAgentRun is { } memoryRun)
-                            await _tenantMemory.RequireProjectionAsync(memoryRun, memoryObservation, token).ConfigureAwait(false);
-                        if (_tenantExperience is not null && _boundAgentRun is { } experienceRun)
-                            await _tenantExperience.RequireProjectionAsync(experienceRun, experienceObservation, token).ConfigureAwait(false);
-                    }
-                    if (_runtimeOwner is not null && _boundAgentRun is { } imageRun && TenantBrowserArtifactRules.HasCapture(messages))
-                        await (_tenantContinuations ?? throw new InvalidOperationException("Tenant continuation binding is required."))
-                            .RequireBrowserImageSourcesAsync(imageRun, messages, generateToken, RequireOtherSources).ConfigureAwait(false);
-                    else await RequireOtherSources(generateToken).ConfigureAwait(false);
+                    await RequireSummarySources(generateToken).ConfigureAwait(false);
                 }
                 if (!resumingBatch)
                 await foreach (var evt in model.GenerateAsync(working, finalizationReason is null && workTimer is not null ? (cleanupPhase ? cleanupCts.Token : workCts.Token) : generateToken).ConfigureAwait(false))
                 {
+                    if (evt is ModelFailed { Failure.FailureReason: "contextLength" } && !contextOverflowRetried
+                        && !publishedVisible && pending.Count == 0 && !resumingBatch)
+                    {
+                        contextOverflowRetried = true;
+                        if (await CompactRunAsync(working, force: true).ConfigureAwait(false))
+                        {
+                            retryGeneration = true;
+                            break;
+                        }
+                    }
                     if (!cancellationToken.IsCancellationRequested && generateToken.IsCancellationRequested)
                     {
                         await MailboxModelAsync(cause, request.ResponseId, new ModelFailed(RunFinalization.DeadlineFailure()), CancellationToken.None).ConfigureAwait(false);
@@ -4055,6 +4172,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         switch (input.Event)
         {
+            case RunCompactionProgress progress:
+                if (progress.Started)
+                    await PublishProgressAsync(input.Context, input.ResponseId, ResponseProgressKind.OptimizingContext,
+                        ResponseProgressState.Started, progress.Operation, "Optimizing context…", cancellationToken).ConfigureAwait(false);
+                else await FinishOwnedProgressAsync(input.Context, ResponseProgressState.Completed, cancellationToken, input.ResponseId).ConfigureAwait(false);
+                break;
             case ModelReasoningDelta:
                 RuntimeTelemetry.RecordDiagnostic("llm.reasoning.delta", 0, "present");
                 break;

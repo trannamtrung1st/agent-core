@@ -251,6 +251,12 @@ public sealed partial class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
+        if (request.Context?.Text(ContextSectionId.History).StartsWith(AgentCore.Application.Execution.RunContextCompaction.Marker, StringComparison.Ordinal) == true)
+        {
+            yield return new ModelTextDelta("""{"objective":"Continue the original user task","completed":"Earlier observations are summarized; exact receipts remain authoritative","decisions":"Use current policy","pending":"Finish remaining work","constraints":"Retain original user constraints","next":"Inspect recent evidence","uncertainty":"Summary does not prove effects"}""");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            yield break;
+        }
         if (IsCompactionRequest(request))
         {
             await foreach (var item in GenerateCompactionAsync(request, cancellationToken).ConfigureAwait(false))
@@ -318,6 +324,29 @@ public sealed partial class ScriptedLanguageModel : ILanguageModel
             {
                 var verified = results.Length == 9 && results[7].Text.Contains("Sign in") && !results[7].Text.Contains("\"error\"");
                 yield return new ModelSemanticResponseReady(new(verified ? "Sign-out verified at the login screen; browser closure recorded." : "Cleanup incomplete; sign-out unverified.", new(ModelSpeechMode.Same, null), []));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+            yield break;
+        }
+        if (diagnosticUser.Contains("synthetic-in-run-compaction", StringComparison.Ordinal))
+        {
+            var prior = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool && m.ToolCallId?.StartsWith("compaction-read-", StringComparison.Ordinal) == true);
+            var round = prior is not null && int.TryParse(prior.ToolCallId!["compaction-read-".Length..], out var parsed) ? parsed : 0;
+            if (!Offers(request, ToolCatalog.AttachmentsRead) && Offers(request, ToolCatalog.CapabilitiesLoad)
+                && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.ToolCallId == "compaction-load"))
+            {
+                yield return new ModelToolCallEvent(new("compaction-load", ToolCatalog.CapabilitiesLoad, """{"query":"attachments.read","limit":1}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
+            if (round < 12 && Offers(request, ToolCatalog.AttachmentsRead) && TryReadManifestAttachmentId(request, out var file))
+            {
+                yield return new ModelToolCallEvent(new("compaction-read-" + (round + 1), ToolCatalog.AttachmentsRead, JsonSerializer.Serialize(new { attachmentId = file })));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
+            else
+            {
+                var observed = round == 12 && prior!.Text.Contains("COMPACTION-FILE-PROOF", StringComparison.Ordinal);
+                yield return new ModelTextDelta(observed ? "Completed twelve reads of COMPACTION-FILE-PROOF. Exact file receipts remain available." : "The supplied file could not be verified; check its saved read result.");
                 yield return new ModelCompleted(ModelStopReason.Completed);
             }
             yield break;

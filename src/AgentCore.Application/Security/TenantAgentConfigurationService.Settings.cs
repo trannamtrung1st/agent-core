@@ -104,7 +104,7 @@ public sealed partial class TenantAgentConfigurationService
     }
     private static void RequireWritable(AgentInstance instance, long revision)
     {
-        if (instance.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Validation("Archived Instances are read-only.");
+        if (instance.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Validation("Disabled Instances are read-only.");
         if (instance.Revision != revision) throw new SecurityConflictException("stale_revision");
     }
 }

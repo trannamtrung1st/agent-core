@@ -1109,11 +1109,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("SettingsOverridesJson")
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("ShowInChat")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasDefaultValue(true);
-
                     b.Property<string>("UnattendedModelJson")
                         .HasColumnType("TEXT");
 

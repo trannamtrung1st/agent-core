@@ -20,7 +20,7 @@ export function activitySessionTitle(row: InstanceActivitySession) {
   return row.session.title?.trim() || (row.origin === "UserChat" ? "Untitled conversation" : "Untitled background task");
 }
 
-export function InstanceSessionsSection({ instanceId, open, archived = false, source, activityPath }: { instanceId: string; open: boolean; archived?: boolean; source: ActivitySource; activityPath?: string }) {
+export function InstanceSessionsSection({ instanceId, open, disabled = false, source, activityPath }: { instanceId: string; open: boolean; disabled?: boolean; source: ActivitySource; activityPath?: string }) {
   const { token } = theme.useToken();
   const page = useCursorPages(`${source.scope}:${instanceId}`, open, (_scope, cursor) => source.listSessions(instanceId, cursor));
   const { search, setSearch } = useActivitySearch();
@@ -78,8 +78,8 @@ export function InstanceSessionsSection({ instanceId, open, archived = false, so
         size="min(640px, 100vw)" className="background-work-drawer" afterOpenChange={visible => { if (!visible && opener.current?.isConnected) opener.current.focus(); }}>
         {selected ? <Flex vertical gap={token.padding}>
           <Typography.Text type="secondary" copyable>{selected.session.sessionId}</Typography.Text>
-          <Button style={{ alignSelf: "flex-start" }} disabled={archived || selected.session.archived} href={conversationHref(selected.session.sessionId)} onClick={event => followAppLink(event, () => openConversation(selected.session.sessionId))}>Open conversation</Button>
-          {archived ? <Typography.Text type="secondary">Archived Agent Instance. Unarchive it from Identity &amp; version to open this conversation.</Typography.Text> : null}
+          <Button style={{ alignSelf: "flex-start" }} disabled={selected.session.archived} href={conversationHref(selected.session.sessionId)} onClick={event => followAppLink(event, () => openConversation(selected.session.sessionId))}>Open conversation</Button>
+          {disabled ? <Typography.Text type="secondary">Agent disabled. You can read this conversation; enable the agent to send new messages.</Typography.Text> : null}
           {selected.session.archived ? <Typography.Text type="secondary">Archived conversation. Its history and files remain available here.</Typography.Text> : null}
           <Collapse defaultActiveKey={["runs"]} items={[{ key: "runs", label: "Runs", children: <SessionRunHistory sessionId={selected.session.sessionId} open={open} source={source} /> }]} />
           <SessionArtifacts sessionId={selected.session.sessionId} tenantId={source.tenantId} open={open} />

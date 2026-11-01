@@ -75,7 +75,7 @@ public sealed partial class TenantAgentConfigurationService
         await RequireVersionSourceRead(actor, tenant, current, ct).ConfigureAwait(false);
         var (target, metadataRevision, status) = await Definition(tenant, current.DefinitionId, version, ct).ConfigureAwait(false);
         if (status != "Active") throw new AccessDeniedException("definition_unavailable");
-        if (current.Lifecycle != AgentInstanceLifecycle.Active) throw new ArgumentException("Archived Instances are read-only.");
+        if (current.Lifecycle != AgentInstanceLifecycle.Active) throw new ArgumentException("Disabled Instances are read-only.");
         var models = await ModelCatalogForAgentAsync(actor, tenant, current.InstanceId, ct).ConfigureAwait(false);
         return await PrepareVersionCompatibilityAsync(tenant, snapshot, target, metadataRevision, models, ct);
     }

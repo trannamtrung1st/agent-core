@@ -64,6 +64,6 @@ public static class TenantSessionRules
             || snapshot.PinnedPersona != agent.Instance.Persona || snapshot.PinnedPersonaRevision != agent.Instance.PersonaRevision
             || snapshot.LifecycleStatus != SessionLifecycleStatus.Active || snapshot.Origin != SessionOrigin.UserChat || snapshot.Surfaces != SessionSurface.ChatList)
             throw new ArgumentException("Invalid tenant Session admission.");
-        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
     }
 }

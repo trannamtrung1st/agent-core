@@ -38,7 +38,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         async Task<TenantAgent?> Execute(HumanSessionReference witness)
         {
             if (operation == "creation") return await agents.CreateAsync(owner.OwnerPrincipalId, owner.TenantId, "examiner", 1, before.Tenant.Revision, initiator: witness);
-            if (operation == "lifecycle") return await agents.SetLifecycleAsync(owner.OwnerPrincipalId, owner.TenantId, id, AgentInstanceLifecycle.Archived, before.Tenant.Revision, 1, initiator: witness);
+            if (operation == "lifecycle") return await agents.SetLifecycleAsync(owner.OwnerPrincipalId, owner.TenantId, id, AgentInstanceLifecycle.Disabled, before.Tenant.Revision, 1, initiator: witness);
             // Bypass the Application precheck: this must be enforced inside the actual transaction.
             var next = before with { Tenant = before.Tenant with { Revision = before.Tenant.Revision + 1 } };
             var change = new TenantAgentConfigurationChange(id, 1, agent.Instance.Persona with { Name = "Atomic human saved" }, 1, Initiator: witness);

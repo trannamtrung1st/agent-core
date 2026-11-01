@@ -46,7 +46,7 @@ public sealed partial class TenantRunAdmissionTests
         var selected = current.Items.First(a => a.InstanceId == setup.Agent.Instance.InstanceId);
         var created = await f.Sessions.CreateAsync(setup.Tenant, selected.InstanceId, member, SessionMode.Text, current.SecurityRevision, selected.Revision);
         Assert.Equal(member.PrincipalId, created.Owner.CreatedByPrincipalId); Assert.Equal(setup.Agent.PrincipalId, created.Owner.ExecutorPrincipalId);
-        await f.Agents.SetLifecycleAsync(setup.Owner.PrincipalId, setup.Tenant, setup.Agent.Instance.InstanceId, AgentInstanceLifecycle.Archived, await Revision(), 1);
+        await f.Agents.SetLifecycleAsync(setup.Owner.PrincipalId, setup.Tenant, setup.Agent.Instance.InstanceId, AgentInstanceLifecycle.Disabled, await Revision(), 1);
         Assert.Equal(second.Instance.InstanceId, Assert.Single((await service.ListAgentsAsync(setup.Tenant, member)).Items).InstanceId);
         await f.Access.RevokeAssignmentAsync(setup.Owner.PrincipalId, setup.Tenant, secondAssignment.AssignmentId, await Revision());
         Assert.Equal(0, (await service.ListAgentsAsync(setup.Tenant, member)).Total);
@@ -79,7 +79,7 @@ public sealed partial class TenantRunAdmissionTests
         {
             if (boundary == "revoke") await f.Access.RevokeAssignmentAsync(setup.Owner.PrincipalId, setup.Tenant, assignment.AssignmentId, await Revision());
             if (boundary == "logout") await f.Identity.SignOutAsync(member.AuthenticationSessionId);
-            if (boundary == "archive") await f.Agents.SetLifecycleAsync(setup.Owner.PrincipalId, setup.Tenant, setup.Agent.Instance.InstanceId, AgentInstanceLifecycle.Archived, await Revision(), 1);
+            if (boundary == "archive") await f.Agents.SetLifecycleAsync(setup.Owner.PrincipalId, setup.Tenant, setup.Agent.Instance.InstanceId, AgentInstanceLifecycle.Disabled, await Revision(), 1);
         }
         finally { gate.Proceed.TrySetResult(); }
         var error = await Record.ExceptionAsync(() => pending);
@@ -101,6 +101,6 @@ public sealed partial class TenantRunAdmissionTests
         public ValueTask<TenantAgent?> TryChangeTenantAgentConfigurationAsync(TenantSecurityState next, long expectedSecurityRevision, TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) => inner.TryChangeTenantAgentConfigurationAsync(next, expectedSecurityRevision, change, at, audit, ct);
         public ValueTask<TenantAgent?> FindTenantAgentAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default) => inner.FindTenantAgentAsync(tenantId, instanceId, ct);
         public ValueTask<bool> TryCreateTenantAgentAsync(TenantSecurityState next, long expectedSecurityRevision, AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) => inner.TryCreateTenantAgentAsync(next, expectedSecurityRevision, instance, skills, audit, ct, initiator);
-        public ValueTask<TenantAgent?> TrySetTenantAgentLifecycleAsync(TenantSecurityState next, long expectedSecurityRevision, Guid instanceId, long expectedInstanceRevision, AgentInstanceLifecycle lifecycle, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) => inner.TrySetTenantAgentLifecycleAsync(next, expectedSecurityRevision, instanceId, expectedInstanceRevision, lifecycle, at, audit, ct, initiator);
+        public ValueTask<TenantAgent?> TrySetTenantAgentLifecycleAsync(TenantSecurityState next, long expectedSecurityRevision, Guid instanceId, long expectedInstanceRevision, AgentInstanceLifecycle lifecycle, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null, IReadOnlyList<AgentCore.Domain.Conversation.ConversationEntry>? responses = null) => inner.TrySetTenantAgentLifecycleAsync(next, expectedSecurityRevision, instanceId, expectedInstanceRevision, lifecycle, at, audit, ct, initiator, responses);
     }
 }

@@ -142,7 +142,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var templates = new FileAgentDefinitionStore(Path.Combine(directory!.FullName, "agents"), SyntheticProviderAliases.Default);
         var agents = new TenantAgentService(f.Iam, (ITenantAgentStore)f.Iam, templates, f.Authorizer, f.Ids, TimeProvider.System, ownedDefinitions: f.Definitions);
         var instance = await agents.CreateFromPublicationAsync(owner.OwnerPrincipalId, owner.TenantId, id, 1, 3);
-        await agents.SetLifecycleAsync(owner.OwnerPrincipalId, owner.TenantId, instance.Instance.InstanceId, AgentInstanceLifecycle.Archived, 4, 1);
+        await agents.SetLifecycleAsync(owner.OwnerPrincipalId, owner.TenantId, instance.Instance.InstanceId, AgentInstanceLifecycle.Disabled, 4, 1);
         var witness = new AdminDefinitionDeleteWitness([], [new(1, 1)]);
         var auditBefore = (await f.Iam.ReadAuditAsync(owner.TenantId, 200)).Count;
         var stale = await Assert.ThrowsAsync<SecurityConflictException>(() => f.Service.DeleteAsync(owner.OwnerPrincipalId, owner.TenantId, id,

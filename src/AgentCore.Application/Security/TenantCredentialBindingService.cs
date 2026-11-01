@@ -117,7 +117,7 @@ public sealed class TenantCredentialBindingService(IIamStore security, ITenantAg
         await bindings.ReadTenantCredentialBindingsAsync(tenant, instance, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
     private ValueTask<T> WithGate<T>(Guid instance, Func<CancellationToken, ValueTask<T>> action, CancellationToken ct) =>
         lifecycleGate is null ? action(ct) : lifecycleGate.WithInstanceAsync(instance, action, ct);
-    private static void RequireActive(AgentInstance instance) { if (instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived"); }
+    private static void RequireActive(AgentInstance instance) { if (instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled"); }
     private static AccessScope TenantAgentServiceScope(Guid tenant, Guid instance) => AccessScope.ForResource(tenant, "agent", instance.ToString("D"));
     private static TenantSecurityState Advance(TenantSecurityState state) => state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };
     private AuthorizationAudit Audit(Guid actor, Guid tenant, AgentCredentialBinding binding, string action, DateTimeOffset at) =>

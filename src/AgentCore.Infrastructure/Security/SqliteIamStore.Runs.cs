@@ -26,44 +26,50 @@ public sealed partial class SqliteIamStore
             var row = await OwnedRuns(db, next.Tenant.TenantId).SingleOrDefaultAsync(r => r.AgentRunId == runId.ToString("D"), ct).ConfigureAwait(false);
             if (row is null || row.Revision != expectedRunRevision) return false;
             var run = AgentRunStoreMapping.ToDomain(row);
-            saved = TenantRunCancellationRules.Cancel(run, at);
-            var approval = run.ApprovalRequestId is { } id ? await db.Set<TenantApprovalRecord>().SingleOrDefaultAsync(r => r.TenantId == next.Tenant.TenantId && r.RequestId == id, ct).ConfigureAwait(false) : null;
-            var request = approval?.Domain();
-            var sourceRow = request is not null && request.RunId != runId ? await OwnedRuns(db, request.TenantId).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == request.RunId.ToString("D"), ct).ConfigureAwait(false) : null;
-            var closed = TenantRunCancellationRules.Approval(request, run, sourceRow is null ? null : AgentRunStoreMapping.ToDomain(sourceRow), at);
-            if (closed is not null && closed != request)
-            {
-                db.Entry(approval!).CurrentValues.SetValues(TenantApprovalRecord.From(closed));
-                if (closed.Status == TenantApprovalStatus.Cancelled)
-                    db.Add(new TenantApprovalDecision(audit.AuditId, closed.RequestId, closed.TenantId, initiator.PrincipalId,
-                        closed.Status, closed.Operation.ActionHash, closed.Revision, at));
-            }
-            if (run.ApprovalRequestId is { } approvalId)
-            {
-                var grant = await db.Set<TenantOperationGrant>().SingleOrDefaultAsync(g => g.TenantId == next.Tenant.TenantId && g.RequestId == approvalId, ct).ConfigureAwait(false);
-                if (grant is { Status: OperationGrantStatus.Available }) db.Entry(grant).CurrentValues.SetValues(grant with { Status = OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) });
-            }
-            var responseEntryId = response?.EntryId.ToString("D"); var responseSequence = response?.Sequence;
-            var entries = await db.Entries.Where(e => e.SessionId == row.SessionId && (e.ResponseId == run.ResponseId!.Value.ToString("D")
-                || responseEntryId != null && (e.EntryId == responseEntryId || e.EntrySequence == responseSequence))).ToArrayAsync(ct).ConfigureAwait(false);
-            var beforeEntries = entries.Select(SqliteMemoryStore.ToEntry).ToArray();
-            var values = TenantRunCancellationRules.ResponseEntries(beforeEntries, run, response, at);
-            if (!values.SequenceEqual(beforeEntries))
-            {
-                foreach (var entry in values)
-                {
-                    var prior = entries.SingleOrDefault(e => e.EntryId == entry.EntryId.ToString("D"));
-                    var mapped = SqliteMemoryStore.ToRecord(row.SessionId, entry);
-                    if (prior is null) db.Entries.Add(mapped); else db.Entry(prior).CurrentValues.SetValues(mapped);
-                }
-                var session = await db.Sessions.Include(s => s.Snapshot).SingleAsync(s => s.SessionId == row.SessionId, ct).ConfigureAwait(false);
-                var snapshot = SqliteMemoryStore.ToSnapshot(session, []);
-                SqliteMemoryStore.ApplySession(session, snapshot with { Revision = checked(snapshot.Revision + 1), UpdatedAt = at,
-                    LastEntrySequence = Math.Max(snapshot.DurableLastEntrySequence, values.Max(e => e.Sequence)) });
-            }
-            AgentRunStoreMapping.Apply(row, saved); await SettleTenantCompletion(db, saved, run.Claim?.Generation, ct).ConfigureAwait(false); return true;
+            saved = await CancelRunAsync(db, row, run, at, audit.AuditId, initiator.PrincipalId, ct, response).ConfigureAwait(false); return true;
         }, ct).ConfigureAwait(false);
         return written ? saved : null;
+    }
+    private async Task<AgentRun> CancelRunAsync(AgentCoreDbContext db, AgentRunRecord row, AgentRun run,
+        DateTimeOffset at, Guid decisionId, Guid actor, CancellationToken ct, ConversationEntry? response = null, string reason = "userStop")
+    {
+        var saved = TenantRunCancellationRules.Cancel(run, at);
+        var approval = run.ApprovalRequestId is { } id ? await db.Set<TenantApprovalRecord>().SingleOrDefaultAsync(r => r.TenantId == run.Owner.TenantId!.Value && r.RequestId == id, ct).ConfigureAwait(false) : null;
+        var request = approval?.Domain();
+        var sourceRow = request is not null && request.RunId != run.AgentRunId ? await OwnedRuns(db, request.TenantId).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == request.RunId.ToString("D"), ct).ConfigureAwait(false) : null;
+        var closed = TenantRunCancellationRules.Approval(request, run, sourceRow is null ? null : AgentRunStoreMapping.ToDomain(sourceRow), at);
+        if (closed is not null && closed != request)
+        {
+            db.Entry(approval!).CurrentValues.SetValues(TenantApprovalRecord.From(closed));
+            if (closed.Status == TenantApprovalStatus.Cancelled)
+                db.Add(new TenantApprovalDecision(decisionId, closed.RequestId, closed.TenantId, actor,
+                    closed.Status, closed.Operation.ActionHash, closed.Revision, at));
+        }
+        if (run.ApprovalRequestId is { } approvalId)
+        {
+            var grant = await db.Set<TenantOperationGrant>().SingleOrDefaultAsync(g => g.TenantId == run.Owner.TenantId!.Value && g.RequestId == approvalId, ct).ConfigureAwait(false);
+            if (grant is { Status: OperationGrantStatus.Available }) db.Entry(grant).CurrentValues.SetValues(grant with { Status = OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) });
+        }
+        var responseEntryId = response?.EntryId.ToString("D"); var responseSequence = response?.Sequence;
+        var entries = await db.Entries.Where(e => e.SessionId == row.SessionId && (e.ResponseId == run.ResponseId!.Value.ToString("D")
+            || responseEntryId != null && (e.EntryId == responseEntryId || e.EntrySequence == responseSequence))).ToArrayAsync(ct).ConfigureAwait(false);
+        var beforeEntries = entries.Select(SqliteMemoryStore.ToEntry).ToArray();
+        var values = TenantRunCancellationRules.ResponseEntries(beforeEntries, run, response, at, reason);
+        if (!values.SequenceEqual(beforeEntries))
+        {
+            foreach (var entry in values)
+            {
+                var prior = entries.SingleOrDefault(e => e.EntryId == entry.EntryId.ToString("D"));
+                var mapped = SqliteMemoryStore.ToRecord(row.SessionId, entry);
+                if (prior is null) db.Entries.Add(mapped); else db.Entry(prior).CurrentValues.SetValues(mapped);
+            }
+            var session = await db.Sessions.Include(s => s.Snapshot).SingleAsync(s => s.SessionId == row.SessionId, ct).ConfigureAwait(false);
+            var snapshot = SqliteMemoryStore.ToSnapshot(session, []);
+            SqliteMemoryStore.ApplySession(session, snapshot with { Revision = checked(snapshot.Revision + 1), UpdatedAt = at,
+                LastEntrySequence = Math.Max(snapshot.DurableLastEntrySequence, values.Max(e => e.Sequence)) });
+        }
+        AgentRunStoreMapping.Apply(row, saved); await TenantCoreEventProduction.StageRunAsync(db, run, saved, ct).ConfigureAwait(false); await SettleTenantCompletion(db, saved, run.Claim?.Generation, ct).ConfigureAwait(false);
+        return saved;
     }
     private IQueryable<AgentRunRecord> OwnedRuns(AgentCoreDbContext db, Guid tenant) => db.AgentRuns.Where(r => r.TenantId == tenant
         && db.Set<TenantSessionRecord>().Any(s => s.TenantId == tenant && s.SessionId == r.SessionId && s.AgentInstanceId == r.AgentInstanceId && s.ExecutorPrincipalId == r.ExecutorPrincipalId)
@@ -100,7 +106,7 @@ public sealed partial class SqliteIamStore
             var parent = await OwnedAgents(db, next.Tenant.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == run.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false);
             if (root is null || parent is null || parent.Instance.Revision != admission.ExpectedInstanceRevision) return false;
             var agent = Owned(parent);
-            if (agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+            if (agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
             TenantSessionRules.RequireExecutor((await ReadTenantAsync(db, next.Tenant.TenantId, ct).ConfigureAwait(false))!, agent);
             var row = await db.Sessions.Include(s => s.Snapshot).SingleAsync(s => s.SessionId == root.SessionId, ct).ConfigureAwait(false);
             var current = SqliteMemoryStore.ToSnapshot(row, []);

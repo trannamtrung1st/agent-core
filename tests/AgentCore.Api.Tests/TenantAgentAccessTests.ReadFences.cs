@@ -181,7 +181,7 @@ public sealed partial class TenantAgentAccessTests
         { await factory.Captured("configuration-commit"); return await inner.TryChangeTenantAgentConfigurationAsync(next, revision, change, at, audit, ct); }
         public async ValueTask<bool> TryCreateTenantAgentAsync(TenantSecurityState next, long revision, AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
         { await factory.Captured("creation-commit"); return await inner.TryCreateTenantAgentAsync(next, revision, instance, skills, audit, ct, initiator); }
-        public async ValueTask<TenantAgent?> TrySetTenantAgentLifecycleAsync(TenantSecurityState next, long revision, Guid id, long instanceRevision, AgentInstanceLifecycle lifecycle, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
-        { await factory.Captured("lifecycle-commit"); return await inner.TrySetTenantAgentLifecycleAsync(next, revision, id, instanceRevision, lifecycle, at, audit, ct, initiator); }
+        public async ValueTask<TenantAgent?> TrySetTenantAgentLifecycleAsync(TenantSecurityState next, long revision, Guid id, long instanceRevision, AgentInstanceLifecycle lifecycle, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null, IReadOnlyList<AgentCore.Domain.Conversation.ConversationEntry>? responses = null)
+        { await factory.Captured("lifecycle-commit"); return await inner.TrySetTenantAgentLifecycleAsync(next, revision, id, instanceRevision, lifecycle, at, audit, ct, initiator, responses); }
     }
 }

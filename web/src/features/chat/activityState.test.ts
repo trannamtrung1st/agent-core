@@ -182,6 +182,12 @@ describe("agent activity mapping", () => {
     expect(conversationStatus({ ...ready, connection: "idle", sessionStatus: "ended" })).toBe("Ended");
   });
 
+  it("describes disabled availability without claiming the Session ended or is ready", () => {
+    expect(conversationStatus({ ...ready, agentEnabled: false })).toBe("Agent disabled");
+    expect(conversationStatusTone("Agent disabled")).toBe("wait");
+    expect(conversationStatus({ ...ready, activeProgress: { kind: "optimizingContext" } })).toBe("Optimizing context…");
+  });
+
   it("uses reason-specific pause copy", () => {
     expect(pausedSessionMessage("inactivity")).toContain("inactivity");
     expect(pausedSessionMessage("silentEvaluation")).toContain("quiet checks");

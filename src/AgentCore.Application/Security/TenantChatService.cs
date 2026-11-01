@@ -25,7 +25,7 @@ public sealed class TenantChatService(IIamStore security, ITenantAgentStore agen
         {
             var agent = await agents.FindTenantAgentAsync(tenant, id, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
             TenantSessionRules.RequireExecutor(state, agent);
-            if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+            if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_disabled");
             var allowed = await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("agents.chat"),
                 AccessScope.ForResource(tenant, "agent", id.ToString("D")), ct).ConfigureAwait(false);
             if (!allowed.Allowed) throw new AccessDeniedException(allowed.ReasonCode);
@@ -72,14 +72,14 @@ public sealed class TenantChatService(IIamStore security, ITenantAgentStore agen
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         var eligible = new List<Guid>(); var authorized = false;
         var activePrincipals = state.Principals.Where(p => p.Status == IdentityStatus.Active).Select(p => p.PrincipalId).ToHashSet();
-        foreach (var executor in state.SystemIdentities.Where(i => i.Kind == SystemIdentityKind.Agent && i.Status == IdentityStatus.Active
-            && i.AgentInstanceId is not null && activePrincipals.Contains(i.PrincipalId)))
+        foreach (var executor in state.SystemIdentities.Where(i => i.Kind == SystemIdentityKind.Agent && i.Status != IdentityStatus.Removed
+            && i.AgentInstanceId is not null))
         {
             var id = executor.AgentInstanceId!.Value;
             if (!(await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("agents.chat"),
                 AccessScope.ForResource(tenant, "agent", id.ToString("D")), ct).ConfigureAwait(false)).Allowed) continue;
             authorized = true;
-            eligible.Add(id);
+            if (executor.Status == IdentityStatus.Active && activePrincipals.Contains(executor.PrincipalId)) eligible.Add(id);
         }
         // Filter before count/offset in the existing authoritative ownership store, never on a page
         // of admin-visible agents. A read-only administrator has no implied communication grant.
@@ -112,7 +112,7 @@ public sealed class TenantChatService(IIamStore security, ITenantAgentStore agen
         {
             var owner = (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("agents.create"), AccessScope.ForTenant(tenant), ct)).Allowed;
             empty = !string.IsNullOrEmpty(query) ? "no_matches" : owner && !state.SystemIdentities.Any(i => i.ManagedKind == ManagedGeneralAssistant.Kind)
-                ? "setup_pending" : authorized ? "no_visible_agents" : "no_chat_permission";
+                ? "setup_pending" : authorized ? "no_enabled_agents" : "no_chat_permission";
         }
         var canManage = state.Assignments.Any(a => a.PrincipalId == human.PrincipalId && a.Scope.Kind == AccessScopeKind.Tenant
             && state.Roles.Any(r => r.RoleId == a.RoleId && r.IsBuiltin && r.Key == BuiltinAccessRoles.Owner));

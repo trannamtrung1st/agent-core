@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { App, ConfigProvider } from 'antd';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IdentityError, identityRequest } from '../../services/identity';
 import { delegateTask, readTask, readTaskMessages, readTaskNotices, type DelegatedTask, type TaskPage } from '../../services/tenantTasks';
 import { TaskCenterDrawer } from './TaskCenterDrawer';
@@ -13,8 +13,14 @@ const task = (taskId: string): DelegatedTask => ({ taskId, title: taskId, object
   reportOnCompletion: false, canInspect: true, canCancel: true, canSend: true, securityRevision: 1, retryOfTaskId: null, canRetry: false, canAcknowledge: true });
 const page = (items: DelegatedTask[], nextCursor: string | null = null): TaskPage<DelegatedTask> => ({ items, nextCursor, hasMore: !!nextCursor, securityRevision: 1 });
 const show = (tenant = 'first', initialTaskId?: string) => <ConfigProvider theme={{ token: { motion: false } }}><App><TaskCenterDrawer tenant={tenant} session="source" open narrow={false} initialTaskId={initialTaskId} onClose={vi.fn()} /></App></ConfigProvider>;
+afterEach(() => vi.restoreAllMocks());
 beforeEach(() => {
+  // These cases exercise explicit reads/commands. Keep the independent polling
+  // interval from racing their exact request and private-content assertions.
   vi.resetAllMocks();
+  const interval = window.setInterval.bind(window);
+  vi.spyOn(window, 'setInterval').mockImplementation((handler, delay, ...args) =>
+    (delay === 3000 ? 0 : interval(handler, delay, ...args)) as unknown as ReturnType<typeof setInterval>);
   vi.mocked(readTask).mockImplementation(async (_tenant, id) => task(id));
   vi.mocked(readTaskMessages).mockResolvedValue({ items: [], nextCursor: null, hasMore: false, securityRevision: 1 });
   vi.mocked(readTaskNotices).mockResolvedValue({ items: [], nextCursor: null, hasMore: false, securityRevision: 1 });
@@ -63,6 +69,7 @@ describe('Task Center current private scope', () => {
     expect(await screen.findByText('first-row')).toBeVisible();
     fireEvent.click(await screen.findByRole('button', { name: 'Load more' }));
     expect(await screen.findByText('second-row')).toBeVisible();
+    await waitFor(() => expect(screen.getByRole('button', { name: /Reload tasks/ })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: /Reload tasks/ }));
     await waitFor(() => expect(vi.mocked(identityRequest).mock.calls).toHaveLength(4));
     expect(screen.getByText('second-row')).toBeVisible();
@@ -123,8 +130,9 @@ describe('Task Center current private scope', () => {
     expect(await screen.findByText('New replacement assignment')).toBeVisible();
     expect(screen.getByLabelText('Objective')).toHaveValue('Private private-task');
     expect(vi.mocked(delegateTask)).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Assign task' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Assign task' }));
-    expect(await screen.findByText('Private replacement')).toBeVisible();
+    expect(await screen.findByText('Private replacement', {}, { timeout: 5_000 })).toBeVisible();
     expect(vi.mocked(delegateTask)).toHaveBeenCalledOnce();
     const [tenant, session, body] = vi.mocked(delegateTask).mock.calls[0];
     expect([tenant, session]).toEqual(['first', 'source']);

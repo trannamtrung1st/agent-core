@@ -125,7 +125,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var copy = (await reads.ReadResourceEditorAsync(owner.TenantId, id, human, search: "copied.txt")).Items.Single();
         Assert.Equal("Read-only source bytes.", Encoding.UTF8.GetString((await reads.ReadResourceContentAsync(owner.TenantId, id, human, copy.Resource.Key)).Bytes));
         Assert.False(copy.CanDelete); // Tenant manage never implies delete.
-        await agents.SetLifecycleAsync(owner.OwnerPrincipalId, owner.TenantId, id, AgentInstanceLifecycle.Archived, await Revision(), await Ir());
+        await agents.SetLifecycleAsync(owner.OwnerPrincipalId, owner.TenantId, id, AgentInstanceLifecycle.Disabled, await Revision(), await Ir());
         skills = await reads.ReadSkillEditorAsync(owner.TenantId, id, human); resources = await reads.ReadResourceEditorAsync(owner.TenantId, id, human);
         Assert.False(skills.CanCreate); Assert.False(resources.CanCreate);
         Assert.All(skills.Items, item => { Assert.False(item.CanManage); Assert.False(item.CanCustomize); });

@@ -27,6 +27,16 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class OpenAICompatibleLanguageModelTests
 {
+    [Theory] [InlineData("context_length_exceeded", "contextLength")] [InlineData("invalid_request_error", null)]
+    public async Task Context_overflow_classification_is_exact_and_does_not_expose_provider_content(string code, string? expected)
+    {
+        var handler = new ErrorBodyHandler(HttpStatusCode.BadRequest, JsonSerializer.Serialize(new { error = new { code, message = "private provider body" } }));
+        var events = await CollectAsync(Create(handler));
+        var failure = Assert.Single(events.OfType<ModelFailed>()).Failure;
+        Assert.Equal(ProviderErrorCode.InvalidRequest, failure.Code); Assert.Equal(expected, failure.FailureReason);
+        Assert.DoesNotContain("private provider body", failure.SafeMessage);
+    }
+
     [Fact]
     public async Task Parses_chunks_split_across_reads_including_utf8()
     {

@@ -67,7 +67,7 @@ public sealed partial class TenantRunAdmissionTests
         {
             if (boundary == "revoke") await f.Access.RevokeAssignmentAsync(setup.Owner.PrincipalId, setup.Tenant, assignment.AssignmentId, await Revision());
             if (boundary == "logout") await f.Identity.SignOutAsync(member.AuthenticationSessionId);
-            if (boundary == "archive") await f.Agents.SetLifecycleAsync(setup.Owner.PrincipalId, setup.Tenant, setup.Agent.Instance.InstanceId, AgentInstanceLifecycle.Archived, await Revision(), 1);
+            if (boundary == "archive") await f.Agents.SetLifecycleAsync(setup.Owner.PrincipalId, setup.Tenant, setup.Agent.Instance.InstanceId, AgentInstanceLifecycle.Disabled, await Revision(), 1);
             if (boundary == "compete") await f.RunService().SubmitTextAsync(setup.Tenant, setup.Session, setup.Owner, f.Ids.NewId(), "Winning input", await Revision(), 1);
             if (boundary == "cancel") cancel.Cancel();
         }
