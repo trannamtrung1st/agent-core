@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using AgentCore.Application.Context;
 using AgentCore.Application.Ports;
 
@@ -20,6 +21,16 @@ public static class RunContextCompaction
     public const int SourceCharacters = 24000;
     // An operating pressure budget, not a claim about any provider's context window.
     public const int InputPressureCharacters = 96000;
+
+    public static int EstimateInputTokens(ModelRequest request) => checked(
+        (request.ContextManifest?.Sections.Sum(s => s.EstimatedTokens)
+            ?? (request.Messages.Sum(m => m.Text.Length) + 3) / 4)
+        + (JsonSerializer.Serialize(request.Tools).Length + 3) / 4
+        // Manifest text estimates exclude the assistant's exact tool arguments.
+        + request.Messages.Sum(m => m.ToolCalls is { Count: > 0 } calls
+            ? (JsonSerializer.Serialize(calls).Length + 3) / 4 : 0)
+        + request.MaxOutputTokens + 2000
+        + request.Messages.Sum(m => (m.Parts?.Count(p => p is ModelImageContent) ?? 0) * 1024));
 
     public static int SelectBoundary(IReadOnlyList<ModelMessage> messages, RunContextSummary? previous,
         bool safe, int inputCharacters, int checkpointBytes, bool force = false)

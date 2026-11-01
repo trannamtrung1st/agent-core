@@ -2690,11 +2690,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 && repairReason is null && _publishedDisplayLength == 0 && ToolLimits.MaxOutputBytes - outputBytes >= 32 * 1024
                 && (overallDeadline is null || overallDeadline - _time.GetUtcNow() > finalizationReserve + TimeSpan.FromSeconds(20));
             if (compactionAttempts >= RunContextCompaction.MaxCompactions || lastCompactionAttemptMessages == messages.Count) return false;
-            var inputTokens = (working.ContextManifest?.Sections.Sum(s => s.EstimatedTokens)
-                ?? (working.Messages.Sum(m => m.Text.Length) + 3) / 4)
-                + (JsonSerializer.Serialize(working.Tools).Length + 3) / 4
-                + working.MaxOutputTokens + 2000
-                + working.Messages.Sum(m => (m.Parts?.Count(p => p is ModelImageContent) ?? 0) * 1024);
+            var inputTokens = RunContextCompaction.EstimateInputTokens(working);
             var inputCharacters = checked(inputTokens * 4);
             var checkpointBytes = Encoding.UTF8.GetByteCount(AgentRunToolCallCheckpoint.Write(messages, executionState: State()));
             var boundary = RunContextCompaction.SelectBoundary(messages, runSummary, safe, inputCharacters, checkpointBytes, force);

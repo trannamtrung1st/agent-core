@@ -15,6 +15,21 @@ public sealed class RunContextCompactionTests
         new(ModelRole.Tool, "receipt-" + i + ":" + new string('x', 16000), ToolCallId: "call-" + i, Name: "email.send") }).ToArray();
 
     [Fact]
+    public void Large_tool_arguments_trigger_model_input_pressure_before_checkpoint_pressure()
+    {
+        var messages = Messages(3);
+        messages[0] = messages[0] with { ToolCalls = [new("call-0", "email.send",
+            System.Text.Json.JsonSerializer.Serialize(new { body = new string('x', 100000) }))] };
+        var request = ContextAssembler.Create(Guid.NewGuid(), new EffectiveContextSnapshot([
+            ContextSection.Core(CoreProcedure.OperatingContract)
+        ], purpose: ContextPurpose.Platform), messages);
+        Assert.True(request.ContextManifest!.Sections.Sum(s => s.EstimatedTokens) < 24000);
+        var projected = RunContextCompaction.EstimateInputTokens(request);
+        Assert.True(projected > 24000);
+        Assert.Equal(2, RunContextCompaction.SelectBoundary(messages, null, true, projected * 4, checkpointBytes: 1000));
+    }
+
+    [Fact]
     public void Stored_compaction_is_lossless_for_proof_readers_but_model_sees_summary_and_recent_closed_batches()
     {
         var messages = Messages();
