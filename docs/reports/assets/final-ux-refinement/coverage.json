@@ -324,7 +324,7 @@
     "web/src/speech/speechObservability.ts": "e590049bbc03e6911f4946cba04dcd23fac5103a114d958c15a752c41cbae14e",
     "web/src/speech/speechTransport.ts": "22c154b43657900ff88b2e10ef09986f6ccc5e9e7ed93543b93e64d44420b0da",
     "web/src/speech/voiceEnablement.ts": "1a2875e4d5e239bed43a90fea772da3bbb4d42647c51270add4327a0a5d4409b",
-    "web/src/state/sessionStore.ts": "46bbf07fdec7d3766f556b6a27ef4f7be6928fa03e225c884a9f0f72825752ff",
+    "web/src/state/sessionStore.ts": "38bb08249b52bf593e983ac33dd04b737997c023ba71863b09acc722f44ee25f",
     "web/src/test/displayPipelineFixture.ts": "dbb8249bc70fdd6ef95253749a480e6d1e820ef9c74ff3be6055af5eb3fe7229",
     "web/src/test/exposedRoles.ts": "4483decc1274bf8e87790df5e73d61afe181ccf3da8baf108b9f8c2e2cc4ee49",
     "web/src/test/modelFixtures.ts": "516fcf672cb57838f51f6eeebdce2cacc1b39abea573a0320930299fa9bf5bcf",

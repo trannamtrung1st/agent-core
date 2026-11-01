@@ -43,7 +43,7 @@ public sealed partial class TenantCredentialAccessTests
         Assert.False(invalid.TryGetProperty("diagnosticId", out _));
         Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(root + $"/agents/{id}/lifecycle", new { lifecycle = 1, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 })).StatusCode);
         var archivedView = await Json(await owner.GetAsync(path));
-        Assert.Equal(1, archivedView.GetProperty("total").GetInt32()); Assert.Equal("Archived", archivedView.GetProperty("lifecycle").GetString());
+        Assert.Equal(1, archivedView.GetProperty("total").GetInt32()); Assert.Equal("Disabled", archivedView.GetProperty("lifecycle").GetString());
         Assert.Empty(archivedView.GetProperty("removableBindingIds").EnumerateArray());
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.DeleteAsync(path + $"/{binding}?expectedRevision={await Revision(owner, tenant)}&expectedInstanceRevision=3&expectedBindingRevision=1")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(root + $"/agents/{id}/lifecycle", new { lifecycle = 0, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 })).StatusCode);

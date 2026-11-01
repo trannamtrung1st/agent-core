@@ -950,6 +950,9 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       const liveResponseId = state.liveResponseId === event.responseId ? null : state.liveResponseId;
       return {
         ...state,
+        agentEnabled: interruptReason === "agentDisabled" && state.liveResponseId === event.responseId
+          ? false
+          : state.agentEnabled,
         agentRunId:
           state.liveResponseId === event.responseId ? null : state.agentRunId,
         liveResponseId,

@@ -53,7 +53,7 @@ it('retains a failed mutation selection and never silently retries a stale assig
 it('scoped readers have no directory or editing controls and cannot select organization authority', async () => {
   const read = { ...view, canGrantChat: false, canGrantExecution: false, canInspectOrganization: false, principals: { ...view.principals, items: [] } };
   fetchMock.mockImplementation(async () => response(read)); renderView(read); await screen.findByText('Alex <safe>');
-  for (const name of ['Grant chat access', 'Grant execution role', 'Archive instance']) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+  for (const name of ['Grant chat access', 'Grant execution role', 'Disable agent']) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
   expect(screen.queryByRole('combobox', { name: 'Person or agent' })).not.toBeInTheDocument(); expect(screen.queryByRole('radio', { name: /^Organization$/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Agents' })); expect(await screen.findByText('Not granted', { exact: true })).toBeVisible();
 });

@@ -21,12 +21,13 @@ for (const width of [1440, 390]) test(`tenant original, working copy and Artifac
   const errors: string[] = [], obsolete: string[] = [], unexpected: string[] = [], consoleErrors: string[] = [];
   page.on('pageerror', error => errors.push(error.message)); page.on('console', entry => { if (entry.type() === 'error') consoleErrors.push(entry.text()); });
   page.on('request', request => { const path = new URL(request.url()).pathname; if (path.includes('owner-capability') || /^\/api\/v[12]\/(sessions|agent-instances|admin|file-preview)(\/|$)/.test(path) || request.headers()['x-agentcore-owner-capability']) obsolete.push(path); });
-  let expectedDeniedPath = '', expectedStalePath = '', metadataRefusals = 0, tenantPrefix = '', responseOrder = 0, injectedApprovalConflict = false;
+  let expectedDeniedPath = '', expectedStalePath = '', metadataRefusals = 0, tenantPrefix = '', responseOrder = 0, injectedApprovalConflict = false, injectedInboxConflict = false;
   const approvalConflicts: { path: string; order: number }[] = [], responseChecks: Promise<void>[] = [];
   const successfulApprovalReads = new Map<string, number>();
   page.on('response', response => {
-    const path = new URL(response.url()).pathname, order = ++responseOrder;
-    const approvalRead = response.request().method() === 'GET' && path.startsWith(tenantPrefix + '/sessions/') && path.endsWith('/approvals');
+    const url = new URL(response.url()), path = url.pathname, order = ++responseOrder;
+    const inboxRead = path === tenantPrefix + '/approvals' && url.searchParams.get('status') === 'pending' && url.searchParams.get('pageSize') === '1';
+    const approvalRead = response.request().method() === 'GET' && (inboxRead || path.startsWith(tenantPrefix + '/sessions/') && path.endsWith('/approvals'));
     if (approvalRead && response.status() === 200) successfulApprovalReads.set(path, order);
     if (response.status() < 400 || response.status() === 403 && path === expectedDeniedPath) return;
     if (response.status() === 409 && path === expectedStalePath && metadataRefusals++ === 0) return;
@@ -52,6 +53,17 @@ for (const width of [1440, 390]) test(`tenant original, working copy and Artifac
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Keep this original file.'); await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('Hello from synthetic.', { exact: true })).toBeVisible();
     await expect(page.getByText('Ready', { exact: true })).toBeVisible();
+    await page.route(`**${prefix}/approvals?status=pending&pageSize=1`, async route => {
+      if (!injectedInboxConflict && route.request().method() === 'GET') {
+        injectedInboxConflict = true;
+        await route.fulfill({ status: 409, contentType: 'application/problem+json', body: '{"reasonCode":"stale_revision"}' });
+      } else await route.continue();
+    });
+    // Wake the real scoped notification read after the new Session attachment is stable.
+    // A refusal injected during attachment replacement can be transport-aborted instead.
+    await page.evaluate(() => window.dispatchEvent(new Event('agentcore:approval-updated')));
+    await expect.poll(() => injectedInboxConflict && approvalConflicts.some(conflict => conflict.path === prefix + '/approvals')).toBe(true);
+
     const original = page.locator('.entry-files').getByRole('group', { name, exact: true }); await expect(original).toBeVisible();
     let staleMetadata = false;
     await page.route(`**${prefix}/sessions/*/attachments/*`, async route => {
@@ -104,8 +116,10 @@ for (const width of [1440, 390]) test(`tenant original, working copy and Artifac
     const download = await restored; expect(download.suggestedFilename()).toBe(name); expect(await readFile((await download.path())!)).toEqual(bytes);
     await expect.poll(() => injectedApprovalConflict).toBe(true);
     await Promise.all(responseChecks);
-    expect(approvalConflicts.length).toBeGreaterThan(0);
-    for (const conflict of approvalConflicts) expect(conflict.path).toBe(approvalsPath);
+    expect(injectedInboxConflict).toBe(true);
+    expect(approvalConflicts.some(conflict => conflict.path === approvalsPath)).toBe(true);
+    expect(approvalConflicts.some(conflict => conflict.path === prefix + '/approvals')).toBe(true);
+    for (const conflict of approvalConflicts) expect([approvalsPath, prefix + '/approvals']).toContain(conflict.path);
     // File mutations can invalidate a concurrent approval-status snapshot. Require
     // the exact refusal and a later real scoped read, never a blanket 409 exemption.
     await expect.poll(() => approvalConflicts.every(conflict => (successfulApprovalReads.get(conflict.path) ?? 0) > conflict.order)).toBe(true);

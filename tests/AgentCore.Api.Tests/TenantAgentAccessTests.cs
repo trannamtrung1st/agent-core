@@ -75,7 +75,7 @@ public sealed partial class TenantAgentAccessTests
         Assert.Equal(HttpStatusCode.Forbidden, (await member.PostAsJsonAsync($"/api/v2/tenants/{a}/agents", new { templateId = "examiner", version = 1, expectedRevision = 1 })).StatusCode);
         var archived = await owner.PutAsJsonAsync($"/api/v2/tenants/{a}/agents/{id}/lifecycle", new { lifecycle = 1, expectedRevision = await Revision(owner, a), expectedInstanceRevision = 1 });
         Assert.Equal(HttpStatusCode.OK, archived.StatusCode);
-        var archive = await Json(archived); Assert.Equal("Archived", archive.GetProperty("instance").GetProperty("lifecycle").GetString());
+        var archive = await Json(archived); Assert.Equal("Disabled", archive.GetProperty("instance").GetProperty("lifecycle").GetString());
         Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync($"/api/v2/tenants/{a}/agents/{id}/effective-config")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PutAsJsonAsync($"/api/v2/tenants/{a}/agents/{id}/persona", new { persona = new { name = "Archived", role = "Guide", description = "Read only", tone = "Clear" }, expectedRevision = await Revision(owner, a), expectedInstanceRevision = 2, expectedPersonaRevision = 1 })).StatusCode);
         var stale = await owner.PutAsJsonAsync($"/api/v2/tenants/{a}/agents/{id}/lifecycle", new { lifecycle = 0, expectedRevision = await Revision(owner, a), expectedInstanceRevision = 1 });

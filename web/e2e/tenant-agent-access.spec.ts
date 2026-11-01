@@ -60,11 +60,11 @@ test('create, grant exact chat and independent execution, inspect permissions, r
     await page.getByRole('dialog').getByRole('button', { name: 'Revoke role', exact: true }).click(); await expect(audience.getByText('Agent-specific Chat', { exact: true })).toHaveCount(0);
     expect((await check(f.member.principalId, 'agents.chat', true)).allowed).toBe(false);
     await page.goto(`${f.path}/${id}/lifecycle`);
-    await page.getByRole('button', { name: 'Archive instance', exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Archive instance', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Restore instance', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Disable agent', exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Disable agent', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Enable agent', exact: true })).toBeVisible();
     await page.goto(`${f.path}/${id}/access`); await expect(audience.getByText('Can chat', { exact: true })).toHaveCount(0); await page.goto(`${f.path}/${id}/lifecycle`);
-    await page.getByRole('button', { name: 'Restore instance', exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Restore instance', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Archive instance', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Enable agent', exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Enable agent', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Disable agent', exact: true })).toBeVisible();
     await page.goto(`${f.path}/${id}/access`); await page.reload(); await expect(authority.getByText('Credential metadata reader', { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); expect(errors).toEqual([]); expect(legacy).toEqual([]);
   } finally { await f.api.dispose(); }
@@ -78,7 +78,7 @@ test('a resource-scoped reader can inspect only that agent and loses private con
     const assignment = await call<{ assignmentId: string }>(f.api, f.prefix + '/role-assignments', { principalId: f.member.principalId, roleId: role.roleId, resourceType: 'agent', resourceId: id, expectedRevision: await f.revision() });
     await signIn(page, f.memberLogin, f.memberPassword); await page.goto(`${f.path}/${id}/access`);
     await expect(page.getByRole('heading', { name: 'Who can chat?', exact: true })).toBeVisible();
-    for (const name of ['Grant chat access', 'Grant execution role', 'Archive instance', 'New agent']) await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
+    for (const name of ['Grant chat access', 'Grant execution role', 'Disable agent', 'New agent']) await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
     await expect(page.getByRole('radio', { name: 'Organization', exact: true })).toHaveCount(0);
     await call(f.api, `${f.prefix}/role-assignments/${assignment.assignmentId}?expectedRevision=${await f.revision()}`, undefined, 'DELETE');
     await page.getByRole('button', { name: 'Reload access', exact: true }).click(); await expect(page.getByText(/You do not have permission/)).toBeVisible();

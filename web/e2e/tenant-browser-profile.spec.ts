@@ -46,7 +46,7 @@ test('named confirmation, real reset, lost reply readback and no automatic physi
   } finally { await f.api.dispose(); }
 });
 
-test('stale preflight requires fresh observation and archived profile stays readable without reset at 320px', async ({ page }) => {
+test('stale preflight requires fresh observation and disabled profile stays readable without reset at 320px', async ({ page }) => {
   const f = await fixture(); let posts = 0; page.on('request', r => { if (new URL(r.url()).pathname === f.profile + '/reset') posts++; });
   try {
     await signIn(page); await page.setViewportSize({ width: 320, height: 740 }); await page.goto(f.path); const panel = page.getByRole('region', { name: 'Browser state', exact: true });

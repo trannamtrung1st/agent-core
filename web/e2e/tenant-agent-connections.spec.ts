@@ -28,7 +28,7 @@ test.beforeAll(async () => {
   try { expect((await (await api.get('/health')).json()).profile).toBe('Synthetic'); await call(api, '/api/v2/auth/login', { login, password }); identity = await api.storageState(); } finally { await api.dispose(); }
 });
 
-test('paged binding draft, focus/discard, normalized save, stale removal recovery and archived inspection at 320px', async ({ page }) => {
+test('paged binding draft, focus/discard, normalized save, stale removal recovery and disabled inspection at 320px', async ({ page }) => {
   const f = await fixture(); const errors: string[] = [], legacy: string[] = []; page.on('pageerror', error => errors.push(error.message));
   page.on('request', request => { if (/^\/api\/v[12]\/(owner-capability|agent-instances|admin)(\/|$)/.test(new URL(request.url()).pathname)) legacy.push(request.url()); });
   try {
@@ -64,7 +64,7 @@ test('paged binding draft, focus/discard, normalized save, stale removal recover
     expect((await f.api.get(f.root + `/credentials/${credential}`)).ok()).toBe(true);
     const current = await call<{ instance: { revision: number } }>(f.api, f.root + `/agents/${f.id}`);
     await call(f.api, f.root + `/agents/${f.id}/lifecycle`, { lifecycle: 1, expectedRevision: await f.revision(), expectedInstanceRevision: current.instance.revision }, 'PUT');
-    await page.getByRole('button', { name: 'Reload connections', exact: true }).click(); await expect(page.getByText('Archived instance', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Reload connections', exact: true }).click(); await expect(page.getByText('Disabled agent', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Add binding', exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); expect(errors).toEqual([]); expect(legacy).toEqual([]);
   } finally { await f.api.dispose(); }

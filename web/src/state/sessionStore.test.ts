@@ -17,6 +17,22 @@ function event(partial: Partial<ServerEvent> & Pick<ServerEvent, "type" | "seque
 }
 
 describe("applyServerEvent", () => {
+  it('makes the active disabled Agent readonly while retaining received text and fencing old interruptions', () => {
+    const started = applyServerEvent({ ...emptySession(), sessionId: 's1', attachmentId: 'a1' }, event({
+      type: 'agent.response.started', sequence: 1, responseId: 'r1', payload: { entryId: 'reply', entrySequence: 1 }
+    }));
+    const received = applyServerEvent(started, event({ type: 'agent.text.delta', sequence: 2, responseId: 'r1',
+      payload: { text: 'Received prefix', textStart: 0 } }));
+    const disabled = applyServerEvent(received, event({ type: 'agent.response.interrupted', sequence: 3,
+      responseId: 'r1', payload: { reason: 'agentDisabled' } }));
+    expect(isReadonlySession(disabled)).toBe(true);
+    expect(disabled.liveResponseId).toBeNull();
+    expect(disabled.entries[0]).toMatchObject({ text: 'Received prefix', status: 'interrupted', interruptReason: 'agentDisabled' });
+    const stale = applyServerEvent({ ...received, liveResponseId: 'r2' }, event({ type: 'agent.response.interrupted',
+      sequence: 3, responseId: 'r1', payload: { reason: 'agentDisabled' } }));
+    expect(isReadonlySession(stale)).toBe(false);
+    expect(stale.liveResponseId).toBe('r2');
+  });
   it('updates the observed Run model without overwriting saved Auto intent', () => {
     const preference = { mode: 'auto' as const, reasoning: { mode: 'modelDefault' as const } };
     const state = { ...emptySession(), sessionId: 's1', attachmentId: 'a1', sessionModelPreference: preference, sessionModelEffort: 'high' };

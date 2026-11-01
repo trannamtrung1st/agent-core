@@ -52,7 +52,7 @@ public sealed partial class TenantCredentialAccessTests
         using var memberLifetime = memberClient;
         var view = await Json(await reader.GetAsync(route + "/editor?page=0&pageSize=1"));
         Assert.Equal(mode is "reader" or "writer" ? 1 : 2, view.GetProperty("total").GetInt32());
-        Assert.Equal(mode == "archived" ? "Archived" : "Active", view.GetProperty("agent").GetProperty("instance").GetProperty("lifecycle").GetString());
+        Assert.Equal(mode == "archived" ? "Disabled" : "Active", view.GetProperty("agent").GetProperty("instance").GetProperty("lifecycle").GetString());
         Assert.Equal(await Revision(owner, tenant), view.GetProperty("securityRevision").GetInt64());
         Assert.Equal(mode == "owner", view.GetProperty("canCreate").GetBoolean());
         if (mode is "reader" or "writer")

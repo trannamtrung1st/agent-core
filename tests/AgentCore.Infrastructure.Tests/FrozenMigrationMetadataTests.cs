@@ -75,6 +75,8 @@ public sealed class FrozenMigrationMetadataTests
     // ownership and Workflow migrations; every other incumbent guard stays byte-identical.
     private static readonly IReadOnlyDictionary<string, string> CurrentGuardTransitions = new Dictionary<string, string>(StringComparer.Ordinal)
     {
+        // Availability cutover changes only the lifecycle literal; retirement remains irreversible.
+        ["trigger:TR_AgentDecommission_Instance"] = "4d9351812e808a85740dedd245300c189071367dc7659326ccac0ccbd11738bd",
         ["trigger:TR_TenantApprovals_AutomationAdmission_INSERT"] = "71631cc9cf4e9408c7994b4e22d04650c652b9ad090dca4f2a505150b163ca88",
         ["trigger:TR_TenantApprovals_ConfigurationRemedy_INSERT"] = "44432c1b9b6a2f3b7e51fbcc0321c331d298b2790a7c227fa453a2d8343ad861",
         ["trigger:TR_TenantApprovals_CredentialBinding_INSERT"] = "b51e9f1e91caa9b5f1e26d275ff63e45d5323f4bb8daf158fa625c5bdba36a30",

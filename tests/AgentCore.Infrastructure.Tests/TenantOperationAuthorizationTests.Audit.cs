@@ -147,7 +147,9 @@ public sealed partial class TenantOperationAuthorizationTests
         await f.Agents.SetLifecycleAsync(setup.Owner.PrincipalId, setup.Tenant, setup.Agent.Instance.InstanceId,
             AgentCore.Domain.Definitions.AgentInstanceLifecycle.Disabled, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision, setup.Agent.Instance.Revision);
         var error = await Assert.ThrowsAsync<AccessDeniedException>(() => operations.CheckAsync(reference, "agents.read", "agent", setup.Agent.Instance.InstanceId.ToString("D")).AsTask());
-        Assert.Equal("executor_unavailable", error.ReasonCode);
+        // Disable now atomically cancels this admitted Run before another tool boundary.
+        Assert.Equal(AgentRunStatus.Cancelled, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(setup.Tenant, setup.Run.AgentRunId))!.Status);
+        Assert.Equal("run_unavailable", error.ReasonCode);
         var denied = Assert.Single(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Action == "authorization.operation" && a.Decision == "denied");
         Assert.Equal(error.ReasonCode, denied.ReasonCode); Assert.Equal(setup.Run.Admission.ExecutionContext, denied.Execution!.Context);
     }
