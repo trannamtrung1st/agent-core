@@ -18,6 +18,7 @@ public sealed class RunContextCompactionTests
     public void Large_tool_arguments_trigger_model_input_pressure_before_checkpoint_pressure()
     {
         var messages = Messages(3);
+        for (var i = 1; i < messages.Length; i += 2) messages[i] = messages[i] with { Text = "short receipt" };
         messages[0] = messages[0] with { ToolCalls = [new("call-0", "email.send",
             System.Text.Json.JsonSerializer.Serialize(new { body = new string('x', 100000) }))] };
         var request = ContextAssembler.Create(Guid.NewGuid(), new EffectiveContextSnapshot([
@@ -26,7 +27,32 @@ public sealed class RunContextCompactionTests
         Assert.True(request.ContextManifest!.Sections.Sum(s => s.EstimatedTokens) < 24000);
         var projected = RunContextCompaction.EstimateInputTokens(request);
         Assert.True(projected > 24000);
+        Assert.True(messages.Sum(m => m.Text.Length) < 8192);
         Assert.Equal(2, RunContextCompaction.SelectBoundary(messages, null, true, projected * 4, checkpointBytes: 1000));
+        var summary = new RunContextSummary(1, Summary, 2, 1, projected, 0);
+        var after = RunContextCompaction.Project(request, [], messages, summary);
+        Assert.True(projected - RunContextCompaction.EstimateInputTokens(after) >= 1024);
+    }
+
+    [Fact]
+    public void Summary_evidence_keeps_bounded_action_identifiers_without_copying_free_form_arguments()
+    {
+        var task = Guid.NewGuid(); var privateId = Guid.NewGuid();
+        var arguments = System.Text.Json.JsonSerializer.Serialize(new {
+            target = new { taskId = task }, decision = "approve",
+            content = "sk-private-body-" + new string('z', 20000),
+            headers = new { requestId = privateId, authorization = "private-bearer" }, password = "private-password"
+        });
+        ModelMessage[] messages = [new(ModelRole.Assistant, "", ToolCalls: [new("exact-action", "tasks.assign", arguments)]),
+            new(ModelRole.Tool, "short receipt", ToolCallId: "exact-action", Name: "tasks.assign")];
+        var request = RunContextCompaction.SummaryRequest(Guid.NewGuid(), messages, 2, null, null);
+        var evidence = request.Context!.Text(ContextSectionId.History);
+        Assert.Contains(task.ToString(), evidence); Assert.Contains("approve", evidence); Assert.Contains("tasks.assign", evidence);
+        Assert.DoesNotContain("sk-private-body", evidence); Assert.DoesNotContain(privateId.ToString(), evidence);
+        Assert.DoesNotContain("private-bearer", evidence); Assert.DoesNotContain("private-password", evidence);
+        Assert.InRange(evidence.Length, 1, RunContextCompaction.SourceCharacters);
+        Assert.Equal(ContextSemantics.UntrustedData, request.Context.Sections.Single(s => s.Id == ContextSectionId.History).Semantics);
+        Assert.Null(request.Tools);
     }
 
     [Fact]

@@ -2690,7 +2690,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 && repairReason is null && _publishedDisplayLength == 0 && ToolLimits.MaxOutputBytes - outputBytes >= 32 * 1024
                 && (overallDeadline is null || overallDeadline - _time.GetUtcNow() > finalizationReserve + TimeSpan.FromSeconds(20));
             if (compactionAttempts >= RunContextCompaction.MaxCompactions || lastCompactionAttemptMessages == messages.Count) return false;
-            var inputTokens = RunContextCompaction.EstimateInputTokens(working);
+            var inputTokens = RunContextCompaction.EstimateInputTokens(model.PrepareRequest(working));
             var inputCharacters = checked(inputTokens * 4);
             var checkpointBytes = Encoding.UTF8.GetByteCount(AgentRunToolCallCheckpoint.Write(messages, executionState: State()));
             var boundary = RunContextCompaction.SelectBoundary(messages, runSummary, safe, inputCharacters, checkpointBytes, force);
@@ -2738,10 +2738,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 await RequireSummarySources(generateToken).ConfigureAwait(false);
                 var text = summaryText.ToString().Trim();
                 if (!complete || !RunContextCompaction.ValidSummary(text)) return Reject("invalid_summary");
-                var before = messages.Skip(runSummary?.ThroughMessageCount ?? 0).Take(boundary - (runSummary?.ThroughMessageCount ?? 0)).Sum(m => m.Text.Length) + (runSummary?.Text.Length ?? 0);
-                if (before - text.Length < 4096) return Reject("no_reduction");
                 var candidate = new RunContextSummary(RunContextCompaction.Version, text, boundary, (runSummary?.Count ?? 0) + 1,
-                    (inputCharacters + 3) / 4, (Math.Max(0, inputCharacters - before + text.Length) + 3) / 4);
+                    inputTokens, 0);
+                var projected = model.PrepareRequest(RunContextCompaction.Project(working, request.Interaction ?? [], messages, candidate));
+                var afterTokens = RunContextCompaction.EstimateInputTokens(projected);
+                if (inputTokens - afterTokens < 1024) return Reject("no_reduction");
+                candidate = candidate with { AfterEstimatedTokens = afterTokens };
                 var old = runSummary;
                 runSummary = candidate;
                 try
